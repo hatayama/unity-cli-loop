@@ -50,14 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
-            (HotReloadFileProcessResult earlyResult,
-                string projectRelativePath,
-                string assemblyName,
-                UnityEditor.Compilation.Assembly compilationAssembly,
-                string targetDllPath,
-                string projectRoot,
-                HotReloadUnchangedSourceDecision unchangedDecision,
-                HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+            HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -65,17 +58,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "new-source-editor-state",
                 new List<HotReloadMethodOutcome>());
 
-            Assert.That(earlyResult, Is.Not.Null);
-            Assert.That(earlyResult.Outcomes, Has.Count.EqualTo(1));
-            Assert.That(earlyResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
-            Assert.That(earlyResult.Outcomes[0].Reason, Does.Contain("retry hot reload"));
-            Assert.That(projectRelativePath, Is.Null);
-            Assert.That(assemblyName, Is.Null);
-            Assert.That(compilationAssembly, Is.Null);
-            Assert.That(targetDllPath, Is.Null);
-            Assert.That(projectRoot, Is.Null);
-            Assert.That(unchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
-            Assert.That(newSourceMembershipEvidence, Is.Null);
+            Assert.That(resolution.EarlyResult, Is.Not.Null);
+            Assert.That(resolution.EarlyResult.Outcomes, Has.Count.EqualTo(1));
+            Assert.That(resolution.EarlyResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            Assert.That(resolution.EarlyResult.Outcomes[0].Reason, Does.Contain("retry hot reload"));
+            Assert.That(resolution.ProjectRelativePath, Is.Null);
+            Assert.That(resolution.AssemblyName, Is.Null);
+            Assert.That(resolution.CompilationAssembly, Is.Null);
+            Assert.That(resolution.TargetDllPath, Is.Null);
+            Assert.That(resolution.ProjectRoot, Is.Null);
+            Assert.That(resolution.UnchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
+            Assert.That(resolution.NewSourceMembershipEvidence, Is.Null);
         }
 
         /// <summary>
@@ -89,14 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
-            (HotReloadFileProcessResult earlyResult,
-                string projectRelativePath,
-                string assemblyName,
-                UnityEditor.Compilation.Assembly compilationAssembly,
-                string targetDllPath,
-                string projectRoot,
-                HotReloadUnchangedSourceDecision unchangedDecision,
-                HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+            HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -104,14 +90,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "new-source-editor-ready",
                 new List<HotReloadMethodOutcome>());
 
-            Assert.That(earlyResult, Is.Null);
-            Assert.That(projectRelativePath, Is.EqualTo(MissingHotReloadScriptPath));
-            Assert.That(assemblyName, Is.Not.Null.And.Not.Empty);
-            Assert.That(compilationAssembly, Is.Not.Null);
-            Assert.That(targetDllPath, Is.Not.Null.And.Not.Empty);
-            Assert.That(projectRoot, Is.Not.Null.And.Not.Empty);
-            Assert.That(unchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
-            Assert.That(newSourceMembershipEvidence, Is.Not.Null);
+            Assert.That(resolution.EarlyResult, Is.Null);
+            Assert.That(resolution.ProjectRelativePath, Is.EqualTo(MissingHotReloadScriptPath));
+            Assert.That(resolution.AssemblyName, Is.Not.Null.And.Not.Empty);
+            Assert.That(resolution.CompilationAssembly, Is.Not.Null);
+            Assert.That(resolution.TargetDllPath, Is.Not.Null.And.Not.Empty);
+            Assert.That(resolution.ProjectRoot, Is.Not.Null.And.Not.Empty);
+            Assert.That(resolution.UnchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
+            Assert.That(resolution.NewSourceMembershipEvidence, Is.Not.Null);
         }
 
         /// <summary>
@@ -224,14 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
-            (HotReloadFileProcessResult earlyResult,
-                string projectRelativePath,
-                string assemblyName,
-                UnityEditor.Compilation.Assembly compilationAssembly,
-                string targetDllPath,
-                string projectRoot,
-                HotReloadUnchangedSourceDecision unchangedDecision,
-                HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+            HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 MissingPredefinedScriptPath,
                 MissingPredefinedScriptPath,
                 outcomes,
@@ -239,16 +218,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "new-predefined-source",
                 new List<HotReloadMethodOutcome>());
 
-            Assert.That(earlyResult, Is.Null);
-            Assert.That(projectRelativePath, Is.EqualTo(MissingPredefinedScriptPath));
-            Assert.That(assemblyName, Is.EqualTo("Assembly-CSharp"));
-            Assert.That(compilationAssembly, Is.Not.Null);
-            Assert.That(targetDllPath, Is.Not.Null.And.Not.Empty);
-            Assert.That(projectRoot, Is.Not.Null.And.Not.Empty);
-            Assert.That(unchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
-            Assert.That(newSourceMembershipEvidence, Is.Not.Null);
-            Assert.That(newSourceMembershipEvidence.Boundaries, Is.Empty);
-            Assert.That(newSourceMembershipEvidence.ResolvedAssemblyDefinitionPath, Is.Null);
+            Assert.That(resolution.EarlyResult, Is.Null);
+            Assert.That(resolution.ProjectRelativePath, Is.EqualTo(MissingPredefinedScriptPath));
+            Assert.That(resolution.AssemblyName, Is.EqualTo("Assembly-CSharp"));
+            Assert.That(resolution.CompilationAssembly, Is.Not.Null);
+            Assert.That(resolution.TargetDllPath, Is.Not.Null.And.Not.Empty);
+            Assert.That(resolution.ProjectRoot, Is.Not.Null.And.Not.Empty);
+            Assert.That(resolution.UnchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
+            Assert.That(resolution.NewSourceMembershipEvidence, Is.Not.Null);
+            Assert.That(resolution.NewSourceMembershipEvidence.Boundaries, Is.Empty);
+            Assert.That(resolution.NewSourceMembershipEvidence.ResolvedAssemblyDefinitionPath, Is.Null);
         }
 
         /// <summary>

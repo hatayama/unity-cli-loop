@@ -178,14 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
-            (HotReloadFileProcessResult earlyResult,
-                string projectRelativePath,
-                string assemblyName,
-                UnityCompilationAssembly compilationAssembly,
-                string targetDllPath,
-                string projectRoot,
-                HotReloadUnchangedSourceDecision unchangedDecision,
-                HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+            HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -193,14 +186,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "assembly-resolution-wiring",
                 new List<HotReloadMethodOutcome>());
 
-            Assert.That(earlyResult, Is.Null);
-            Assert.That(projectRelativePath, Is.EqualTo(MissingHotReloadScriptPath));
-            Assert.That(assemblyName, Is.EqualTo(HotReloadTestAssemblyName));
-            Assert.That(compilationAssembly, Is.Not.Null);
-            Assert.That(targetDllPath, Is.Not.Null.And.Not.Empty);
-            Assert.That(projectRoot, Is.Not.Null.And.Not.Empty);
-            Assert.That(unchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
-            Assert.That(newSourceMembershipEvidence, Is.Not.Null);
+            Assert.That(resolution.EarlyResult, Is.Null);
+            Assert.That(resolution.ProjectRelativePath, Is.EqualTo(MissingHotReloadScriptPath));
+            Assert.That(resolution.AssemblyName, Is.EqualTo(HotReloadTestAssemblyName));
+            Assert.That(resolution.CompilationAssembly, Is.Not.Null);
+            Assert.That(resolution.TargetDllPath, Is.Not.Null.And.Not.Empty);
+            Assert.That(resolution.ProjectRoot, Is.Not.Null.And.Not.Empty);
+            Assert.That(resolution.UnchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
+            Assert.That(resolution.NewSourceMembershipEvidence, Is.Not.Null);
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
