@@ -41,7 +41,7 @@ internal static class MethodTransformSkipReasons
         "Struct (value type) methods are out of scope for v1; byref instance transplant is unverified.";
 
     public const string GenericMethodOrType =
-        "Generic methods and methods inside generic types cannot be safely patched with Harmony. Run 'uloop compile'.";
+        "Generic methods and methods inside generic types cannot be safely patched with Harmony. " + CompileCallToAction.Plain;
 
     public const string ExplicitInterfaceImplementation = "Explicit interface implementations are skipped in v1.";
 
