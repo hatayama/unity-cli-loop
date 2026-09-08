@@ -2513,6 +2513,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 resolution.NotCapturableVariables);
         }
 
+        /// <summary>
+        /// What: SetPersisted marks an armed entry as surviving the next domain reload, and a
+        /// plain re-enable of the same id clears the mark again.
+        /// </summary>
+        [Test]
+        public void SetPersisted_MarksTheEntryAndAReEnableClearsIt()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointRegistry.SetPersisted("jump", true);
+
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Persisted, Is.True);
+            Assert.That(UloopPausePointRegistry.GetActivePersistedCount(), Is.EqualTo(1));
+
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(
+                UloopPausePointRegistry.GetStatus("jump").Persisted,
+                Is.False,
+                "Re-enabling without --persist is how the user takes a pause point back off persistence.");
+            Assert.That(UloopPausePointRegistry.GetActivePersistedCount(), Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: an unknown id is a no-op for SetPersisted, and only armed persisted entries are counted.
+        /// </summary>
+        [Test]
+        public void GetActivePersistedCount_IgnoresUnknownAndClearedEntries()
+        {
+            UloopPausePointRegistry.SetPersisted("never-enabled", true);
+
+            Assert.That(UloopPausePointRegistry.GetActivePersistedCount(), Is.EqualTo(0));
+
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.SetPersisted("jump", true);
+            UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(UloopPausePointRegistry.GetActivePersistedCount(), Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: --persist reaches the response as Persisted, and the field is omitted entirely
+        /// when the pause point is not persisted, so existing consumers see no new key.
+        /// </summary>
+        [Test]
+        public async Task EnablePausePoint_ReportsPersistedOnlyWhenPersistWasRequested()
+        {
+            PausePointResponse persisted = await EnablePersistedPausePointAsync("jump");
+
+            Assert.That(persisted.Persisted, Is.True);
+            Assert.That(JsonConvert.SerializeObject(persisted), Does.Contain("\"Persisted\":true"));
+
+            PausePointResponse plain = await EnablePausePointAsync("dash");
+
+            Assert.That(plain.Persisted, Is.False);
+            Assert.That(JsonConvert.SerializeObject(plain), Does.Not.Contain("Persisted"));
+        }
+
         private static async Task<PausePointResponse> EnablePausePointAsync(string id)
         {
             EnablePausePointTool tool = new();
@@ -2520,6 +2578,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ["id"] = id,
                 ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+            return response;
+        }
+
+        private static async Task<PausePointResponse> EnablePersistedPausePointAsync(string id)
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = id,
+                ["timeoutSeconds"] = 30,
+                ["persist"] = true
             };
 
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
