@@ -5,24 +5,52 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Verifies compile Warning text for each Play-at-request-start branch: none, Play without
-    /// pause points, and Play with enabled pause points.
+    /// Verifies compile Warning text for each Play-at-request-start branch: Edit Mode with and
+    /// without enabled pause points, Play without pause points, and Play with enabled pause points.
     /// </summary>
     [TestFixture]
     public sealed class CompilePlayModeStopWarningBuilderTests
     {
         /// <summary>
-        /// What: no warning when Play Mode was not active, regardless of marker count.
+        /// What: Edit Mode with enabled pause points warns about the drop without claiming Play Mode was active.
         /// </summary>
         [Test]
-        public void BuildWarning_WhenNotPlayingAtRequestStart_ReturnsNull()
+        public void BuildWarning_WhenNotPlayingWithActivePausePoints_ReturnsEditModeDropWarning()
         {
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
-                activePausePointCount: 3,
+                activePausePointCount: 2,
                 activeHotReloadChangeCount: 0);
 
-            Assert.That(warning, Is.Null);
+            Assert.That(warning, Is.Not.Null);
+            Assert.That(warning, Does.Contain("2 enabled pause point(s)"));
+            Assert.That(
+                warning,
+                Does.Not.Contain("Play Mode was active"),
+                "An Edit Mode compile must not claim Play Mode was running.");
+        }
+
+        /// <summary>
+        /// What: Edit Mode with both pause points and hot-reload changes joins the pause point sentence first.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenNotPlayingWithPausePointsAndHotReloadChanges_JoinsPausePointSentenceFirst()
+        {
+            string pausePointOnly = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 2,
+                activeHotReloadChangeCount: 0);
+            string hotReloadOnly = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 0,
+                activeHotReloadChangeCount: 3);
+
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 2,
+                activeHotReloadChangeCount: 3);
+
+            Assert.That(warning, Is.EqualTo(pausePointOnly + " " + hotReloadOnly));
         }
 
         /// <summary>
