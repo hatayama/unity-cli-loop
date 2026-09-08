@@ -17,8 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class TypeEmitPlanner
 {
-    internal static (List<TypeEmitState> TypeEmitStates, int ShimTypeCounter, int GlobalShimMethodCounter)
-        QueueAllTypeEmitStates(
+    internal static List<TypeEmitState> QueueAllTypeEmitStates(
             WorkerSourceUnit sourceUnit,
             IAssemblySymbol targetTypesAssemblySymbol,
             WorkerInput input,
@@ -32,8 +31,7 @@ internal static class TypeEmitPlanner
             List<string> declarationDriftWarnings,
             List<WorkerRemovedMember> removedMembers,
             List<WorkerRemovedMethodSignature> removedMethodSignatures,
-            int shimTypeCounter,
-            int globalShimMethodCounter)
+            ShimNameAllocator shimNames)
     {
         CompilationUnitSyntax root = sourceUnit.BindingRoot;
         SemanticModel semanticModel = sourceUnit.SemanticModel;
@@ -56,7 +54,7 @@ internal static class TypeEmitPlanner
                 TypeSymbol = typeSymbol,
                 TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
             };
-            (shimTypeCounter, globalShimMethodCounter) = AddedPropertyClassifier.ClassifyAddedProperties(
+            AddedPropertyClassifier.ClassifyAddedProperties(
                 typeState,
                 semanticModel,
                 targetTypesAssemblySymbol,
@@ -69,8 +67,7 @@ internal static class TypeEmitPlanner
                 addedMethodCatalog,
                 addedFieldCatalog,
                 skipped,
-                shimTypeCounter,
-                globalShimMethodCounter);
+                shimNames);
 
             // Existing property setters/init and all indexer accessors with bodies stay Skipped.
             // Added properties were classified above and must not receive duplicate skip rows.
@@ -111,7 +108,7 @@ internal static class TypeEmitPlanner
                 plainCurrentOperatorMap,
                 plainCurrentEventMap);
 
-            (int nextShimTypeCounter, int nextGlobalShimMethodCounter) = QueueTypeMethods(
+            QueueTypeMethods(
                 typeState,
                 semanticModel,
                 targetTypesAssemblySymbol,
@@ -129,17 +126,14 @@ internal static class TypeEmitPlanner
                 declarationDriftWarnings,
                 removedMembers,
                 removedMethodSignatures,
-                shimTypeCounter,
-                globalShimMethodCounter);
-            shimTypeCounter = nextShimTypeCounter;
-            globalShimMethodCounter = nextGlobalShimMethodCounter;
+                shimNames);
             typeEmitStates.Add(typeState);
         }
 
-        return (typeEmitStates, shimTypeCounter, globalShimMethodCounter);
+        return typeEmitStates;
     }
 
-    internal static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueTypeMethods(
+    internal static void QueueTypeMethods(
         TypeEmitState typeState,
         SemanticModel semanticModel,
         IAssemblySymbol targetTypesAssemblySymbol,
@@ -157,14 +151,13 @@ internal static class TypeEmitPlanner
         List<string> declarationDriftWarnings,
         List<WorkerRemovedMember> removedMembers,
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
         INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
         if (compiledType == null)
         {
             OrdinaryMethodQueue.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         typeState.CompiledType = compiledType;
@@ -180,7 +173,7 @@ internal static class TypeEmitPlanner
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())
         {
-            (shimTypeCounter, globalShimMethodCounter) = OrdinaryMethodQueue.QueueOrdinaryMethod(
+            OrdinaryMethodQueue.QueueOrdinaryMethod(
                 methodDeclaration,
                 typeState,
                 semanticModel,
@@ -198,10 +191,7 @@ internal static class TypeEmitPlanner
                 declarationDriftWarnings,
                 removedMembers,
                 removedMethodSignatures,
-                shimTypeCounter,
-                globalShimMethodCounter);
+                shimNames);
         }
-
-        return (shimTypeCounter, globalShimMethodCounter);
     }
 }
