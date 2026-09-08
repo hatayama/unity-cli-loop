@@ -204,7 +204,7 @@ internal static class PropertyGetterClassifier
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
-            Reason = AddedMethodSkipReasons.NewTypeOutOfScope
+            Reason = AddedMethodSkipReasons.TypeNotIntroduced
         });
     }
 }

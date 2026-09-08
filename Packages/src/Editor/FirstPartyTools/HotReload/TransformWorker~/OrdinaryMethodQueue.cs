@@ -461,7 +461,7 @@ internal static class OrdinaryMethodQueue
             {
                 SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
-                Reason = AddedMethodSkipReasons.NewTypeOutOfScope
+                Reason = AddedMethodSkipReasons.TypeNotIntroduced
             });
         }
     }
