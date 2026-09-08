@@ -32,19 +32,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<ResolvedEntry> resolvedEntries = new List<ResolvedEntry>();
             for (int index = 0; index < entriesToPatch.Length; index++)
             {
-                (ResolvedEntry resolved, HotReloadMethodOutcome failure) = TryResolveEntry(
+                ResolvedEntryOutcome entryOutcome = TryResolveEntry(
                     entriesToPatch[index],
                     assemblyName,
                     shimAssembly,
                     bindFailures,
                     filePath);
-                if (failure != null)
+                if (entryOutcome.IsFailure)
                 {
                     return Result.Failed(
-                        BuildAtomicFailureOutcomes(entriesToPatch, index, failure, filePath));
+                        BuildAtomicFailureOutcomes(entriesToPatch, index, entryOutcome.Failure, filePath));
                 }
 
-                resolvedEntries.Add(resolved);
+                resolvedEntries.Add(entryOutcome.Resolved);
             }
 
             return Result.Succeeded(resolvedEntries);
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 filePath);
         }
 
-        private static (ResolvedEntry Resolved, HotReloadMethodOutcome Failure) TryResolveEntry(
+        private static ResolvedEntryOutcome TryResolveEntry(
             TransformWorkerEntryDto entry,
             string assemblyName,
             Assembly shimAssembly,
@@ -124,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 filePath);
         }
 
-        private static (ResolvedEntry Resolved, HotReloadMethodOutcome Failure) TryResolveAddedMethod(
+        private static ResolvedEntryOutcome TryResolveAddedMethod(
             TransformWorkerEntryDto entry,
             string methodLabel,
             Assembly shimAssembly,
@@ -133,16 +133,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (bindFailures.TryGetValue(entry.shimTypeName ?? string.Empty, out string bindFailureReason))
             {
-                return (null, HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath));
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath));
             }
 
             (MethodInfo shimMethod, string shimError) = FindShimMethod(shimAssembly, entry);
             if (shimMethod == null)
             {
-                return (null, HotReloadMethodOutcome.Failed(methodLabel, shimError, filePath));
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, shimError, filePath));
             }
 
-            return (
+            return ResolvedEntryOutcome.Succeeded(
                 new ResolvedEntry(
                     entry,
                     methodLabel,
@@ -150,11 +152,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadPatchShape.Transplant,
                     originalMethod: null,
                     shimMethod,
-                    isAddedMethod: true),
-                null);
+                    isAddedMethod: true));
         }
 
-        private static (ResolvedEntry Resolved, HotReloadMethodOutcome Failure) TryResolveExistingMethod(
+        private static ResolvedEntryOutcome TryResolveExistingMethod(
             TransformWorkerEntryDto entry,
             string methodLabel,
             string assemblyName,
@@ -168,7 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (patchShape == HotReloadPatchShape.Delegation
                 && bindFailures.TryGetValue(entry.shimTypeName ?? string.Empty, out string bindFailureReason))
             {
-                return (null, HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath));
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath));
             }
 
             string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
@@ -180,23 +182,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entry.genericArity);
             if (!matchResult.Success)
             {
-                return (null, HotReloadMethodOutcome.Failed(methodLabel, matchResult.ErrorMessage, filePath));
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, matchResult.ErrorMessage, filePath));
             }
 
             methodLabel = HotReloadMethodKeys.FormatMethodLabel(matchResult.Method);
             (MethodInfo shimMethod, string shimError) = FindShimMethod(shimAssembly, entry);
             if (shimMethod == null)
             {
-                return (null, HotReloadMethodOutcome.Failed(methodLabel, shimError, filePath));
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, shimError, filePath));
             }
 
             HotReloadPatchResult patchability = HotReloadPatcher.CheckPatchable(matchResult.Method);
             if (!patchability.Success)
             {
-                return (null, HotReloadMethodOutcome.Failed(methodLabel, patchability.ErrorMessage, filePath));
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, patchability.ErrorMessage, filePath));
             }
 
-            return (
+            return ResolvedEntryOutcome.Succeeded(
                 new ResolvedEntry(
                     entry,
                     methodLabel,
@@ -204,8 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patchShape,
                     matchResult.Method,
                     shimMethod,
-                    isAddedMethod: false),
-                null);
+                    isAddedMethod: false));
         }
 
         private static (MethodInfo ShimMethod, string ErrorMessage) FindShimMethod(
@@ -298,6 +302,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 OriginalMethod = originalMethod;
                 ShimMethod = shimMethod;
                 IsAddedMethod = isAddedMethod;
+            }
+        }
+
+        /// <summary>
+        /// One entry's preflight result: the resolved entry, or the outcome that failed it.
+        /// </summary>
+        private sealed class ResolvedEntryOutcome
+        {
+            public ResolvedEntry Resolved { get; }
+            public HotReloadMethodOutcome Failure { get; }
+
+            public bool IsFailure => Failure != null;
+
+            private ResolvedEntryOutcome(ResolvedEntry resolved, HotReloadMethodOutcome failure)
+            {
+                Resolved = resolved;
+                Failure = failure;
+            }
+
+            public static ResolvedEntryOutcome Succeeded(ResolvedEntry resolved)
+            {
+                Debug.Assert(resolved != null, "resolved must not be null.");
+
+                return new ResolvedEntryOutcome(resolved, null);
+            }
+
+            public static ResolvedEntryOutcome Failed(HotReloadMethodOutcome failure)
+            {
+                Debug.Assert(failure != null, "failure must not be null.");
+
+                return new ResolvedEntryOutcome(null, failure);
             }
         }
 
