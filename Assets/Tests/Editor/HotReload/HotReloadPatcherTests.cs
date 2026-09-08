@@ -133,6 +133,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: RevertAll runs the domain-scoped store reset, so no change stays counted and
+        /// no added field stays described.
+        /// </summary>
+        [Test]
+        public void RevertAll_RunsTheDomainStoreReset()
+        {
+            HotReloadAddedFieldRegistry.ReplaceForFile(
+                "Assets/Tests/Editor/HotReload/PatcherResetHost.cs",
+                new[] { "PatcherResetHost.count" });
+
+            HotReloadPatcher.RevertAll();
+
+            Assert.That(HotReloadPatcher.ActiveChangeCount, Is.EqualTo(0));
+            Assert.That(HotReloadAddedFieldRegistry.DescribeAll(), Is.Empty);
+        }
+
+        /// <summary>
         /// What: DescribeActivePatches lists the patched fixture method after Apply and is empty
         /// after RevertAll.
         /// </summary>
