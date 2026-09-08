@@ -38,6 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Method { get; set; } = string.Empty;
 
         public string SnapshotTiming { get; set; } = SourcePausePointConstants.PreLineSnapshotTimingValue;
+
+        public bool Persist { get; set; }
     }
 
     /// <summary>
@@ -108,6 +110,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string LineBasis { get; set; } = string.Empty;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string SuppressedByHotReloadReason { get; set; }
+        // Omitted when false so a caller that never used --persist sees no new field.
+        public bool Persisted { get; set; }
+
+        public bool ShouldSerializePersisted()
+        {
+            return Persisted;
+        }
 
         // Why null for empty: the response omits the field entirely when every parameter of the
         // armed method can be captured, so a reader never sees an empty list to interpret.
@@ -170,7 +179,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
                 SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
                 ResolvedLine = snapshot.ResolvedLine,
-                ResolvedLineText = snapshot.ResolvedLineText ?? string.Empty
+                ResolvedLineText = snapshot.ResolvedLineText ?? string.Empty,
+                Persisted = snapshot.Persisted
             };
         }
 

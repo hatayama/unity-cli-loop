@@ -213,6 +213,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string ResolvedLineText { get; set; }
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Persisted { get; set; }
+
         // Why null for empty: the status contract omits the field entirely when every parameter of
         // the resolved method can be captured, so a reader never sees an empty list to interpret.
         private static IReadOnlyList<string> NormalizeNotCapturableVariables(IReadOnlyList<string> values)
@@ -282,6 +285,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // two must never see fewer topics than the other carries.
                 Warning = warnings == null ? null : string.Join(" ", warnings),
                 Warnings = warnings,
+                Persisted = snapshot.Persisted,
                 ResolvedLine = snapshot.ResolvedLine,
                 ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
                     ? null
@@ -348,6 +352,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public int HitCount { get; set; }
         public long RemainingMilliseconds { get; set; }
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Persisted { get; set; }
+
         internal static PausePointStatusListItemResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
             if (snapshot == null)
@@ -361,7 +368,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Status = snapshot.Status,
                 Mode = snapshot.Mode,
                 HitCount = snapshot.HitCount,
-                RemainingMilliseconds = snapshot.RemainingMilliseconds
+                RemainingMilliseconds = snapshot.RemainingMilliseconds,
+                Persisted = snapshot.Persisted
             };
         }
     }

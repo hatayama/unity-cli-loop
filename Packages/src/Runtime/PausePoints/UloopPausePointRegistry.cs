@@ -437,6 +437,38 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return UloopPausePointStatusSnapshotCollector.CountActiveEntries(Entries.Values);
         }
 
+        /// <summary>
+        /// Marks whether this pause point is re-armed after a domain reload. A no-op for an
+        /// unknown id: the caller has already learned the enable failed from its own result.
+        /// </summary>
+        public static void SetPersisted(string id, bool persisted)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
+
+            if (Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                entry.Persisted = persisted;
+            }
+        }
+
+        /// <summary>
+        /// Counts armed entries that will be re-armed after the next domain reload, so warnings
+        /// can separate the pause points that come back from the ones that are simply lost.
+        /// </summary>
+        public static int GetActivePersistedCount()
+        {
+            int count = 0;
+            foreach (UloopPausePointEntry entry in Entries.Values)
+            {
+                if (entry.IsEnabled && entry.Persisted)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static UloopPausePointSnapshot HitCore(
             string id,
             UloopPausePointCapturedVariableFrame capturedFrame,

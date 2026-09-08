@@ -103,6 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxCallerFrames,
                 hitWhen,
                 hitWhenCondition);
+            ApplyPersistRequest(snapshot.Id, parameters);
+            snapshot = UloopPausePointRegistry.GetStatus(snapshot.Id);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             List<string> warningEntries = new List<string>();
             PausePointEnableWarningList.AddIfNotEmpty(
@@ -400,6 +402,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : SourcePausePointConstants.PreLineSnapshotTimingNote;
         }
 
+        /// <summary>
+        /// Records whether this enable asked for the pause point to be re-armed after a domain
+        /// reload. Enabling without --persist rebuilds the entry, so persistence is already off;
+        /// this only has to turn it on.
+        /// </summary>
+        private static void ApplyPersistRequest(string registryId, EnablePausePointSchema parameters)
+        {
+            if (parameters.Persist)
+            {
+                UloopPausePointRegistry.SetPersisted(registryId, true);
+            }
+        }
+
         private static PausePointResponse FinishEnableBySourceLocation(
             string id,
             EnablePausePointSchema parameters,
@@ -432,6 +447,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hitWhen,
                 hitWhenCondition,
                 patchResult.HasPhysicsCallbackWarning);
+            ApplyPersistRequest(snapshot.Id, parameters);
+            snapshot = UloopPausePointRegistry.GetStatus(snapshot.Id);
             if (retargetedToHotReloadPatch)
             {
                 UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
