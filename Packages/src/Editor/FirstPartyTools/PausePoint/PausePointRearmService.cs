@@ -90,8 +90,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 line.Append('[').Append(response.ErrorCode).Append("] ");
             }
 
-            line.Append(response.Message);
+            line.Append(DescribeFailureReason(response));
             return line.ToString();
+        }
+
+        // The shared Release message is written for a hand-issued enable-pause-point, where the
+        // CLI has already tried the automatic Debug switch. A re-arm never switches Code
+        // Optimization, so repeating that message here would describe a step that did not run.
+        private static string DescribeFailureReason(PausePointResponse response)
+        {
+            if (response.ErrorCode == SourcePausePointConstants.ErrorCodeReleaseCodeOptimization)
+            {
+                return "Code Optimization is Release and the re-arm does not switch it. Run "
+                    + "uloop set-code-optimization debug, compile, then enable-pause-point again "
+                    + "with --persist.";
+            }
+
+            return response.Message;
         }
     }
 }

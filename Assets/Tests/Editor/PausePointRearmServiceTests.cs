@@ -98,6 +98,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a Release-code-optimization failure is reported in re-arm terms, not with the
+        /// hand-issued enable message about an automatic Debug switch the re-arm never performs.
+        /// </summary>
+        [Test]
+        public void RearmAfterDomainReload_WhenCodeOptimizationIsRelease_ExplainsTheReArmHasNoAutomaticSwitch()
+        {
+            InMemoryPausePointPersistenceStore store = new(
+                SourceRecordFor("Assets/Tests/Editor/PausePointToolsFixture.cs", 12));
+            PausePointRearmService service = new(
+                store,
+                _ => new PausePointResponse
+                {
+                    Success = false,
+                    ErrorCode = SourcePausePointConstants.ErrorCodeReleaseCodeOptimization,
+                    Message = SourcePausePointConstants.ReleaseCodeOptimizationRejectionMessage
+                });
+            LogAssert.Expect(LogType.Warning, new RegexMatchAnything());
+
+            IReadOnlyList<string> report = service.RearmAfterDomainReload();
+
+            Assert.That(report, Has.Count.EqualTo(1));
+            Assert.That(
+                report[0],
+                Does.Contain("[" + SourcePausePointConstants.ErrorCodeReleaseCodeOptimization + "]"));
+            Assert.That(
+                report[0],
+                Does.Contain("Code Optimization is Release and the re-arm does not switch it."));
+            Assert.That(
+                report[0],
+                Does.Not.Contain("Automatic switch"),
+                "The re-arm never runs the CLI's automatic Debug switch, so it must not claim it did.");
+        }
+
+        /// <summary>
         /// What: an empty store re-arms nothing and never calls the enable path.
         /// </summary>
         [Test]
