@@ -42,12 +42,13 @@ also written to the Console as a warning, so `uloop get-logs` finds it.
 Each pause point also reports `Persisted: true` in its own status while it is armed with
 `--persist`.
 
-`DomainReloadRearmReport` describes the most recent reload only — it is Editor state that each
-reload rebuilds, and there is no carry-over from the reload before it. A re-arm also consumes
-the stored request, so a pause point that failed to come back is not retried: the next reload
-re-arms nothing and reports nothing, and the failure line is gone from the report. The Console
-warning is the durable record, so read it with `uloop get-logs --log-type Warning` whenever the
-report is empty but a pause point you persisted is missing.
+`DomainReloadRearmReport` describes the most recent reload only: it is Editor state that each
+reload rebuilds, with no carry-over from the reload before it. When a failed re-arm is followed
+by another reload (a later `uloop compile`, or the recompile Unity runs when Code Optimization
+changes), the next report no longer mentions the failure. The Console warning is the durable
+record, so read it with `uloop get-logs --log-type Warning` when the report is empty but a pause
+point is missing. The re-arm itself never switches Code Optimization; only a hand-issued
+`enable-pause-point` does.
 
 The most common re-arm failure is `uloop set-code-optimization` sitting on Release: source
 pause points cannot be patched in that mode, so the re-arm fails the same way a fresh enable
