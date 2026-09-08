@@ -44,7 +44,6 @@ internal sealed class AddedPropertyBinding
 
     public MethodTransformDecision SetterDecision { get; set; }
 
-    public string StoreFieldKey { get; set; }
 
     public ExpressionSyntax Initializer { get; set; }
 

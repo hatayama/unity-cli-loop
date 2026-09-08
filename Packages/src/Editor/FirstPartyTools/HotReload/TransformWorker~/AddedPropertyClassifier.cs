@@ -392,7 +392,6 @@ internal static class AddedPropertyClassifier
         AddedPropertyBinding binding,
         AddedFieldCatalog addedFieldCatalog)
     {
-        binding.StoreFieldKey = binding.PropertyKey;
         binding.Initializer = binding.Declaration.Initializer?.Value;
 
         // Why not AddAddedSyntaxKey: the field syntax-key set drives field drift stripping,

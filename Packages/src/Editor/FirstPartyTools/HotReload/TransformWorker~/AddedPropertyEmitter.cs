@@ -121,10 +121,12 @@ internal static class AddedPropertyEmitter
                 SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName)));
         }
 
+        // Why PropertyKey: the auto-property store is keyed by the property itself, because
+        // RegisterAutoPropertyStore registers the backing field with FieldKey = PropertyKey.
         arguments.Add(SyntaxFactory.Argument(
             SyntaxFactory.LiteralExpression(
                 SyntaxKind.StringLiteralExpression,
-                SyntaxFactory.Literal(binding.StoreFieldKey))));
+                SyntaxFactory.Literal(binding.PropertyKey))));
         return arguments;
     }
 

@@ -149,13 +149,13 @@ internal static class AddedPropertyBodyScan
         }
 
         if (expression.Parent is PrefixUnaryExpressionSyntax prefix
-            && IsIncrementOrDecrement(prefix.Kind()))
+            && AddedFieldBodyScan.IsIncrementOrDecrement(prefix.Kind()))
         {
             return AddedPropertySkipReasons.CompoundAssignment;
         }
 
         if (expression.Parent is PostfixUnaryExpressionSyntax postfix
-            && IsIncrementOrDecrement(postfix.Kind()))
+            && AddedFieldBodyScan.IsIncrementOrDecrement(postfix.Kind()))
         {
             return AddedPropertySkipReasons.CompoundAssignment;
         }
@@ -179,14 +179,6 @@ internal static class AddedPropertyBodyScan
         }
 
         return false;
-    }
-
-    private static bool IsIncrementOrDecrement(SyntaxKind kind)
-    {
-        return kind == SyntaxKind.PreIncrementExpression
-            || kind == SyntaxKind.PreDecrementExpression
-            || kind == SyntaxKind.PostIncrementExpression
-            || kind == SyntaxKind.PostDecrementExpression;
     }
 
     private static bool HasRefKind(ArgumentSyntax argument)
