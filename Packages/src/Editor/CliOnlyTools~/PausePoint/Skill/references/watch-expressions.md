@@ -17,4 +17,8 @@ The expression may use `UloopPausePoint.TryGetCapturedValue("name")` to inspect 
 
 ## Lifetime
 
-Watch expressions are in-memory Editor state. A domain reload clears them, so re-register them after `uloop compile`, script recompilation, or an Editor restart. For reliable per-Step changes, keep the expression attached to a continuous pause point on an `Update` or `FixedUpdate` line and use `control-play-mode --action Step`.
+Watch expressions survive a domain reload. They are saved in Editor session state, so `uloop compile`, a script recompilation, and a Play entry with Domain Reload enabled all keep them registered — the expression is recompiled after the reload and evaluation starts from a fresh baseline, so history collected before the reload is gone.
+
+A watch whose expression no longer compiles after the reload (its type was renamed or deleted) is dropped, and the next `enable-watch` or `get-watch-values` response reports it in `Warning` with the id and the compiler message.
+
+Watch expressions do not survive an Editor restart — session state ends with the Editor process. For reliable per-Step changes, keep the expression attached to a continuous pause point on an `Update` or `FixedUpdate` line and use `control-play-mode --action Step`.

@@ -50,6 +50,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Array.Empty<WatchEntryResponse>();
         public IReadOnlyList<WatchCompilationErrorResponse> CompilationErrors { get; set; } =
             Array.Empty<WatchCompilationErrorResponse>();
+
+        /// <summary>
+        /// Set when watches were dropped by the last domain reload, so the caller learns about it
+        /// on the next watch command instead of silently seeing fewer watches.
+        /// </summary>
+        public string Warning { get; set; }
+
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
+        }
     }
 
     /// <summary>
@@ -250,18 +261,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             WatchExpressionServices.EnsureMonitorStarted();
+            WatchExpressionServices.SaveRegistrySnapshot();
             WatchExpressionEntry entry = WatchExpressionServices.Registry.GetEntries()
                 .Single(candidate => candidate.Id == parameters.Id);
-            return WatchResponseFromEntry(entry, "Watch expression enabled.");
+            WatchResponse response = WatchResponseFromEntry(entry, "Watch expression enabled.");
+            response.Warning = BuildRestoreWarning();
+            return response;
         }
 
         public static WatchResponse Clear(ClearWatchSchema parameters)
         {
             if (parameters.All)
             {
+                // Stop any in-flight restore first: otherwise it would keep re-registering the
+                // watches this call is clearing and save them back over the empty store.
+                WatchExpressionServices.CancelPendingRestore();
+                int clearedCount = WatchExpressionServices.Registry.ClearAll();
+                WatchExpressionServices.SaveRegistrySnapshot();
                 return new WatchResponse
                 {
-                    ClearedCount = WatchExpressionServices.Registry.ClearAll(),
+                    ClearedCount = clearedCount,
                     Message = "Watch expressions cleared."
                 };
             }
@@ -272,9 +291,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             bool cleared = WatchExpressionServices.Registry.Clear(parameters.Id);
-            return cleared
-                ? new WatchResponse { Id = parameters.Id, Message = "Watch expression cleared." }
-                : CreateFailure($"Watch expression '{parameters.Id}' was not found.");
+            if (!cleared)
+            {
+                return CreateFailure($"Watch expression '{parameters.Id}' was not found.");
+            }
+
+            WatchExpressionServices.SaveRegistrySnapshot();
+            return new WatchResponse { Id = parameters.Id, Message = "Watch expression cleared." };
         }
 
         public static WatchResponse GetValues(GetWatchValuesSchema parameters)
@@ -285,15 +308,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entries = entries.Where(entry => entry.Id == parameters.Id).ToList();
                 if (entries.Count == 0)
                 {
-                    return CreateFailure($"Watch expression '{parameters.Id}' was not found.");
+                    // Asking for exactly the watch the reload dropped is the one moment the caller
+                    // most needs the restore report, so the failure carries it too.
+                    WatchResponse notFound = CreateFailure($"Watch expression '{parameters.Id}' was not found.");
+                    notFound.Warning = BuildRestoreWarning();
+                    return notFound;
                 }
             }
 
             return new WatchResponse
             {
                 Watches = entries.Select(WatchEntryResponse.FromEntry).ToList(),
-                Message = entries.Count == 0 ? "No watch expressions are registered." : "Watch values retrieved."
+                Message = entries.Count == 0 ? "No watch expressions are registered." : "Watch values retrieved.",
+                Warning = BuildRestoreWarning()
             };
+        }
+
+        /// <summary>
+        /// Surfaces the watches the last domain reload dropped. Clearing a watch is not a place
+        /// the caller needs to hear about it, so only enable and value reads carry it.
+        /// </summary>
+        private static string BuildRestoreWarning()
+        {
+            WatchRestoreReport report = WatchExpressionServices.LastRestoreReport;
+            if (report == null || report.Warnings.Count == 0)
+            {
+                return null;
+            }
+
+            return string.Join(" ", report.Warnings);
         }
 
         private static string ValidateEnable(EnableWatchSchema parameters)
@@ -359,15 +402,116 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private static readonly UnityWatchEditorStateProvider StateProvider = new();
         private static readonly WatchExpressionRegistry RegistryValue = new(StateProvider);
-        private static readonly WatchExpressionCompiler CompilerValue = new(new DynamicCodeCompiler());
+        private static readonly WatchExpressionCompiler DefaultCompiler = new(new DynamicCodeCompiler());
+        private static IWatchExpressionCompiler _compiler = DefaultCompiler;
         private static readonly WatchExpressionStepMonitor Monitor = new(RegistryValue);
+        private static readonly IWatchPersistenceStore DefaultStore = new WatchSessionStateStore();
+        private static IWatchPersistenceStore _store = DefaultStore;
+        private static CancellationTokenSource _restoreCancellation;
 
         public static WatchExpressionRegistry Registry => RegistryValue;
-        public static WatchExpressionCompiler Compiler => CompilerValue;
+        public static IWatchExpressionCompiler Compiler => _compiler;
+        public static IWatchPersistenceStore Store => _store;
+
+        /// <summary>
+        /// Result of the restore that ran after the last domain reload, or null when no restore
+        /// has completed in this domain.
+        /// </summary>
+        public static WatchRestoreReport LastRestoreReport { get; private set; }
 
         public static void EnsureMonitorStarted()
         {
             Monitor.Start();
+        }
+
+        /// <summary>
+        /// Recompiles and re-registers the watches the domain reload dropped. Fire-and-forget
+        /// because compilation is asynchronous and Editor startup must not block on it.
+        /// </summary>
+        public static void RestoreAfterDomainReload()
+        {
+            _restoreCancellation = new CancellationTokenSource();
+            _ = RestoreAfterDomainReloadAsync(_restoreCancellation.Token);
+        }
+
+        /// <summary>
+        /// Stops a restore that is still compiling. Without this, a clear issued mid-restore would
+        /// be undone: the restore would keep registering the records the clear just removed and
+        /// write them back over the empty store.
+        /// </summary>
+        public static void CancelPendingRestore()
+        {
+            _restoreCancellation?.Cancel();
+        }
+
+        private static async Task RestoreAfterDomainReloadAsync(CancellationToken ct)
+        {
+            try
+            {
+                WatchRestoreService restoreService = new(
+                    RegistryValue,
+                    _compiler,
+                    _store,
+                    EnsureMonitorStarted);
+                LastRestoreReport = await restoreService.RestoreAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // A cancelled restore is a clear the user asked for, not a failure.
+            }
+            catch (Exception exception)
+            {
+                // Why catch everything: this runs on an Editor update tick with nobody to observe
+                // the Task, so an escaping exception would only surface as an unobserved-task log.
+                VibeLogger.LogError(
+                    "watch_restore_after_domain_reload_failed",
+                    "Restoring watch expressions after the domain reload failed.",
+                    new { error = exception.ToString() });
+            }
+        }
+
+        /// <summary>
+        /// Writes the registry's current contents over the persisted records, so the next domain
+        /// reload restores exactly what is registered now.
+        /// </summary>
+        public static void SaveRegistrySnapshot()
+        {
+            IReadOnlyList<WatchExpressionEntry> entries = RegistryValue.GetEntries();
+            List<WatchPersistedRecord> records = new(entries.Count);
+            foreach (WatchExpressionEntry entry in entries)
+            {
+                records.Add(new WatchPersistedRecord
+                {
+                    Id = entry.Id,
+                    Expression = entry.Expression,
+                    MaxHistory = entry.MaxHistory
+                });
+            }
+
+            _store.Save(records);
+        }
+
+        internal static void OverrideStoreForTesting(IWatchPersistenceStore store)
+        {
+            _store = store ?? throw new ArgumentNullException(nameof(store));
+        }
+
+        internal static void OverrideCompilerForTesting(IWatchExpressionCompiler compiler)
+        {
+            _compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
+        }
+
+        internal static void ResetForTesting()
+        {
+            _store = DefaultStore;
+            _compiler = DefaultCompiler;
+            LastRestoreReport = null;
+            _restoreCancellation = null;
+        }
+
+        internal static void SetLastRestoreReportForTesting(WatchRestoreReport report)
+        {
+            LastRestoreReport = report;
         }
     }
 }
