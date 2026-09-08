@@ -67,9 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Drops the file's stale added members when the run left it with no entry to patch.
         /// </summary>
         /// <remarks>
-        /// Why not HotReloadFileGenerations.BeginFileGeneration: this file contributed no body to
-        /// the shim assembly, so there are no bytes to register a shim generation with. Only the
-        /// added-member side has stale rows to drop.
+        /// Why the added-member-only start: this file contributed no body to the shim assembly,
+        /// so it has no shim generation to replace.
         /// </remarks>
         internal static void ClearFileGeneration(HotReloadApplyContext context, HotReloadGroupFile file)
         {
@@ -79,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> addedLabelsAtClear =
                 HotReloadFileGenerations.ListActiveAddedMethodKeys(file.ProjectRelativePath);
             HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, context.CorrelationId);
-            HotReloadAddedMemberRegistry.BeginFileGeneration(file.ProjectRelativePath);
+            HotReloadFileGenerations.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
             // Why AddedFieldNames first: a retry (gate or isolation) replaces this file's added
             // field names, and committing the first-pass names would resurrect a field the
             // retry no longer emits. The worker row is the first-pass fallback.
@@ -270,7 +269,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (resolved.IsAddedMethod)
             {
-                HotReloadAddedMemberRegistry.Register(
+                HotReloadFileGenerations.RegisterAddedMethod(
                     projectRelativePath,
                     resolved.MethodLabel,
                     resolved.ShimMethod,
@@ -283,7 +282,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why before Apply: Apply notifies OnHotReloadPatchStateChanged(true) after the
             // ledger write; registration must already expose this method's shim for retarget.
-            HotReloadShimRegistry.RegisterMethod(
+            HotReloadFileGenerations.RegisterShimMethod(
                 projectRelativePath,
                 resolved.OriginalMethod,
                 new HotReloadShimRegistry.MethodEntry(
@@ -298,7 +297,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (!patchResult.Success)
             {
-                HotReloadShimRegistry.RemoveMethod(resolved.OriginalMethod);
+                HotReloadFileGenerations.RemoveShimMethod(resolved.OriginalMethod);
                 return HotReloadMethodOutcome.Failed(
                     resolved.MethodLabel,
                     patchResult.ErrorMessage,
