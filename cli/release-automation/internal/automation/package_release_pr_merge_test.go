@@ -55,26 +55,50 @@ func (stub *mergePackageReleasePRStub) runOutput(ctx context.Context, name strin
 	commandLine := strings.Join(append([]string{name}, args...), " ")
 	stub.commandLog = append(stub.commandLog, commandLine)
 
+	output, answered, err := stub.answerPullRequestCommand(commandLine)
+	if answered {
+		return output, err
+	}
+	return stub.answerContentCommand(commandLine)
+}
+
+// answerPullRequestCommand covers the pull request reads and writes. answered
+// is false for anything it does not own, so the caller falls through to the
+// content and run reads.
+func (stub *mergePackageReleasePRStub) answerPullRequestCommand(commandLine string) (string, bool, error) {
 	switch {
 	case strings.Contains(commandLine, "--components--dispatcher"):
 		// The dispatcher listing is a gate question inside one pass, so unlike
 		// the package listing it must not advance the stubbed state.
 		if stub.activePoll.openDispatcherPRListJSON == "" {
-			return "[]", nil
+			return "[]", true, nil
 		}
-		return stub.activePoll.openDispatcherPRListJSON, nil
+		return stub.activePoll.openDispatcherPRListJSON, true, nil
 	case strings.HasPrefix(commandLine, "gh pr list "):
 		// The listing opens each pass, so it is what advances the stubbed state;
 		// the rest of the pass must keep reading the same poll.
 		stub.activePoll = stub.nextPoll()
-		return stub.activePoll.prListJSON, nil
+		return stub.activePoll.prListJSON, true, nil
 	case strings.HasPrefix(commandLine, "gh pr ready "):
 		if stub.activePoll.failReady {
-			return "", fmt.Errorf("gh pr ready failed")
+			return "", true, fmt.Errorf("gh pr ready failed")
 		}
-		return "", nil
+		return "", true, nil
 	case strings.HasPrefix(commandLine, "gh pr view "):
-		return stub.activePoll.stateJSON, nil
+		return stub.activePoll.stateJSON, true, nil
+	case strings.Contains(commandLine, " --match-head-commit "):
+		if stub.activePoll.failMerge {
+			return "", true, fmt.Errorf("gh pr merge failed")
+		}
+		return "", true, nil
+	}
+	return "", false, nil
+}
+
+// answerContentCommand covers the contents API reads and the workflow run
+// listing, and rejects anything the command is not expected to run.
+func (stub *mergePackageReleasePRStub) answerContentCommand(commandLine string) (string, error) {
+	switch {
 	case strings.Contains(commandLine, releasePleaseManifestRelativePath):
 		ref := mergePackageReleasePRRequestedRef(commandLine)
 		manifest, known := stub.manifestAt(ref)
@@ -97,11 +121,6 @@ func (stub *mergePackageReleasePRStub) runOutput(ctx context.Context, name strin
 			}
 		}
 		return "[]", nil
-	case strings.Contains(commandLine, " --match-head-commit "):
-		if stub.activePoll.failMerge {
-			return "", fmt.Errorf("gh pr merge failed")
-		}
-		return "", nil
 	}
 	return "", fmt.Errorf("unexpected command: %s", commandLine)
 }
