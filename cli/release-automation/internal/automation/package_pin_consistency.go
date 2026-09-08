@@ -96,10 +96,14 @@ func packagePinConsistencyDispatcherVersion(ctx context.Context, config packageP
 			packagePinConsistencyCommandName, releasePleaseManifestRelativePath, config.ref, err)
 	}
 
-	version := strings.TrimSpace(manifest[releasePleaseDispatcherPackage])
-	if version == "" {
+	version := manifest[releasePleaseDispatcherPackage]
+	if strings.TrimSpace(version) == "" {
 		return "", fmt.Errorf("%s: %s at %s has no %q version",
 			packagePinConsistencyCommandName, releasePleaseManifestRelativePath, config.ref, releasePleaseDispatcherPackage)
+	}
+	if version != strings.TrimSpace(version) {
+		return "", fmt.Errorf("%s: %s at %s releases %q as %q, which is not a bare version",
+			packagePinConsistencyCommandName, releasePleaseManifestRelativePath, config.ref, releasePleaseDispatcherPackage, version)
 	}
 	return version, nil
 }
@@ -117,10 +121,17 @@ func packagePinConsistencyPinnedTag(ctx context.Context, config packagePinConsis
 			packagePinConsistencyCommandName, unityPackageCliPinFile, config.ref, err)
 	}
 
-	pinnedTag := strings.TrimSpace(pin.DispatcherReleaseTag)
-	if pinnedTag == "" {
+	pinnedTag := pin.DispatcherReleaseTag
+	if strings.TrimSpace(pinnedTag) == "" {
 		return "", fmt.Errorf("%s: %s at %s has no dispatcherReleaseTag",
 			packagePinConsistencyCommandName, unityPackageCliPinFile, config.ref)
+	}
+	// Trimming instead of rejecting would let a padded tag pass this gate while
+	// the merge automation, which compares the pin verbatim against the tag it
+	// just published, waits out its whole timeout on the same release.
+	if pinnedTag != strings.TrimSpace(pinnedTag) {
+		return "", fmt.Errorf("%s: %s at %s records dispatcherReleaseTag %q, which is not a bare tag",
+			packagePinConsistencyCommandName, unityPackageCliPinFile, config.ref, pinnedTag)
 	}
 	return pinnedTag, nil
 }

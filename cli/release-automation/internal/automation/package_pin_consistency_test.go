@@ -135,3 +135,35 @@ func TestPackagePinConsistencyFailsWhenPinJSONIsInvalid(t *testing.T) {
 		t.Fatalf("expected the unparsable pin path in the failure message, got %q", stderr)
 	}
 }
+
+// Verifies a pin tag padded with whitespace is rejected rather than trimmed, since the merge automation compares the pin verbatim.
+func TestPackagePinConsistencyRejectsPaddedDispatcherReleaseTag(t *testing.T) {
+	repoRoot := writePackagePinConsistencyRepo(t,
+		`{"Packages/src":"3.6.0","cli/dispatcher":"3.4.0"}`,
+		`{"dispatcherReleaseTag":" dispatcher-v3.4.0 ","projectRunnerVersion":"3.6.0"}`)
+
+	exitCode, stdout, stderr := runPackagePinConsistencyCheck(t, repoRoot)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout)
+	}
+	if !strings.Contains(stderr, "not a bare tag") {
+		t.Fatalf("expected the non-canonical tag to be named in the failure message, got %q", stderr)
+	}
+}
+
+// Verifies a manifest version padded with whitespace is rejected rather than trimmed into a matching tag.
+func TestPackagePinConsistencyRejectsPaddedManifestVersion(t *testing.T) {
+	repoRoot := writePackagePinConsistencyRepo(t,
+		`{"Packages/src":"3.6.0","cli/dispatcher":" 3.4.0 "}`,
+		`{"dispatcherReleaseTag":"dispatcher-v3.4.0","projectRunnerVersion":"3.6.0"}`)
+
+	exitCode, stdout, stderr := runPackagePinConsistencyCheck(t, repoRoot)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout)
+	}
+	if !strings.Contains(stderr, "not a bare version") {
+		t.Fatalf("expected the non-canonical version to be named in the failure message, got %q", stderr)
+	}
+}

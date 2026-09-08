@@ -87,7 +87,9 @@ would never be tagged.
 - The GitHub App needs **Pull requests: Read and write** in addition to
   **Contents: Read and write**, and the permission change must be approved on
   the installation. Without it the merge step fails with 403; the stamp has
-  already landed at that point, so recovery is merging the pull request by hand.
+  already landed at that point, so recovery is merging the pull request by hand
+  after verifying the same conditions the automation checks
+  (`docs/dispatcher-pin-release-order.md`).
 - `always-update: true` rebases every pending release pull request on each push
   to `main`, so their checks are re-dispatched each time. That is more CI work
   per push, accepted because without it the package release pull request never

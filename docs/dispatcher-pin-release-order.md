@@ -66,10 +66,21 @@ branch on purpose: between the dispatcher merge and the stamp, `main`'s manifest
 and pin legitimately disagree, and gating every pull request would turn that
 window red for unrelated work.
 
-When the automatic merge does not happen, check that the pin freshness gate on
-`main` is green — that confirms the stamp landed — and then merge the
-unity-package release pull request by hand. Decision record:
-`docs/adr/0007-separate-release-prs-and-package-auto-merge.md`.
+When the automatic merge does not happen, merging the unity-package release pull
+request by hand means re-checking by hand what the automation would have
+checked. A green pin freshness gate on `main` only proves the stamp landed; it
+says nothing about the pull request. Before merging, confirm all four:
+
+- the pin freshness gate on `main` is green, so the stamp reached `main`;
+- the pull request's head commit records the dispatcher tag just published in
+  `Packages/src/project-runner-pin.json`;
+- the pull request is not a draft;
+- every required workflow has a completed successful run for that exact head
+  SHA — not for an earlier head.
+
+Merging without those is how a stale or unvalidated package release gets
+published, which is the failure this whole order exists to prevent. Decision
+record: `docs/adr/0007-separate-release-prs-and-package-auto-merge.md`.
 
 ## Why the stamp is pushed without a pull request
 
@@ -96,7 +107,7 @@ administrator:
    and no others. Install it on this repository only. Pull requests write is
    what lets `post-publish` merge the unity-package release pull request after
    the stamp; without it that step fails with a 403 and the pull request has to
-   be merged by hand.
+   be merged by hand, under the conditions listed in "Release pull requests".
 2. Store the App ID as the repository variable `DISPATCHER_PIN_APP_ID` and a
    generated private key as the repository secret
    `DISPATCHER_PIN_APP_PRIVATE_KEY`.
