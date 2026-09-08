@@ -90,6 +90,9 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 - Use from `uloop execute-dynamic-code`. Dynamic code compiles against the compiled assemblies,
   not against the reload's artifact.
 - A new or changed `.asmdef` / `.asmref`. Assembly layout is decided at compile time.
+- A call to a member an earlier or the same reload *added* to a compiled type (an `Added` row).
+  Introduced types compile against the compiled assemblies and the retained artifacts only, so
+  the artifact compilation fails with the compiler error naming the missing member.
 
 ## Lifecycle
 
