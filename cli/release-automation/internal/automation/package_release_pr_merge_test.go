@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-const packageReleasePRHeadBranch = "release-please--branches--main--components--unity-package"
+const (
+	packageReleasePRHeadBranch = "release-please--branches--main--components--unity-package"
+	packageReleasePRNumber     = 2002
+)
 
 // mergePackageReleasePRPoll describes what the stubbed gh reports on one pass of
 // the wait loop, so a test can walk the pull request through the states it
@@ -181,8 +184,8 @@ func runMergePackageReleasePRCaseWithArgs(
 
 func packageReleasePRListJSON(headSHA string, isDraft bool) string {
 	return fmt.Sprintf(
-		`[{"number":2002,"headRefName":%q,"headRefOid":%q,"isDraft":%t}]`,
-		packageReleasePRHeadBranch, headSHA, isDraft)
+		`[{"number":%d,"headRefName":%q,"headRefOid":%q,"isDraft":%t}]`,
+		packageReleasePRNumber, packageReleasePRHeadBranch, headSHA, isDraft)
 }
 
 func packageReleasePRWorkflows() []string {
@@ -581,16 +584,22 @@ func TestMergePackageReleasePRFailsWhenSeveralPullRequestsMatch(t *testing.T) {
 	assertMergePackageReleasePRNeverMerged(t, stub)
 }
 
+// assertMergePackageReleasePRMergeCount counts merges of the package release
+// pull request against one head. The pull request number is part of the match:
+// a merge command naming another pull request must not read as this one.
 func assertMergePackageReleasePRMergeCount(t *testing.T, stub *mergePackageReleasePRStub, headSHA string, expected int) {
 	t.Helper()
+	expectedMerge := fmt.Sprintf(
+		"gh pr merge %d --repo owner/repository --squash --match-head-commit %s", packageReleasePRNumber, headSHA)
 	mergeCount := 0
 	for _, commandLine := range stub.commandLog {
-		if strings.Contains(commandLine, "--match-head-commit "+headSHA) {
+		if commandLine == expectedMerge {
 			mergeCount++
 		}
 	}
 	if mergeCount != expected {
-		t.Fatalf("expected %d merges against %s, got %d\n%s", expected, headSHA, mergeCount, strings.Join(stub.commandLog, "\n"))
+		t.Fatalf("expected %d merges matching %q, got %d\n%s",
+			expected, expectedMerge, mergeCount, strings.Join(stub.commandLog, "\n"))
 	}
 }
 
