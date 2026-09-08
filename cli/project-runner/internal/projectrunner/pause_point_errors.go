@@ -201,10 +201,8 @@ const (
 
 	pausePointHintTimeoutAutoCleared    = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
 	pausePointHitWhenNoMatchTimeoutHint = "The marker's line executed, but no hit matched --hit-when. Adjust the --hit-when condition or trigger input so a hit matches, then wait again."
-	pausePointHitWhenNoMatchExpiredHint = "The marker expired after its line executed, but no hit matched --hit-when. Re-enable it with a longer --timeout-seconds, then adjust the --hit-when condition or trigger input so a hit matches."
 	pausePointExpiredNoHitPrefix        = "The enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out before the marker was hit. "
 	pausePointExpiredNoHitSuffix        = " Once the cause is addressed, re-enable the marker (raise --timeout-seconds only if the window itself was too short) and trigger the code path again."
-	pausePointExpiredAfterHitHint       = "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with 'uloop pause-point-status --id <marker-id>' (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit."
 
 	// Explains how to read resolved-line Details on Expired when HitCount is still 0.
 	// Why not mention ResolvedLineText: C# omits empty text, so Details may carry only ResolvedLine.
@@ -296,6 +294,11 @@ func pausePointTimeoutHint(
 // pausePointExpiredHint mirrors the timeout diagnosis for expired markers, because a marker
 // whose enable window ends before the wait deadline surfaces as PAUSE_POINT_EXPIRED instead
 // of a timeout and would otherwise carry no hint at all.
+//
+// Why it says nothing about a recorded hit or a --hit-when mismatch: the Editor already
+// diagnoses both in RecommendedNextAction, which leads NextActions, so a hint here would
+// print the same guidance a second time in the same error. Only the branches the Editor
+// cannot see stay: hot-reload suppression, a rejected trigger, and the Editor's Play state.
 func pausePointExpiredHint(response pausePointStatusResponse, triggerResult *pausePointTriggerResult) string {
 	if response.SuppressedByHotReload {
 		return pausePointSuppressedByHotReloadHint(response)
@@ -309,16 +312,15 @@ func pausePointExpiredHint(response pausePointStatusResponse, triggerResult *pau
 	if response.EditorState.IsPaused {
 		return pausePointHintEditorAlreadyPaused
 	}
+	// Why != 0 rather than > 0: a recorded hit is diagnosed by RecommendedNextAction, and a
+	// malformed negative count is no evidence that the line never ran, so neither may claim it.
+	if response.HitCount != 0 {
+		return ""
+	}
 	if pausePointHasHitWhenSkips(response) {
-		return pausePointHitWhenNoMatchExpiredHint
+		return ""
 	}
-	if response.HitCount == 0 {
-		return pausePointExpiredNoHitPrefix + pausePointNonFiringPatternsHint + pausePointExpiredNoHitSuffix
-	}
-	if response.HitCount > 0 {
-		return pausePointExpiredAfterHitHint
-	}
-	return ""
+	return pausePointExpiredNoHitPrefix + pausePointNonFiringPatternsHint + pausePointExpiredNoHitSuffix
 }
 
 // pausePointHasHitWhenSkips identifies the state that proves the line executed
