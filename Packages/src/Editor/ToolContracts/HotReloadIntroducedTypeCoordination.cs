@@ -10,8 +10,10 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     public static class HotReloadIntroducedTypeCoordination
     {
         /// <summary>
-        /// Set by HotReloadIntroducedTypeHolder. Returns the metadata names
-        /// (Namespace.Outer+Nested form) of every active introduced type, empty when none.
+        /// Set by HotReloadIntroducedTypeHolder. Returns the metadata name of every active
+        /// introduced type, empty when none. These are metadata names as defined in
+        /// docs/glossary.md: nested types are joined with '/'. Convert one to the reflection
+        /// form before comparing it against Type.FullName or passing it to Assembly.GetType.
         /// </summary>
         public static Func<IReadOnlyList<string>> DescribeActiveTypeNames { get; set; }
     }
