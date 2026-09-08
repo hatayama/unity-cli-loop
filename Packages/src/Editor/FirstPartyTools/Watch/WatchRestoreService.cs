@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool restored;
                 try
                 {
-                    restored = await TryRestoreAsync(record, pass, ct);
+                    restored = await TryRestoreAsync(record, pass, ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -73,6 +73,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            // The ConfigureAwait(false) awaits above can resume off-thread, and both the monitor
+            // and the SessionState-backed store are main-thread only.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             if (restoredCount > 0)
             {
                 _ensureMonitorStarted();
@@ -100,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WatchCompilationResult compiled;
             try
             {
-                compiled = await _compiler.CompileAsync(record.Expression, ct);
+                compiled = await _compiler.CompileAsync(record.Expression, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

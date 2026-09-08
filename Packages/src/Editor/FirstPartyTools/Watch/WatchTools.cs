@@ -453,7 +453,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _compiler,
                     _store,
                     EnsureMonitorStarted);
-                LastRestoreReport = await restoreService.RestoreAsync(ct);
+                LastRestoreReport = await restoreService.RestoreAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
