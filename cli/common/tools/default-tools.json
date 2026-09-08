@@ -764,7 +764,7 @@
     },
     {
       "name": "record-video",
-      "description": "Record the Unity Game View to a video file (H.264 .mp4, or VP8 .webm) while Play Mode runs. Use when a still screenshot is not enough: motion, animation, transitions, physics, or a gameplay sequence to review later. `start` returns at once and other uloop commands keep working while it records.",
+      "description": "Record the Unity Game View or any Editor window (Scene, Inspector, Console, ...) to a video file (H.264 .mp4, or VP8 .webm). Use when a still screenshot is not enough: motion, animation, transitions, physics, a gameplay sequence, or an Editor window changing over time. `start` returns at once and other uloop commands keep working while it records.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -787,6 +787,21 @@
             "type": "integer",
             "description": "Auto-stop safety limit in seconds. Valid range 1–600. Used by start only.",
             "default": 60
+          },
+          "WindowName": {
+            "type": "string",
+            "description": "Editor window title to record instead of the Game View (for example Scene, Inspector, Console). Empty records the Game View and requires Play Mode. A window recording does not require Play Mode, brings the tab to the front, repaints it every frame, and keeps running across Play Mode changes. Used by start only.",
+            "default": ""
+          },
+          "MatchMode": {
+            "type": "string",
+            "description": "Window title matching for --window-name: exact, prefix, or contains (case-insensitive). Used by start only.",
+            "enum": [
+              "exact",
+              "prefix",
+              "contains"
+            ],
+            "default": "exact"
           },
           "OutputPath": {
             "type": "string",
