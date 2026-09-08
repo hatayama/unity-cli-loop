@@ -41,9 +41,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AtomicSkipOutcomesByFile = atomicSkipOutcomesByFile;
         }
 
-        // The project-relative paths of the files a compile error was attributed to.
-        internal IReadOnlyCollection<string> FailedFiles => failedFiles;
-
         internal bool AllFilesFailed { get; }
 
         internal bool IsFailedFile(string projectRelativePath)

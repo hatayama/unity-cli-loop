@@ -43,11 +43,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public TransformWorkerOutputDto Output { get; }
         public string ErrorMessage { get; }
 
-        public bool Success
-        {
-            get { return Kind == TransformWorkerHostResultKind.Completed; }
-        }
-
         private TransformWorkerHostResult(TransformWorkerHostResultKind kind, TransformWorkerOutputDto output, string errorMessage)
         {
             Kind = kind;

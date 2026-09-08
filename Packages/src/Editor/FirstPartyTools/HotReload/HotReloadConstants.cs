@@ -382,10 +382,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string UnimportedAsmdefCompilationAssemblyNotFoundReasonFormat =
             "Resolved assembly '{0}' was not found in the compilation pipeline. '{1}' sits under a .asmdef that Unity has not imported yet, so hot reload cannot target it. Run 'uloop compile' first.";
 
-        // Format: project-relative script path, compiled assembly name.
-        public const string SourceFileNotInCompiledAssemblyReasonFormat =
-            "'{0}' is not part of the last compiled assembly '{1}' (a newly added script). New files require a real compile; run 'uloop compile' first.";
-
         // Why "declarations or methods": a run can fail on a refused type declaration alone, and
         // Methods is then empty, so a next action naming only methods would send the reader to a
         // section with nothing in it.
