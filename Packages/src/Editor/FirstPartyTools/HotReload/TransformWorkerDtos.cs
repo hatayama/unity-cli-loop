@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// One retained type inside an introduced-type artifact assembly.
     /// </summary>
-    // Keep in sync with TransformWorker~/WorkerIntroducedTypeArtifactType.cs.
+    // Keep in sync with WorkerIntroducedTypeArtifactType in TransformWorker~/WorkerIntroducedTypeArtifact.cs.
     [Serializable]
     internal sealed class TransformWorkerIntroducedTypeArtifactTypeDto
     {

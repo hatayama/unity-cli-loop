@@ -58,10 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates =>
             _oneShotCallerNoteCandidates;
 
-        public IReadOnlyList<HotReloadMethodOutcome> Outcomes => _outcomes;
-
-        public int PatchedTotal => _patchedTotal;
-
         /// <summary>Merges one processed file into the run.</summary>
         public void Add(string projectRelativePath, HotReloadFileProcessResult fileResult)
         {

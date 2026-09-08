@@ -352,11 +352,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerOutputDto output,
             out string errorMessage)
         {
-            if (!TryValidateRequiredPreparationOutput(input, output, out errorMessage))
-            {
-                return false;
-            }
-
             if (output.files == null || output.files.Length != input.sources.Length)
             {
                 errorMessage = "Transform worker output files must have the same count as input sources.";
