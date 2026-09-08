@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PausePointEditorStartup.Initialize();
             CompileEditorStartup.Initialize();
             HotReloadEditorStartup.Initialize();
+            WatchEditorStartup.Initialize();
             ExecuteDynamicCodeEditorStartup.Initialize();
             GetLogsEditorStartup.Initialize();
             ScreenshotEditorStartup.Initialize();

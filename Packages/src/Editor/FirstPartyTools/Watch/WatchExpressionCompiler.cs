@@ -9,7 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Wraps one user expression in a compiled evaluator using the execute-dynamic-code compiler.
     /// </summary>
-    public sealed class WatchExpressionCompiler
+    public sealed class WatchExpressionCompiler : IWatchExpressionCompiler
     {
         private const string WatchNamespace = "io.github.hatayama.UnityCliLoop.DynamicWatch";
         private const string WatchClassName = "WatchExpressionEntryPoint";
