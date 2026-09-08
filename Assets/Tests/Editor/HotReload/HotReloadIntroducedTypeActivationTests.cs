@@ -10,6 +10,7 @@ using NUnit.Framework;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -57,6 +58,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     HotReloadIntroducedTypeHolder.Resolver.ResolveExact(artifact.AssemblyFullName),
                     Is.SameAs(artifact.Assembly));
+            }
+        }
+
+        /// <summary>
+        /// Verifies that Initialize publishes the introduced type names through the tool contract
+        /// port, so a tool that cannot reference this assembly sees what the registry holds.
+        /// </summary>
+        [Test]
+        public void Holder_AfterInitialize_PublishesActiveTypeNamesThroughTheToolContractPort()
+        {
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifact();
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
+                HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+
+                Func<IReadOnlyList<string>> describe =
+                    HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames;
+                Assert.That(describe, Is.Not.Null);
+
+                List<string> expected = new List<string>();
+                foreach (HotReloadIntroducedTypeDescriptor descriptor
+                    in HotReloadIntroducedTypeHolder.Registry.DescribeActive())
+                {
+                    expected.Add(descriptor.MetadataName);
+                }
+
+                Assert.That(describe(), Is.EqualTo(expected));
+                Assert.That(expected, Is.Not.Empty);
             }
         }
 

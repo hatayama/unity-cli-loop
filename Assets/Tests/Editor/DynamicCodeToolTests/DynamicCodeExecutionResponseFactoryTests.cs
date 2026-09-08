@@ -453,5 +453,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(response.Diagnostics[0].Suggestions, Contains.Item(
                 "Cast each component explicitly, for example: new Color32((byte)255, (byte)0, (byte)0, (byte)255)."));
         }
+
+        /// <summary>
+        /// Verifies a missing type that names an active hot-reload introduced type is explained as
+        /// one, and that the ambiguous-candidate suggestions stay behind the introduced-type ones
+        /// because the diagnostic alone cannot tell which route the caller meant.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenMissingTypeIsIntroducedByHotReload_ExplainsTheIntroducedType()
+        {
+            Func<IReadOnlyList<string>> previousDescribe =
+                HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames;
+            HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames =
+                () => new List<string> { "Example.Widget" };
+            try
+            {
+                DynamicCodeExecutionResponseFactory factory = new();
+                ExecutionResult result = new()
+                {
+                    Success = false,
+                    ErrorMessage = "Compilation error occurred",
+                    UpdatedCode = "return new Widget();",
+                    CompilationErrors = new List<CompilationError>
+                    {
+                        new CompilationError
+                        {
+                            ErrorCode = "CS0246",
+                            Message = "The type or namespace name 'Widget' could not be found",
+                            Line = 1,
+                            Column = 12
+                        }
+                    },
+                    AmbiguousTypeCandidates = new Dictionary<string, List<string>>
+                    {
+                        { "Widget", new List<string> { "Namespace.One", "Namespace.Two" } }
+                    }
+                };
+
+                ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+                Assert.That(
+                    response.Diagnostics[0].Hint,
+                    Is.EqualTo(
+                        "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
+                Assert.That(
+                    response.Diagnostics[0].Suggestions,
+                    Is.EqualTo(new[]
+                    {
+                        "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Widget\") and drive it through reflection",
+                        "Run 'uloop compile' when the type is final, then reference it directly",
+                        "Use Namespace.One.Widget",
+                        "Use Namespace.Two.Widget"
+                    }));
+            }
+            finally
+            {
+                HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames = previousDescribe;
+            }
+        }
     }
 }

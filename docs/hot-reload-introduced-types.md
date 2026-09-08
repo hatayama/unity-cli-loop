@@ -88,7 +88,9 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 - Anything that reads the type through Unity: serialization, `[SerializeField]`, Inspector
   display, `AddComponent`, `ScriptableObject.CreateInstance`, Unity message discovery.
 - Use from `uloop execute-dynamic-code`. Dynamic code compiles against the compiled assemblies,
-  not against the reload's artifact.
+  not against the reload's artifact. The compile error's `Hint` names the introduced type and
+  points to reflection through the loaded assembly or to `uloop compile`, so the failure does not
+  read as a missing type.
 - A new or changed `.asmdef` / `.asmref`. Assembly layout is decided at compile time.
 - A call to a member an earlier or the same reload *added* to a compiled type (an `Added` row).
   Introduced types compile against the compiled assemblies and the retained artifacts only, so

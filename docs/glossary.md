@@ -184,6 +184,19 @@ reload. Hot reload adopts a snapshot as the edited-method baseline only when its
 match the corresponding portable-PDB document checksum for that source file; otherwise
 the file falls back to patching every editable method.
 
+### Metadata name
+
+The ECMA-335 spelling of a type as Cecil and the transform worker emit it: namespace and
+type joined with `.`, nested types joined with `/` (`Example.Outer/Inner`). Introduced-type
+descriptors, worker method keys, and added-field keys carry this form.
+
+### Reflection name
+
+The CLR spelling that `Type.FullName` returns and `Assembly.GetType` accepts: nested types
+joined with `+` (`Example.Outer+Inner`). Anything compared against a live `Type`, or shown
+to an agent as a `FullName` to look up, must be converted to this form at the boundary
+where the metadata name leaves the worker.
+
 ### Shim
 
 A generated static method that mirrors an edited user method body for hot reload. For an
