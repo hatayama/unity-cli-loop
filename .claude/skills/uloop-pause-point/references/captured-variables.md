@@ -64,7 +64,7 @@ Three different sources answer three different questions about a captured variab
 
 | Need | Source | Notes |
 |---|---|---|
-| A value type's value at capture time | `UloopPausePoint.TryGetCapturedValue("name")` | Faithful: value types are a boxed copy taken at capture time, so this never drifts. |
+| A value type's own field values at capture time | `UloopPausePoint.TryGetCapturedValue("name")` | Faithful for the value itself: it is a boxed copy taken at capture time, so its own fields never drift. A field that points at a collection or another object is copied as a reference, so that target reads live exactly as in the reference-type row below. |
 | A reference type's *live* current state | `UloopPausePoint.TryGetCapturedValue("name")` | The reference itself is live, so the object it points to may have changed since capture (or been destroyed/resumed away). Only available while Unity is still paused. |
 | A reference type's state *as it was at capture time* | `uloop pause-point-status --id <id>` | The only faithful source for this: the response is a formatted string snapshot taken at capture time and stored in the registry, so it never drifts and stays retrievable after resume until the next clear or domain reload. |
 
