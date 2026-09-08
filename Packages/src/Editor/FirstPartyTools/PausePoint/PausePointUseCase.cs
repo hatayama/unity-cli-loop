@@ -45,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PausePointUseCaseLogger.LogPhysicsDispatchDiagnostics("pause_point_cleared_without_hit_physics", id, declaringType, statusBeforeClear);
             }
             PhysicsFlaggedDeclaringTypesById.Remove(id);
+            PausePointPersistRequestLedger.Remove(id);
         }
 
         public PausePointResponse Enable(EnablePausePointSchema parameters)
@@ -405,14 +406,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Records whether this enable asked for the pause point to be re-armed after a domain
         /// reload. Enabling without --persist rebuilds the entry, so persistence is already off;
-        /// this only has to turn it on.
+        /// this only has to turn it on, and to drop any request the previous enable left behind.
         /// </summary>
         private static void ApplyPersistRequest(string registryId, EnablePausePointSchema parameters)
         {
-            if (parameters.Persist)
+            if (!parameters.Persist)
             {
-                UloopPausePointRegistry.SetPersisted(registryId, true);
+                PausePointPersistRequestLedger.Remove(registryId);
+                return;
             }
+
+            UloopPausePointRegistry.SetPersisted(registryId, true);
+            PausePointPersistRequestLedger.Upsert(
+                PausePointPersistedRecord.FromSchema(registryId, parameters));
         }
 
         private static PausePointResponse FinishEnableBySourceLocation(
