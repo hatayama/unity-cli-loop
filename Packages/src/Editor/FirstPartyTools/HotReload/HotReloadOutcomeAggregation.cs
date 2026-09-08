@@ -61,8 +61,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount, int staleCount)
-            CountMethodOutcomeKinds(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        internal static HotReloadOutcomeTally CountMethodOutcomeKinds(
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             int patchedCount = 0;
             int failedCount = 0;
@@ -99,7 +99,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            return (patchedCount, failedCount, skippedCount, alreadyActiveCount, addedCount, staleCount);
+            return new HotReloadOutcomeTally(
+                patchedCount,
+                failedCount,
+                skippedCount,
+                alreadyActiveCount,
+                addedCount,
+                staleCount);
         }
     }
 }

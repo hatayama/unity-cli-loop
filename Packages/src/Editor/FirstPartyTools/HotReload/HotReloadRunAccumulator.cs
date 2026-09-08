@@ -184,16 +184,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void LogSummary(string correlationId)
         {
-            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount, int staleCount) =
-                HotReloadOutcomeAggregation.CountMethodOutcomeKinds(_outcomes);
+            HotReloadOutcomeTally tally = HotReloadOutcomeAggregation.CountMethodOutcomeKinds(_outcomes);
             HotReloadOrchestratorLog.LogHotReloadApplySummary(
-                patchedCount,
-                failedCount,
-                skippedCount,
-                alreadyActiveCount,
-                addedCount,
-                staleCount,
-                failedCount == 0,
+                tally.PatchedCount,
+                tally.FailedCount,
+                tally.SkippedCount,
+                tally.AlreadyActiveCount,
+                tally.AddedCount,
+                tally.StaleCount,
+                !tally.HasFailure,
                 correlationId);
         }
     }

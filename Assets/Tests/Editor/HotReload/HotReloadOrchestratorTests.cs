@@ -6450,9 +6450,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             JObject workerResult = FindVibeLog(logs, HotReloadConstants.VibeLogWorkerResult);
             JObject applySummary = FindVibeLog(logs, HotReloadConstants.VibeLogApplySummary);
             AssertSameHotReloadCorrelation(fileStart, workerResult, applySummary);
-            Assert.That(
-                (int)applySummary["context"]["addedCount"],
-                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Added)));
+            AssertApplySummaryMatchesOutcomes(applySummary, result);
         }
 
         /// <summary>
@@ -6558,6 +6556,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     (string)others[index]["correlation_id"],
                     Is.EqualTo(correlationId));
             }
+        }
+
+        private static void AssertApplySummaryMatchesOutcomes(
+            JObject applySummary,
+            HotReloadOrchestratorResult result)
+        {
+            JToken context = applySummary["context"];
+            Assert.That(
+                (int)context["patchedCount"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Patched)));
+            Assert.That(
+                (int)context["failedCount"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Failed)));
+            Assert.That(
+                (int)context["skippedCount"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Skipped)));
+            Assert.That(
+                (int)context["alreadyActiveCount"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.AlreadyActive)));
+            Assert.That(
+                (int)context["addedCount"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Added)));
+            Assert.That(
+                (int)context["staleCount"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Stale)));
+            Assert.That(
+                (bool)context["success"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Failed) == 0));
         }
 
         private static int CountOutcomeKind(
