@@ -483,6 +483,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a Harmony rebuild failure while reverting keeps the whole ledger entry of the
+        /// still-patched method, including the transplant locals and preamble length that
+        /// pause-point reads when it joins the shim chain.
+        /// </summary>
+        [Test]
+        public void Revert_WhenHarmonyCannotRebuild_KeepsTransplantLedgerForTheLivePatch()
+        {
+            MethodInfo failing = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo failingShim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            Assert.That(
+                HotReloadPatcher.Apply(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                Is.True);
+            Assert.That(
+                HotReloadPausePointCoordination.GetTransplantLocals(failing),
+                Is.Not.Null,
+                "A transplant apply must record the shim locals the test then checks are retained.");
+
+            HotReloadPatcher.UnpatchForTesting = _ => throw new InvalidOperationException("rebuild failed");
+            try
+            {
+                Assert.That(
+                    HotReloadPatcher.Revert(failing, out string _),
+                    Is.EqualTo(HotReloadRevertOutcome.UnpatchFailed));
+            }
+            finally
+            {
+                HotReloadPatcher.UnpatchForTesting = null;
+            }
+
+            Assert.That(
+                HotReloadPausePointCoordination.GetTransplantLocals(failing),
+                Is.Not.Null,
+                "The transpiler is still live, so pause-point must still find its transplant locals.");
+            Assert.That(
+                HotReloadPausePointCoordination.GetTransplantPreambleLength(failing),
+                Is.GreaterThan(0),
+                "The retained entry must keep the preamble length pause-point offsets against.");
+        }
+
+        /// <summary>
         /// What: Revert(method) clears that method's invocation count (RevertAll is not required).
         /// </summary>
         [Test]
