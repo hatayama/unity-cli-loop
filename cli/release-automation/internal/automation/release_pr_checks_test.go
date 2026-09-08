@@ -790,3 +790,135 @@ func assertReleasePRCheckLogDoesNotContainLine(t *testing.T, actual string, unex
 		}
 	}
 }
+
+type multiReleasePRCheckStub struct {
+	commandLog    []string
+	failWatchRuns map[string]bool
+}
+
+// runMultiReleasePRCheck drives the orchestrator against a stubbed gh for a
+// per-component release PR listing, so several pending PRs can be exercised
+// without the PATH-based mock's single global run list.
+func runMultiReleasePRCheck(t *testing.T, prListJSON string, failWatchRuns map[string]bool) (int, string, string, *multiReleasePRCheckStub) {
+	t.Helper()
+
+	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
+	t.Setenv("TARGET_BRANCH", "main")
+	t.Setenv("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", "1")
+	t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "1")
+
+	stub := &multiReleasePRCheckStub{failWatchRuns: failWatchRuns}
+	deps := releasePRCheckDeps{
+		now: func() time.Time {
+			return time.Date(2026, 9, 8, 1, 0, 0, 0, time.UTC)
+		},
+		sleep: func(ctx context.Context, duration time.Duration) error {
+			return ctx.Err()
+		},
+		runOutput: func(ctx context.Context, name string, args ...string) (string, error) {
+			commandLine := strings.Join(append([]string{name}, args...), " ")
+			stub.commandLog = append(stub.commandLog, commandLine)
+
+			switch {
+			case strings.HasPrefix(commandLine, "gh pr list "):
+				return prListJSON, nil
+			case strings.HasPrefix(commandLine, "gh pr view "):
+				return `{"body":"<details><summary>3.6.0</summary>\n</details>\n"}`, nil
+			case strings.HasPrefix(commandLine, "gh pr ready "),
+				strings.HasPrefix(commandLine, "gh pr edit "),
+				strings.HasPrefix(commandLine, "gh workflow run "):
+				return "", nil
+			case strings.HasPrefix(commandLine, "gh run list "):
+				runID := multiReleasePRCheckRunID(commandLine)
+				return `[{"databaseId":` + runID + `,"headSha":"` + multiReleasePRCheckHeadSHA(commandLine) +
+					`","createdAt":"2026-09-08T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/` + runID + `"}]`, nil
+			case strings.HasPrefix(commandLine, "gh run watch "):
+				runID := strings.Fields(commandLine)[3]
+				if stub.failWatchRuns[runID] {
+					return "", fmt.Errorf("gh run watch %s failed", runID)
+				}
+				return "", nil
+			}
+			return "", fmt.Errorf("unexpected command: %s", commandLine)
+		},
+	}
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := runReleasePleasePRChecksWithDeps(context.Background(), &stdout, &stderr, deps)
+	return exitCode, stdout.String(), stderr.String(), stub
+}
+
+// multiReleasePRCheckRunID derives a stable run id per component and workflow so
+// each stubbed dispatch is watched under its own identifier.
+func multiReleasePRCheckRunID(commandLine string) string {
+	component := "1"
+	if strings.Contains(commandLine, "--components--unity-package") {
+		component = "2"
+	}
+	workflow := "1"
+	if strings.Contains(commandLine, "unity-compile-check-and-test-runner.yml") {
+		workflow = "2"
+	}
+	return component + workflow
+}
+
+func multiReleasePRCheckHeadSHA(commandLine string) string {
+	if strings.Contains(commandLine, "--components--unity-package") {
+		return "package123"
+	}
+	return "dispatcher123"
+}
+
+// Verifies that every pending per-component release PR is drafted, checked, and marked ready.
+func TestReleasePRChecksMarkEveryComponentPullRequestReady(t *testing.T) {
+	prListJSON := `[` +
+		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`]`
+
+	exitCode, stdout, stderr, stub := runMultiReleasePRCheck(t, prListJSON, nil)
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "Marked release PR #2001 as ready after checks passed.")
+	assertReleasePRCheckLogContains(t, stdout, "Marked release PR #2002 as ready after checks passed.")
+	commandLogText := strings.Join(stub.commandLog, "\n")
+	assertReleasePRCheckLogContainsLine(t, commandLogText, "gh pr ready 2001 --repo owner/repository")
+	assertReleasePRCheckLogContainsLine(t, commandLogText, "gh pr ready 2002 --repo owner/repository")
+}
+
+// Verifies that one component's failing checks still let the other component's release PR be marked ready, and the command reports the failure.
+func TestReleasePRChecksContinueAfterOneComponentFails(t *testing.T) {
+	prListJSON := `[` +
+		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`]`
+
+	exitCode, stdout, stderr, stub := runMultiReleasePRCheck(t, prListJSON, map[string]bool{"11": true})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "gh run watch 11 failed")
+	assertReleasePRCheckLogContains(t, stdout, "Marked release PR #2002 as ready after checks passed.")
+	commandLogText := strings.Join(stub.commandLog, "\n")
+	assertReleasePRCheckLogDoesNotContainLine(t, commandLogText, "gh pr ready 2001 --repo owner/repository")
+	assertReleasePRCheckLogContainsLine(t, commandLogText, "gh pr ready 2002 --repo owner/repository")
+}
+
+// Verifies that a non-package component's release PR body is left alone, so its bare version summary is not relabeled as the Unity package.
+func TestReleasePRChecksLeaveNonPackageComponentBodyUnchanged(t *testing.T) {
+	prListJSON := `[{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"}]`
+
+	exitCode, stdout, stderr, stub := runMultiReleasePRCheck(t, prListJSON, nil)
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogDoesNotContain(t, stdout, "body to clarify release component labels")
+	commandLogText := strings.Join(stub.commandLog, "\n")
+	assertReleasePRCheckLogDoesNotContain(t, commandLogText, "gh pr view 2001")
+	assertReleasePRCheckLogDoesNotContain(t, commandLogText, "gh pr edit 2001")
+}
