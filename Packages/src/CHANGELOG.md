@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.6.0](https://github.com/hatayama/unity-cli-loop/compare/v3.5.0...v3.6.0) (2026-09-08)
+
+
+### Features
+
+* enable-pause-point --persist re-arms the pause point after a domain reload ([#2681](https://github.com/hatayama/unity-cli-loop/issues/2681)) ([9c0f195](https://github.com/hatayama/unity-cli-loop/commit/9c0f195354785295e2d1e1d8887d0ad37c6c4414))
+* Hot reload now applies newly written types and explains the declarations it cannot apply ([#2676](https://github.com/hatayama/unity-cli-loop/issues/2676)) ([3bc9471](https://github.com/hatayama/unity-cli-loop/commit/3bc94710e30ae33f35f80fdc2cf44ffde88a2076))
+* record-video can now record any Editor window, not just the Game View ([#2680](https://github.com/hatayama/unity-cli-loop/issues/2680)) ([902cb03](https://github.com/hatayama/unity-cli-loop/commit/902cb034ca57ceea7c18fc794cc09bd005471a05))
+* Watch expressions now survive domain reloads ([#2679](https://github.com/hatayama/unity-cli-loop/issues/2679)) ([bdae397](https://github.com/hatayama/unity-cli-loop/commit/bdae39780b494bedf49953eab8047fa6db8d8597))
+
+
+### Bug Fixes
+
+* an unchanged introduced type is no longer rejected as changed when a compiled type it uses is part of the same reload ([#2697](https://github.com/hatayama/unity-cli-loop/issues/2697)) ([abcc8cd](https://github.com/hatayama/unity-cli-loop/commit/abcc8cd4d71f2c47057ba6c823e2b03af02152bb))
+* **asmdef:** scope Infrastructure precompiled references to Newtonsoft.Json ([#2672](https://github.com/hatayama/unity-cli-loop/issues/2672)) ([a88e080](https://github.com/hatayama/unity-cli-loop/commit/a88e080a9bae309d37f3ec9651d73f68fc47929b))
+* CLI update button now shows the version it will actually install ([#2686](https://github.com/hatayama/unity-cli-loop/issues/2686)) ([238c126](https://github.com/hatayama/unity-cli-loop/commit/238c126ca82da1188075516ce2371c25d0bbd331))
+* enable-pause-point --await no longer waits out the timeout when its trigger is refused by a marker that was not hit ([#2683](https://github.com/hatayama/unity-cli-loop/issues/2683)) ([97710aa](https://github.com/hatayama/unity-cli-loop/commit/97710aa78951a5d9174698836e12f1a4ef9211e0))
+* execute-dynamic-code now explains when a missing type is one hot reload introduced ([#2701](https://github.com/hatayama/unity-cli-loop/issues/2701)) ([81d61cc](https://github.com/hatayama/unity-cli-loop/commit/81d61cc9c5f14d85d27c6013f44e6429a4e36b6d))
+* find-game-objects retry hint now shows search modes in the documented lowercase spelling ([#2661](https://github.com/hatayama/unity-cli-loop/issues/2661)) ([7d421e1](https://github.com/hatayama/unity-cli-loop/commit/7d421e10c1ee886d52d8db1561793fa3ba737838))
+* hot reload now reports a file with syntax errors as Failed instead of applying nothing and answering Success ([#2684](https://github.com/hatayama/unity-cli-loop/issues/2684)) ([d8d7ec4](https://github.com/hatayama/unity-cli-loop/commit/d8d7ec42afbfb77aed15238c0589c6f6e7a14699))
+* hot reload now reports the compiler errors of a failed introduced-type compilation with the file they belong to ([#2696](https://github.com/hatayama/unity-cli-loop/issues/2696)) ([b2de0d1](https://github.com/hatayama/unity-cli-loop/commit/b2de0d147cbfb83cc1d29fdd99ff1120f08d0bea))
+* hot reload Warnings no longer repeat every Skipped method row verbatim ([#2698](https://github.com/hatayama/unity-cli-loop/issues/2698)) ([81cffcc](https://github.com/hatayama/unity-cli-loop/commit/81cffccf9b5eb82f365d13a1166cf39b9ab59c74))
+* pause point no longer suggests the raw capture API as a way to recover a clipped at-line value ([#2700](https://github.com/hatayama/unity-cli-loop/issues/2700)) ([30432ef](https://github.com/hatayama/unity-cli-loop/commit/30432ef76b15b6dea1242814d99be99c22d28a38))
+* uloop compile now warns when armed pause points will be dropped in Edit Mode ([#2678](https://github.com/hatayama/unity-cli-loop/issues/2678)) ([c2a06ca](https://github.com/hatayama/unity-cli-loop/commit/c2a06cae0afdd4d67ea6b7a7684e3e398b99e4df))
+
 ## [3.5.0](https://github.com/hatayama/unity-cli-loop/compare/v3.4.0...v3.5.0) (2026-09-07)
 
 
