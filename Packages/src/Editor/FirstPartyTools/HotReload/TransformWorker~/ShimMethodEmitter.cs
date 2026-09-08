@@ -17,7 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class ShimMethodEmitter
 {
-    internal static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitQueuedMethodsAndPropertyGetters(
+    internal static void EmitQueuedMethodsAndPropertyGetters(
         List<TypeEmitState> typeEmitStates,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
@@ -28,8 +28,7 @@ internal static class ShimMethodEmitter
         List<WorkerUnchangedMethod> unchangedMethods,
         List<ShimTypeBuilder> shimTypes,
         List<UsingDirectiveSyntax> assemblyGlobalUsings,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
         foreach (TypeEmitState typeState in typeEmitStates)
         {
@@ -45,7 +44,7 @@ internal static class ShimMethodEmitter
                 addedMethodCatalog,
                 addedFieldCatalog,
                 entries);
-            (shimTypeCounter, globalShimMethodCounter) = PropertyGetterEmitter.EmitPropertyGettersForType(
+            PropertyGetterEmitter.EmitPropertyGettersForType(
                 typeState,
                 addedMethodCatalog,
                 addedFieldCatalog,
@@ -56,11 +55,8 @@ internal static class ShimMethodEmitter
                 unchangedMethods,
                 shimTypes,
                 assemblyGlobalUsings,
-                shimTypeCounter,
-                globalShimMethodCounter);
+                shimNames);
         }
-
-        return (shimTypeCounter, globalShimMethodCounter);
     }
 
     internal static void EmitQueuedMethods(

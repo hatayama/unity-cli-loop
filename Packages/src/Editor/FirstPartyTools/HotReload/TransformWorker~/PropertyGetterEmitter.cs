@@ -17,7 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class PropertyGetterEmitter
 {
-    internal static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitPropertyGettersForType(
+    internal static void EmitPropertyGettersForType(
         TypeEmitState typeState,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
@@ -28,8 +28,7 @@ internal static class PropertyGetterEmitter
         List<WorkerUnchangedMethod> unchangedMethods,
         List<ShimTypeBuilder> shimTypes,
         List<UsingDirectiveSyntax> assemblyGlobalUsings,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
         SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
         CompilationUnitSyntax root = typeState.SourceUnit.BindingRoot;
@@ -53,8 +52,7 @@ internal static class PropertyGetterEmitter
                 continue;
             }
 
-            (ShimTypeBuilder nextShimType, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
-                AppendPropertyGetterEntry(
+            typeState.CurrentShimType = AppendPropertyGetterEntry(
                     propertyDeclaration,
                     typeState.TypeDeclaration,
                     typeState.TypeSymbol,
@@ -71,24 +69,17 @@ internal static class PropertyGetterEmitter
                     skipped,
                     unchangedMethods,
                     shimTypes,
-                    shimTypeCounter,
-                    globalShimMethodCounter,
+                    shimNames,
                     typeState.CurrentShimType,
                     assemblyGlobalUsings,
                     addedMethodCatalog,
                     addedFieldCatalog,
                     addedPropertyCatalog);
-            typeState.CurrentShimType = nextShimType;
-            shimTypeCounter = nextShimTypeCounter;
-            globalShimMethodCounter = nextGlobalShimMethodCounter;
         }
-
-        return (shimTypeCounter, globalShimMethodCounter);
     }
 
     // What: emit a get_<Name> entry / unchanged row / skip for one property with a getter body.
-    internal static (ShimTypeBuilder CurrentShimType, int ShimTypeCounter, int GlobalShimMethodCounter)
-        AppendPropertyGetterEntry(
+    internal static ShimTypeBuilder AppendPropertyGetterEntry(
             PropertyDeclarationSyntax propertyDeclaration,
             TypeDeclarationSyntax typeDeclaration,
             INamedTypeSymbol typeSymbol,
@@ -105,8 +96,7 @@ internal static class PropertyGetterEmitter
             List<WorkerSkipped> skipped,
             List<WorkerUnchangedMethod> unchangedMethods,
             List<ShimTypeBuilder> shimTypes,
-            int shimTypeCounter,
-            int globalShimMethodCounter,
+            ShimNameAllocator shimNames,
             ShimTypeBuilder currentShimType,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
@@ -116,7 +106,7 @@ internal static class PropertyGetterEmitter
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
         {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return currentShimType;
         }
 
         string propertyKey = AddedPropertyCatalog.FormatPropertyKey(
@@ -124,14 +114,14 @@ internal static class PropertyGetterEmitter
             propertySymbol.Name);
         if (addedPropertyCatalog.IsClassifiedAdded(propertyKey))
         {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return currentShimType;
         }
 
         (bool hasGetterBody, AccessorDeclarationSyntax getAccessor) =
             PropertyGetterClassifier.TryGetPropertyGetterBody(propertyDeclaration);
         if (!hasGetterBody)
         {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return currentShimType;
         }
 
         IMethodSymbol getterSymbol = propertySymbol.GetMethod;
@@ -143,7 +133,7 @@ internal static class PropertyGetterEmitter
             getterSymbol.Arity);
         if (input.ExcludedMethodKeys.Contains(methodKey))
         {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return currentShimType;
         }
 
         if (PropertyGetterClassifier.TryRecordUnchangedPropertyGetter(
@@ -158,7 +148,7 @@ internal static class PropertyGetterEmitter
             parameterTypeFullNames,
             unchangedMethods))
         {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return currentShimType;
         }
 
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
@@ -169,7 +159,7 @@ internal static class PropertyGetterEmitter
                 Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
                 Reason = "Explicit interface implementations are skipped in v1."
             });
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return currentShimType;
         }
 
         // Why body stays on the property tree: SemanticModel rejects nodes re-parented onto a
@@ -191,7 +181,7 @@ internal static class PropertyGetterEmitter
             skipped);
         if (skipGetter)
         {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return currentShimType;
         }
 
         return EmitPropertyGetterShim(
@@ -208,8 +198,7 @@ internal static class PropertyGetterEmitter
             sourceProjectRelativePath,
             entries,
             shimTypes,
-            shimTypeCounter,
-            globalShimMethodCounter,
+            shimNames,
             currentShimType,
             assemblyGlobalUsings,
             addedMethodCatalog,
@@ -217,8 +206,7 @@ internal static class PropertyGetterEmitter
             addedPropertyCatalog);
     }
 
-    internal static (ShimTypeBuilder CurrentShimType, int ShimTypeCounter, int GlobalShimMethodCounter)
-        EmitPropertyGetterShim(
+    internal static ShimTypeBuilder EmitPropertyGetterShim(
             PropertyDeclarationSyntax propertyDeclaration,
             TypeDeclarationSyntax typeDeclaration,
             INamedTypeSymbol typeSymbol,
@@ -232,8 +220,7 @@ internal static class PropertyGetterEmitter
             string sourceProjectRelativePath,
             List<WorkerEntry> entries,
             List<ShimTypeBuilder> shimTypes,
-            int shimTypeCounter,
-            int globalShimMethodCounter,
+            ShimNameAllocator shimNames,
             ShimTypeBuilder currentShimType,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
@@ -242,8 +229,7 @@ internal static class PropertyGetterEmitter
     {
         if (currentShimType == null)
         {
-            string shimTypeName = typeSymbol.Name + "_UloopHotReloadShims_" + shimTypeCounter;
-            shimTypeCounter++;
+            string shimTypeName = shimNames.NextShimTypeName(typeSymbol.Name);
             string namespaceName = typeSymbol.ContainingNamespace == null
                 || typeSymbol.ContainingNamespace.IsGlobalNamespace
                 ? string.Empty
@@ -256,8 +242,7 @@ internal static class PropertyGetterEmitter
             shimTypes.Add(currentShimType);
         }
 
-        string shimMethodName = getterSymbol.Name + "__shim" + globalShimMethodCounter;
-        globalShimMethodCounter++;
+        string shimMethodName = shimNames.NextShimMethodName(getterSymbol.Name);
 
         FileLinePositionSpan originalSpan = propertyDeclaration.GetLocation().GetLineSpan();
         int sourceStartLine = originalSpan.StartLinePosition.Line + 1;
@@ -299,7 +284,7 @@ internal static class PropertyGetterEmitter
             LifecycleNote = null
         });
 
-        return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        return currentShimType;
     }
 
     // What: rewrite a getter body while it is still in the bound tree, then wrap as a shim method.

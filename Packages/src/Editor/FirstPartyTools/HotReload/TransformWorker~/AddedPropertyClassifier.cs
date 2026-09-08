@@ -20,7 +20,7 @@ using Microsoft.CodeAnalysis.Text;
 /// </summary>
 internal static class AddedPropertyClassifier
 {
-    internal static (int ShimTypeCounter, int GlobalShimMethodCounter) ClassifyAddedProperties(
+    internal static void ClassifyAddedProperties(
         TypeEmitState typeState,
         SemanticModel semanticModel,
         IAssemblySymbol targetTypesAssemblySymbol,
@@ -33,22 +33,21 @@ internal static class AddedPropertyClassifier
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
         INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(
             typeState.TypeSymbol,
             targetTypesAssemblySymbol);
         if (compiledType == null)
         {
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         typeState.CompiledType = compiledType;
         foreach (PropertyDeclarationSyntax declaration in typeState.TypeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>())
         {
-            (shimTypeCounter, globalShimMethodCounter) = ClassifyProperty(
+            ClassifyProperty(
                 declaration,
                 typeState,
                 compiledType,
@@ -63,14 +62,11 @@ internal static class AddedPropertyClassifier
                 addedMethodCatalog,
                 addedFieldCatalog,
                 skipped,
-                shimTypeCounter,
-                globalShimMethodCounter);
+                shimNames);
         }
-
-        return (shimTypeCounter, globalShimMethodCounter);
     }
 
-    private static (int ShimTypeCounter, int GlobalShimMethodCounter) ClassifyProperty(
+    private static void ClassifyProperty(
         PropertyDeclarationSyntax declaration,
         TypeEmitState typeState,
         INamedTypeSymbol compiledType,
@@ -85,8 +81,7 @@ internal static class AddedPropertyClassifier
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
         AddedPropertyCandidate candidate = CreateCandidateOrNull(
             declaration,
@@ -98,7 +93,7 @@ internal static class AddedPropertyClassifier
             addedMethodCatalog);
         if (candidate == null)
         {
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         MarkClassifiedAccessors(candidate, addedMethodCatalog);
@@ -108,7 +103,7 @@ internal static class AddedPropertyClassifier
                 ?? AddedPropertySkipReasons.UnavailableAddedProperty;
             addedPropertyCatalog.Register(candidate.Binding);
             AppendSkippedAccessors(candidate.Binding, skipped);
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         if (candidate.Binding.IsAuto)
@@ -116,26 +111,26 @@ internal static class AddedPropertyClassifier
             RegisterAutoPropertyStore(candidate.Binding, addedFieldCatalog);
         }
 
-        (ShimTypeBuilder shimType, int nextShimTypeCounter) = OrdinaryMethodQueue.EnsureShimType(
+        ShimTypeBuilder shimType = OrdinaryMethodQueue.EnsureShimType(
             typeState,
             root,
             assemblyGlobalUsings,
             shimTypes,
-            shimTypeCounter);
+            shimNames);
+        // Why the getter name is taken first: the accessors are numbered getter before setter,
+        // and the numbers appear in the emitted shim names.
         candidate.Binding.Getter = CreateBinding(
             candidate.GetterKey,
             candidate.Binding.Symbol.GetMethod,
             shimType,
-            globalShimMethodCounter);
-        globalShimMethodCounter++;
+            shimNames.NextShimMethodName(candidate.Binding.Symbol.GetMethod.Name));
         if (candidate.Binding.Symbol.SetMethod != null)
         {
             candidate.Binding.Setter = CreateBinding(
                 candidate.SetterKey,
                 candidate.Binding.Symbol.SetMethod,
                 shimType,
-                globalShimMethodCounter);
-            globalShimMethodCounter++;
+                shimNames.NextShimMethodName(candidate.Binding.Symbol.SetMethod.Name));
         }
 
         addedMethodCatalog.Register(candidate.Binding.Getter);
@@ -145,7 +140,6 @@ internal static class AddedPropertyClassifier
         }
 
         addedPropertyCatalog.Register(candidate.Binding);
-        return (nextShimTypeCounter, globalShimMethodCounter);
     }
 
     private static AddedPropertyCandidate CreateCandidateOrNull(
@@ -345,13 +339,13 @@ internal static class AddedPropertyClassifier
         string methodKey,
         IMethodSymbol accessorSymbol,
         ShimTypeBuilder shimType,
-        int shimMethodCounter)
+        string shimMethodName)
     {
         return new AddedMethodBinding
         {
             MethodKey = methodKey,
             ShimTypeName = shimType.ShimTypeName,
-            ShimMethodName = accessorSymbol.Name + "__shim" + shimMethodCounter,
+            ShimMethodName = shimMethodName,
             NamespaceName = shimType.NamespaceName,
             IsStatic = accessorSymbol.IsStatic,
             ParameterCount = accessorSymbol.Parameters.Length

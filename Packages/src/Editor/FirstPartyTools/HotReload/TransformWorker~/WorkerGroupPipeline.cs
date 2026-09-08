@@ -122,13 +122,10 @@ internal static class WorkerGroupPipeline
         AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
         AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
         AddedPropertyCatalog addedPropertyCatalog = new AddedPropertyCatalog();
-        // Why counters run across units: shim type and method names must stay unique when two
-        // files of the group declare types of the same name.
-        int shimTypeCounter = 0;
-        int globalShimMethodCounter = 0;
+        ShimNameAllocator shimNames = new ShimNameAllocator();
         foreach (WorkerSourceUnit unit in transformUnits)
         {
-            (shimTypeCounter, globalShimMethodCounter) = QueueUnit(
+            QueueUnit(
                 unit,
                 input,
                 parseOptions,
@@ -140,8 +137,7 @@ internal static class WorkerGroupPipeline
                 addedPropertyCatalog,
                 skipped,
                 unchangedMethods,
-                shimTypeCounter,
-                globalShimMethodCounter);
+                shimNames);
         }
 
         foreach (WorkerSourceUnit unit in transformUnits)
@@ -184,8 +180,7 @@ internal static class WorkerGroupPipeline
             unchangedMethods,
             shimTypes,
             assemblyGlobalUsings,
-            shimTypeCounter,
-            globalShimMethodCounter);
+            shimNames);
 
         foreach (WorkerSourceUnit unit in transformUnits)
         {
@@ -341,7 +336,7 @@ internal static class WorkerGroupPipeline
 
     // Everything one unit contributes before the group-wide guard and emit: its drift warnings,
     // its baseline, and the queued shim methods of its types.
-    private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueUnit(
+    private static void QueueUnit(
         WorkerSourceUnit unit,
         WorkerInput input,
         CSharpParseOptions parseOptions,
@@ -353,8 +348,7 @@ internal static class WorkerGroupPipeline
         AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
         unit.DeclarationDriftWarnings.AddRange(
             ConstDriftCollector.CollectConstDriftWarnings(
@@ -374,25 +368,22 @@ internal static class WorkerGroupPipeline
             parseOptions,
             unit.PlainRoot);
 
-        (List<TypeEmitState> typeEmitStates, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
-            TypeEmitPlanner.QueueAllTypeEmitStates(
-                unit,
-                targetTypesAssemblySymbol,
-                input,
-                assemblyGlobalUsings,
-                shimTypes,
-                addedMethodCatalog,
-                addedFieldCatalog,
-                addedPropertyCatalog,
-                skipped,
-                unchangedMethods,
-                unit.DeclarationDriftWarnings,
-                unit.RemovedMembers,
-                unit.RemovedMethodSignatures,
-                shimTypeCounter,
-                globalShimMethodCounter);
+        List<TypeEmitState> typeEmitStates = TypeEmitPlanner.QueueAllTypeEmitStates(
+            unit,
+            targetTypesAssemblySymbol,
+            input,
+            assemblyGlobalUsings,
+            shimTypes,
+            addedMethodCatalog,
+            addedFieldCatalog,
+            addedPropertyCatalog,
+            skipped,
+            unchangedMethods,
+            unit.DeclarationDriftWarnings,
+            unit.RemovedMembers,
+            unit.RemovedMethodSignatures,
+            shimNames);
         unit.TypeEmitStates = typeEmitStates;
-        return (nextShimTypeCounter, nextGlobalShimMethodCounter);
     }
 
     private static void AppendOutsideMethodBodyDriftWarnings(

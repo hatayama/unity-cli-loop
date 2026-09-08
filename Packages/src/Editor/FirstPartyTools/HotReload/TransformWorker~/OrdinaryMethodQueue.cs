@@ -17,7 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class OrdinaryMethodQueue
 {
-    internal static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueOrdinaryMethod(
+    internal static void QueueOrdinaryMethod(
         MethodDeclarationSyntax methodDeclaration,
         TypeEmitState typeState,
         SemanticModel semanticModel,
@@ -35,13 +35,12 @@ internal static class OrdinaryMethodQueue
         List<string> declarationDriftWarnings,
         List<WorkerRemovedMember> removedMembers,
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
         IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(methodDeclaration);
         if (methodSymbol == null)
         {
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         string[] parameterTypeFullNames = methodSymbol.Parameters
@@ -67,7 +66,7 @@ internal static class OrdinaryMethodQueue
             plainCurrentMethodMap,
             addedMethodCatalog))
         {
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         string syntaxMethodKey = WorkerSyntaxIndex.BuildSyntaxMethodKey(
@@ -85,7 +84,7 @@ internal static class OrdinaryMethodQueue
             addedMethodCatalog,
             skipped))
         {
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         if (TryRecordUnchangedOrdinaryMethod(
@@ -99,7 +98,7 @@ internal static class OrdinaryMethodQueue
             plainCurrentMethodMap,
             unchangedMethods))
         {
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
         MethodTransformDecision decision = DecideOrdinaryMethodTransform(
@@ -128,10 +127,10 @@ internal static class OrdinaryMethodQueue
                     plainCurrentMethodMap);
             }
 
-            return (shimTypeCounter, globalShimMethodCounter);
+            return;
         }
 
-        return QueueDecidedOrdinaryMethod(
+        QueueDecidedOrdinaryMethod(
             methodDeclaration,
             methodSymbol,
             decision,
@@ -150,8 +149,7 @@ internal static class OrdinaryMethodQueue
             declarationDriftWarnings,
             removedMembers,
             removedMethodSignatures,
-            shimTypeCounter,
-            globalShimMethodCounter);
+            shimNames);
     }
 
     internal static (bool IsAddedMethod, bool ReplacesCompiledMethod) ClassifyOrdinaryMethodAddedState(
@@ -321,7 +319,7 @@ internal static class OrdinaryMethodQueue
         return decision;
     }
 
-    internal static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueDecidedOrdinaryMethod(
+    internal static void QueueDecidedOrdinaryMethod(
         MethodDeclarationSyntax methodDeclaration,
         IMethodSymbol methodSymbol,
         MethodTransformDecision decision,
@@ -340,18 +338,15 @@ internal static class OrdinaryMethodQueue
         List<string> declarationDriftWarnings,
         List<WorkerRemovedMember> removedMembers,
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
+        ShimNameAllocator shimNames)
     {
-        ShimTypeBuilder shimType;
-        (shimType, shimTypeCounter) = EnsureShimType(
+        ShimTypeBuilder shimType = EnsureShimType(
             typeState,
             root,
             assemblyGlobalUsings,
             shimTypes,
-            shimTypeCounter);
-        string shimMethodName = methodSymbol.Name + "__shim" + globalShimMethodCounter;
-        globalShimMethodCounter++;
+            shimNames);
+        string shimMethodName = shimNames.NextShimMethodName(methodSymbol.Name);
 
         FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
         QueuedShimMethod queued = new QueuedShimMethod
@@ -409,24 +404,21 @@ internal static class OrdinaryMethodQueue
                 methodSymbol,
                 declarationDriftWarnings);
         }
-
-        return (shimTypeCounter, globalShimMethodCounter);
     }
 
-    internal static (ShimTypeBuilder ShimType, int ShimTypeCounter) EnsureShimType(
+    internal static ShimTypeBuilder EnsureShimType(
         TypeEmitState typeState,
         CompilationUnitSyntax root,
         List<UsingDirectiveSyntax> assemblyGlobalUsings,
         List<ShimTypeBuilder> shimTypes,
-        int shimTypeCounter)
+        ShimNameAllocator shimNames)
     {
         if (typeState.CurrentShimType != null)
         {
-            return (typeState.CurrentShimType, shimTypeCounter);
+            return typeState.CurrentShimType;
         }
 
-        string shimTypeName = typeState.TypeSymbol.Name + "_UloopHotReloadShims_" + shimTypeCounter;
-        shimTypeCounter++;
+        string shimTypeName = shimNames.NextShimTypeName(typeState.TypeSymbol.Name);
         string namespaceName = typeState.TypeSymbol.ContainingNamespace == null
             || typeState.TypeSymbol.ContainingNamespace.IsGlobalNamespace
             ? string.Empty
@@ -437,7 +429,7 @@ internal static class OrdinaryMethodQueue
             WorkerUsingCollector.CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings),
             typeState.SourceUnit.Input.ProjectRelativePath);
         shimTypes.Add(typeState.CurrentShimType);
-        return (typeState.CurrentShimType, shimTypeCounter);
+        return typeState.CurrentShimType;
     }
 
     internal static void SkipAllMethodsOnUncompiledType(
