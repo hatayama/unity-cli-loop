@@ -44,6 +44,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: Start with an unmatched window name fails with the window-not-found message.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_StartWithUnknownWindowName_ReturnsWindowNotFoundFailure()
+        {
+            RecordVideoUseCase useCase = new RecordVideoUseCase();
+            RecordVideoSchema parameters = new RecordVideoSchema
+            {
+                Action = RecordVideoAction.start,
+                WindowName = "NoSuchWindow-uloop-test"
+            };
+
+            RecordVideoResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.IsRecording, Is.False);
+            Assert.That(response.Message, Does.StartWith("Window 'NoSuchWindow-uloop-test' not found"));
+        }
+
+        /// <summary>
+        /// What: a window recording skips the Play Mode preflight, so Edit Mode does not fail on it.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_StartWithWindowNameInEditMode_DoesNotFailPreflight()
+        {
+            RecordVideoUseCase useCase = new RecordVideoUseCase();
+            RecordVideoSchema parameters = new RecordVideoSchema
+            {
+                Action = RecordVideoAction.start,
+                WindowName = "NoSuchWindow-uloop-test"
+            };
+
+            RecordVideoResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Message, Is.Not.EqualTo(PlayModeToolPreflightService.PlayModeNotActiveMessage));
+        }
+
+        /// <summary>
         /// What: Status with no recording and no last-completed snapshot reports idle success.
         /// </summary>
         [Test]

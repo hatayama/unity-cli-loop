@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
@@ -39,10 +40,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static RecordVideoResponse ExecuteStart(RecordVideoSchema parameters, bool isLinux)
         {
-            PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActive();
-            if (!preflight.IsValid)
+            bool isWindowRecording = !string.IsNullOrEmpty(parameters.WindowName);
+            // A window recording paints through the Editor loop, so it does not need Play Mode.
+            if (!isWindowRecording)
             {
-                return CreateFailure(RecordVideoAction.start, preflight.ErrorMessage);
+                PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActive();
+                if (!preflight.IsValid)
+                {
+                    return CreateFailure(RecordVideoAction.start, preflight.ErrorMessage);
+                }
             }
 
             if (RecordVideoService.IsRecording)
@@ -60,23 +66,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.OutputPath,
                 isLinux,
                 parameters.ResolutionScale,
-                parameters.Quality);
+                parameters.Quality,
+                parameters.MatchMode);
             if (!validation.IsValid)
             {
                 return CreateFailure(RecordVideoAction.start, validation.ErrorMessage);
             }
 
-            RenderTexture renderTexture = GameViewBridge.GetRenderTexture();
-            if (renderTexture == null)
+            RecordVideoSourceResolution source = isWindowRecording
+                ? ResolveWindowSource(parameters)
+                : ResolvePlayModeViewSource(parameters);
+            if (source.FailureMessage != null)
             {
-                return CreateFailure(
-                    RecordVideoAction.start,
-                    RecordVideoConstants.RenderTextureUnavailableMessage);
+                return CreateFailure(RecordVideoAction.start, source.FailureMessage);
             }
 
             (int width, int height) size = VideoFrameSizePolicy.Resolve(
-                renderTexture.width,
-                renderTexture.height,
+                source.SourceWidth,
+                source.SourceHeight,
                 parameters.ResolutionScale);
             int width = size.width;
             int height = size.height;
@@ -89,7 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.OutputPath,
                 UnityCliLoopPathResolver.GetProjectRoot(),
                 DateTime.Now,
-                isLinux);
+                isLinux,
+                source.FileNamePrefix);
             bool usedDefaultOutputPath = string.IsNullOrEmpty(parameters.OutputPath);
             VideoRecordingSnapshot snapshot = RecordVideoService.Start(
                 parameters.FrameRate,
@@ -98,13 +106,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 usedDefaultOutputPath,
                 width,
                 height,
-                parameters.ResolutionScale,
+                source.FrameSource,
+                !isWindowRecording,
                 parameters.Quality);
             return CreateResponse(
                 true,
                 RecordVideoConstants.StartedMessage,
                 RecordVideoAction.start,
                 snapshot);
+        }
+
+        private static RecordVideoSourceResolution ResolveWindowSource(RecordVideoSchema parameters)
+        {
+            EditorWindow[] windows = EditorWindowFinder.FindWindowsByName(
+                parameters.WindowName,
+                parameters.MatchMode);
+            if (windows.Length == 0)
+            {
+                string openWindows = string.Join(", ", EditorWindowFinder.GetOpenWindowNames());
+                return RecordVideoSourceResolution.Failure(
+                    $"Window '{parameters.WindowName}' not found (MatchMode: {parameters.MatchMode}). Open windows: {openWindows}");
+            }
+
+            EditorWindow window = windows[0];
+            // Shown before measuring: a background tab is never painted, and bringing it to the
+            // front can change its layout.
+            window.ShowTab();
+            float pixelsPerPoint = EditorGUIUtility.pixelsPerPoint;
+            return RecordVideoSourceResolution.Success(
+                new EditorWindowFrameSource(window, parameters.ResolutionScale),
+                Mathf.RoundToInt(window.position.width * pixelsPerPoint),
+                Mathf.RoundToInt(window.position.height * pixelsPerPoint),
+                RecordVideoConstants.DefaultWindowFileNamePrefix);
+        }
+
+        private static RecordVideoSourceResolution ResolvePlayModeViewSource(RecordVideoSchema parameters)
+        {
+            RenderTexture renderTexture = GameViewBridge.GetRenderTexture();
+            if (renderTexture == null)
+            {
+                return RecordVideoSourceResolution.Failure(
+                    RecordVideoConstants.RenderTextureUnavailableMessage);
+            }
+
+            return RecordVideoSourceResolution.Success(
+                new PlayModeViewFrameSource(parameters.ResolutionScale),
+                renderTexture.width,
+                renderTexture.height,
+                RecordVideoOutputPathResolver.DefaultFileNamePrefix);
         }
 
         private static RecordVideoResponse ExecuteStop()
@@ -196,6 +245,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 StoppedBy = snapshot.StoppedBy,
                 Quality = snapshot.Quality
             };
+        }
+    }
+
+    /// <summary>
+    /// Carries the frame source, source size, and file name prefix chosen for one recording start.
+    /// </summary>
+    internal readonly struct RecordVideoSourceResolution
+    {
+        internal IGameViewFrameSource FrameSource { get; }
+
+        internal int SourceWidth { get; }
+
+        internal int SourceHeight { get; }
+
+        internal string FileNamePrefix { get; }
+
+        internal string FailureMessage { get; }
+
+        private RecordVideoSourceResolution(
+            IGameViewFrameSource frameSource,
+            int sourceWidth,
+            int sourceHeight,
+            string fileNamePrefix,
+            string failureMessage)
+        {
+            FrameSource = frameSource;
+            SourceWidth = sourceWidth;
+            SourceHeight = sourceHeight;
+            FileNamePrefix = fileNamePrefix;
+            FailureMessage = failureMessage;
+        }
+
+        internal static RecordVideoSourceResolution Success(
+            IGameViewFrameSource frameSource,
+            int sourceWidth,
+            int sourceHeight,
+            string fileNamePrefix)
+        {
+            return new RecordVideoSourceResolution(frameSource, sourceWidth, sourceHeight, fileNamePrefix, null);
+        }
+
+        internal static RecordVideoSourceResolution Failure(string failureMessage)
+        {
+            return new RecordVideoSourceResolution(null, 0, 0, null, failureMessage);
         }
     }
 }
