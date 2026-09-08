@@ -186,6 +186,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: the frame texture is marked HideAndDontSave so a texture created during Play Mode
+        /// is not destroyed when Play Mode ends. The transition itself cannot run in an EditMode
+        /// test and is covered by manual verification against a live Editor.
+        /// </summary>
+        [Test]
+        public void Constructor_MarksFrameTextureHideAndDontSave()
+        {
+            Assert.That(_session.FrameTextureForTests.hideFlags, Is.EqualTo(HideFlags.HideAndDontSave));
+        }
+
+        /// <summary>
         /// What: a second Stop is a no-op so the encoder is disposed only once.
         /// </summary>
         [Test]

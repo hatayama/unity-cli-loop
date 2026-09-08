@@ -790,7 +790,7 @@
           },
           "WindowName": {
             "type": "string",
-            "description": "Editor window title to record instead of the Game View (for example Scene, Inspector, Console). Empty records the Game View and requires Play Mode. A window recording does not require Play Mode, brings the tab to the front, repaints it every frame, and keeps running across Play Mode changes. Used by start only.",
+            "description": "Editor window title to record instead of the Game View (for example Scene, Inspector, Console). Empty records the Game View and requires Play Mode. A window recording does not require Play Mode, brings the tab to the front, repaints it every frame, and keeps running when Play Mode stops. Used by start only.",
             "default": ""
           },
           "MatchMode": {

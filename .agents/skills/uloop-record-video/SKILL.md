@@ -34,7 +34,7 @@ uloop record-video --action stop
 | `--max-duration-seconds` | integer | `60` | Auto-stop safety limit in seconds. Valid range 1–600. Used by `start` only. |
 | `--resolution-scale` | number | `1.0` | Resolution scale (0.1 to 1.0) applied to the Game View size before encoding. `0.5` cuts file size and encoding cost to about a quarter. Used by `start` only. |
 | `--quality` | enum | `medium` | Encoder bitrate preset: `low`, `medium`, or `high`. Used by `start` only. |
-| `--window-name` | string | empty | Editor window title to record instead of the Game View (for example Scene, Inspector, Console). Empty records the Game View and requires Play Mode. A window recording does not require Play Mode, brings the tab to the front, repaints it every frame, and keeps running across Play Mode changes. Used by `start` only. |
+| `--window-name` | string | empty | Editor window title to record instead of the Game View (for example Scene, Inspector, Console). Empty records the Game View and requires Play Mode. A window recording does not require Play Mode, brings the tab to the front, repaints it every frame, and keeps running when Play Mode stops. Used by `start` only. |
 | `--match-mode` | enum | `exact` | Window title matching for `--window-name`: `exact`, `prefix`, or `contains` (case-insensitive). Used by `start` only. |
 | `--output-path` | string | empty | Output file path. Empty uses `.uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss_fff>.mp4` (`.webm` on Linux). Extension must be `.mp4` (H.264) or `.webm` (VP8). Linux rejects `.mp4`. Used by `start` only. |
 
@@ -76,5 +76,6 @@ Returns JSON containing:
 
 - Odd Game View sizes are rounded down to even for H.264 (for example 1286×723 → 1286×722; the last pixel row/column is dropped).
 - The recording is wall-clock paced, so Play Mode pause records a still image, not a gap.
+- A window recording survives Play Mode stopping, but entering Play Mode with domain reload enabled (Unity's default) ends it with `StoppedBy: "assembly-reload"`.
 - Default output is H.264 `.mp4` on macOS/Windows and VP8 `.webm` on Linux. An explicit `.webm` path uses VP8 on every host.
 - Default recordings under `.uloop/outputs/Videos/` keep only the newest 20 files per extension; a custom `--output-path` is never pruned.
