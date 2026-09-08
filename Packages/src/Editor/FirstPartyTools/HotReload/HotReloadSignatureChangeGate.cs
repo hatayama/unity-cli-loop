@@ -316,11 +316,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return outcomes;
         }
 
+        /// <summary>
+        /// The four ways the signature-change gate can end. Held as one value rather than as
+        /// separate flags, because no two of them can be true at once.
+        /// </summary>
+        internal enum SignatureChangeGateOutcome
+        {
+            NoWork,
+            WarningsOnly,
+            Failed,
+            Retried
+        }
+
         internal sealed class SignatureChangeGateResult
         {
-            public bool FileFailed { get; }
+            public SignatureChangeGateOutcome Outcome { get; }
             public string FailureMessage { get; }
-            public bool UsedWorkerRetry { get; }
             public bool DidScan { get; }
             public HotReloadShimIsolation.HotReloadShimIsolationResult Isolation { get; }
             public List<HotReloadMethodOutcome> SkippedOutcomes { get; }
@@ -329,10 +340,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public HashSet<HotReloadQualifiedMethodIdentity> DeletedCallerExemptions { get; }
             public List<string> GatedReplacementMethodKeys { get; }
 
+            public bool FileFailed => Outcome == SignatureChangeGateOutcome.Failed;
+            public bool UsedWorkerRetry => Outcome == SignatureChangeGateOutcome.Retried;
+
             private SignatureChangeGateResult(
-                bool fileFailed,
+                SignatureChangeGateOutcome outcome,
                 string failureMessage,
-                bool usedWorkerRetry,
                 bool didScan,
                 HotReloadShimIsolation.HotReloadShimIsolationResult isolation,
                 List<HotReloadMethodOutcome> skippedOutcomes,
@@ -341,9 +354,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions,
                 List<string> gatedReplacementMethodKeys)
             {
-                FileFailed = fileFailed;
+                Outcome = outcome;
                 FailureMessage = failureMessage;
-                UsedWorkerRetry = usedWorkerRetry;
                 DidScan = didScan;
                 Isolation = isolation;
                 SkippedOutcomes = skippedOutcomes ?? new List<HotReloadMethodOutcome>();
@@ -357,7 +369,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public static SignatureChangeGateResult NoWork()
             {
                 return new SignatureChangeGateResult(
-                    false, null, false, false, null, null, null, null, null, null);
+                    SignatureChangeGateOutcome.NoWork,
+                    null, false, null, null, null, null, null, null);
             }
 
             public static SignatureChangeGateResult WarningsOnly(
@@ -366,18 +379,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions)
             {
                 return new SignatureChangeGateResult(
-                    false, null, false, true, null, null, warnings, hits, deletedCallerExemptions, null);
+                    SignatureChangeGateOutcome.WarningsOnly,
+                    null, true, null, null, warnings, hits, deletedCallerExemptions, null);
             }
 
+            // Why didScan is true: this result is only built after FindCallSites has already run,
+            // so the scan did happen. It used to be reported false, which no consumer could
+            // observe because every reader of DidScan sits behind an early return on FileFailed.
             public static SignatureChangeGateResult Failed(
                 string failureMessage,
                 List<string> gatedReplacementMethodKeys)
             {
                 return new SignatureChangeGateResult(
-                    true,
+                    SignatureChangeGateOutcome.Failed,
                     failureMessage,
-                    false,
-                    false,
+                    true,
                     null,
                     null,
                     null,
@@ -395,9 +411,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 List<string> gatedReplacementMethodKeys)
             {
                 return new SignatureChangeGateResult(
-                    false,
+                    SignatureChangeGateOutcome.Retried,
                     null,
-                    true,
                     true,
                     isolation,
                     skippedOutcomes,
