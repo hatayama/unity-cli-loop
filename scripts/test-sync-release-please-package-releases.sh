@@ -186,6 +186,13 @@ MOCK_GH
 set -eu
 
 printf '%s\n' "$*" >> "$GO_LOG"
+
+case "$*" in
+  *check-package-pin-consistency*)
+    exit "${PIN_CONSISTENCY_CHECK_STATUS:-0}"
+    ;;
+esac
+
 exit "${PROTOCOL_CHECK_STATUS:-0}"
 MOCK_GO
 
@@ -472,6 +479,7 @@ run_sync() {
     GH_LOG="$work_dir/gh.log" \
     GO_LOG="$work_dir/go.log" \
     PROTOCOL_CHECK_STATUS="${PROTOCOL_CHECK_STATUS:-0}" \
+    PIN_CONSISTENCY_CHECK_STATUS="${PIN_CONSISTENCY_CHECK_STATUS:-0}" \
     SLEEP_LOG="$work_dir/sleep.log" \
     EXISTING_RELEASE_TAG="$existing_tag" \
     EXISTING_RELEASE_DRAFT="$existing_draft" \
@@ -749,6 +757,36 @@ test_dispatcher_package_release_is_left_to_dispatcher_publish() {
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
+# Verifies a Unity package release whose commit pins a different dispatcher is refused instead of released with a stale pin.
+test_fails_when_package_pin_records_a_different_dispatcher() {
+  work_dir=$(create_release_repo package-pin-mismatch)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  if PIN_CONSISTENCY_CHECK_STATUS=1 run_sync "$work_dir" "" false ""; then
+    echo "Expected a package pin mismatch to fail the release sync." >&2
+    exit 1
+  fi
+
+  assert_contains "$work_dir/go.log" "run ./cmd/check-package-pin-consistency --repo-root $work_dir --ref $release_sha"
+  assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
+}
+
+# Verifies the pin consistency gate is scoped to the Unity package and never gates the project runner release.
+test_package_pin_gate_does_not_apply_to_project_runner_release() {
+  work_dir=$(create_release_repo package-pin-scope)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  run_sync "$work_dir" "" false ""
+
+  assert_contains "$work_dir/go.log" "run ./cmd/check-package-pin-consistency --repo-root $work_dir --ref $release_sha"
+  pin_check_count=$(grep -c -- "check-package-pin-consistency" "$work_dir/go.log")
+  if [ "$pin_check_count" != "1" ]; then
+    echo "Expected exactly one package pin consistency check, got $pin_check_count." >&2
+    cat "$work_dir/go.log" >&2
+    exit 1
+  fi
+}
+
 # Verifies a root package release created by another workflow during creation is reused.
 test_concurrent_root_release_creation_is_reused() {
   work_dir=$(create_release_repo concurrent-root-create)
@@ -780,3 +818,5 @@ test_key_rename_commit_is_not_treated_as_release_commit
 test_changelog_move_commit_is_not_treated_as_release_commit
 test_dispatcher_package_release_is_left_to_dispatcher_publish
 test_concurrent_root_release_creation_is_reused
+test_fails_when_package_pin_records_a_different_dispatcher
+test_package_pin_gate_does_not_apply_to_project_runner_release

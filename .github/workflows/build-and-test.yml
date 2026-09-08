@@ -234,3 +234,28 @@ jobs:
           echo "Validating package.json syntax..."
           jq empty package.json
           echo "✅ package.json is valid"
+
+  # Only the Unity package release branch is gated: between merging the
+  # dispatcher release PR and the post-publish pin stamp, main's manifest and
+  # the package pin legitimately disagree, so gating every pull request would
+  # turn that window red for unrelated work.
+  check-package-release-pin:
+    if: startsWith(github.head_ref || github.ref_name, 'release-please--branches--main--components--unity-package')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      - name: Check the package release commit pins the dispatcher it releases
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-package-pin-consistency --ref HEAD

@@ -12,6 +12,7 @@ CLI_PACKAGE_PATH="cli/project-runner"
 # the release here would publish it before its assets are uploaded, so the sync
 # must skip the dispatcher package entirely.
 DISPATCHER_PACKAGE_PATH="cli/dispatcher"
+UNITY_PACKAGE_PATH="Packages/src"
 UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/project-runner-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)
@@ -532,6 +533,30 @@ verify_minimum_cli_release_protocol() {
   )
 }
 
+# The Unity package release commit is the commit its tag points at, so the pin
+# recorded there is the dispatcher every fresh install of the release will
+# fetch. A mismatch is failed rather than waited out: the commit's pin never
+# changes, so only a later release commit can resolve it.
+verify_package_pin_consistency() {
+  release_ref=$1
+
+  (
+    cd "$ROOT_DIR/cli/release-automation"
+    go run ./cmd/check-package-pin-consistency --repo-root "$ROOT_DIR" --ref "$release_ref"
+  )
+}
+
+verify_release_commit_for_package() {
+  package_path=$1
+  release_ref=$2
+
+  verify_minimum_cli_release_protocol "$release_ref"
+
+  if [ "$package_path" = "$UNITY_PACKAGE_PATH" ]; then
+    verify_package_pin_consistency "$release_ref"
+  fi
+}
+
 release_tag_from_config() {
   package_path=$1
   version=$2
@@ -635,7 +660,7 @@ while IFS='	' read -r package_path changelog_config_path component include_compo
           echo "Draft release $release_tag cannot be protocol-verified because no release-please commit for $package_path version $version was found." >&2
           exit 1
         fi
-        verify_minimum_cli_release_protocol "$release_commit_sha"
+        verify_release_commit_for_package "$package_path" "$release_commit_sha"
         publish_existing_draft_release "$release_tag" "$version"
       else
         echo "Release $release_tag already exists."
@@ -648,7 +673,7 @@ while IFS='	' read -r package_path changelog_config_path component include_compo
         exit 1
       fi
 
-      verify_minimum_cli_release_protocol "$release_commit_sha"
+      verify_release_commit_for_package "$package_path" "$release_commit_sha"
       notes_file="$TMP_DIR/$release_tag.md"
       write_release_notes "$changelog_path" "$version" "$notes_file"
       create_package_release "$release_tag" "$version" "$release_commit_sha" "$notes_file"
