@@ -394,7 +394,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a file whose worker output carries parse errors is marked SkipApply and gets a
+        /// A file whose worker output carries parse errors is marked SkipApply and gets a
         /// "(file)" Failed row, while a file without parse errors keeps SkipApply false and gets
         /// no Failed row.
         /// </summary>

@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ParseErrorText = "Broken.cs(3,1): error CS1022: Type or namespace definition, or end-of-file expected";
 
         /// <summary>
-        /// What: a file output carrying parse errors adds exactly one Failed outcome named
+        /// A file output carrying parse errors adds exactly one Failed outcome named
         /// "(file)" and does not put the parse error text into the warnings.
         /// </summary>
         [Test]
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a file output without parse errors adds no Failed outcome at all.
+        /// A file output without parse errors adds no Failed outcome at all.
         /// </summary>
         [Test]
         public void AppendWorkerNotices_WithoutParseErrors_AddsNoFailedOutcome()
