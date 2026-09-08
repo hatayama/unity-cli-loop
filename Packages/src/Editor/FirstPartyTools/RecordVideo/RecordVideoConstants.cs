@@ -10,7 +10,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string StoppedByPlayModeExit = "play-mode-exit";
         internal const string StoppedByAssemblyReload = "assembly-reload";
         internal const string StoppedByEditorQuit = "editor-quit";
+        internal const string StoppedByWindowClosed = "window-closed";
+        internal const string StoppedByFrameTextureLost = "frame-texture-lost";
         internal const string WebmExtension = ".webm";
+        internal const string DefaultWindowFileNamePrefix = "window_";
 
         internal const string AlreadyRecordingMessage =
             "A recording is already in progress. Stop it first.";
@@ -18,6 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Play Mode view RenderTexture is not available. Open the Game View and make sure a camera renders.";
         internal const string FrameSizeTooSmallMessage =
             "Play Mode view size is too small to record after rounding to even encoder dimensions.";
+        internal const string WindowLayoutTimedOutMessage =
+            "Timed out waiting for the window to lay out; retry after focusing the Editor.";
         internal const string NoRecordingMessage = "No recording is in progress.";
         internal const string InvalidActionMessage = "Action must be Start, Stop, or Status.";
         internal const string StartedMessage = "Recording started.";

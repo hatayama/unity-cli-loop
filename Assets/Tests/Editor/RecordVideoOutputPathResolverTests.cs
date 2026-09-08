@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             DateTime now = new DateTime(2026, 9, 1, 15, 4, 5, 123, DateTimeKind.Utc);
 
-            string resolved = RecordVideoOutputPathResolver.Resolve("", "/project", now, false);
+            string resolved = RecordVideoOutputPathResolver.Resolve("", "/project", now, false, RecordVideoOutputPathResolver.DefaultFileNamePrefix);
 
             string expected = Path.Combine(
                 "/project",
@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string requested = Path.Combine("custom", "clip.mp4");
 
-            string resolved = RecordVideoOutputPathResolver.Resolve(requested, "/project", DateTime.UtcNow, false);
+            string resolved = RecordVideoOutputPathResolver.Resolve(requested, "/project", DateTime.UtcNow, false, RecordVideoOutputPathResolver.DefaultFileNamePrefix);
 
             Assert.That(resolved, Is.EqualTo(Path.GetFullPath(requested)));
         }
@@ -51,10 +51,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             DateTime now = new DateTime(2026, 9, 1, 15, 4, 5, 123, DateTimeKind.Utc);
 
-            string resolved = RecordVideoOutputPathResolver.Resolve("", "/project", now, true);
+            string resolved = RecordVideoOutputPathResolver.Resolve("", "/project", now, true, RecordVideoOutputPathResolver.DefaultFileNamePrefix);
 
             Assert.That(resolved, Does.EndWith(".webm"));
             Assert.That(resolved, Does.Contain("gameview_20260901_150405_123.webm"));
+        }
+
+        /// <summary>
+        /// What: the window prefix produces a window_ default file name instead of the Game View one.
+        /// </summary>
+        [Test]
+        public void Resolve_WithWindowPrefix_UsesWindowFileName()
+        {
+            DateTime now = new DateTime(2026, 9, 1, 15, 4, 5, 123, DateTimeKind.Utc);
+
+            string resolved = RecordVideoOutputPathResolver.Resolve(
+                "", "/project", now, false, RecordVideoConstants.DefaultWindowFileNamePrefix);
+
+            Assert.That(Path.GetFileName(resolved), Does.StartWith("window_"));
         }
     }
 }

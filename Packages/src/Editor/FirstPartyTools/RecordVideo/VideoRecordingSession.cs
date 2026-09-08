@@ -1,6 +1,8 @@
 using System;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -44,6 +46,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _quality = quality;
             _startedAt = clock();
             _frameTexture = new Texture2D(encoder.Width, encoder.Height, TextureFormat.RGBA32, false);
+            // A texture created during Play Mode is destroyed when Play Mode ends, and a window
+            // recording outlives Play Mode, so the frame texture must not be owned by the scene.
+            _frameTexture.hideFlags = HideFlags.HideAndDontSave;
         }
 
         internal void Tick()
@@ -53,10 +58,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            // Unity's null comparison reports a destroyed texture. Reading through it would throw
+            // on every editor update and break the update delegate chain for every other subscriber.
+            if (_frameTexture == null)
+            {
+                VibeLogger.LogError(
+                    "record_video_frame_texture_lost",
+                    "The recording frame texture was destroyed, so the recording was stopped.");
+                Stop(RecordVideoConstants.StoppedByFrameTextureLost);
+                return;
+            }
+
             double elapsed = _clock() - _startedAt;
             if (elapsed >= _maxDurationSeconds)
             {
                 Stop(RecordVideoConstants.StoppedByMaxDuration);
+                return;
+            }
+
+            // Checked after max-duration so a run that hits both still reports max-duration,
+            // and before FramesDue so a closed window's frames are not counted as skips.
+            if (_frameSource.IsSourceClosed)
+            {
+                Stop(RecordVideoConstants.StoppedByWindowClosed);
                 return;
             }
 
@@ -102,6 +126,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityEngine.Object.DestroyImmediate(_frameTexture);
             _frameTexture = null;
         }
+
+        internal Texture2D FrameTextureForTests => _frameTexture;
 
         internal VideoRecordingSnapshot Snapshot()
         {

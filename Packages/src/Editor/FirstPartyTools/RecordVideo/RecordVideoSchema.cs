@@ -15,6 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string OutputPath { get; set; } = "";
 
+        public string WindowName { get; set; } = "";
+
+        public WindowMatchMode MatchMode { get; set; } = WindowMatchMode.exact;
+
         public float ResolutionScale { get; set; } = 1.0f;
 
         public RecordVideoQuality Quality { get; set; } = RecordVideoQuality.medium;

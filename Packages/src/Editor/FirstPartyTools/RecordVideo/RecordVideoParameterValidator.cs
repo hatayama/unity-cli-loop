@@ -24,7 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string outputPath,
             bool isLinux,
             float resolutionScale,
-            RecordVideoQuality quality)
+            RecordVideoQuality quality,
+            WindowMatchMode matchMode)
         {
             if (frameRate < MinFrameRate || frameRate > MaxFrameRate)
             {
@@ -50,6 +51,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!Enum.IsDefined(typeof(RecordVideoQuality), quality))
             {
                 return ValidationResult.Failure("Quality must be Low, Medium, or High.");
+            }
+
+            // Newtonsoft maps numeric JSON input onto undefined enum values, so range-check here.
+            if (!Enum.IsDefined(typeof(WindowMatchMode), matchMode))
+            {
+                return ValidationResult.Failure("MatchMode must be exact, prefix, or contains.");
             }
 
             if (string.IsNullOrEmpty(outputPath))

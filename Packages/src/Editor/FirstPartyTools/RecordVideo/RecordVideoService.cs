@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private static VideoRecordingSession _session;
         private static bool _usedDefaultOutputPath;
+        private static bool _stopOnPlayModeExit;
 
         internal static bool IsRecording => _session != null && _session.Snapshot().IsRecording;
 
@@ -34,7 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool usedDefaultOutputPath,
             int width,
             int height,
-            float resolutionScale,
+            IGameViewFrameSource frameSource,
+            bool stopOnPlayModeExit,
             RecordVideoQuality quality)
         {
             Debug.Assert(!IsRecording, "Start must not run while a recording is already active.");
@@ -43,8 +45,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(height > 0, "encoder height must be a positive even size.");
             Debug.Assert((width & 1) == 0, "encoder width must be even.");
             Debug.Assert((height & 1) == 0, "encoder height must be even.");
-
-            PlayModeViewFrameSource frameSource = new PlayModeViewFrameSource(resolutionScale);
 
             string directory = Path.GetDirectoryName(outputPath);
             Debug.Assert(!string.IsNullOrEmpty(directory), "outputPath must include a directory.");
@@ -72,6 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outputPath,
                     quality);
                 _usedDefaultOutputPath = usedDefaultOutputPath;
+                _stopOnPlayModeExit = stopOnPlayModeExit;
                 LastCompletedRecordingStore.Clear();
                 EditorApplication.update -= OnEditorUpdate;
                 EditorApplication.update += OnEditorUpdate;
@@ -147,6 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 _session = null;
                 _usedDefaultOutputPath = false;
+                _stopOnPlayModeExit = false;
             }
         }
 
@@ -168,6 +170,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             if (_session == null)
+            {
+                return;
+            }
+
+            // A window recording is independent of Play Mode, so only a Game View recording
+            // stops when Play Mode ends.
+            if (!_stopOnPlayModeExit)
             {
                 return;
             }
