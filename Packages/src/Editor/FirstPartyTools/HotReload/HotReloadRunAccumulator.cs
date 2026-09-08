@@ -133,20 +133,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // with Auto Refresh allowed and ended with it held.
             bool newlyArmed = autoRefreshHold.Held && !_autoRefreshHeldAtStart;
             return new HotReloadOrchestratorResult(
-                _outcomes,
-                _warnings,
-                _patchedTotal,
-                HotReloadPatcher.ActiveChangeCount,
-                _suppressedPausePointIds,
-                _unchangedTotal,
-                _retargetedPausePointIds,
-                _addedFields.ToArray(),
-                _addedConsts.ToArray(),
-                _revertedUnchangedTotal,
-                autoRefreshHold,
-                _reappliedSiblingPaths.ToArray(),
-                _introducedTypes,
-                newlyArmed);
+                methods: _outcomes,
+                warnings: _warnings,
+                patchedTotal: _patchedTotal,
+                activePatchTotal: HotReloadPatcher.ActiveChangeCount,
+                suppressedPausePointIds: _suppressedPausePointIds,
+                unchangedTotal: _unchangedTotal,
+                retargetedPausePointIds: _retargetedPausePointIds,
+                addedFields: _addedFields.ToArray(),
+                addedConsts: _addedConsts.ToArray(),
+                revertedUnchangedTotal: _revertedUnchangedTotal,
+                autoRefreshHold: autoRefreshHold,
+                reappliedSiblingPaths: _reappliedSiblingPaths.ToArray(),
+                introducedTypes: _introducedTypes,
+                autoRefreshHoldNewlyArmed: newlyArmed);
         }
 
         private void AppendInlineRiskWarning()

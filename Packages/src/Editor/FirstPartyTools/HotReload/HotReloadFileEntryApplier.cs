@@ -110,13 +110,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadFileSinks sinks = file.Sinks;
             return new HotReloadFileProcessResult(
-                sinks.Outcomes,
-                sinks.Warnings,
-                0,
-                sinks.SuppressedPausePointIds,
-                new List<string>(),
-                file.UnchangedMethodCount,
-                sinks.RetargetedPausePointIds,
+                outcomes: sinks.Outcomes,
+                warnings: sinks.Warnings,
+                patchedCount: 0,
+                suppressedPausePointIds: sinks.SuppressedPausePointIds,
+                inlineRiskMethodLabels: new List<string>(),
+                unchangedMethodCount: file.UnchangedMethodCount,
+                retargetedPausePointIds: sinks.RetargetedPausePointIds,
                 addedFieldNames: file.ClearedAddedFieldNames,
                 sourceContentSha256: file.FileOutput != null ? file.FileOutput.sourceContentSha256 : null,
                 revertedUnchangedCount: file.RevertedUnchangedCount,
@@ -156,18 +156,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.WorkerOutput,
                 sinks.Outcomes);
             return new HotReloadFileProcessResult(
-                sinks.Outcomes,
-                sinks.Warnings,
-                patchedCount,
-                sinks.SuppressedPausePointIds,
-                inlineRiskMethodLabels ?? new List<string>(),
-                file.UnchangedMethodCount,
-                sinks.RetargetedPausePointIds,
-                applied ? file.AddedFieldNames : null,
-                file.FileOutput.sourceContentSha256,
-                applied ? file.AddedConstNames : null,
-                file.RevertedUnchangedCount,
-                sinks.IntroducedTypes);
+                outcomes: sinks.Outcomes,
+                warnings: sinks.Warnings,
+                patchedCount: patchedCount,
+                suppressedPausePointIds: sinks.SuppressedPausePointIds,
+                inlineRiskMethodLabels: inlineRiskMethodLabels ?? new List<string>(),
+                unchangedMethodCount: file.UnchangedMethodCount,
+                retargetedPausePointIds: sinks.RetargetedPausePointIds,
+                addedFieldNames: applied ? file.AddedFieldNames : null,
+                sourceContentSha256: file.FileOutput.sourceContentSha256,
+                addedConstNames: applied ? file.AddedConstNames : null,
+                revertedUnchangedCount: file.RevertedUnchangedCount,
+                introducedTypes: sinks.IntroducedTypes);
         }
 
         private static int ApplyResolvedEntries(
