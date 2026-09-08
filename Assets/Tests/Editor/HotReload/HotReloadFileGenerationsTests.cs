@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/FileGenerationsFixture.cs";
+        private const string AddedMethodKey = "FileGenerationsFixture.AddedMember()";
 
         private Func<MethodBase, MethodBase> _originalActiveShimLookup;
 
@@ -62,6 +63,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             BeginGeneration();
             RegisterOneOfEach();
+            Assert.That(
+                HotReloadAddedMemberRegistry.ListActiveMethodKeys(FixtureProjectRelativePath),
+                Does.Contain(AddedMethodKey),
+                "The added member must be recorded before the start under test drops it.");
 
             HotReloadFileGenerations.BeginAddedMemberOnlyGeneration(FixtureProjectRelativePath);
 
@@ -121,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadShimRegistry.MethodEntry(GetAddedTarget(), false, 1, 2));
             HotReloadFileGenerations.RegisterAddedMethod(
                 FixtureProjectRelativePath,
-                "FileGenerationsFixture.AddedMember()",
+                AddedMethodKey,
                 GetAddedTarget(),
                 FixtureProjectRelativePath);
         }
