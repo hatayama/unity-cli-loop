@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.ReadAllBytes(assembly.Location),
                 null,
                 assembly);
-            HotReloadAddedMemberRegistry.Register(
+            HotReloadFileGenerations.RegisterAddedMethod(
                 FixtureProjectRelativePath,
                 FixtureMethodKey,
                 typeof(HotReloadDomainStoresTests).GetMethod(
