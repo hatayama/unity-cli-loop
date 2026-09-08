@@ -23,6 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TargetKey = "Coverage.Host::Target()";
         private const string MissingNewSourcePath = "Assets/Tests/Editor/HotReload/UncompiledNewScript.cs";
         private const string PersistedAddedMemberKey = "Coverage.Host::Persisted()";
+        private const string BrokenSourcePath = "Assets/Tests/Editor/HotReload/BrokenNoticeSource.cs";
+        private const string HealthySourcePath = "Assets/Tests/Editor/HotReload/HealthyNoticeSource.cs";
+        private const string ParseErrorText =
+            "BrokenNoticeSource.cs(3,1): error CS1022: Type or namespace definition, or end-of-file expected";
 
         private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
 
@@ -387,6 +391,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(HotReloadAddedMemberRegistry.HasGeneration(file.ProjectRelativePath), Is.True);
             Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.False);
             Assert.That(file.ClearedAddedFieldNames, Is.Not.Null);
+        }
+
+        /// <summary>
+        /// What: a file whose worker output carries parse errors is marked SkipApply and gets a
+        /// "(file)" Failed row, while a file without parse errors keeps SkipApply false and gets
+        /// no Failed row.
+        /// </summary>
+        [Test]
+        public void AppendPerFileWorkerNotices_WhenFileOutputCarriesParseErrors_SetsSkipApplyAndFailedRow()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            Assembly compilationAssembly = FindCompilationAssembly();
+            HotReloadGroupFile brokenFile = CreateFile(BrokenSourcePath, projectRoot, compilationAssembly);
+            HotReloadGroupFile healthyFile = CreateFile(HealthySourcePath, projectRoot, compilationAssembly);
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                shimSource = string.Empty,
+                entries = Array.Empty<TransformWorkerEntryDto>(),
+                skipped = Array.Empty<TransformWorkerSkippedDto>(),
+                unchangedMethods = Array.Empty<TransformWorkerUnchangedMethodDto>(),
+                files = new[]
+                {
+                    CreateWorkerFileOutput(BrokenSourcePath, new[] { ParseErrorText }),
+                    CreateWorkerFileOutput(HealthySourcePath, Array.Empty<string>())
+                },
+                parseErrors = Array.Empty<string>(),
+                siblingConstDriftWarnings = Array.Empty<string>()
+            };
+            HotReloadWorkerRowsByFile rows = HotReloadWorkerRowsByFile.Build(
+                output,
+                new List<string> { BrokenSourcePath, HealthySourcePath });
+
+            HotReloadGroupProcessor.AppendPerFileWorkerNotices(
+                new List<HotReloadGroupFile> { brokenFile, healthyFile },
+                rows);
+
+            Assert.That(brokenFile.SkipApply, Is.True);
+            Assert.That(CountFileFailedRows(brokenFile), Is.EqualTo(1));
+            Assert.That(healthyFile.SkipApply, Is.False);
+            Assert.That(CountFileFailedRows(healthyFile), Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// A file skipped for parse errors keeps its added-member generation even when the group
+        /// resolves no entries, so the previous reload's patches stay active.
+        /// </summary>
+        [Test]
+        public async Task ResolveEntriesToPatchAsync_WhenFileIsSkippedByParseErrors_KeepsAddedMemberGeneration()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
+            HotReloadApplyContext context = CreateEmptyEntriesContext(evidence);
+            HotReloadGroupFile file = context.Files[0];
+            SeedActiveAddedMember(file.ProjectRelativePath);
+            file.SkipApply = true;
+
+            HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                context,
+                CreateEmptyGateResult(),
+                CancellationToken.None);
+
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
+            Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
+            Assert.That(file.ClearedAddedFieldNames, Is.Null);
+        }
+
+        private static int CountFileFailedRows(HotReloadGroupFile file)
+        {
+            int count = 0;
+            foreach (HotReloadMethodOutcome outcome in file.Sinks.Outcomes)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed && outcome.Method == "(file)")
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static TransformWorkerFileOutputDto CreateWorkerFileOutput(
+            string projectRelativePath,
+            string[] parseErrors)
+        {
+            return new TransformWorkerFileOutputDto
+            {
+                projectRelativePath = projectRelativePath,
+                sourceContentSha256 = "aaaa",
+                parseErrors = parseErrors,
+                declarationDriftWarnings = Array.Empty<string>(),
+                removedMembers = Array.Empty<TransformWorkerRemovedMemberDto>(),
+                removedMethodSignatures = Array.Empty<TransformWorkerRemovedMethodSignatureDto>()
+            };
         }
 
         /// <summary>

@@ -314,6 +314,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: an edited source that fails to parse carries its errors on its own per-file row
+        /// and contributes no entries, skipped rows or unchanged methods, while the other file of
+        /// the run still produces entries.
+        /// </summary>
+        [Test]
+        public async Task Run_TwoSources_WhenOneSourceHasSyntaxErrors_ReportsParseErrorAndNoRowsForThatFile()
+        {
+            string brokenHost = RemoveLastClosingBrace(AddHostMethod(ReadOnDisk(HostFileName)));
+            CrossFileRun run = await RunEditedPairAsync(
+                brokenHost,
+                CallAddedHostMethod(ReadOnDisk(CallerFileName)));
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            Assert.That(run.Result.Output.files[0].parseErrors, Is.Not.Empty);
+            Assert.That(
+                run.Result.Output.files[0].parseErrors,
+                Has.Some.Contains("CS"),
+                "The broken source must report a compiler diagnostic id.");
+            Assert.That(run.Result.Output.files[1].parseErrors, Is.Empty);
+
+            foreach (TransformWorkerEntryDto entry in run.Result.Output.entries)
+            {
+                Assert.That(
+                    entry.sourceProjectRelativePath,
+                    Is.Not.EqualTo(run.HostProjectRelativePath),
+                    "A source that failed to parse must not produce an entry: " + entry.methodName);
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in run.Result.Output.skipped)
+            {
+                Assert.That(
+                    skipped.sourceProjectRelativePath,
+                    Is.Not.EqualTo(run.HostProjectRelativePath),
+                    "A source that failed to parse must not produce a skipped row: " + skipped.method);
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in run.Result.Output.unchangedMethods)
+            {
+                Assert.That(
+                    unchanged.sourceProjectRelativePath,
+                    Is.Not.EqualTo(run.HostProjectRelativePath),
+                    "A source that failed to parse must not produce an unchanged row: " + unchanged.methodName);
+            }
+
+            bool callerHasEntry = false;
+            foreach (TransformWorkerEntryDto entry in run.Result.Output.entries)
+            {
+                if (entry.sourceProjectRelativePath == run.CallerProjectRelativePath)
+                {
+                    callerHasEntry = true;
+                    break;
+                }
+            }
+
+            Assert.That(callerHasEntry, Is.True, "The parseable file must still produce entries.");
+        }
+
+        private static string RemoveLastClosingBrace(string source)
+        {
+            int lastBrace = source.LastIndexOf('}');
+            Assert.That(lastBrace, Is.GreaterThanOrEqualTo(0), "Precondition: source must have a closing brace.");
+            return source.Remove(lastBrace, 1);
+        }
+
         private static string ReadOnDisk(string fileName)
         {
             return File.ReadAllText(Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fileName));

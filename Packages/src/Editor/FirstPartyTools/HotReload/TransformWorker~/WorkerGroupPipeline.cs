@@ -70,20 +70,22 @@ internal static class WorkerGroupPipeline
             loadedUnit.ParseErrors.AddRange(referenceParseErrors);
         }
 
+        List<WorkerSourceUnit> transformUnits = SelectTransformableUnits(loadedUnits);
+
         // Why a run-level failure and not a per-file diagnostic: the orchestrator advances to
         // revert, gating and compile whenever the run succeeds, so a run that could not trust its
         // retained artifacts has to stop the whole group rather than transform against a binding
         // that is missing a type or attributing it to the wrong assembly.
-        string artifactFailure = PrepareBindingTrees(input, loadedUnits, references, targetTypesReference, parseOptions);
+        string artifactFailure = PrepareBindingTrees(input, transformUnits, references, targetTypesReference, parseOptions);
         if (artifactFailure != null)
         {
             return CreateRunFailureOutput(artifactFailure);
         }
 
-        List<SyntaxTree> bindingTrees = new List<SyntaxTree>(loadedUnits.Count);
-        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        List<SyntaxTree> bindingTrees = new List<SyntaxTree>(transformUnits.Count);
+        foreach (WorkerSourceUnit transformUnit in transformUnits)
         {
-            bindingTrees.Add(loadedUnit.BindingSyntaxTree);
+            bindingTrees.Add(transformUnit.BindingSyntaxTree);
         }
 
         CSharpCompilation compilation = CSharpCompilation.Create(
@@ -91,7 +93,7 @@ internal static class WorkerGroupPipeline
             syntaxTrees: bindingTrees,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        foreach (WorkerSourceUnit unit in loadedUnits)
+        foreach (WorkerSourceUnit unit in transformUnits)
         {
             unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
         }
@@ -99,10 +101,10 @@ internal static class WorkerGroupPipeline
         IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
             compilation,
             targetTypesReference);
-        List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(loadedUnits.Count);
-        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(transformUnits.Count);
+        foreach (WorkerSourceUnit transformUnit in transformUnits)
         {
-            editedRoots.Add(loadedUnit.Root);
+            editedRoots.Add(transformUnit.Root);
         }
 
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
@@ -124,7 +126,7 @@ internal static class WorkerGroupPipeline
         // files of the group declare types of the same name.
         int shimTypeCounter = 0;
         int globalShimMethodCounter = 0;
-        foreach (WorkerSourceUnit unit in loadedUnits)
+        foreach (WorkerSourceUnit unit in transformUnits)
         {
             (shimTypeCounter, globalShimMethodCounter) = QueueUnit(
                 unit,
@@ -142,7 +144,7 @@ internal static class WorkerGroupPipeline
                 globalShimMethodCounter);
         }
 
-        foreach (WorkerSourceUnit unit in loadedUnits)
+        foreach (WorkerSourceUnit unit in transformUnits)
         {
             RemovedMemberCollector.CollectRemovedMembersIfBaseline(
                 unit.Baseline,
@@ -159,7 +161,7 @@ internal static class WorkerGroupPipeline
         // Why one concatenated list: the guard runs to a fixed point, so a body that calls an
         // added method of another file must be able to lose its shim in the same iteration.
         List<TypeEmitState> allTypeEmitStates = new List<TypeEmitState>();
-        foreach (WorkerSourceUnit unit in loadedUnits)
+        foreach (WorkerSourceUnit unit in transformUnits)
         {
             allTypeEmitStates.AddRange(unit.TypeEmitStates);
         }
@@ -185,7 +187,7 @@ internal static class WorkerGroupPipeline
             shimTypeCounter,
             globalShimMethodCounter);
 
-        foreach (WorkerSourceUnit unit in loadedUnits)
+        foreach (WorkerSourceUnit unit in transformUnits)
         {
             // Why registered here and not where the type is planned: planning is a separate
             // worker operation, so by the time this run transforms the file the type is served
@@ -207,6 +209,25 @@ internal static class WorkerGroupPipeline
             unchangedMethods,
             siblingConstDriftWarnings,
             addedFieldCatalog);
+    }
+
+    // Keeps only the units a transform may read. A unit with parse errors is dropped: Roslyn's
+    // recovery tree still exposes method-shaped nodes, so transforming it would shim bodies read
+    // out of broken source and call the file applied. A file is all-or-nothing, so such a unit
+    // only carries its ParseErrors on its own file row and contributes no entry and no skipped
+    // row. This is the condition IntroducedTypePreparation already applies to type introduction.
+    private static List<WorkerSourceUnit> SelectTransformableUnits(List<WorkerSourceUnit> loadedUnits)
+    {
+        List<WorkerSourceUnit> transformUnits = new List<WorkerSourceUnit>(loadedUnits.Count);
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            if (loadedUnit.ParseErrors.Count == 0)
+            {
+                transformUnits.Add(loadedUnit);
+            }
+        }
+
+        return transformUnits;
     }
 
     // Removes from each unit's binding tree the declarations a retained artifact already serves,
