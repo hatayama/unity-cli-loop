@@ -19,6 +19,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private const string SharedContractPath = "tests/contracts/pause_point_status_response_contract.json";
 
+        /// <summary>
+        /// What: the id-less listing carries no DomainReloadRearmReport key when the last domain
+        /// reload replayed nothing, so an ordinary listing is unchanged for existing consumers.
+        /// </summary>
+        [Test]
+        public void PausePointStatusListResponse_WithNoRearmReport_OmitsTheReportKey()
+        {
+            UloopPausePointRegistry.SetDomainReloadRearmReport(Array.Empty<string>());
+
+            JObject listed = JObject.Parse(JsonConvert.SerializeObject(PausePointStatusBridgeCommand.ExecuteList()));
+
+            Assert.That(listed.ContainsKey("DomainReloadRearmReport"), Is.False);
+        }
+
+        /// <summary>
+        /// What: a re-arm report from the last domain reload reaches the id-less listing.
+        /// </summary>
+        [Test]
+        public void PausePointStatusListResponse_WithARearmReport_IncludesTheReportKey()
+        {
+            UloopPausePointRegistry.SetDomainReloadRearmReport(new[] { "Re-armed pause point 'jump'" });
+
+            JObject listed = JObject.Parse(JsonConvert.SerializeObject(PausePointStatusBridgeCommand.ExecuteList()));
+
+            Assert.That(
+                listed["DomainReloadRearmReport"].ToObject<string[]>(),
+                Is.EqualTo(new[] { "Re-armed pause point 'jump'" }));
+
+            UloopPausePointRegistry.SetDomainReloadRearmReport(Array.Empty<string>());
+        }
+
         [Test]
         public void PausePointStatusResponse_WhenSerialized_MatchesSharedContractFieldShape()
         {

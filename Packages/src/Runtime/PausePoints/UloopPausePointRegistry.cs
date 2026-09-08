@@ -441,6 +441,24 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         /// Marks whether this pause point is re-armed after a domain reload. A no-op for an
         /// unknown id: the caller has already learned the enable failed from its own result.
         /// </summary>
+        /// <summary>
+        /// What the re-arm pass after the last domain reload did, one line per persisted pause
+        /// point, so pause-point-status can show it. Plain strings because this Runtime assembly
+        /// cannot reference the Editor-side response types that produced them.
+        /// </summary>
+        public static IReadOnlyList<string> DomainReloadRearmReport { get; private set; } =
+            Array.Empty<string>();
+
+        public static void SetDomainReloadRearmReport(IReadOnlyList<string> lines)
+        {
+            if (lines == null)
+            {
+                throw new ArgumentNullException(nameof(lines));
+            }
+
+            DomainReloadRearmReport = lines;
+        }
+
         public static void SetPersisted(string id, bool persisted)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
@@ -635,6 +653,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public static void ResetForTests()
         {
+            DomainReloadRearmReport = Array.Empty<string>();
             Entries.Clear();
             MethodEntryInstrumentedIds.Clear();
             _nextGeneration = 0;

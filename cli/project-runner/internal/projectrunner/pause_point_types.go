@@ -145,6 +145,8 @@ type pausePointStatusListResponse struct {
 	Count       int                                `json:"Count"`
 	PausePoints []pausePointStatusListItemResponse `json:"PausePoints"`
 	NextActions []string                           `json:"NextActions"`
+	// Present only when the last domain reload replayed persisted pause points.
+	DomainReloadRearmReport []string `json:"DomainReloadRearmReport,omitempty"`
 }
 
 // pausePointStatusListItemResponse keeps id-less status output bounded to the fields needed for selection.

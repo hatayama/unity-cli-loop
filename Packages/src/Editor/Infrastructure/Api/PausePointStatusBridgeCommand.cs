@@ -49,8 +49,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 PausePoints = pausePoints,
                 NextActions = count == 0
                     ? new string[] { EmptyListNextAction }
-                    : new string[] { NonEmptyListNextAction }
+                    : new string[] { NonEmptyListNextAction },
+                DomainReloadRearmReport = BuildDomainReloadRearmReportOrNull()
             };
+        }
+
+        private static IReadOnlyList<string> BuildDomainReloadRearmReportOrNull()
+        {
+            IReadOnlyList<string> report = UloopPausePointRegistry.DomainReloadRearmReport;
+            return report.Count == 0 ? null : report;
         }
 
         // Called once when await-pause-point starts waiting, so a marker enabled well before a
@@ -339,6 +346,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         [JsonProperty(Order = 4)]
         public IReadOnlyList<string> NextActions { get; set; } = Array.Empty<string>();
+
+        // Omitted when the last domain reload re-armed nothing, so the usual listing is unchanged.
+        [JsonProperty(Order = 5, NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> DomainReloadRearmReport { get; set; }
     }
 
     /// <summary>
