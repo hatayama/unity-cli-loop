@@ -103,6 +103,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Update_WhenUpdateIsNeeded_ShowsInstallTargetVersionInsteadOfMinimumVersion()
+        {
+            // Verifies the Settings update button is wired to the install target version, not the minimum required one.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                needsUpdate: true,
+                cliVersion: "2.1.6",
+                requiredCliVersion: "3.0.0-beta.31",
+                installTargetCliVersion: "3.4.0");
+
+            section.Update(data);
+
+            Button installCliButton = root.Q<Button>("install-cli-button");
+            Assert.That(installCliButton.text, Is.EqualTo("Update CLI (v2.1.6 \u2192 v3.4.0)"));
+        }
+
+        [Test]
         public void Update_WhenCliIsHomebrewManaged_DisablesPrimaryButton()
         {
             // Verifies the Settings primary button cannot trigger an install for a Homebrew-managed CLI.
@@ -597,13 +618,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ManagedCliKind managedCliKind = ManagedCliKind.None,
             bool needsUpdate = false,
             string cliVersion = "3.0.0",
-            bool needsCliPathSetup = false)
+            bool needsCliPathSetup = false,
+            string requiredCliVersion = "3.0.0",
+            string installTargetCliVersion = "3.0.0")
         {
             return new CliSetupData(
                 isCliInstalled,
                 cliVersion,
-                requiredCliVersion: "3.0.0",
-                installTargetCliVersion: "3.0.0",
+                requiredCliVersion,
+                installTargetCliVersion,
                 needsUpdate,
                 canUninstallCli: true,
                 needsCliPathSetup,

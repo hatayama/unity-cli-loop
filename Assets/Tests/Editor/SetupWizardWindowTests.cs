@@ -612,6 +612,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(homebrewUpgradeMessage.text, Is.EqualTo(expectedText));
         }
 
+        [Test]
+        public void Update_WhenUpdateIsNeeded_ShowsInstallTargetVersionInsteadOfMinimumVersion()
+        {
+            // Verifies the wizard update button is wired to the install target version, not the minimum required one.
+            VisualElement statusIcon = new();
+            Label statusLabel = new();
+            Label homebrewUpgradeMessage = new() { name = "cli-homebrew-upgrade-message" };
+            Button installButton = new();
+            SetupWizardCliStepPresenter presenter = new(
+                statusIcon,
+                statusLabel,
+                homebrewUpgradeMessage,
+                installButton,
+                () => { });
+
+            presenter.Update(
+                cliInstalled: true,
+                cliVersion: "2.1.6",
+                cliIsDispatcher: true,
+                requiredCliVersion: "3.0.0-beta.31",
+                installTargetCliVersion: "3.4.0",
+                isInstallingCli: false,
+                needsCliPathSetup: false,
+                managedCliKind: ManagedCliKind.None);
+
+            Assert.That(installButton.text, Is.EqualTo("Update CLI (v2.1.6 \u2192 v3.4.0)"));
+        }
+
         [TestCase(false, false, false, false, false, ManagedCliKind.None, true)]
         [TestCase(true, false, true, false, false, ManagedCliKind.None, true)]
         [TestCase(true, false, false, false, false, ManagedCliKind.None, true)]
