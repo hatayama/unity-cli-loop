@@ -76,7 +76,7 @@ func assertStdoutCapturedVariablePreviewNote(t *testing.T, output string, want s
 // Verifies pause-point-status stdout includes CapturedVariablePreviewNote when a remaining
 // captured variable is truncated, so dropping the status-command apply call fails this test.
 func TestRunPausePointStatusCommandIncludesCapturedVariablePreviewNote(t *testing.T) {
-	const want = "a captured value was clipped at the current --max-preview-elements cap of 13 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+	const want = "a captured value was clipped at the current --max-preview-elements cap of 13 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. A clipped collection or object cannot be recovered after the fact: the capture keeps a reference, not a snapshot, so while Unity is still paused UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the current live object, whose contents may already differ from the paused line. It is exact only for values that cannot change after capture (numbers, enums, strings, other immutable values); anything that holds a collection or another object shares it with the running game. For at-line contents, re-enable with a larger cap."
 	stubPausePointStatusHitWithTruncatedCapturedVariable(t, 13)
 
 	code, output := runPausePointStatusForExpect(t, []string{"--id", "jump"})
@@ -90,7 +90,7 @@ func TestRunPausePointStatusCommandIncludesCapturedVariablePreviewNote(t *testin
 // Verifies await-pause-point stdout includes CapturedVariablePreviewNote on a truncated hit, so
 // dropping the plain-await apply call fails this test.
 func TestRunWaitForPausePointIncludesCapturedVariablePreviewNote(t *testing.T) {
-	const want = "a captured value was clipped at the current --max-preview-elements cap of 37 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+	const want = "a captured value was clipped at the current --max-preview-elements cap of 37 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. A clipped collection or object cannot be recovered after the fact: the capture keeps a reference, not a snapshot, so while Unity is still paused UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the current live object, whose contents may already differ from the paused line. It is exact only for values that cannot change after capture (numbers, enums, strings, other immutable values); anything that holds a collection or another object shares it with the running game. For at-line contents, re-enable with a larger cap."
 	stubPausePointStatusHitWithTruncatedCapturedVariable(t, 37)
 	stubPausePointMatchingLogs(t, nil)
 
@@ -118,7 +118,7 @@ func TestRunWaitForPausePointIncludesCapturedVariablePreviewNote(t *testing.T) {
 // Verifies enable-pause-point --await stdout includes CapturedVariablePreviewNote on a truncated
 // hit, so dropping the enable-await apply call fails this test.
 func TestRunPausePointWaitAfterEnableIncludesCapturedVariablePreviewNote(t *testing.T) {
-	const want = "a captured value was clipped at the current --max-preview-elements cap of 91 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+	const want = "a captured value was clipped at the current --max-preview-elements cap of 91 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. A clipped collection or object cannot be recovered after the fact: the capture keeps a reference, not a snapshot, so while Unity is still paused UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the current live object, whose contents may already differ from the paused line. It is exact only for values that cannot change after capture (numbers, enums, strings, other immutable values); anything that holds a collection or another object shares it with the running game. For at-line contents, re-enable with a larger cap."
 	stubPausePointStatusHitWithTruncatedCapturedVariable(t, 91)
 	stubPausePointMatchingLogs(t, nil)
 	stubPausePointTriggerDispatch(t, `{"Success":true}`)
