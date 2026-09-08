@@ -106,10 +106,11 @@ internal static class AddedFieldClassifier
             fieldSymbol.Name);
         if (declarationChangeReason != null)
         {
-            // Why not RegisterStore: rewriting to the side table would hide the
-            // declaration change and leave compiled callers on the old field.
+            // Why register as unavailable: the reason set here is what stops the field from
+            // being rewritten to the side table, which would hide the declaration change and
+            // leave compiled callers on the old field.
             binding.UnavailableReason = declarationChangeReason;
-            addedFieldCatalog.RegisterUnavailable(binding);
+            addedFieldCatalog.Register(binding);
             return;
         }
 
@@ -123,17 +124,17 @@ internal static class AddedFieldClassifier
 
         if (binding.UnavailableReason != null)
         {
-            addedFieldCatalog.RegisterUnavailable(binding);
+            addedFieldCatalog.Register(binding);
             return;
         }
 
         if (fieldSymbol.IsConst)
         {
-            addedFieldCatalog.RegisterConst(binding);
+            addedFieldCatalog.Register(binding);
             return;
         }
 
-        addedFieldCatalog.RegisterStore(binding);
+        addedFieldCatalog.Register(binding);
     }
 
     internal static string EvaluateAddedFieldAvailability(

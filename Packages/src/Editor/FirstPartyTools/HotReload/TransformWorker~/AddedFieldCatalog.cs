@@ -19,11 +19,8 @@ using Microsoft.CodeAnalysis.Text;
 /// What: file-wide catalog of added fields, syntax keys for drift strip, store-rewrite
 /// presence, and display names of fields rewritten in emitted shim bodies.
 /// </summary>
-internal sealed class AddedFieldCatalog
+internal sealed class AddedFieldCatalog : AddedMemberCatalog<AddedFieldBinding>
 {
-    private readonly Dictionary<string, AddedFieldBinding> _byKey =
-        new Dictionary<string, AddedFieldBinding>(StringComparer.Ordinal);
-    private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _rewrittenAddedFieldKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _foldedConstKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -33,16 +30,11 @@ internal sealed class AddedFieldCatalog
 
     public IReadOnlyCollection<string> RemovedSyntaxKeys => _removedSyntaxKeys;
 
-    public bool HasClassifiedAdded => _classifiedAddedKeys.Count > 0;
-
     public bool HasStoreRewrites { get; private set; }
 
-    public void MarkClassifiedAdded(string fieldKey)
+    protected override string KeyOf(AddedFieldBinding binding)
     {
-        if (fieldKey != null)
-        {
-            _classifiedAddedKeys.Add(fieldKey);
-        }
+        return binding.FieldKey;
     }
 
     public void AddAddedSyntaxKey(string syntaxKey)
@@ -55,19 +47,7 @@ internal sealed class AddedFieldCatalog
         _removedSyntaxKeys.Add(syntaxKey);
     }
 
-    public void RegisterStore(AddedFieldBinding binding)
-    {
-        _byKey[binding.FieldKey] = binding;
-        MarkClassifiedAdded(binding.FieldKey);
-    }
-
-    public void RegisterConst(AddedFieldBinding binding)
-    {
-        _byKey[binding.FieldKey] = binding;
-        MarkClassifiedAdded(binding.FieldKey);
-    }
-
-    // Why rewritten keys, not RegisterStore/RegisterConst: those fire at declaration
+    // Why rewritten keys, not Register: registration fires at declaration
     // classification, so unused fields and isolation-excluded bodies would still list.
     // Excluded methods are dropped in TypeEmitPlanner.QueueTypeMethods before rewrite, so a file-wide
     // rewrite set matches emitted entries without per-entry tracking.
@@ -88,7 +68,7 @@ internal sealed class AddedFieldCatalog
         List<string> names = new List<string>(fieldKeys.Count);
         foreach (string fieldKey in fieldKeys)
         {
-            AddedFieldBinding binding = _byKey[fieldKey];
+            AddedFieldBinding binding = GetRegistered(fieldKey);
             if (!string.Equals(binding.SourceProjectRelativePath, projectRelativePath, StringComparison.Ordinal))
             {
                 continue;
@@ -116,22 +96,6 @@ internal sealed class AddedFieldCatalog
         string fieldName = fieldKey.Substring(
             separatorIndex + TransformWorkerProgramMarker.AddedFieldKeySeparator.Length);
         return typeMetadataName + "." + fieldName;
-    }
-
-    public void RegisterUnavailable(AddedFieldBinding binding)
-    {
-        _byKey[binding.FieldKey] = binding;
-        MarkClassifiedAdded(binding.FieldKey);
-    }
-
-    public AddedFieldBinding FindOrNull(string fieldKey)
-    {
-        if (fieldKey == null)
-        {
-            return null;
-        }
-
-        return _byKey.TryGetValue(fieldKey, out AddedFieldBinding binding) ? binding : null;
     }
 
     public void MarkStoreRewrite(string fieldKey)

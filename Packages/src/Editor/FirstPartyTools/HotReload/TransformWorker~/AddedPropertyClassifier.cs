@@ -397,7 +397,7 @@ internal static class AddedPropertyClassifier
 
         // Why not AddAddedSyntaxKey: the field syntax-key set drives field drift stripping,
         // while the property declaration is already registered as an added property key.
-        addedFieldCatalog.RegisterStore(new AddedFieldBinding
+        addedFieldCatalog.Register(new AddedFieldBinding
         {
             SourceProjectRelativePath = binding.SourceProjectRelativePath,
             FieldKey = binding.PropertyKey,
