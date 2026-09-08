@@ -18,6 +18,13 @@ enforcing exclusivity, every patch transition re-targets them:
   markers back onto the compiled body; a marker whose line no longer resolves there
   stays suppressed with a reason until `uloop compile` and a re-enable.
 
+A pause point enabled with `--persist` is no exception. Its re-arm after a domain reload
+goes through the same enable path as a hand-issued `enable-pause-point`, so it re-resolves
+against whatever body is live at that moment and re-targets onto a hot-reload patch exactly
+as a fresh enable would. A domain reload drops every hot-reload patch, though, so a re-armed
+marker normally lands on the compiled body — re-apply the patch afterwards if you want it
+back on the edited one.
+
 Suppressed markers are never cleared automatically — they keep their identity and fire
 again as soon as a transition restores their line. The practical workflow: iterate with
 hot reload and place pause points on edited lines in either order — enable then patch,

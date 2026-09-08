@@ -143,8 +143,9 @@ A pause point enabled by `enable-pause-point --file <path> --line <N>` instead o
 `Id`. `SourcePausePointResolver` maps the file and line to a patch location over the
 method's portable PDB, and `SourcePausePointPatcher` injects the capture call at that
 instruction via a Harmony transpiler — no source edit or recompile is required. Source
-pause points are removed automatically on `clear-pause-point`/`ClearAll` and never survive a
-script compile or domain reload.
+pause points are removed automatically on `clear-pause-point`/`ClearAll` and are dropped by a
+script compile or domain reload unless enabled with `--persist`, which re-arms them after the
+reload.
 
 ### Captured variable
 
