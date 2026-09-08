@@ -94,5 +94,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(removed, Is.Empty);
             Assert.That(snapshots.Count, Is.EqualTo(1));
         }
+
+        [Test]
+        public void ShouldRecordBaselineOnInitialize_WhenDeferredAndFocused_KeepsTheRestoredFingerprints()
+        {
+            // Verifies a deferred focus return keeps the pre-reload fingerprints it still has to compare against.
+            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: true);
+
+            bool shouldRecord = deferral.ShouldRecordBaselineOnInitialize(
+                isFocused: true,
+                restoredSceneSnapshots: true);
+
+            Assert.That(shouldRecord, Is.False);
+        }
+
+        [Test]
+        public void ShouldRecordBaselineOnInitialize_WhenNotDeferredAndFocused_RecordsTheCurrentState()
+        {
+            // Verifies a focused reload with nothing deferred still refreshes the baseline as before.
+            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
+
+            bool shouldRecord = deferral.ShouldRecordBaselineOnInitialize(
+                isFocused: true,
+                restoredSceneSnapshots: true);
+
+            Assert.That(shouldRecord, Is.True);
+        }
+
+        [Test]
+        public void ShouldRecordBaselineOnInitialize_WhenNothingWasRestored_RecordsEvenWhileDeferred()
+        {
+            // Verifies first launch always records a baseline, because there is nothing to preserve.
+            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: true);
+
+            bool shouldRecord = deferral.ShouldRecordBaselineOnInitialize(
+                isFocused: true,
+                restoredSceneSnapshots: false);
+
+            Assert.That(shouldRecord, Is.True);
+        }
+
+        [Test]
+        public void ShouldRecordBaselineOnInitialize_WhenUnfocused_KeepsTheRestoredFingerprints()
+        {
+            // Verifies the existing unfocused-reload behavior is unchanged when nothing is deferred.
+            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
+
+            bool shouldRecord = deferral.ShouldRecordBaselineOnInitialize(
+                isFocused: false,
+                restoredSceneSnapshots: true);
+
+            Assert.That(shouldRecord, Is.False);
+        }
     }
 }

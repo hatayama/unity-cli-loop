@@ -54,11 +54,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EditorApplication.focusChanged += HandleFocusChanged;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             EditorApplication.playModeStateChanged += HandlePlayModeStateChanged;
-            // Keep restored fingerprints only across a domain reload that happened while unfocused.
-            // The next focus-return preflight compares against those fingerprints so it can detect
-            // external changes that occurred before the reload. First launch still records a baseline
-            // even when the Editor starts unfocused.
-            if (EditorApplication.isFocused || !restoredSceneSnapshots)
+            // Keep restored fingerprints only across a domain reload that happened while unfocused,
+            // or while a focus return is still deferred: the deferred preflight compares against those
+            // fingerprints so it can detect external changes that occurred before the reload. First
+            // launch still records a baseline even when the Editor starts unfocused.
+            if (_focusReturnDeferral.ShouldRecordBaselineOnInitialize(
+                EditorApplication.isFocused,
+                restoredSceneSnapshots))
             {
                 RecordOpenSceneSnapshots();
                 ExternalPrefabStageChangeTracker.RecordCurrent();
