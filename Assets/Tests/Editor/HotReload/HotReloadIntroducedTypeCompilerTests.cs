@@ -190,7 +190,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     {
                         type = CompilerMessageType.Error,
                         file = "second.cs",
-                        message = "second source error"
+                        message = "second source error",
+                        line = 7,
+                        column = 12
                     }
                 }
             };
@@ -205,6 +207,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Diagnostics, Has.Count.EqualTo(1));
             Assert.That(result.Diagnostics[0].OwnerProjectRelativePath, Is.EqualTo("Assets/Second.cs"));
             Assert.That(result.Diagnostics[0].Message, Is.EqualTo("second source error"));
+            Assert.That(result.Diagnostics[0].Line, Is.EqualTo(7));
+            Assert.That(result.Diagnostics[0].Column, Is.EqualTo(12));
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 
@@ -257,6 +261,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Diagnostics, Has.Count.EqualTo(1));
             Assert.That(result.Diagnostics[0].OwnerProjectRelativePath, Is.EqualTo("Assets/Second.cs"));
             Assert.That(result.Diagnostics[0].Message, Does.Contain("MissingType"));
+            Assert.That(result.Diagnostics[0].Line, Is.GreaterThan(0));
+            Assert.That(result.Diagnostics[0].Column, Is.GreaterThan(0));
         }
 
         /// <summary>

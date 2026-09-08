@@ -521,6 +521,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a reload whose introduced type does not compile reports the compiler
+        /// error itself, with the file and the source position it belongs to, instead of one row
+        /// that names neither the declaration nor what was wrong with it.
+        /// </summary>
+        [Test]
+        public async Task Build_IntroducedTypeCompileFails_ReportsTheCompilerErrorWithItsOwnerFile()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            HotReloadOrchestratorResult result;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                result = await HotReloadOrchestrator.RunAsync(
+                    new[] { hostPath },
+                    HotReloadTestSourceWriter.WriteEditedSource(
+                        "IntroducedTypeCompileFailureHost.cs",
+                        InsertUncompilableIntroducedType(File.ReadAllText(hostPath))),
+                    CancellationToken.None);
+            }
+
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(result, null);
+            Assert.That(response.Success, Is.False, "A refused declaration must fail the run.");
+            string ownerProjectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(hostPath);
+            List<HotReloadIntroducedTypeResult> failedRows = new List<HotReloadIntroducedTypeResult>();
+            foreach (HotReloadIntroducedTypeResult row in response.IntroducedTypes)
+            {
+                if (string.Equals(row.Kind, "Failed", StringComparison.Ordinal)
+                    && string.Equals(row.FilePath, ownerProjectRelativePath, StringComparison.Ordinal))
+                {
+                    failedRows.Add(row);
+                }
+            }
+
+            Assert.That(
+                failedRows,
+                Has.Count.EqualTo(1),
+                "The failure must be reported once, against the file that declares the type.");
+            Assert.That(failedRows[0].Reason, Does.StartWith("Introduced-type compilation failed: "));
+            Assert.That(failedRows[0].Reason, Does.Contain("CS0117"));
+            Assert.That(failedRows[0].Reason, Does.Contain("("));
+            Assert.That(failedRows[0].Reason, Does.Contain("): "));
+        }
+
+        /// <summary>
         /// Verifies that a reload whose introduced type derives from a type an earlier reload
         /// introduced compiles its artifact against the active artifact: the base type lives in
         /// neither the compiled assembly nor this run's sources, so only the record of the
@@ -1624,6 +1669,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        public int Read()\n"
                 + "        {\n"
                 + "            return 7;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
+        }
+
+        // A new type whose body names a member the compiled host does not declare, so the artifact
+        // compilation fails with a CS0117 that belongs to the host file.
+        private static string InsertUncompilableIntroducedType(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced =
+                "    public sealed class HotReloadCrossFileIntroducedBroken\n"
+                + "    {\n"
+                + "        public int Value()\n"
+                + "        {\n"
+                + "            return HotReloadCrossFileAddedMemberHost.NoSuchMemberForThisTest();\n"
                 + "        }\n"
                 + "    }\n"
                 + "\n";

@@ -183,7 +183,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
                 }
 
-                diagnostics.Add(new HotReloadIntroducedTypeCompilerDiagnostic(ownerProjectRelativePath, message.message));
+                // Why line and column travel separately: the parsed message keeps only the
+                // "CSxxxx: <text>" part, so dropping them here would leave the response without
+                // the position the reader needs to find the offending source line.
+                diagnostics.Add(new HotReloadIntroducedTypeCompilerDiagnostic(
+                    ownerProjectRelativePath,
+                    message.message,
+                    message.line,
+                    message.column));
             }
 
             return diagnostics;
@@ -504,10 +511,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string Message { get; }
 
-        public HotReloadIntroducedTypeCompilerDiagnostic(string ownerProjectRelativePath, string message)
+        /// <summary>The one-based source line of the diagnostic, or zero when it carries none.</summary>
+        public int Line { get; }
+
+        /// <summary>The one-based source column of the diagnostic, or zero when it carries none.</summary>
+        public int Column { get; }
+
+        public HotReloadIntroducedTypeCompilerDiagnostic(
+            string ownerProjectRelativePath,
+            string message,
+            int line,
+            int column)
         {
             OwnerProjectRelativePath = ownerProjectRelativePath ?? string.Empty;
             Message = message ?? string.Empty;
+            Line = line;
+            Column = column;
         }
     }
 

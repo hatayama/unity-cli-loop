@@ -81,17 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     .ConfigureAwait(false);
             if (!compileResult.Success)
             {
-                // Why one unattributed row: the batch compiles every declaration of the run at
-                // once, so a failure of it belongs to no single owner.
                 return HotReloadIntroducedTypePreparationResult.TypeFailures(
-                    new[]
-                    {
-                        HotReloadIntroducedTypeOutcome.Failed(
-                            string.Empty,
-                            transformInput.targetAssemblyName,
-                            string.Empty,
-                            "Introduced-type compilation failed: " + compileResult.ErrorMessage)
-                    },
+                    HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                        compileResult,
+                        descriptors,
+                        transformInput.targetAssemblyName),
                     alreadyActiveTypes,
                     notices);
             }

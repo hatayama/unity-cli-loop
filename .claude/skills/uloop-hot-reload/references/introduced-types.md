@@ -67,8 +67,10 @@ method **of** an introduced type is out of scope for this stage.
 Any refused shape above; use of the type from another assembly, from a file that is neither
 passed to this reload nor already hot-reloaded, or from `uloop execute-dynamic-code`; anything
 that reaches the type through Unity (serialization, `[SerializeField]`, Inspector,
-`AddComponent`, `CreateInstance`, message discovery); and any new or changed `.asmdef` /
-`.asmref`.
+`AddComponent`, `CreateInstance`, message discovery); a call to a member an earlier or the same
+reload *added* to a compiled type (an `Added` row), because introduced types compile against the
+compiled assemblies and retained artifacts only, so the compile fails naming the missing member;
+and any new or changed `.asmdef` / `.asmref`.
 
 ## File selection and new files
 
