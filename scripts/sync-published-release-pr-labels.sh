@@ -37,9 +37,78 @@ release_tag_from_body() {
   '
 }
 
+# The head branch is the only component marker release-please always writes, so
+# it outranks the summary label and the title once release PRs are split per
+# component: a component PR body can carry a bare "<version>" summary that the
+# body resolver would read as the Unity package.
+release_component_from_head_ref() {
+  head_ref=$1
+
+  case "$head_ref" in
+    *--components--*)
+      printf '%s\n' "${head_ref##*--components--}"
+      ;;
+  esac
+}
+
+release_version_from_body() {
+  body=$1
+
+  printf '%s\n' "$body" | jq -R -s -r '
+    try (
+      capture("<summary>(?:[^<:]+:\\s*)?(?<version>[0-9][A-Za-z0-9._-]*)</summary>") | .version
+    ) catch ""
+  '
+}
+
+release_version_from_title() {
+  title=$1
+
+  printf '%s\n' "$title" | jq -R -r '
+    try (
+      capture("^chore(\\([^)]*\\))?: release (?:[^ ]+ )?(?<version>[0-9][A-Za-z0-9._-]*)$") | .version
+    ) catch ""
+  '
+}
+
+release_tag_for_component() {
+  component=$1
+  version=$2
+
+  jq -n -r --arg component "$component" --arg version "$version" '
+    if $version == "" then
+      ""
+    elif $component == "" or $component == "unity-package" then
+      "v" + $version
+    elif $component == "uloop-project-runner" then
+      "uloop-project-runner-v" + $version
+    elif $component == "dispatcher" or $component == "uloop-dispatcher" then
+      "dispatcher-v" + $version
+    else
+      ""
+    end
+  '
+}
+
 release_tag_from_pr() {
   title=$1
   body=$2
+  head_ref=$3
+
+  release_component=$(release_component_from_head_ref "$head_ref")
+  if [ -n "$release_component" ]; then
+    release_version=$(release_version_from_body "$body")
+    if [ -z "$release_version" ]; then
+      release_version=$(release_version_from_title "$title")
+    fi
+
+    release_tag=$(release_tag_for_component "$release_component" "$release_version")
+    if [ -n "$release_tag" ]; then
+      printf '%s\n' "$release_tag"
+      return
+    fi
+  fi
+
   release_tag=$(release_tag_from_body "$body")
 
   if [ -n "$release_tag" ]; then
@@ -82,7 +151,7 @@ PENDING_RELEASE_PRS=$(gh pr list \
   --state merged \
   --base "$TARGET_BRANCH" \
   --label "$PENDING_LABEL" \
-  --json number,title,body,mergeCommit)
+  --json number,title,body,headRefName,mergeCommit)
 
 PENDING_RELEASE_PR_COUNT=$(printf '%s\n' "$PENDING_RELEASE_PRS" | jq 'length')
 if [ "$PENDING_RELEASE_PR_COUNT" -eq 0 ]; then
@@ -94,8 +163,9 @@ printf '%s\n' "$PENDING_RELEASE_PRS" | jq -c '.[]' | while IFS= read -r release_
   release_pr_number=$(printf '%s\n' "$release_pr_json" | jq -r '.number')
   release_pr_title=$(printf '%s\n' "$release_pr_json" | jq -r '.title')
   release_pr_body=$(printf '%s\n' "$release_pr_json" | jq -r '.body // ""')
+  release_pr_head_ref=$(printf '%s\n' "$release_pr_json" | jq -r '.headRefName // ""')
   release_pr_sha=$(printf '%s\n' "$release_pr_json" | jq -r '.mergeCommit.oid')
-  release_tag=$(release_tag_from_pr "$release_pr_title" "$release_pr_body")
+  release_tag=$(release_tag_from_pr "$release_pr_title" "$release_pr_body" "$release_pr_head_ref")
 
   if [ -z "$release_tag" ]; then
     echo "Skipping pending PR #$release_pr_number because the title is not a release-please release title: $release_pr_title"
