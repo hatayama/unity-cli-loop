@@ -192,7 +192,7 @@ func TestMergePackageReleasePRFailsWhenChecksFail(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
 	}
-	assertReleasePRCheckLogContains(t, stderr, "concluded failure; not merging.")
+	assertReleasePRCheckLogContains(t, stderr, "concluded failure; not merging")
 	assertReleasePRCheckLogDoesNotContain(t, strings.Join(stub.commandLog, "\n"), "--match-head-commit")
 }
 

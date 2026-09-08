@@ -327,7 +327,7 @@ func packageReleasePullRequestChecksPassed(
 		}
 		if run.Conclusion != "success" {
 			writeMergePackageReleasePRLine(stderr, fmt.Errorf(
-				"%s: PR #%d head %s: %s concluded %s; not merging.",
+				"%s: PR #%d head %s: %s concluded %s; not merging",
 				mergePackageReleasePRCommandName, releasePR.Number, releasePR.HeadRefOID, workflow, run.Conclusion))
 			return false, 1
 		}
