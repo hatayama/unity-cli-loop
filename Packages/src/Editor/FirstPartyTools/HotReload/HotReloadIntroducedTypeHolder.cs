@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -28,6 +31,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             resolver?.Dispose();
             registry = new HotReloadIntroducedTypeRegistry();
             resolver = new HotReloadIntroducedTypeAssemblyResolver(registry);
+            HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames = DescribeActiveTypeNames;
+        }
+
+        /// <summary>
+        /// Reports the metadata names of the active introduced types for tools that cannot
+        /// reference this assembly.
+        /// </summary>
+        /// <remarks>
+        /// Why the field is read rather than the Registry property: a caller asking what this
+        /// domain holds must get an answer even while a replacement scope is open, and the
+        /// property throws when no registry is installed.
+        /// </remarks>
+        private static IReadOnlyList<string> DescribeActiveTypeNames()
+        {
+            HotReloadIntroducedTypeRegistry currentRegistry = registry;
+            if (currentRegistry == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> names = new List<string>();
+            foreach (HotReloadIntroducedTypeDescriptor descriptor in currentRegistry.DescribeActive())
+            {
+                names.Add(descriptor.MetadataName);
+            }
+
+            return names;
         }
 
         /// <summary>

@@ -362,6 +362,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string hint = string.Empty;
             List<string> suggestions = new();
 
+            // A missing type that hot reload introduced is a design limit of this tool, not a
+            // spelling or using-directive problem, so it is explained before the generic hints.
+            IReadOnlyList<string> introducedTypeNames =
+                HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames?.Invoke();
+            if (IntroducedTypeDiagnosticHint.TryBuild(
+                    error.ErrorCode,
+                    error.Message,
+                    introducedTypeNames,
+                    out string introducedTypeHint,
+                    out List<string> introducedTypeSuggestions))
+            {
+                // The ambiguous candidates stay available behind the introduced-type ones: the
+                // diagnostic cannot tell which of the two the caller meant.
+                AppendAmbiguousCandidateSuggestions(error, ambiguousCandidates, introducedTypeSuggestions);
+                return (introducedTypeHint, introducedTypeSuggestions);
+            }
+
             switch (error.ErrorCode)
             {
                 case "CS0246":
@@ -425,6 +442,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
 
                     return (hint, suggestions);
+            }
+        }
+
+        private static void AppendAmbiguousCandidateSuggestions(
+            CompilationError error,
+            Dictionary<string, List<string>> ambiguousCandidates,
+            List<string> suggestions)
+        {
+            if (ambiguousCandidates == null)
+            {
+                return;
+            }
+
+            string typeName = CompilationDiagnosticMessageParser.ExtractTypeNameFromMessage(error.Message);
+            if (typeName == null
+                || !ambiguousCandidates.TryGetValue(typeName, out List<string> candidates))
+            {
+                return;
+            }
+
+            foreach (string ns in candidates)
+            {
+                suggestions.Add($"Use {ns}.{typeName}");
             }
         }
 
