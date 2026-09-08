@@ -535,12 +535,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"'{method}' (or its declaring type) is marked [BurstCompile] and cannot be patched.");
             }
 
-            // Value-type instance transplant needs byref `this` semantics that v1 has not validated.
+            // Value-type instance transplant needs byref `this` semantics that transplant has not validated.
             if (method.DeclaringType != null && method.DeclaringType.IsValueType)
             {
                 return HotReloadPatchResult.Failure(
                     HotReloadPatchFailureReason.UnpatchableValueType,
-                    $"'{method}' is declared on a value type; struct method transplant is out of scope for v1.");
+                    $"'{method}' is declared on a value type; struct method transplant is not supported.");
             }
 
             return HotReloadPatchResult.SuccessResult();

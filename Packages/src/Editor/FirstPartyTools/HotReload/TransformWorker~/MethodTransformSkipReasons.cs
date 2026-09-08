@@ -28,22 +28,22 @@ internal static class MethodTransformSkipReasons
 
     public const string ClosureInaccessibleAccess =
         "Lambda, local-function, or query-expression bodies that access private/internal members "
-        + "are skipped in v1 (closure methods JIT-compile normally and fail accessibility checks).";
+        + "are skipped (closure methods JIT-compile normally and fail accessibility checks).";
 
     public const string AsyncIteratorInaccessibleAccess =
-        "Async or iterator methods whose bodies access private/internal members are skipped in v1 "
+        "Async or iterator methods whose bodies access private/internal members are skipped "
         + "(state-machine MoveNext JIT-compiles normally and fails accessibility checks).";
 
     public const string PartialType =
         "Partial types are skipped because a single file cannot provide a complete semantic model.";
 
     public const string StructHost =
-        "Struct (value type) methods are out of scope for v1; byref instance transplant is unverified.";
+        "Struct (value type) methods are skipped; byref instance transplant is unverified.";
 
     public const string GenericMethodOrType =
         "Generic methods and methods inside generic types cannot be safely patched with Harmony. " + CompileCallToAction.Plain;
 
-    public const string ExplicitInterfaceImplementation = "Explicit interface implementations are skipped in v1.";
+    public const string ExplicitInterfaceImplementation = "Explicit interface implementations are skipped.";
 
     // Why an infix and not EventAccessorRules.AccessorRewriteUnavailableReasonPrefix: that one
     // opens the sentence, while this one appends the rejection to a skip reason already written.

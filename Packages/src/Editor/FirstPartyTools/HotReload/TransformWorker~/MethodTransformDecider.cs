@@ -70,8 +70,8 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Transplant();
         }
 
-        // Condition (a): only the v1 private-access skip reasons are eligible for accessor rewrite.
-        string v1Reason = BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
+        // Condition (a): only the private-access skip reasons are eligible for accessor rewrite.
+        string rescuableSkipReason = BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
 
         if (!AccessorEligibility.TryBuildPlan(
                 semanticModel,
@@ -82,9 +82,9 @@ internal static class MethodTransformDecider
                 out string accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
-                v1Reason == null
+                rescuableSkipReason == null
                     ? EventAccessorRules.AccessorRewriteUnavailableReasonPrefix + accessorRejectReason
-                    : v1Reason + MethodTransformSkipReasons.AccessorRewriteUnavailableInfix + accessorRejectReason);
+                    : rescuableSkipReason + MethodTransformSkipReasons.AccessorRewriteUnavailableInfix + accessorRejectReason);
         }
 
         // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
@@ -97,7 +97,7 @@ internal static class MethodTransformDecider
         return MethodTransformDecision.Delegation();
     }
 
-    // Null when the body needs accessors only for its event uses: there is no v1 skip to rescue.
+    // Null when the body needs accessors only for its event uses: there is no skip to rescue.
     private static string BuildAccessorRescueReason(bool closureInaccessible, bool asyncIteratorInaccessible)
     {
         if (closureInaccessible)
@@ -143,7 +143,7 @@ internal static class MethodTransformDecider
 
         // Explicit interface implementations have dotted metadata names (e.g. IFoo.Bar) that are
         // not valid C# identifiers for shim method names; sanitizing would also desync the
-        // matcher (Cecil MethodDefinition.Name). v1 skips them with an explicit reason.
+        // matcher (Cecil MethodDefinition.Name). They are skipped with an explicit reason.
         if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
             return MethodTransformSkipReasons.ExplicitInterfaceImplementation;
@@ -218,7 +218,7 @@ internal static class MethodTransformDecider
             else if (node is QueryExpressionSyntax queryExpression)
             {
                 // Query clauses compile to display-class methods that JIT normally; treat the
-                // whole query (including the source expression) as a closure body for v1.
+                // whole query (including the source expression) as a closure body.
                 bodies.Add(queryExpression);
             }
         }

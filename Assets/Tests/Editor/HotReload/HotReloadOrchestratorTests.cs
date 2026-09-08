@@ -548,7 +548,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
 
             const string expectedReason =
-                "Property setter, init, or indexer accessors are out of scope for v1; "
+                "Property setter, init, or indexer accessors are skipped; "
                 + "run 'uloop compile' to apply accessor edits.";
             bool foundPropertyGetterPatched = false;
             bool foundIndexerGetter = false;
@@ -622,7 +622,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
 
             const string expectedReason =
-                "Constructors, operators, and event accessors are out of scope for v1; "
+                "Constructors, operators, and event accessors are skipped; "
                 + "run 'uloop compile' to apply these edits.";
             AssertHasSkipped(result, ".ctor()", expectedReason);
 

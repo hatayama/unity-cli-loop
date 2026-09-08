@@ -552,7 +552,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// Struct fixture used only to assert the v1 value-type rejection path.
+    /// Struct fixture used only to assert the value-type rejection path.
     /// </summary>
     public struct HotReloadValueTypeFixture
     {
