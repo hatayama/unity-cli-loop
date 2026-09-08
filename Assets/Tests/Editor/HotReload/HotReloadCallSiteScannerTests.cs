@@ -22,6 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteScannerFixture";
 
+        private const string NestedCallerHostTypeMetadataName =
+            FixtureTypeMetadataName + "/NestedCallerHost";
+
         private const string GenericHostTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.GenericHost`1";
 
@@ -78,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCallSiteScanner.CompiledMethodIdentity target =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
                     missingAssemblyName,
-                    FixtureTypeMetadataName,
+                    new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                     nameof(HotReloadCallSiteScannerFixture.NeverCalled),
                     Array.Empty<string>(),
                     0);
@@ -200,13 +203,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     new HotReloadCallSiteScanner.CompiledMethodIdentity(
                         assemblyName,
-                        FixtureTypeMetadataName,
+                        new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                         nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod),
                         Array.Empty<string>(),
                         0),
                     new HotReloadCallSiteScanner.CompiledMethodIdentity(
                         assemblyName,
-                        FixtureTypeMetadataName,
+                        new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                         nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate),
                         Array.Empty<string>(),
                         0)
@@ -345,6 +348,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(hits, Is.Empty);
         }
 
+        /// <summary>
+        /// What: a call from a nested type reports the caller type in the metadata spelling, and
+        /// the wire method key it is assembled into keeps that same separator.
+        /// </summary>
+        [Test]
+        public void FindCallSites_NestedCaller_KeepsTheMetadataSeparator()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.CalledFromNestedType),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].CallerTypeMetadataName.Value,
+                Is.EqualTo(NestedCallerHostTypeMetadataName));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(NestedCallerHostTypeMetadataName + "::NestedCaller()"));
+        }
+
         private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(
             string typeMetadataName,
             string methodName,
@@ -359,7 +384,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCallSiteScanner.CompiledMethodIdentity target =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
                     assemblyName,
-                    typeMetadataName,
+                    new HotReloadMetadataTypeName(typeMetadataName),
                     methodName,
                     parameterTypeFullNames,
                     genericArity);

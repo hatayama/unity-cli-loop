@@ -101,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 rows.Add(HotReloadIntroducedTypeOutcome.Failed(
-                    descriptor.MetadataName,
+                    descriptor.MetadataName.Value,
                     targetAssemblyName,
                     owner,
                     ReasonPrefix + string.Join("; ", messages)));

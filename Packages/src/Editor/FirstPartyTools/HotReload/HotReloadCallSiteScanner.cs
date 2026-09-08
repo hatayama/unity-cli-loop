@@ -39,20 +39,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public readonly struct CompiledMethodIdentity
         {
             public readonly string AssemblyName;
-            public readonly string TypeMetadataName;
+            public readonly HotReloadMetadataTypeName TypeMetadataName;
             public readonly string MethodName;
             public readonly string[] ParameterTypeFullNames;
             public readonly int GenericArity;
 
             public CompiledMethodIdentity(
                 string assemblyName,
-                string typeMetadataName,
+                HotReloadMetadataTypeName typeMetadataName,
                 string methodName,
                 string[] parameterTypeFullNames,
                 int genericArity)
             {
                 Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
-                Debug.Assert(!string.IsNullOrEmpty(typeMetadataName), "typeMetadataName must not be null or empty.");
                 Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
                 Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
                 Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
@@ -71,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public sealed class CallSiteHit
         {
             public string CallerAssemblyName;
-            public string CallerTypeMetadataName;
+            public HotReloadMetadataTypeName CallerTypeMetadataName;
             public string CallerMethodName;
             public string[] CallerParameterTypeFullNames;
             public int CallerGenericArity;
@@ -328,7 +327,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why not normalize '/' → '+': Cecil FullName and worker typeMetadataName both use
             // '/' for nested types, and BuildMethodKey keeps that form. Converting here would
             // desync CallerMethodKey from the orchestrator key space on nested types.
-            if (openDeclaringType.FullName != target.TypeMetadataName)
+            if (openDeclaringType.FullName != target.TypeMetadataName.Value)
             {
                 return false;
             }
@@ -467,7 +466,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameterTypeFullNames[index] = caller.Parameters[index].ParameterType.FullName;
             }
 
-            string typeMetadataName = caller.DeclaringType.FullName;
+            HotReloadMetadataTypeName typeMetadataName = new HotReloadMetadataTypeName(caller.DeclaringType.FullName);
 
             return new CallSiteHit
             {
@@ -477,12 +476,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CallerParameterTypeFullNames = parameterTypeFullNames,
                 CallerGenericArity = caller.GenericParameters.Count,
                 CallerMethodKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                    typeMetadataName,
+                    typeMetadataName.Value,
                     caller.Name,
                     parameterTypeFullNames,
                     caller.GenericParameters.Count),
                 TargetMethodKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                    target.TypeMetadataName,
+                    target.TypeMetadataName.Value,
                     target.MethodName,
                     target.ParameterTypeFullNames,
                     target.GenericArity),

@@ -25,6 +25,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 2;
         }
 
+        public static int CalledFromNestedType()
+        {
+            return 5;
+        }
+
+        /// <summary>
+        /// A nested caller, so a scan can observe a caller type name that only a metadata
+        /// separator spells correctly.
+        /// </summary>
+        public static class NestedCallerHost
+        {
+            public static int NestedCaller()
+            {
+                return CalledFromNestedType();
+            }
+        }
+
         public static int CalledOnlyViaDelegate()
         {
             return 3;

@@ -868,7 +868,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadCallSiteScanner.CallSiteHit
             {
                 CallerAssemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name,
-                CallerTypeMetadataName = typeMetadataName,
+                CallerTypeMetadataName = new HotReloadMetadataTypeName(typeMetadataName),
                 CallerMethodName = methodName,
                 CallerParameterTypeFullNames = Array.Empty<string>(),
                 CallerGenericArity = 0
@@ -882,7 +882,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCallSiteScanner.CompiledMethodIdentity identity =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
                     assemblyName,
-                    "Type",
+                    new HotReloadMetadataTypeName("Type"),
                     "SetUp",
                     Array.Empty<string>(),
                     0);
@@ -907,7 +907,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCallSiteScanner.CompiledMethodIdentity identity =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
                     assemblyName,
-                    type.FullName,
+                    new HotReloadMetadataTypeName(type.FullName),
                     methodName,
                     Array.Empty<string>(),
                     0);
@@ -923,7 +923,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadCallSiteScanner.CallSiteHit
             {
                 CallerAssemblyName = assemblyName,
-                CallerTypeMetadataName = typeMetadataName,
+                CallerTypeMetadataName = new HotReloadMetadataTypeName(typeMetadataName),
                 CallerMethodName = methodName,
                 CallerParameterTypeFullNames = Array.Empty<string>(),
                 CallerGenericArity = 0,

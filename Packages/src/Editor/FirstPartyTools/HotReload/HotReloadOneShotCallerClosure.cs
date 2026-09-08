@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (HotReloadCallSiteScanner.CompiledMethodIdentity identity in identities)
             {
                 string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                    identity.TypeMetadataName,
+                    identity.TypeMetadataName.Value,
                     identity.MethodName,
                     identity.ParameterTypeFullNames,
                     identity.GenericArity);
@@ -196,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (string.IsNullOrEmpty(callerKey))
             {
                 callerKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                    hit.CallerTypeMetadataName,
+                    hit.CallerTypeMetadataName.Value,
                     hit.CallerMethodName,
                     hit.CallerParameterTypeFullNames,
                     hit.CallerGenericArity);

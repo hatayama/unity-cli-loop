@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> names = new List<string>();
             foreach (HotReloadIntroducedTypeDescriptor descriptor in currentRegistry.DescribeActive())
             {
-                names.Add(descriptor.MetadataName);
+                names.Add(descriptor.MetadataName.Value);
             }
 
             return names;

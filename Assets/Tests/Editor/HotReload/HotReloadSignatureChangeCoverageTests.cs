@@ -487,7 +487,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadCallSiteScanner.CallSiteHit
             {
                 CallerAssemblyName = callerAssemblyName,
-                CallerTypeMetadataName = "Example.Caller",
+                CallerTypeMetadataName = new HotReloadMetadataTypeName("Example.Caller"),
                 CallerMethodName = "Call",
                 CallerParameterTypeFullNames = Array.Empty<string>(),
                 CallerMethodKey = CallerKey,

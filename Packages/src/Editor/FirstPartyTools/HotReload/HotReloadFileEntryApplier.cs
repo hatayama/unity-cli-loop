@@ -254,7 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadCallSiteScanner.CompiledMethodIdentity identity =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
                     assemblyName,
-                    resolved.Entry.typeMetadataName,
+                    new HotReloadMetadataTypeName(resolved.Entry.typeMetadataName),
                     resolved.Entry.methodName,
                     resolved.Entry.parameterTypeFullNames ?? Array.Empty<string>(),
                     resolved.Entry.genericArity);

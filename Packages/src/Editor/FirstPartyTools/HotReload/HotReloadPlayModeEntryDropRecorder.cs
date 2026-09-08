@@ -223,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadIntroducedTypeDescriptor descriptor = introducedTypes[index];
                 identities.Add(HotReloadPlayModeEntryDropIdentity.ForType(
                     descriptor.OriginalAssemblyName,
-                    descriptor.MetadataName));
+                    descriptor.MetadataName.Value));
             }
 
             return identities;
