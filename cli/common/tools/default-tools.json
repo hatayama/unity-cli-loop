@@ -427,6 +427,10 @@
               "post-line"
             ],
             "default": "pre-line"
+          },
+          "Persist": {
+            "type": "boolean",
+            "description": "Re-arm after a domain reload (compile, Play entry); re-arm result is reported in pause-point-status"
           }
         }
       }

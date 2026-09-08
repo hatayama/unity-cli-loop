@@ -43,6 +43,7 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 | `--max-caller-frames` | integer | `2` | Maximum caller stack frames recorded per hit (0-8). 0 disables capture. Also caps later pause-point-status responses; status cannot change it. |
 | `--method` | string | - | Optional method simple name or `Type.Method`. When set, `--line` resolves only inside matching methods |
 | `--snapshot-timing` | enum | `pre-line` | pre-line captures before the resolved line runs; post-line captures after that line's statement finished, without arming the next line |
+| `--persist` | flag | - | Re-arm after a domain reload (compile, Play entry); re-arm result is reported in `pause-point-status` |
 
 ### clear-pause-point
 

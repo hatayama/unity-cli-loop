@@ -31,6 +31,9 @@ type pausePointStatusResponse struct {
 	LastHitSequence                 int                              `json:"LastHitSequence"`
 	Message                         string                           `json:"Message"`
 	RecommendedNextAction           string                           `json:"RecommendedNextAction"`
+	// Persisted mirrors the Unity DTO, which omits the field when false, so a pause point
+	// enabled without --persist keeps the response shape it had before --persist existed.
+	Persisted bool `json:"Persisted,omitempty"`
 
 	// SnapshotTiming is still enable-only on the Unity status DTO today, so --await copies it
 	// from the enable response on both hit and Expired. Method-name arms leave it empty, so
@@ -151,6 +154,7 @@ type pausePointStatusListItemResponse struct {
 	Mode                  string `json:"Mode"`
 	HitCount              int    `json:"HitCount"`
 	RemainingMilliseconds int64  `json:"RemainingMilliseconds"`
+	Persisted             bool   `json:"Persisted,omitempty"`
 }
 
 // pausePointStatusResult wraps a status response with the CLI-evaluated --expect verdicts.
