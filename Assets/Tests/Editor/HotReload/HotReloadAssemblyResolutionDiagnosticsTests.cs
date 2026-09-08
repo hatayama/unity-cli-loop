@@ -27,6 +27,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [SetUp]
         public void SetUp()
         {
+            // The production run captures these at its entry point; a direct call into the patch
+            // target resolver in a test has to do the same.
+            HotReloadPackageRootProvider.CaptureCurrent();
             _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
                 new HotReloadEditorStateSnapshot(false, false, false);

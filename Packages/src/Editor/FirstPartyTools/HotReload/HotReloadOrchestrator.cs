@@ -40,6 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // CompilationPipeline / Application.dataPath require the Unity main thread, and the
             // groups cannot be planned before every file knows which assembly it compiles into.
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            // Why after the switch: PackageInfo is main-thread only, and script paths are
+            // normalized against these roots later on the background threads this run switches to.
+            HotReloadPackageRootProvider.CaptureCurrent();
             // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
             // SessionState, which is a main-thread API.
             HotReloadRunAccumulator run =

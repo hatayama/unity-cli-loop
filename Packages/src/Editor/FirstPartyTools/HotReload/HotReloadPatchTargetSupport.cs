@@ -279,24 +279,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string ToProjectRelativeScriptPath(string path)
         {
             Debug.Assert(!string.IsNullOrEmpty(path), "path must not be empty.");
-            string normalized = path.Replace('\\', '/');
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "..")).Replace('\\', '/');
-            if (!projectRoot.EndsWith("/", StringComparison.Ordinal))
-            {
-                projectRoot += "/";
-            }
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            string fullPath = Path.GetFullPath(path).Replace('\\', '/');
+            // Path.GetFullPath resolves a relative path against the current directory (the project
+            // root in the Editor) and turns a virtual Packages/<pkg-id>/... path into the physical
+            // folder behind it, which resolves to the wrong assembly. The captured package roots
+            // map that physical folder back to the virtual path Unity's script APIs expect.
+            string fullPath = Path.GetFullPath(path.Replace('\\', '/'));
             StringComparison comparison = Application.platform == RuntimePlatform.WindowsEditor
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
-            if (fullPath.StartsWith(projectRoot, comparison))
-            {
-                return fullPath.Substring(projectRoot.Length);
-            }
-
-            // Already project-relative (Assets/... or Packages/...).
-            return normalized;
+            return HotReloadScriptPathNormalizer.ToProjectRelative(
+                fullPath,
+                projectRoot,
+                HotReloadPackageRootProvider.Current,
+                comparison);
         }
     }
 }
