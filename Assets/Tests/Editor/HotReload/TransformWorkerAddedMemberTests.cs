@@ -1189,11 +1189,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a type absent from the compiled assembly skips every method with the new-type
-        /// out-of-scope reason instead of emitting MethodNotFound entries.
+        /// What: a type absent from the compiled assembly skips every method with the
+        /// not-introduced reason instead of emitting MethodNotFound entries.
         /// </summary>
         [Test]
-        public async Task Skip_NewTypeAbsentFromCompiledAssembly_UsesOutOfScopeReason()
+        public async Task Skip_NewTypeAbsentFromCompiledAssembly_UsesNotIntroducedReason()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -1207,7 +1207,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, "HotReloadBrandNewType.Fresh", "New types are out of scope");
+            AssertHasSkip(result, "HotReloadBrandNewType.Fresh", "was not introduced by this run");
             Assert.That(FindEntry(result, "Fresh"), Is.Null);
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
@@ -1236,7 +1236,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, "IHotReloadBrandNewInterface.Fresh", "New types are out of scope");
+            AssertHasSkip(result, "IHotReloadBrandNewInterface.Fresh", "was not introduced by this run");
             Assert.That(FindEntry(result, "Fresh"), Is.Null);
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,

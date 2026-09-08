@@ -36,8 +36,10 @@ internal static class AddedMethodSkipReasons
     public const string UnavailableAddedCall =
         "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
-    public const string NewTypeOutOfScope =
-        "New types are out of scope for hot reload; run 'uloop compile' to add them.";
+    public const string TypeNotIntroduced =
+        "Declared on a type that is not in the compiled assembly and was not introduced by this "
+        + "run. Run 'uloop compile'; when the file's introduced-type diagnostics name this type, "
+        + "that line gives the reason it was not introduced.";
 
     public const string InterfaceMember =
         "Interface members are not patchable. Run 'uloop compile'.";

@@ -368,34 +368,27 @@ internal static class AddedPropertyClassifier
         IAssemblySymbol targetTypesAssemblySymbol,
         IntroducedTypeArtifactMap artifactMap)
     {
-        string storeReason = AddedFieldClassifier.EvaluateStoreAvailability(
+        AddedFieldStoreAvailability availability = AddedFieldClassifier.EvaluateStoreAvailability(
             hostType,
             semanticModel,
             targetTypesAssemblySymbol,
             symbol.Type,
             declaration.Initializer?.Value,
-            artifactMap);
-        if (storeReason == null)
+            artifactMap,
+            out ITypeSymbol _);
+        switch (availability)
         {
-            return null;
+            case AddedFieldStoreAvailability.Available:
+                return null;
+            case AddedFieldStoreAvailability.StructHost:
+                return AddedPropertySkipReasons.StructHost;
+            case AddedFieldStoreAvailability.InitializerNotEmittable:
+                return AddedPropertySkipReasons.InitializerNotEmittable;
+            default:
+                // The declaration check already rejects unresolved and non-visible value types, so
+                // anything left names a type the shim assembly cannot see.
+                return AddedPropertySkipReasons.ValueTypeNotExternallyVisible;
         }
-
-        if (string.Equals(storeReason, AddedFieldSkipReasons.StructHost, StringComparison.Ordinal))
-        {
-            return AddedPropertySkipReasons.StructHost;
-        }
-
-        if (string.Equals(
-                storeReason,
-                AddedFieldSkipReasons.InitializerNotLiteralOrExternalStatic,
-                StringComparison.Ordinal))
-        {
-            return AddedPropertySkipReasons.InitializerNotEmittable;
-        }
-
-        // The declaration check already rejects unresolved and non-visible value types, so
-        // anything left names a type the shim assembly cannot see.
-        return AddedPropertySkipReasons.ValueTypeNotExternallyVisible;
     }
 
     // Why register here and not at rewrite time: the accessor shims themselves read and write

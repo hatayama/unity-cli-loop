@@ -156,45 +156,49 @@ internal static class AddedFieldClassifier
 
         // Why after const: added consts on struct hosts still fold to literals; the store
         // identity problem only applies to instance/static storage.
-        return EvaluateStoreAvailability(
+        AddedFieldStoreAvailability availability = EvaluateStoreAvailability(
             hostType,
             semanticModel,
             targetTypesAssemblySymbol,
             fieldSymbol.Type,
             binding.Initializer,
-            artifactMap);
+            artifactMap,
+            out ITypeSymbol unresolvedStoreType);
+        return DescribeStoreAvailability(availability, unresolvedStoreType);
     }
 
     /// <summary>
-    /// Reports why a value cannot live in the added-field store, for any member backed by it.
-    /// Added auto-properties reuse this so their backing store follows the same rules as fields.
+    /// Reports whether a value can live in the added-field store, and on what grounds it cannot,
+    /// for any member backed by it. Added auto-properties classify against this so their backing
+    /// store follows the same rules as fields while wording the outcome as a property.
     /// </summary>
-    internal static string EvaluateStoreAvailability(
+    // unresolvedType names the type the compilation could not resolve, and is set only for
+    // ValueTypeUnresolved, whose reason has to repeat that name.
+    internal static AddedFieldStoreAvailability EvaluateStoreAvailability(
         INamedTypeSymbol hostType,
         SemanticModel semanticModel,
         IAssemblySymbol targetTypesAssemblySymbol,
         ITypeSymbol valueType,
         ExpressionSyntax initializer,
-        IntroducedTypeArtifactMap artifactMap)
+        IntroducedTypeArtifactMap artifactMap,
+        out ITypeSymbol unresolvedType)
     {
+        unresolvedType = null;
         if (hostType.TypeKind == TypeKind.Struct)
         {
-            return AddedFieldSkipReasons.StructHost;
+            return AddedFieldStoreAvailability.StructHost;
         }
 
         // Why unresolved types before visibility: TypeKind.Error is not externally
         // visible, so the shim-visibility reason would hide a missing using or typo.
-        if (TryFindUnresolvedType(valueType, out ITypeSymbol unresolvedType))
+        if (TryFindUnresolvedType(valueType, out unresolvedType))
         {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.FieldTypeUnresolvedFormat,
-                unresolvedType.ToDisplayString());
+            return AddedFieldStoreAvailability.ValueTypeUnresolved;
         }
 
         if (!AccessibilityRules.IsExternallyVisibleType(valueType))
         {
-            return AddedFieldSkipReasons.FieldTypeNotExternallyVisible;
+            return AddedFieldStoreAvailability.ValueTypeNotExternallyVisible;
         }
 
         if (initializer != null
@@ -205,10 +209,33 @@ internal static class AddedFieldClassifier
                 targetTypesAssemblySymbol,
                 artifactMap))
         {
-            return AddedFieldSkipReasons.InitializerNotLiteralOrExternalStatic;
+            return AddedFieldStoreAvailability.InitializerNotEmittable;
         }
 
-        return null;
+        return AddedFieldStoreAvailability.Available;
+    }
+
+    /// <summary>Words a store outcome as the skip reason an added field reports.</summary>
+    private static string DescribeStoreAvailability(
+        AddedFieldStoreAvailability availability,
+        ITypeSymbol unresolvedType)
+    {
+        switch (availability)
+        {
+            case AddedFieldStoreAvailability.Available:
+                return null;
+            case AddedFieldStoreAvailability.StructHost:
+                return AddedFieldSkipReasons.StructHost;
+            case AddedFieldStoreAvailability.ValueTypeUnresolved:
+                return string.Format(
+                    CultureInfo.InvariantCulture,
+                    AddedFieldSkipReasons.FieldTypeUnresolvedFormat,
+                    unresolvedType.ToDisplayString());
+            case AddedFieldStoreAvailability.ValueTypeNotExternallyVisible:
+                return AddedFieldSkipReasons.FieldTypeNotExternallyVisible;
+            default:
+                return AddedFieldSkipReasons.InitializerNotLiteralOrExternalStatic;
+        }
     }
 
     // Why recurse array elements and type arguments: List<Missing> and Missing[]
