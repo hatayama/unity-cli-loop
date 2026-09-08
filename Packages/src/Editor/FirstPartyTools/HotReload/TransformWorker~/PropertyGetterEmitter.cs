@@ -157,7 +157,7 @@ internal static class PropertyGetterEmitter
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
-                Reason = "Explicit interface implementations are skipped in v1."
+                Reason = MethodTransformSkipReasons.ExplicitInterfaceImplementation
             });
             return currentShimType;
         }

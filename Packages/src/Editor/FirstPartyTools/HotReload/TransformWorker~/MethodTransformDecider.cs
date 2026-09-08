@@ -39,13 +39,12 @@ internal static class MethodTransformDecider
 
         if (bodyNode == null)
         {
-            return MethodTransformDecision.Skip("Methods without a body (abstract/extern) are skipped.");
+            return MethodTransformDecision.Skip(MethodTransformSkipReasons.NoBody);
         }
 
         if (ContainsBaseExpression(bodyNode))
         {
-            return MethodTransformDecision.Skip(
-                "Methods that call base. members are skipped; C# cannot express base calls outside the type.");
+            return MethodTransformDecision.Skip(MethodTransformSkipReasons.BaseMemberCall);
         }
 
         string eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
@@ -85,7 +84,7 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Skip(
                 v1Reason == null
                     ? EventAccessorRules.AccessorRewriteUnavailableReasonPrefix + accessorRejectReason
-                    : v1Reason + " Accessor rewrite unavailable: " + accessorRejectReason);
+                    : v1Reason + MethodTransformSkipReasons.AccessorRewriteUnavailableInfix + accessorRejectReason);
         }
 
         // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
@@ -103,14 +102,12 @@ internal static class MethodTransformDecider
     {
         if (closureInaccessible)
         {
-            return "Lambda, local-function, or query-expression bodies that access private/internal members "
-                + "are skipped in v1 (closure methods JIT-compile normally and fail accessibility checks).";
+            return MethodTransformSkipReasons.ClosureInaccessibleAccess;
         }
 
         if (asyncIteratorInaccessible)
         {
-            return "Async or iterator methods whose bodies access private/internal members are skipped in v1 "
-                + "(state-machine MoveNext JIT-compiles normally and fails accessibility checks).";
+            return MethodTransformSkipReasons.AsyncIteratorInaccessibleAccess;
         }
 
         return null;
@@ -129,19 +126,19 @@ internal static class MethodTransformDecider
         {
             if (declaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
             {
-                return "Partial types are skipped because a single file cannot provide a complete semantic model.";
+                return MethodTransformSkipReasons.PartialType;
             }
         }
 
         if (typeSymbol.TypeKind == TypeKind.Struct || typeSymbol.IsValueType)
         {
-            return "Struct (value type) methods are out of scope for v1; byref instance transplant is unverified.";
+            return MethodTransformSkipReasons.StructHost;
         }
 
         bool hasTypeParameters = methodDeclaration != null && methodDeclaration.TypeParameterList != null;
         if (typeSymbol.IsGenericType || methodSymbol.IsGenericMethod || hasTypeParameters)
         {
-            return "Generic methods and methods inside generic types cannot be safely patched with Harmony. Run 'uloop compile'.";
+            return MethodTransformSkipReasons.GenericMethodOrType;
         }
 
         // Explicit interface implementations have dotted metadata names (e.g. IFoo.Bar) that are
@@ -149,7 +146,7 @@ internal static class MethodTransformDecider
         // matcher (Cecil MethodDefinition.Name). v1 skips them with an explicit reason.
         if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            return "Explicit interface implementations are skipped in v1.";
+            return MethodTransformSkipReasons.ExplicitInterfaceImplementation;
         }
 
         return null;
@@ -260,7 +257,7 @@ internal static class MethodTransformDecider
         {
             return MethodTransformDecision.Skip(
                 AddedMethodSkipReasons.InaccessibleAccessNoRewrite
-                + " Accessor rewrite unavailable: "
+                + MethodTransformSkipReasons.AccessorRewriteUnavailableInfix
                 + accessorRejectReason
                 + " Run 'uloop compile'.");
         }
