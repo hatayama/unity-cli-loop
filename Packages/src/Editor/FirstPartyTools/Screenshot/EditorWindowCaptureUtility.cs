@@ -28,36 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>Array of matching EditorWindows (empty if none found)</returns>
         public static EditorWindow[] FindWindowsByName(string windowName, WindowMatchMode matchMode = WindowMatchMode.exact)
         {
-            if (string.IsNullOrEmpty(windowName))
-            {
-                return Array.Empty<EditorWindow>();
-            }
-
-            List<EditorWindow> matchingWindows = new();
-            EditorWindow[] allWindows = Resources.FindObjectsOfTypeAll<EditorWindow>();
-            foreach (EditorWindow window in allWindows)
-            {
-                if (window.titleContent == null)
-                {
-                    continue;
-                }
-
-                string title = window.titleContent.text;
-                bool isMatch = matchMode switch
-                {
-                    WindowMatchMode.exact => title.Equals(windowName, StringComparison.OrdinalIgnoreCase),
-                    WindowMatchMode.prefix => title.StartsWith(windowName, StringComparison.OrdinalIgnoreCase),
-                    WindowMatchMode.contains => title.Contains(windowName, StringComparison.OrdinalIgnoreCase),
-                    _ => title.Equals(windowName, StringComparison.OrdinalIgnoreCase)
-                };
-
-                if (isMatch)
-                {
-                    matchingWindows.Add(window);
-                }
-            }
-
-            return matchingWindows.ToArray();
+            return EditorWindowFinder.FindWindowsByName(windowName, matchMode);
         }
 
         /// <summary>
@@ -195,18 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>Array of window names</returns>
         public static string[] GetOpenWindowNames()
         {
-            EditorWindow[] allWindows = Resources.FindObjectsOfTypeAll<EditorWindow>();
-            List<string> names = new();
-
-            foreach (EditorWindow window in allWindows)
-            {
-                if (window.titleContent != null && !string.IsNullOrEmpty(window.titleContent.text))
-                {
-                    names.Add(window.titleContent.text);
-                }
-            }
-
-            return names.ToArray();
+            return EditorWindowFinder.GetOpenWindowNames();
         }
 
         // Captures game rendering by reading the Play Mode view RenderTexture (PlayMode only).
