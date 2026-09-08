@@ -70,7 +70,9 @@ that reaches the type through Unity (serialization, `[SerializeField]`, Inspecto
 `AddComponent`, `CreateInstance`, message discovery); a call to a member an earlier or the same
 reload *added* to a compiled type (an `Added` row), because introduced types compile against the
 compiled assemblies and retained artifacts only, so the compile fails naming the missing member;
-and any new or changed `.asmdef` / `.asmref`.
+and any new or changed `.asmdef` / `.asmref`. When `execute-dynamic-code` fails on an introduced
+type, the diagnostic's `Hint` names it and points to reflection through the loaded assembly or to
+`uloop compile`.
 
 ## File selection and new files
 
