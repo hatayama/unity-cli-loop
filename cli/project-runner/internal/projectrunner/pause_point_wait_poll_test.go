@@ -962,9 +962,10 @@ func TestWaitForPausePointAbortsWhenUnityRejectsTriggerBeforeExecution(t *testin
 	}
 }
 
-// Verifies a rejection owned by the awaited marker itself does not abort: that is the marker
-// having been hit before the trigger ran, which the refusal warning already diagnoses.
-func TestWaitForPausePointDoesNotAbortWhenTriggerRejectionNamesTheAwaitedMarker(t *testing.T) {
+// Verifies a rejection naming the awaited marker still aborts the wait when that marker was not
+// hit: the marker stays Armed, which is the shape of a re-arm performed while PlayMode was still
+// paused by a previous generation's hit, and waiting out the timeout can never produce a hit.
+func TestWaitForPausePointAbortsWhenTriggerRejectionNamesTheAwaitedMarkerThatWasNotHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalDispatch := dispatchPausePointTriggerCommand
 	originalPoll := pausePointStatusPoll
@@ -997,18 +998,95 @@ func TestWaitForPausePointDoesNotAbortWhenTriggerRejectionNamesTheAwaitedMarker(
 		return 1
 	}
 
-	_, state, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	startedAt := time.Now()
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
-		timeoutSeconds: 60,
-		timeout:        50 * time.Millisecond,
+		timeoutSeconds: 10,
+		timeout:        10 * time.Second,
 		triggerCommand: "simulate-keyboard",
 		triggerArgs:    []string{"--action", "Press"},
 	})
+	elapsed := time.Since(startedAt)
+
 	if err != nil {
 		t.Fatalf("waitForPausePoint failed: %v", err)
 	}
-	if state != pausePointWaitStateTimeout {
-		t.Fatalf("a rejection owned by the awaited marker must let the wait settle on its own, got state %q", state)
+	if state != pausePointWaitStateTriggerFailed {
+		t.Fatalf("expected trigger_failed state, got %q", state)
+	}
+	if elapsed >= 5*time.Second {
+		t.Fatalf("expected an early abort, waited %v of a 10s timeout", elapsed)
+	}
+	if triggerResult == nil {
+		t.Fatal("expected a TriggerResult reporting the rejection, got nil")
+	}
+}
+
+// Verifies that awaiting a new hit on an already hit continuous marker aborts when the trigger is
+// refused in the awaited marker's name: the final status read reports the baseline LastHitSequence,
+// so the recorded hit is the old one and not a new hit the wait could settle on.
+func TestWaitForPausePointAbortsWhenTriggerRejectionNamesAnAlreadyHitContinuousMarker(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsHit:           true,
+			HitCount:        5,
+			Mode:            pausePointModeContinuous,
+			LastHitSequence: 5,
+			EditorState:     pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stdout.Write([]byte(
+			`{"Success":false,"Message":"PlayMode is paused.","RejectedBeforeExecution":true,` +
+				`"RejectedByActivePausePointId":"jump"}`))
+		return 1
+	}
+
+	startedAt := time.Now()
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 10,
+		timeout:        10 * time.Second,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press"},
+	})
+	elapsed := time.Since(startedAt)
+
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateTriggerFailed {
+		t.Fatalf("expected trigger_failed state, got %q", state)
+	}
+	if elapsed >= 5*time.Second {
+		t.Fatalf("expected an early abort, waited %v of a 10s timeout", elapsed)
+	}
+	if triggerResult == nil {
+		t.Fatal("expected a TriggerResult reporting the rejection, got nil")
 	}
 }
 
