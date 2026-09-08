@@ -38,6 +38,9 @@ patch binds to the newest shim. Edit the file and reload again to apply new chan
   other files of the same assembly — a file containing a `Failed` method is left
   unapplied as a whole, bodies that call an added method it declares are `Skipped`, and
   there is no run-level rollback. `Methods` is the authoritative record of which bodies changed.
+  A `Failed` row in `IntroducedTypes` is the exception: type preparation runs once per assembly
+  before any method of that assembly is transformed, so the run applies no method body from any
+  file of that assembly; files in other assemblies still apply.
 
 ## Editor-Code Iteration Without PlayMode
 

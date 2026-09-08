@@ -20,7 +20,9 @@ continues, and `Warnings` carries `<file>: <reason>: <type>` where the reason is
 `Nested type requires a compile` · `Nested declaration inside an introduced type requires a compile`
 
 Three conditions produce a `Failed` row in `IntroducedTypes` instead, and a `Failed` row makes
-`Success` false:
+`Success` false and leaves every file that shares an assembly with the refused declaration
+unapplied — no method body of those files is patched in that run, files in other assemblies still
+apply, and patches from earlier reloads stay active:
 
 | Condition | `Reason` starts with |
 |---|---|
