@@ -257,7 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadRevertOutcome.NotPatched;
             }
 
-            HotReloadShimRegistry.RemoveMethod(method);
+            HotReloadFileGenerations.RemoveShimMethod(method);
             string methodKey = HotReloadMethodKeys.FormatMethodLabel(method);
             HotReloadInvocationRegistry.Remove(methodKey);
             // Why here, not only RevertAll: RevertUnchangedPatches uses this path, and a
