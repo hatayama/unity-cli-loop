@@ -50,6 +50,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [Test]
+        public void ToProjectRelative_WhenPackageResolvesOutsideTheProject_ReturnsTheVirtualPackagePath()
+        {
+            // Verifies a file: package whose folder lives outside the project root still maps to its virtual path.
+            string relative = HotReloadScriptPathNormalizer.ToProjectRelative(
+                "/MyPackage/Runtime/Foo.cs",
+                "/proj",
+                PackageRoots(("/MyPackage", "Packages/com.example.core")),
+                StringComparison.Ordinal);
+
+            Assert.That(relative, Is.EqualTo("Packages/com.example.core/Runtime/Foo.cs"));
+        }
+
+        [Test]
         public void ToProjectRelative_WhenAbsoluteAssetsPath_StripsTheProjectRoot()
         {
             // Verifies an absolute Assets path under the project root becomes project-relative.
