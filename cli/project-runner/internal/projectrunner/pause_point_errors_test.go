@@ -203,10 +203,11 @@ func TestPausePointStateErrorDetailsIncludeHitWhenDiagnostics(t *testing.T) {
 // markers whose line did not execute.
 func TestPausePointWaitHintsDifferentiateHitWhenSkips(t *testing.T) {
 	cases := []struct {
-		name     string
-		state    pausePointWaitState
-		response pausePointStatusResponse
-		wantHint string
+		name       string
+		state      pausePointWaitState
+		response   pausePointStatusResponse
+		wantHint   string
+		wantNoHint bool
 	}{
 		{
 			name:  "timeout with skipped conditional hits",
@@ -228,7 +229,9 @@ func TestPausePointWaitHintsDifferentiateHitWhenSkips(t *testing.T) {
 				HitWhenSkippedCount: 3,
 				EditorState:         pausePointEditorState{IsPlaying: true},
 			},
-			wantHint: "The marker expired after its line executed, but no hit matched --hit-when. Re-enable it with a longer --timeout-seconds, then adjust the --hit-when condition or trigger input so a hit matches.",
+			// The RecommendedNextAction the Editor sends already carries this diagnosis and
+			// leads NextActions, so no Hint is set at all.
+			wantNoHint: true,
 		},
 		{
 			name:  "timeout without skipped conditional hits",
@@ -256,6 +259,12 @@ func TestPausePointWaitHintsDifferentiateHitWhenSkips(t *testing.T) {
 				id:             "marker",
 				timeoutSeconds: 30,
 			}, testCase.response, testCase.state, false, false, nil)
+			if testCase.wantNoHint {
+				if hint, exists := cliErr.Details["Hint"]; exists {
+					t.Fatalf("expected no Hint, got %#v", hint)
+				}
+				return
+			}
 			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("Hint mismatch: got %#v, want %#v", cliErr.Details["Hint"], testCase.wantHint)
 			}
@@ -283,7 +292,9 @@ func TestPausePointHitWhenHintsRequireZeroMatchingHits(t *testing.T) {
 		HitWhenSkippedCount: 3,
 		EditorState:         pausePointEditorState{IsPlaying: true},
 	}, nil)
-	if expiredMatchingHitHint != "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with 'uloop pause-point-status --id <marker-id>' (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit." {
+	// The Editor's RecommendedNextAction already reports the recorded hit, so the expired
+	// hint stays empty rather than repeating it.
+	if expiredMatchingHitHint != "" {
 		t.Fatalf("expired matching-hit hint mismatch: got %q", expiredMatchingHitHint)
 	}
 

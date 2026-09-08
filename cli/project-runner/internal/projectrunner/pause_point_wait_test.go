@@ -602,13 +602,15 @@ func TestPausePointExpiredErrorPrependsRecommendedNextAction(t *testing.T) {
 // Verifies skipped conditional hits suppress the resolved-line guidance that
 // would otherwise contradict the expired hint by claiming the line never ran.
 func TestPausePointExpiredErrorWithSkippedHitsOmitsNeverExecutedGuidance(t *testing.T) {
+	const recommendedNextAction = "The armed line executed 3 time(s) but no hit matched --hit-when. Re-enable the marker, then adjust the --hit-when condition or the trigger input so a hit matches; clearing the expired marker first is not required."
 	response := pausePointStatusResponse{
-		Id:                  "Assets/Scripts/Foo.cs:72",
-		Status:              pausePointStatusExpired,
-		HitWhen:             "speed > 5",
-		HitWhenSkippedCount: 3,
-		ResolvedLine:        72,
-		EditorState:         pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		Id:                    "Assets/Scripts/Foo.cs:72",
+		Status:                pausePointStatusExpired,
+		HitWhen:               "speed > 5",
+		HitWhenSkippedCount:   3,
+		ResolvedLine:          72,
+		RecommendedNextAction: recommendedNextAction,
+		EditorState:           pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 	}
 
 	cliErr := pausePointWaitError("/tmp/project", waitForPausePointOptions{
@@ -619,8 +621,13 @@ func TestPausePointExpiredErrorWithSkippedHitsOmitsNeverExecutedGuidance(t *test
 	if cliErr.Message != "Pause point expired before it was hit." {
 		t.Fatalf("Message mismatch: got %#v, want %#v", cliErr.Message, "Pause point expired before it was hit.")
 	}
-	if cliErr.Details["Hint"] != "The marker expired after its line executed, but no hit matched --hit-when. Re-enable it with a longer --timeout-seconds, then adjust the --hit-when condition or trigger input so a hit matches." {
-		t.Fatalf("Hint mismatch: got %#v", cliErr.Details["Hint"])
+	// The Editor's RecommendedNextAction leads NextActions with this diagnosis, so repeating
+	// it in Hint would print the same guidance twice.
+	if hint, exists := cliErr.Details["Hint"]; exists {
+		t.Fatalf("expected no Hint, got %#v", hint)
+	}
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != recommendedNextAction {
+		t.Fatalf("NextActions must lead with the recommended next action: got %#v", cliErr.NextActions)
 	}
 }
 
@@ -1625,10 +1632,12 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 
 // Verifies an expired marker with a recorded hit reports a message and hint that agree on that hit.
 func TestPausePointExpiredErrorAfterHit_ReportsConsistentMessageAndHint(t *testing.T) {
+	const recommendedNextAction = "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with pause-point-status --id <marker-id> (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit."
 	response := pausePointStatusResponse{
-		Id:       "jump",
-		Status:   pausePointStatusExpired,
-		HitCount: 1,
+		Id:                    "jump",
+		Status:                pausePointStatusExpired,
+		HitCount:              1,
+		RecommendedNextAction: recommendedNextAction,
 		EditorState: pausePointEditorState{
 			IsPlaying:  true,
 			CapturedAt: "Current",
@@ -1643,8 +1652,13 @@ func TestPausePointExpiredErrorAfterHit_ReportsConsistentMessageAndHint(t *testi
 	if cliErr.Message != "Pause point expired after it was hit." {
 		t.Fatalf("Message mismatch: got %q", cliErr.Message)
 	}
-	if cliErr.Details["Hint"] != "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with 'uloop pause-point-status --id <marker-id>' (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit." {
-		t.Fatalf("Hint mismatch: got %#v", cliErr.Details["Hint"])
+	// The Editor's RecommendedNextAction leads NextActions with this diagnosis, so repeating
+	// it in Hint would print the same guidance twice.
+	if hint, exists := cliErr.Details["Hint"]; exists {
+		t.Fatalf("expected no Hint, got %#v", hint)
+	}
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != recommendedNextAction {
+		t.Fatalf("NextActions must lead with the recommended next action: got %#v", cliErr.NextActions)
 	}
 }
 
