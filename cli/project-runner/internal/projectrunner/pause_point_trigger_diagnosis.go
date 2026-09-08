@@ -25,21 +25,18 @@ type pausePointTriggerResponseView struct {
 // command before it executed anything. Like the stderr-envelope check, this proves the trigger
 // performed no action, so waiting out the marker's remaining lifetime cannot change the outcome.
 //
-// Why the awaited marker is excluded: a rejection naming the marker being awaited is the marker
-// having been hit before the trigger ran (pausePointTriggerRefusalWarning diagnoses that case), and
-// the hit itself is the wait's success, not a reason to abort.
-func pausePointTriggerRejectedByUnityBeforeExecution(
-	result *pausePointTriggerResult,
-	awaitedPausePointID string,
-) bool {
+// Why a rejection naming the awaited marker is not excluded: the caller
+// (abortPausePointWaitAfterTriggerRejection) reads the marker's status once more before it settles,
+// so a marker that really was hit before the trigger ran is still reported as the wait's success.
+// Excluding it here instead cost the whole --timeout-seconds whenever the marker was re-armed while
+// PlayMode was still paused by a previous generation's hit: that generation can never be hit, yet
+// the refusal it produced names the very marker being awaited.
+func pausePointTriggerRejectedByUnityBeforeExecution(result *pausePointTriggerResult) bool {
 	response, ok := decodePausePointTriggerResponse(result)
 	if !ok || response.Success == nil || *response.Success {
 		return false
 	}
-	if !response.RejectedBeforeExecution {
-		return false
-	}
-	return response.RejectedByActivePausePointId != awaitedPausePointID
+	return response.RejectedBeforeExecution
 }
 
 // pausePointTriggerRejectionReason returns the triggered command's own reason for the failure,

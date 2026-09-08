@@ -304,7 +304,7 @@ func waitForPausePointStatus(
 			state.triggerResult = result
 			triggerDone = nil
 			if pausePointTriggerRejectedBeforeExecution(result) ||
-				pausePointTriggerRejectedByUnityBeforeExecution(result, options.id) {
+				pausePointTriggerRejectedByUnityBeforeExecution(result) {
 				abortResponse, abortState := abortPausePointWaitAfterTriggerRejection(
 					ctx, connection, options.id, state.lastResponse, state.baselineSequence, state.hasBaseline)
 				return abortResponse, abortState, state.triggerResult, state.hasBaseline, nil
