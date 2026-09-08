@@ -224,3 +224,66 @@ func skipJSONValue(decoder *json.Decoder) error {
 	_, err = decoder.Token()
 	return err
 }
+
+// Verifies the list response carries a populated DomainReloadRearmReport through a
+// round-trip with its lines in the order Unity published them, and keeps the key
+// last so the re-arm report reads after the pause-point list. Dropping the field
+// from pausePointStatusListResponse, or moving it above PausePoints, makes this Red.
+func TestPausePointStatusListResponseRoundTripsThePopulatedRearmReport(t *testing.T) {
+	report := []string{
+		"Re-armed pause point 'Assets/Foo.cs:10' after the domain reload (Assets/Foo.cs:10: `return;`)",
+		"Could not re-arm pause point 'Assets/Bar.cs:20' after the domain reload: [PAUSE_POINT_LINE_NOT_RESOLVED] no match",
+	}
+	raw, err := json.Marshal(pausePointStatusListResponse{
+		Success:                 true,
+		Message:                 "m",
+		Count:                   1,
+		PausePoints:             []pausePointStatusListItemResponse{{Id: "Assets/Foo.cs:10", Status: "Armed", Mode: "single-shot", Persisted: true}},
+		NextActions:             []string{"await-pause-point"},
+		DomainReloadRearmReport: report,
+	})
+	if err != nil {
+		t.Fatalf("marshal pausePointStatusListResponse: %v", err)
+	}
+
+	keys, err := collectTopLevelJSONObjectKeys(raw)
+	if err != nil {
+		t.Fatalf("collect top-level keys: %v\npayload: %s", err, raw)
+	}
+	expectedKeys := []string{"Success", "Message", "Count", "PausePoints", "NextActions", "DomainReloadRearmReport"}
+	if !slices.Equal(keys, expectedKeys) {
+		t.Fatalf("top-level JSON key order mismatch\nexpected: %#v\nactual:   %#v", expectedKeys, keys)
+	}
+
+	var decoded pausePointStatusListResponse
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal pausePointStatusListResponse: %v\npayload: %s", err, raw)
+	}
+	if !slices.Equal(decoded.DomainReloadRearmReport, report) {
+		t.Fatalf("re-arm report mismatch\nexpected: %#v\nactual:   %#v", report, decoded.DomainReloadRearmReport)
+	}
+}
+
+// Verifies a list response with no re-arm report omits the key entirely, so a reload
+// that replayed nothing does not add an empty section to the output. Dropping
+// omitempty from DomainReloadRearmReport makes this Red.
+func TestPausePointStatusListResponseOmitsTheRearmReportKeyWhenEmpty(t *testing.T) {
+	raw, err := json.Marshal(pausePointStatusListResponse{
+		Success:     true,
+		Message:     "m",
+		Count:       0,
+		PausePoints: []pausePointStatusListItemResponse{},
+		NextActions: []string{"enable-pause-point"},
+	})
+	if err != nil {
+		t.Fatalf("marshal pausePointStatusListResponse: %v", err)
+	}
+
+	keys, err := collectTopLevelJSONObjectKeys(raw)
+	if err != nil {
+		t.Fatalf("collect top-level keys: %v\npayload: %s", err, raw)
+	}
+	if slices.Contains(keys, "DomainReloadRearmReport") {
+		t.Fatalf("expected DomainReloadRearmReport to be omitted, got keys: %#v", keys)
+	}
+}
