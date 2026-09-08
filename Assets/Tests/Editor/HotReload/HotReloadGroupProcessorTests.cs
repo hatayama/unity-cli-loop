@@ -314,12 +314,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task ResolveInputFile_WhenNewSourceIsPlanned_PreservesEvidenceForPreRevertRevalidation()
         {
             HotReloadRunAccumulator run = new HotReloadRunAccumulator(autoRefreshHeldAtStart: false);
-            HotReloadFileProcessResult[] resultSlots = new HotReloadFileProcessResult[1];
-            string[] resultPaths = new string[1];
-            HotReloadGroupFile[] groupFiles = new HotReloadGroupFile[1];
+            HotReloadInputResolutionSlot slot = new HotReloadInputResolutionSlot();
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
                 new List<(int InputIndex, string AssemblyName, string ProjectRelativePath)>();
-            List<HotReloadMethodOutcome>[] deferredAlreadyActive = new List<HotReloadMethodOutcome>[1];
 
             HotReloadOrchestrator.ResolveInputFile(
                 MissingNewSourcePath,
@@ -328,22 +325,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 null,
                 "new-source-planning",
                 run,
-                resultSlots,
-                resultPaths,
-                groupFiles,
-                plannerInput,
-                deferredAlreadyActive);
+                slot,
+                plannerInput);
 
-            Assert.That(resultSlots[0], Is.Null);
-            Assert.That(groupFiles[0], Is.Not.Null);
-            Assert.That(groupFiles[0].NewSourceMembershipEvidence, Is.Not.Null);
+            Assert.That(slot.Result, Is.Null);
+            Assert.That(slot.GroupFile, Is.Not.Null);
+            Assert.That(slot.GroupFile.NewSourceMembershipEvidence, Is.Not.Null);
             Assert.That(plannerInput, Has.Count.EqualTo(1));
 
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
                 new HotReloadEditorStateSnapshot(false, true, false);
             int revertCalls = 0;
             bool didRevert = await HotReloadGroupProcessor.RevalidateBeforeRevertAsync(
-                new[] { groupFiles[0] },
+                new[] { slot.GroupFile },
                 CancellationToken.None,
                 () => revertCalls++);
 

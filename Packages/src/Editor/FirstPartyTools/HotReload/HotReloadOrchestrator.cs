@@ -47,10 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // SessionState, which is a main-thread API.
             HotReloadRunAccumulator run =
                 new HotReloadRunAccumulator(HotReloadAutoRefreshHold.IsHeld);
-            HotReloadFileProcessResult[] resultSlots = new HotReloadFileProcessResult[files.Count];
-            string[] resultPaths = new string[files.Count];
-            HotReloadGroupFile[] groupFiles = new HotReloadGroupFile[files.Count];
-            List<HotReloadMethodOutcome>[] deferredAlreadyActive = new List<HotReloadMethodOutcome>[files.Count];
+            HotReloadInputResolutionSlot[] slots = new HotReloadInputResolutionSlot[files.Count];
+            for (int index = 0; index < slots.Length; index++)
+            {
+                slots[index] = new HotReloadInputResolutionSlot();
+            }
+
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
                 new List<(int InputIndex, string AssemblyName, string ProjectRelativePath)>();
             for (int index = 0; index < files.Count; index++)
@@ -63,25 +65,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     contentPathOverrideByFile,
                     correlationId,
                     run,
-                    resultSlots,
-                    resultPaths,
-                    groupFiles,
-                    plannerInput,
-                    deferredAlreadyActive);
+                    slots[index],
+                    plannerInput);
             }
 
             IReadOnlyList<HotReloadFileGroupPlan> plans = HotReloadFileGroupPlanner.Plan(plannerInput);
             HashSet<string> pathsInRun = new HashSet<string>(
                 HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
-            for (int pathIndex = 0; pathIndex < resultPaths.Length; pathIndex++)
+            for (int pathIndex = 0; pathIndex < slots.Length; pathIndex++)
             {
-                if (!string.IsNullOrEmpty(resultPaths[pathIndex]))
+                if (!string.IsNullOrEmpty(slots[pathIndex].ResultPath))
                 {
-                    pathsInRun.Add(resultPaths[pathIndex]);
+                    pathsInRun.Add(slots[pathIndex].ResultPath);
                 }
             }
 
-            bool[] allDeferred = ClassifyAllDeferredPlans(plans, deferredAlreadyActive);
+            bool[] allDeferred = ClassifyAllDeferredPlans(plans, slots);
 
             List<(string Path, HotReloadFileProcessResult Result)> extraResults =
                 new List<(string Path, HotReloadFileProcessResult Result)>();
@@ -102,14 +101,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         plans,
                         allDeferred,
                         planIndex,
-                        groupFiles,
+                        slots,
                         inputIndexes);
                 }
 
                 await ProcessPlannedGroupAsync(
                         inputIndexes,
-                        groupFiles,
-                        resultSlots,
+                        slots,
                         correlationId,
                         ct,
                         pathsInRun,
@@ -126,17 +124,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (allDeferred[planIndex])
                 {
-                    ApplyDeferredAlreadyActive(
-                        plans[planIndex],
-                        groupFiles,
-                        resultSlots,
-                        deferredAlreadyActive);
+                    ApplyDeferredAlreadyActive(plans[planIndex], slots);
                 }
             }
 
             for (int index = 0; index < files.Count; index++)
             {
-                run.Add(resultPaths[index], resultSlots[index]);
+                run.Add(slots[index].ResultPath, slots[index].Result);
             }
 
             for (int extraIndex = 0; extraIndex < extraResults.Count; extraIndex++)
@@ -163,11 +157,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyDictionary<string, string> contentPathOverrideByFile,
             string correlationId,
             HotReloadRunAccumulator run,
-            HotReloadFileProcessResult[] resultSlots,
-            string[] resultPaths,
-            HotReloadGroupFile[] groupFiles,
-            List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput,
-            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+            HotReloadInputResolutionSlot slot,
+            List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput)
         {
             string workerSourcePath = ResolveWorkerSourcePath(
                 filePath,
@@ -187,17 +178,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 alreadyActiveOutcomes);
             if (resolution.IsEarlyExit)
             {
-                resultSlots[index] = resolution.EarlyResult;
-                resultPaths[index] = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
+                slot.Result = resolution.EarlyResult;
+                slot.ResultPath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
                 return;
             }
 
             if (resolution.UnchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
             {
-                deferredAlreadyActive[index] = alreadyActiveOutcomes;
+                slot.DeferredAlreadyActive = alreadyActiveOutcomes;
             }
 
-            groupFiles[index] = new HotReloadGroupFile(
+            slot.GroupFile = new HotReloadGroupFile(
                 filePath,
                 workerSourcePath,
                 resolution.ProjectRelativePath,
@@ -207,23 +198,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.ProjectRoot,
                 sinks,
                 resolution.NewSourceMembershipEvidence);
-            resultPaths[index] = resolution.ProjectRelativePath;
+            slot.ResultPath = resolution.ProjectRelativePath;
             plannerInput.Add((index, resolution.AssemblyName, resolution.ProjectRelativePath));
         }
 
         private static bool[] ClassifyAllDeferredPlans(
             IReadOnlyList<HotReloadFileGroupPlan> plans,
-            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+            HotReloadInputResolutionSlot[] slots)
         {
             Debug.Assert(plans != null, "plans must not be null.");
-            Debug.Assert(deferredAlreadyActive != null, "deferredAlreadyActive must not be null.");
+            Debug.Assert(slots != null, "slots must not be null.");
 
             bool[] allDeferred = new bool[plans.Count];
             for (int planIndex = 0; planIndex < plans.Count; planIndex++)
             {
-                allDeferred[planIndex] = AreAllInputsDeferredAlreadyActive(
-                    plans[planIndex],
-                    deferredAlreadyActive);
+                allDeferred[planIndex] = AreAllInputsDeferredAlreadyActive(plans[planIndex], slots);
             }
 
             return allDeferred;
@@ -231,11 +220,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static bool AreAllInputsDeferredAlreadyActive(
             HotReloadFileGroupPlan plan,
-            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+            HotReloadInputResolutionSlot[] slots)
         {
             foreach (int inputIndex in plan.InputIndexes)
             {
-                if (deferredAlreadyActive[inputIndex] == null)
+                if (slots[inputIndex].DeferredAlreadyActive == null)
                 {
                     return false;
                 }
@@ -251,12 +240,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadFileGroupPlan> plans,
             bool[] allDeferred,
             int currentPlanIndex,
-            HotReloadGroupFile[] groupFiles,
+            HotReloadInputResolutionSlot[] slots,
             List<int> inputIndexes)
         {
             Debug.Assert(plans != null, "plans must not be null.");
             Debug.Assert(allDeferred != null, "allDeferred must not be null.");
-            Debug.Assert(groupFiles != null, "groupFiles must not be null.");
+            Debug.Assert(slots != null, "slots must not be null.");
             Debug.Assert(inputIndexes != null, "inputIndexes must not be null.");
 
             string assemblyName = plans[currentPlanIndex].AssemblyName;
@@ -264,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
             for (int position = 0; position < inputIndexes.Count; position++)
             {
-                pathsInGroup.Add(groupFiles[inputIndexes[position]].ProjectRelativePath);
+                pathsInGroup.Add(slots[inputIndexes[position]].GroupFile.ProjectRelativePath);
             }
 
             for (int planIndex = 0; planIndex < plans.Count; planIndex++)
@@ -283,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 for (int deferredPosition = 0; deferredPosition < deferredIndexes.Count; deferredPosition++)
                 {
                     int inputIndex = deferredIndexes[deferredPosition];
-                    string path = groupFiles[inputIndex].ProjectRelativePath;
+                    string path = slots[inputIndex].GroupFile.ProjectRelativePath;
                     if (pathsInGroup.Add(path))
                     {
                         inputIndexes.Add(inputIndex);
@@ -294,32 +283,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void ApplyDeferredAlreadyActive(
             HotReloadFileGroupPlan plan,
-            HotReloadGroupFile[] groupFiles,
-            HotReloadFileProcessResult[] resultSlots,
-            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+            HotReloadInputResolutionSlot[] slots)
         {
             foreach (int inputIndex in plan.InputIndexes)
             {
-                if (resultSlots[inputIndex] != null)
+                HotReloadInputResolutionSlot slot = slots[inputIndex];
+                if (slot.Result != null)
                 {
                     continue;
                 }
 
                 Debug.Assert(
-                    deferredAlreadyActive[inputIndex] != null,
+                    slot.DeferredAlreadyActive != null,
                     "An unfilled deferred slot must have AlreadyActive rows.");
-                groupFiles[inputIndex].Sinks.Outcomes.AddRange(deferredAlreadyActive[inputIndex]);
-                resultSlots[inputIndex] = new HotReloadFileProcessResult(
-                    groupFiles[inputIndex].Sinks.Outcomes,
-                    groupFiles[inputIndex].Sinks.Warnings,
+                slot.GroupFile.Sinks.Outcomes.AddRange(slot.DeferredAlreadyActive);
+                slot.Result = new HotReloadFileProcessResult(
+                    slot.GroupFile.Sinks.Outcomes,
+                    slot.GroupFile.Sinks.Warnings,
                     0);
             }
         }
 
         private static async Task ProcessPlannedGroupAsync(
             IReadOnlyList<int> inputIndexes,
-            HotReloadGroupFile[] groupFiles,
-            HotReloadFileProcessResult[] resultSlots,
+            HotReloadInputResolutionSlot[] slots,
             string correlationId,
             CancellationToken ct,
             HashSet<string> pathsInRun,
@@ -332,7 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadGroupFile> filesOfGroup = new List<HotReloadGroupFile>(inputIndexes.Count);
             foreach (int inputIndex in inputIndexes)
             {
-                filesOfGroup.Add(groupFiles[inputIndex]);
+                filesOfGroup.Add(slots[inputIndex].GroupFile);
             }
 
             int inputCount = inputIndexes.Count;
@@ -354,7 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "A group must report one result per file, including re-applied siblings.");
             for (int position = 0; position < inputIndexes.Count; position++)
             {
-                resultSlots[inputIndexes[position]] = groupResults[position];
+                slots[inputIndexes[position]].Result = groupResults[position];
             }
 
             for (int position = inputCount; position < filesOfGroup.Count; position++)
