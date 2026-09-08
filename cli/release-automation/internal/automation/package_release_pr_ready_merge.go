@@ -33,60 +33,90 @@ func readyAndMergePackageReleasePR(
 	deps mergePackageReleasePRDeps,
 ) (settled bool, exitCode int) {
 	if releasePR.IsDraft {
-		readyErr := markPackageReleasePRReady(ctx, config, releasePR, deps)
-		if readyErr != nil {
-			resolved, exitCode := resolvePackageReleasePRWriteFailure(ctx, stdout, stderr, config, releasePR, readyErr, deps)
-			if resolved {
-				return true, exitCode
-			}
-		} else {
-			writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
-				"Marked Unity package release PR #%d ready before merging it.", releasePR.Number))
+		settled, exitCode := readyPackageReleasePRBeforeMerge(ctx, stdout, stderr, config, releasePR, deps)
+		if settled {
+			return true, exitCode
 		}
 	}
 
 	mergeErr := squashMergePackageReleasePR(ctx, config, releasePR, deps)
 	if mergeErr != nil {
-		_, exitCode := resolvePackageReleasePRWriteFailure(ctx, stdout, stderr, config, releasePR, mergeErr, deps)
-		return true, exitCode
+		return true, resolvePackageReleasePRMergeFailure(ctx, stdout, stderr, config, releasePR, mergeErr, deps)
 	}
 	writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
 		"Merged Unity package release PR #%d at %s; it pins %s.", releasePR.Number, releasePR.HeadRefOID, pinnedTag))
 	return true, 0
 }
 
-// resolvePackageReleasePRWriteFailure re-reads the pull request after a failed
-// write and decides whether the failure was the other run getting there first.
-// resolved is false only when the pull request is still open and out of draft,
-// which means the draft was already lifted and the merge is still worth
-// attempting; every other outcome is final and carries the exit code.
-func resolvePackageReleasePRWriteFailure(
+// readyPackageReleasePRBeforeMerge lifts the draft. settled is false only when
+// the merge is still worth attempting: either the draft was lifted here, or the
+// re-read shows another run lifted it first.
+func readyPackageReleasePRBeforeMerge(
 	ctx context.Context,
 	stdout io.Writer,
 	stderr io.Writer,
 	config mergePackageReleasePRConfig,
 	releasePR mergePackageReleasePullRequest,
-	writeErr error,
 	deps mergePackageReleasePRDeps,
-) (resolved bool, exitCode int) {
+) (settled bool, exitCode int) {
+	readyErr := markPackageReleasePRReady(ctx, config, releasePR, deps)
+	if readyErr == nil {
+		writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
+			"Marked Unity package release PR #%d ready before merging it.", releasePR.Number))
+		return false, 0
+	}
+
 	state, err := packageReleasePullRequestState(ctx, config, releasePR, deps)
 	if err != nil {
-		writeMergePackageReleasePRLine(stderr, writeErr)
+		writeMergePackageReleasePRLine(stderr, readyErr)
 		writeMergePackageReleasePRLine(stderr, err)
 		return true, 1
 	}
 	if state.State == mergePackageReleasePRMergedState {
-		writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
-			"Unity package release PR #%d was already merged by another run; nothing left to do.", releasePR.Number))
+		writeMergePackageReleasePRLine(stdout, packageReleasePRAlreadyMergedMessage(releasePR))
 		return true, 0
 	}
+	// Still draft means the command genuinely could not lift it -- a permission
+	// or ruleset failure, not a lost race.
 	if state.IsDraft {
-		writeMergePackageReleasePRLine(stderr, writeErr)
+		writeMergePackageReleasePRLine(stderr, readyErr)
 		return true, 1
 	}
 	writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
 		"Unity package release PR #%d is already out of draft; continuing to merge it.", releasePR.Number))
 	return false, 0
+}
+
+// resolvePackageReleasePRMergeFailure decides what a failed merge means. Only
+// a pull request another run already merged is a success here: any other state
+// leaves the package unreleased, so reporting anything but a failure would let
+// the release silently not happen.
+func resolvePackageReleasePRMergeFailure(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config mergePackageReleasePRConfig,
+	releasePR mergePackageReleasePullRequest,
+	mergeErr error,
+	deps mergePackageReleasePRDeps,
+) int {
+	state, err := packageReleasePullRequestState(ctx, config, releasePR, deps)
+	if err != nil {
+		writeMergePackageReleasePRLine(stderr, mergeErr)
+		writeMergePackageReleasePRLine(stderr, err)
+		return 1
+	}
+	if state.State == mergePackageReleasePRMergedState {
+		writeMergePackageReleasePRLine(stdout, packageReleasePRAlreadyMergedMessage(releasePR))
+		return 0
+	}
+	writeMergePackageReleasePRLine(stderr, mergeErr)
+	return 1
+}
+
+func packageReleasePRAlreadyMergedMessage(releasePR mergePackageReleasePullRequest) string {
+	return fmt.Sprintf(
+		"Unity package release PR #%d was already merged by another run; nothing left to do.", releasePR.Number)
 }
 
 // packageReleasePullRequestState re-reads the state a write may have raced

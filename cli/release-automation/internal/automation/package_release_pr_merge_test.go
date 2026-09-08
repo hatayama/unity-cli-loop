@@ -390,6 +390,25 @@ func TestMergePackageReleasePRContinuesWhenAnotherRunLiftedTheDraft(t *testing.T
 	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
 }
 
+// Verifies a merge that fails against a pull request nothing else merged is a failure: reporting success there would leave the package release unmade with a green job.
+func TestMergePackageReleasePRFailsWhenTheMergeFailsAndThePullRequestIsStillOpen(t *testing.T) {
+	exitCode, stdout, stderr, _ := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", false),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+			failMerge:       true,
+			stateJSON:       `{"state":"OPEN","isDraft":false}`,
+		},
+	})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "gh pr merge failed")
+	assertReleasePRCheckLogDoesNotContain(t, stdout, "already merged by another run")
+}
+
 // Verifies a failed write that no concurrent run explains still fails the command, so a real permission or ruleset error is not swallowed as a lost race.
 func TestMergePackageReleasePRFailsWhenAFailedWriteIsNotARace(t *testing.T) {
 	exitCode, _, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
