@@ -165,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(hit != null, "hit must not be null.");
             return HotReloadMethodKeys.FormatMethodLabelParts(
-                hit.CallerTypeMetadataName,
+                new HotReloadMetadataTypeName(hit.CallerTypeMetadataName),
                 hit.CallerMethodName,
                 hit.CallerParameterTypeFullNames ?? Array.Empty<string>(),
                 ReadGenericArityFromWireMethodKey(hit.CallerMethodKey, hit.CallerMethodName));
@@ -432,7 +432,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(wireKey), "wireKey must not be empty.");
             int separatorIndex = wireKey.IndexOf("::", StringComparison.Ordinal);
             Debug.Assert(separatorIndex >= 0, "wireKey must contain '::'.");
-            string typePart = wireKey.Substring(0, separatorIndex).Replace('/', '.');
+            string typePart = new HotReloadMetadataTypeName(wireKey.Substring(0, separatorIndex)).ToDisplayShortName();
             int lastDot = typePart.LastIndexOf('.');
             string typeName = lastDot >= 0 ? typePart.Substring(lastDot + 1) : typePart;
             string methodAndParams = wireKey.Substring(separatorIndex + 2);

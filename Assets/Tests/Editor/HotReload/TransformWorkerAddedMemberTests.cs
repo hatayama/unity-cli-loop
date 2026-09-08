@@ -1266,7 +1266,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "ExistingDefault", "Interface members are not patchable");
             Assert.That(FindEntry(result, "ExistingDefault"), Is.Null);
             string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(IHotReloadAddedMemberDefault).FullName,
+                new HotReloadMetadataTypeName(typeof(IHotReloadAddedMemberDefault).FullName),
                 "ExistingDefault",
                 Array.Empty<string>(),
                 genericArity: 0);
@@ -1297,7 +1297,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadMethodLabelNestedHost.INestedGeneric).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadMethodLabelNestedHost.INestedGeneric).FullName),
                 "GenericPing",
                 new[] { "System.Int32", "System.String" },
                 genericArity: 1);

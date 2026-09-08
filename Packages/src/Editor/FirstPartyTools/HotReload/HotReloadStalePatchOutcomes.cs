@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 string displayKey = HotReloadMethodKeys.FormatMethodLabelParts(
-                    signature.typeMetadataName,
+                    new HotReloadMetadataTypeName(signature.typeMetadataName),
                     signature.methodName,
                     parameterTypeFullNames,
                     signature.genericArity);

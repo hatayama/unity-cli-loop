@@ -267,7 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string FormatEntryLabel(TransformWorkerEntryDto entry)
         {
             return HotReloadMethodKeys.FormatMethodLabelParts(
-                entry.typeMetadataName,
+                new HotReloadMetadataTypeName(entry.typeMetadataName),
                 entry.methodName,
                 entry.parameterTypeFullNames ?? Array.Empty<string>(),
                 entry.genericArity);

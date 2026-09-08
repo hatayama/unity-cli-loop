@@ -469,7 +469,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (TransformWorkerEntryDto caller in callerEntries)
             {
                 string methodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                    caller.typeMetadataName,
+                    new HotReloadMetadataTypeName(caller.typeMetadataName),
                     caller.methodName,
                     caller.parameterTypeFullNames ?? Array.Empty<string>(),
                     caller.genericArity);

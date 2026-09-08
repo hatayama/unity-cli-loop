@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     sourceFile,
                     HotReloadMethodOutcome.Skipped(
                         HotReloadMethodKeys.FormatMethodLabelParts(
-                            entry.typeMetadataName,
+                            new HotReloadMetadataTypeName(entry.typeMetadataName),
                             entry.methodName,
                             entry.parameterTypeFullNames ?? Array.Empty<string>(),
                             entry.genericArity),
@@ -187,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     failedEntry.sourceProjectRelativePath,
                     HotReloadMethodOutcome.Failed(
                         HotReloadMethodKeys.FormatMethodLabelParts(
-                            failedEntry.typeMetadataName,
+                            new HotReloadMetadataTypeName(failedEntry.typeMetadataName),
                             failedEntry.methodName,
                             failedEntry.parameterTypeFullNames ?? Array.Empty<string>(),
                             failedEntry.genericArity),
