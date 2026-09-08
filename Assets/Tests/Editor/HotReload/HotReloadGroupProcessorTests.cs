@@ -776,5 +776,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 replacesCompiledMethod = true
             };
         }
+
+        /// <summary>
+        /// A failed gate reports the file as failed and carries no worker retry. Its scan did run,
+        /// because the failure is only reachable after the compiled call sites were scanned.
+        /// </summary>
+        [Test]
+        public void SignatureChangeGateResult_Failed_ReportsTheFileFailedAfterScanning()
+        {
+            HotReloadSignatureChangeGate.SignatureChangeGateResult result =
+                HotReloadSignatureChangeGate.SignatureChangeGateResult.Failed(
+                    "gate failure",
+                    new List<string> { TargetKey });
+
+            Assert.That(result.FileFailed, Is.True);
+            Assert.That(result.UsedWorkerRetry, Is.False);
+            Assert.That(result.DidScan, Is.True);
+            Assert.That(result.FailureMessage, Is.EqualTo("gate failure"));
+            Assert.That(result.GatedReplacementMethodKeys, Is.EqualTo(new[] { TargetKey }));
+        }
+
+        /// <summary>
+        /// A failed gate never reaches the stage that reads DidScan: the group pipeline turns it
+        /// into a Failed gate-and-compile result, which carries no gate for that stage to read.
+        /// </summary>
+        [Test]
+        public void GroupGateAndCompileResult_Failed_CarriesNoGateForTheCoverageStageToRead()
+        {
+            HotReloadGroupGateAndCompileResult result = HotReloadGroupGateAndCompileResult.Failed();
+
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupGateAndCompileOutcome.Failed));
+            Assert.That(result.Gate, Is.Null);
+            Assert.That(result.Compile, Is.Null);
+        }
+
+        /// <summary>
+        /// A retried gate reports the worker retry it consumed and does not fail the file.
+        /// </summary>
+        [Test]
+        public void SignatureChangeGateResult_Retried_ReportsTheWorkerRetryWithoutFailingTheFile()
+        {
+            HotReloadSignatureChangeGate.SignatureChangeGateResult result =
+                HotReloadSignatureChangeGate.SignatureChangeGateResult.Retried(
+                    null,
+                    new List<HotReloadMethodOutcome>(),
+                    new List<string>(),
+                    new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                    new HashSet<HotReloadQualifiedMethodIdentity>(),
+                    new List<string>());
+
+            Assert.That(result.UsedWorkerRetry, Is.True);
+            Assert.That(result.FileFailed, Is.False);
+            Assert.That(result.DidScan, Is.True);
+        }
+
+        /// <summary>
+        /// A gate with nothing to scan reports no scan, so the coverage stage that depends on one
+        /// is skipped.
+        /// </summary>
+        [Test]
+        public void SignatureChangeGateResult_NoWork_ReportsThatNoScanRan()
+        {
+            HotReloadSignatureChangeGate.SignatureChangeGateResult result =
+                HotReloadSignatureChangeGate.SignatureChangeGateResult.NoWork();
+
+            Assert.That(result.DidScan, Is.False);
+            Assert.That(result.FileFailed, Is.False);
+            Assert.That(result.UsedWorkerRetry, Is.False);
+        }
     }
 }
