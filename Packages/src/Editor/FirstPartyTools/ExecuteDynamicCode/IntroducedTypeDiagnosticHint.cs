@@ -91,7 +91,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                matches.Add(metadataName);
+                // Hot reload publishes Cecil metadata names ('Outer/Inner'); the reported name has
+                // to be the reflection form, because that is what a suggested lookup compares.
+                matches.Add(metadataName.Replace('/', '+'));
             }
 
             return matches;
@@ -99,7 +101,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string ExtractSimpleName(string metadataName)
         {
-            int separatorIndex = metadataName.LastIndexOfAny(new[] { '.', '+' });
+            // Both nesting separators are accepted: hot reload publishes Cecil metadata names
+            // ('Outer/Inner'), while the same name reads as 'Outer+Inner' through reflection.
+            int separatorIndex = metadataName.LastIndexOfAny(new[] { '.', '+', '/' });
             return separatorIndex < 0
                 ? metadataName
                 : metadataName.Substring(separatorIndex + 1);

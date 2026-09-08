@@ -63,8 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies a nested introduced type matches on its simple name while its namespace prefix
-        /// still gates the CS0234 match.
+        /// Verifies a nested introduced type matches on its simple name, its namespace prefix still
+        /// gates the CS0234 match, and the Cecil metadata name is reported in reflection form.
         /// </summary>
         [Test]
         public void TryBuild_WhenIntroducedTypeIsNested_MatchesOnTheSimpleName()
@@ -72,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             bool built = IntroducedTypeDiagnosticHint.TryBuild(
                 "CS0234",
                 "The type or namespace name 'Widget' does not exist in the namespace 'Example'",
-                new List<string> { "Example.Outer+Widget" },
+                new List<string> { "Example.Outer/Widget" },
                 out string hint,
                 out List<string> suggestions);
 
