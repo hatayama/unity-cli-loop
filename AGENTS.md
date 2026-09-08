@@ -162,6 +162,20 @@ When you touch a reported file, split it before adding behavior. Commands, the
 exclusion list, and the two places the threshold is declared:
 `docs/file-length.md`.
 
+## Nested Type Name Forms
+
+A nested type has three spellings, and a name that crosses a boundary between them silently
+fails to match: Cecil / worker metadata names nest with `/` (`Outer/Inner`), CLR reflection
+names (`Type.FullName`, `Assembly.GetType`) nest with `+` (`Outer+Inner`), and Roslyn display
+strings and C# source nest with `.` (`Outer.Inner`). Every value that leaves the transform
+worker or a Cecil reader is a metadata name; every value handed to reflection or compared
+against `Type.FullName` must be the reflection form. Convert at the boundary where the value
+changes world, never at the point of use, and never split or end-match a name on one
+separator only — a matcher that sees `.` and `+` but not `/` never matches a nested type
+that came from the worker. When you add a conversion, add a test with a nested type; a
+top-level-only test passes with the conversion missing. Definitions: `docs/glossary.md`
+("Metadata name", "Reflection name").
+
 ## Asmdef Reference Policy
 
 Assembly definitions under `Packages/src` may only reference each other in the directions the
