@@ -85,6 +85,22 @@ assert_winget_pull_request_contains() {
   fi
 }
 
+package_release_merge_section() {
+  awk '
+    /^      - name: Merge the Unity package release pull request now that the pin records this dispatcher$/ { printing = 1; next }
+    printing && /^      - name:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
+assert_package_release_merge_contains() {
+  expected=$1
+  if ! package_release_merge_section | grep -F -- "$expected" >/dev/null 2>&1; then
+    echo "Expected workflow to contain in the package release merge step: $expected" >&2
+    exit 1
+  fi
+}
+
 assert_post_publish_before() {
   earlier=$1
   later=$2
@@ -289,8 +305,12 @@ test_dispatcher_pin_is_pushed_to_main_with_the_app_token() {
   assert_pin_token_contains '          app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}'
   assert_pin_token_contains '          private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}'
   assert_pin_token_contains "          permission-contents: write"
-  if pin_token_section | grep -E "^          permission-" | grep -v -x "          permission-contents: write" >/dev/null 2>&1; then
-    echo "The pin token must request Contents write and no other App permission." >&2
+  # Pull requests write is what lets the same token merge the Unity package
+  # release pull request right after the stamp; nothing beyond those two.
+  assert_pin_token_contains "          permission-pull-requests: write"
+  if pin_token_section | grep -E "^          permission-" |
+    grep -v -x -e "          permission-contents: write" -e "          permission-pull-requests: write" >/dev/null 2>&1; then
+    echo "The pin token must request Contents and Pull requests write and no other App permission." >&2
     exit 1
   fi
   assert_post_publish_before "      - name: Mint dispatcher pin push token" "      - name: Push dispatcher pin stamp to main"
@@ -309,6 +329,24 @@ test_dispatcher_pin_is_pushed_to_main_with_the_app_token() {
   fi
 }
 
+# Verifies the Unity package release pull request is merged with the App token, and only after the pin stamp reaches main.
+test_package_release_pr_is_merged_after_the_pin_stamp() {
+  stable_release_guard="        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'"
+  assert_contains "      - name: Merge the Unity package release pull request now that the pin records this dispatcher"
+  assert_post_publish_before \
+    "      - name: Push dispatcher pin stamp to main" \
+    "      - name: Merge the Unity package release pull request now that the pin records this dispatcher"
+  assert_package_release_merge_contains "$stable_release_guard"
+  assert_package_release_merge_contains '          GH_TOKEN: ${{ steps.dispatcher-pin-token.outputs.token }}'
+  assert_package_release_merge_contains "          go run ./cmd/merge-package-release-pr"
+  assert_package_release_merge_contains "          --base-branch main"
+  assert_package_release_merge_contains '          --dispatcher-tag "${RELEASE_TAG}"'
+  if package_release_merge_section | grep -F 'secrets.GITHUB_TOKEN' >/dev/null 2>&1; then
+    echo "The package release merge must not use GITHUB_TOKEN; its merge starts no follow-up workflow." >&2
+    exit 1
+  fi
+}
+
 test_build_and_publish_jobs_have_separate_trust_boundaries
 test_unprivileged_build_uses_only_the_approved_event_commit
 test_publish_validates_metadata_without_checking_out_source
@@ -323,3 +361,4 @@ test_dispatcher_build_preserves_release_checks
 test_dispatcher_release_target_and_prerelease_state_remain_verified
 test_winget_pull_request_follows_homebrew_update_for_stable_releases
 test_dispatcher_pin_is_pushed_to_main_with_the_app_token
+test_package_release_pr_is_merged_after_the_pin_stamp

@@ -114,6 +114,10 @@ inputs outside the package roots (non-test `cli/common/**` sources, `scripts/ins
 run in the same PR; description-only catalog regenerations are exempt. CI (`check-release-triggers`) fails otherwise. Rules and rationale:
 `docs/shared-release-inputs.md`.
 
+release-please opens one release pull request per component; merge the dispatcher one first, and
+leave the unity-package one to be merged by `post-publish` after the pin stamp. Details:
+`docs/dispatcher-pin-release-order.md`.
+
 ## Broken CLI Releases
 
 When a native CLI release has a tag commit that differs from the `sourceRepositoryDigest` in its

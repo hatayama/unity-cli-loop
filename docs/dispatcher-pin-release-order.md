@@ -28,6 +28,60 @@ lagging pin, and failing there would only hide the state that `main` alone can
 fix. The schedule exists because a dispatcher release can be published without
 any later push to `main`.
 
+## Release pull requests
+
+release-please opens **one release pull request per component**: `unity-package`,
+`dispatcher`, and `uloop-project-runner`. Merge order matters for the first two.
+
+1. Merge the **dispatcher** release pull request and approve the `cli-release`
+   environment. Publishing the dispatcher is the only human decision.
+2. `post-publish` stamps the pin on `main` and then merges the **unity-package**
+   release pull request itself, once that pull request's head records the
+   dispatcher tag just published, is out of draft, and has a successful run of
+   every required workflow for that exact head commit.
+3. The **project runner** release pull request carries no cross-component
+   ordering constraint and can be merged at any time.
+
+Merging the package pull request before the dispatcher one does not break
+anything — that commit's manifest and pin agree, so the release is valid — but
+the package then ships the *previous* dispatcher, which is the lag this order
+exists to remove.
+
+The config sets `always-update: true` alongside `separate-pull-requests`. Without
+it release-please pushes a release branch only when the pull request body
+changes, and the pin stamp is a `chore` commit that appears in no changelog: the
+unity-package release pull request would never move onto the stamp, so its head
+would keep the old pin and the automatic merge would time out. It would also
+keep the `.release-please-manifest.json` conflict that merging the dispatcher
+release pull request creates, since both components' entries sit on adjacent
+lines. The cost is that every push to `main` rebases each pending release pull
+request and re-dispatches its checks.
+
+`check-package-pin-consistency` enforces the rule rather than trusting it. It
+runs as the `check-package-release-pin` job on the unity-package release branch,
+and again inside `sync-release-please-package-releases.sh` before the package
+release is created or published; a release commit whose pin and manifest name
+different dispatchers fails instead of releasing. The job is scoped to that one
+branch on purpose: between the dispatcher merge and the stamp, `main`'s manifest
+and pin legitimately disagree, and gating every pull request would turn that
+window red for unrelated work.
+
+When the automatic merge does not happen, merging the unity-package release pull
+request by hand means re-checking by hand what the automation would have
+checked. A green pin freshness gate on `main` only proves the stamp landed; it
+says nothing about the pull request. Before merging, confirm all four:
+
+- the pin freshness gate on `main` is green, so the stamp reached `main`;
+- the pull request's head commit records the dispatcher tag just published in
+  `Packages/src/project-runner-pin.json`;
+- the pull request is not a draft;
+- every required workflow has a completed successful run for that exact head
+  SHA — not for an earlier head.
+
+Merging without those is how a stale or unvalidated package release gets
+published, which is the failure this whole order exists to prevent. Decision
+record: `docs/adr/0007-separate-release-prs-and-package-auto-merge.md`.
+
 ## Why the stamp is pushed without a pull request
 
 Until 2026-09 the stamp travelled as an automated pull request that a human
@@ -49,8 +103,11 @@ job with `actions/create-github-app-token`. Repository setup, done once by an
 administrator:
 
 1. Create a GitHub App owned by the repository owner with the **Contents:
-   Read and write** repository permission and no other permissions. Install it
-   on this repository only.
+   Read and write** and **Pull requests: Read and write** repository permissions
+   and no others. Install it on this repository only. Pull requests write is
+   what lets `post-publish` merge the unity-package release pull request after
+   the stamp; without it that step fails with a 403 and the pull request has to
+   be merged by hand, under the conditions listed in "Release pull requests".
 2. Store the App ID as the repository variable `DISPATCHER_PIN_APP_ID` and a
    generated private key as the repository secret
    `DISPATCHER_PIN_APP_PRIVATE_KEY`.

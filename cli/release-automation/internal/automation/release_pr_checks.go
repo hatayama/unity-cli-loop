@@ -86,16 +86,42 @@ func runReleasePleasePRChecksWithDeps(ctx context.Context, stdout io.Writer, std
 		return 1
 	}
 
-	releasePR, found, err := findReleasePRCheckPullRequestWithRetry(ctx, config, deps)
+	releasePRs, err := findReleasePRCheckPullRequestsWithRetry(ctx, config, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
 	}
-	if !found {
+	if len(releasePRs) == 0 {
 		writeReleasePRCheckLine(stdout, "No pending release-please PR found for "+config.targetBranch+".")
 		return 0
 	}
 
+	// One component's failing checks must not strand the other components'
+	// release PRs in draft, so every PR is processed and the failures are
+	// reported together at the end.
+	failed := false
+	for _, releasePR := range releasePRs {
+		if runReleasePRCheckForPullRequest(ctx, stdout, stderr, config, releasePR, deps) != 0 {
+			failed = true
+		}
+	}
+	if failed {
+		return 1
+	}
+	return 0
+}
+
+// runReleasePRCheckForPullRequest runs the prepare, dispatch and finalize
+// stages for a single release PR. Why a helper: the orchestrator now loops over
+// several PRs, and inlining the three stages there would push it over cyclop.
+func runReleasePRCheckForPullRequest(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	deps releasePRCheckDeps,
+) int {
 	if code := prepareReleasePRForChecks(ctx, stdout, stderr, config, releasePR, deps); code != 0 {
 		return code
 	}
@@ -290,91 +316,6 @@ func releasePRCheckPositiveIntFromEnvironment(name string, defaultValue int) (in
 	return parsedValue, nil
 }
 
-func findReleasePRCheckPullRequest(ctx context.Context, config releasePRCheckConfig, deps releasePRCheckDeps) (releasePullRequest, bool, error) {
-	output, err := deps.runOutput(
-		ctx,
-		"gh",
-		"pr",
-		"list",
-		"--repo",
-		config.repository,
-		"--state",
-		"open",
-		"--base",
-		config.targetBranch,
-		"--label",
-		"autorelease: pending",
-		"--json",
-		"number,headRefName,headRefOid,title,url",
-	)
-	if err != nil {
-		return releasePullRequest{}, false, err
-	}
-
-	releasePRs := []releasePullRequest{}
-	err = json.Unmarshal([]byte(output), &releasePRs)
-	if err != nil {
-		return releasePullRequest{}, false, fmt.Errorf("failed to parse release PR list: %w", err)
-	}
-
-	matchingPRs := []releasePullRequest{}
-	for _, releasePR := range releasePRs {
-		if releasePRCheckMatches(releasePR, config.targetBranch) {
-			matchingPRs = append(matchingPRs, releasePR)
-		}
-	}
-
-	if len(matchingPRs) == 0 {
-		return releasePullRequest{}, false, nil
-	}
-	if len(matchingPRs) > 1 {
-		return releasePullRequest{}, false, fmt.Errorf("expected one pending release-please PR for %s, found %d", config.targetBranch, len(matchingPRs))
-	}
-	if matchingPRs[0].HeadRefOID == "" {
-		return releasePullRequest{}, false, fmt.Errorf("release PR #%d has no head SHA", matchingPRs[0].Number)
-	}
-	return matchingPRs[0], true, nil
-}
-
-func findReleasePRCheckPullRequestWithRetry(ctx context.Context, config releasePRCheckConfig, deps releasePRCheckDeps) (releasePullRequest, bool, error) {
-	for attempt := 0; attempt < config.lookupAttempts; attempt++ {
-		releasePR, found, err := findReleasePRCheckPullRequest(ctx, config, deps)
-		if err != nil || found {
-			return releasePR, found, err
-		}
-		if attempt+1 < config.lookupAttempts {
-			err = deps.sleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
-			if err != nil {
-				return releasePullRequest{}, false, err
-			}
-		}
-	}
-	return releasePullRequest{}, false, nil
-}
-
-func releasePRCheckMatches(releasePR releasePullRequest, targetBranch string) bool {
-	releasePRBranch := "release-please--branches--" + targetBranch
-	if releasePR.HeadRefName != releasePRBranch && !strings.HasPrefix(releasePR.HeadRefName, releasePRBranch+"--components--") {
-		return false
-	}
-	return releasePRCheckTitleMatches(releasePR.Title)
-}
-
-func releasePRCheckTitleMatches(title string) bool {
-	if title == "chore: release" || strings.HasPrefix(title, "chore: release ") {
-		return true
-	}
-	if !strings.HasPrefix(title, "chore(") {
-		return false
-	}
-	closeIndex := strings.Index(title, "):")
-	if closeIndex == -1 {
-		return false
-	}
-	rest := strings.TrimSpace(title[closeIndex+2:])
-	return rest == "release" || strings.HasPrefix(rest, "release ")
-}
-
 func markReleasePRCheckDraft(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest, deps releasePRCheckDeps) error {
 	_, err := deps.runOutput(ctx, "gh", "pr", "ready", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--undo")
 	return err
@@ -385,7 +326,17 @@ func markReleasePRCheckReady(ctx context.Context, config releasePRCheckConfig, r
 	return err
 }
 
+// clarifyReleasePRCheckBody labels the release summaries of the combined
+// release PR, whose bare "<version>" summary belongs to the Unity package.
+// A per-component PR carries its component in the head branch, so relabeling a
+// bare summary there would mislabel another component as the Unity package;
+// those PRs keep the body release-please wrote.
 func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest, deps releasePRCheckDeps) (bool, error) {
+	component := releasePRCheckComponentFromHeadRef(releasePR.HeadRefName, config.targetBranch)
+	if component != "" && component != "unity-package" {
+		return false, nil
+	}
+
 	output, err := deps.runOutput(ctx, "gh", "pr", "view", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--json", "body")
 	if err != nil {
 		return false, err
@@ -427,15 +378,13 @@ func verifyReleasePRCheckHeadMatchesRun(
 	checkedHeadSHA string,
 	deps releasePRCheckDeps,
 ) (string, error) {
-	currentReleasePR, found, err := findReleasePRCheckPullRequest(ctx, config, deps)
+	currentReleasePRs, err := findReleasePRCheckPullRequests(ctx, config, deps)
 	if err != nil {
 		return "", err
 	}
+	currentReleasePR, found := releasePRCheckPullRequestByNumber(currentReleasePRs, releasePR.Number)
 	if !found {
 		return "", fmt.Errorf("release PR #%d is no longer pending before marking ready", releasePR.Number)
-	}
-	if currentReleasePR.Number != releasePR.Number {
-		return "", fmt.Errorf("pending release PR changed from #%d to #%d before marking ready", releasePR.Number, currentReleasePR.Number)
 	}
 	if currentReleasePR.HeadRefOID != checkedHeadSHA {
 		return fmt.Sprintf(

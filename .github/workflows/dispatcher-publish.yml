@@ -455,6 +455,7 @@ jobs:
           app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}
           private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}
           permission-contents: write
+          permission-pull-requests: write
 
       - name: Push dispatcher pin stamp to main
         if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
@@ -470,3 +471,21 @@ jobs:
           go run ./cmd/push-dispatcher-pin \
             --tag "${RELEASE_TAG}" \
             --base-branch main
+
+      # The stamp is the first commit on main from which the Unity package can
+      # release this dispatcher, so its release pull request is merged here and
+      # not earlier. The App token is required: a merge made with GITHUB_TOKEN
+      # starts no follow-up workflow run, so the package release would never be
+      # tagged (docs/adr/0007-separate-release-prs-and-package-auto-merge.md).
+      - name: Merge the Unity package release pull request now that the pin records this dispatcher
+        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ steps.dispatcher-pin-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+        run: >-
+          go run ./cmd/merge-package-release-pr
+          --repo "${GITHUB_REPOSITORY}"
+          --base-branch main
+          --dispatcher-tag "${RELEASE_TAG}"
