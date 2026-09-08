@@ -291,11 +291,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)
         {
             Debug.Assert(failure != null, "failure must not be null.");
-            int activePatchTotal = HotReloadPatcher.ActiveChangeCount;
-            // Why two numbers: the suffix warns that the refusal left something live, and an
-            // introduced type is live even when nothing is patched. ActivePatchTotal stays a patch
-            // count because callers read it against PatchedTotal.
-            int runtimeChangeTotal = HotReloadActiveChangeCounts.RuntimeChangeTotal;
+            // Why two numbers from one read: the suffix warns that the refusal left something
+            // live, and an introduced type is live even when nothing is patched. ActivePatchTotal
+            // counts patched methods and added members, which is what callers read it against
+            // PatchedTotal for; the runtime total adds the introduced types on top.
+            HotReloadActiveChangeSnapshot snapshot = HotReloadActiveChangeCounts.Capture();
+            int activePatchTotal = snapshot.PatchAndAddedMemberCount;
+            int runtimeChangeTotal = snapshot.RuntimeChangeTotal;
             string message = failure.Message;
             string[] nextActions = failure.NextActions;
             if (runtimeChangeTotal > 0)

@@ -94,8 +94,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 HotReloadResponse response = HotReloadStatusExecutor.ExecuteRevertAll();
 
-                Assert.That(response.Message, Does.Contain("Domain Reload"));
-                Assert.That(response.Message, Does.Contain("2 introduced type"));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "No active hot-reload changes to revert. 2 introduced type(s) stay loaded "
+                        + "until the next Domain Reload; a revert cannot unload the assembly that "
+                        + "carries them. Auto Refresh stays held for them; run 'uloop compile' to "
+                        + "release it."));
                 Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(2));
                 Assert.That(
                     response.IntroducedTypes.Count,
@@ -151,7 +156,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(response.ActivePatchTotal, Is.EqualTo(0), "Arrange: no method is patched.");
                 Assert.That(
                     response.Message,
-                    Does.EndWith("2 hot-reload change(s) are still active."),
+                    Is.EqualTo(
+                        "--status cannot be combined with --files or --revert-all. 2 hot-reload "
+                        + "change(s) are still active."),
                     "A refusal must not tell the caller the domain is clean while it holds two types.");
             }
         }
