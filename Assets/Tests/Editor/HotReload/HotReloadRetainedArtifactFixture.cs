@@ -77,9 +77,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public string RetainedFingerprint { get; private set; }
 
-        public static async Task<HotReloadRetainedArtifactFixture> CreateAsync(
+        public static Task<HotReloadRetainedArtifactFixture> CreateAsync(
             string name,
             string editedSource)
+        {
+            return CreateWithSiblingSourceAsync(name, editedSource, SiblingSource);
+        }
+
+        /// <summary>
+        /// Builds the same world with a caller-supplied sibling file, so a test can put the source
+        /// of a type the target assembly also holds into the same run.
+        /// </summary>
+        public static async Task<HotReloadRetainedArtifactFixture> CreateWithSiblingSourceAsync(
+            string name,
+            string editedSource,
+            string siblingSource)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(
@@ -93,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string sourcePath = Path.Combine(directory, "Edited.cs");
             File.WriteAllText(sourcePath, editedSource);
             string siblingSourcePath = Path.Combine(directory, "Sibling.cs");
-            File.WriteAllText(siblingSourcePath, SiblingSource);
+            File.WriteAllText(siblingSourcePath, siblingSource);
             string targetAssemblyPath = Path.Combine(directory, "RetainedTarget.dll");
             string targetAssemblyMvid = CreateTargetAssembly(targetAssemblyPath);
             string artifactPath = Path.Combine(directory, "RetainedArtifact.dll");
@@ -135,6 +147,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "prepareIntroducedTypes",
                 Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                 includeSibling: false);
+        }
+
+        /// <summary>
+        /// Builds a prepare input covering both edited files of the group, so planning binds the
+        /// sibling's types from source instead of from the target assembly.
+        /// </summary>
+        public TransformWorkerInputDto BuildPrepareGroupInput()
+        {
+            return BuildInput(
+                "prepareIntroducedTypes",
+                Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                includeSibling: true);
         }
 
         public TransformWorkerIntroducedTypeArtifactDto CreateRecordedArtifact(

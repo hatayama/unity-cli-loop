@@ -492,6 +492,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that the fingerprint of a declaration that uses a compiled type is the same
+        /// whether that type is bound from the target assembly or from its source in the same run.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_CompiledTypeBoundFromSource_KeepsTheFingerprint()
+        {
+            // Why the caller is a parameter and not a `new Caller()`: the target assembly is built
+            // without a constructor, so a construction would fail to bind against metadata and the
+            // fingerprint would differ for that reason instead of the identity under test.
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture
+                .CreateWithSiblingSourceAsync(
+                    "CompiledTypeFromSource",
+                    "namespace Example { public class Retained { public int Compute(Caller caller) { return caller.Read(); } } }",
+                    "namespace Example { public class Caller { public int Read() { return 0; } } }");
+
+            TransformWorkerClientResult alone = await TransformWorkerClient.RunAsync(
+                fixture.BuildPrepareInput(),
+                CancellationToken.None);
+            TransformWorkerClientResult grouped = await TransformWorkerClient.RunAsync(
+                fixture.BuildPrepareGroupInput(),
+                CancellationToken.None);
+
+            Assert.That(alone.Success, Is.True, alone.ErrorMessage);
+            Assert.That(grouped.Success, Is.True, grouped.ErrorMessage);
+            Assert.That(
+                FindRetainedFingerprint(grouped, fixture.ProjectRelativePath),
+                Is.EqualTo(FindRetainedFingerprint(alone, fixture.ProjectRelativePath)),
+                "A compiled type bound from source must fingerprint as the same dependency.");
+        }
+
+        private static string FindRetainedFingerprint(
+            TransformWorkerClientResult result,
+            string projectRelativePath)
+        {
+            foreach (TransformWorkerFileOutputDto file in result.Output.files)
+            {
+                if (file.projectRelativePath != projectRelativePath)
+                {
+                    continue;
+                }
+
+                foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
+                {
+                    if (introducedType.metadataName == "Example.Retained")
+                    {
+                        return introducedType.declarationFingerprint;
+                    }
+                }
+            }
+
+            Assert.Fail("Planning did not report Example.Retained for " + projectRelativePath + ".");
+            return null;
+        }
+
+        /// <summary>
         /// Verifies that a fingerprint retains each semantic dependency at its stable declaration
         /// traversal position when aliases exchange their bound types without changing tokens.
         /// </summary>
