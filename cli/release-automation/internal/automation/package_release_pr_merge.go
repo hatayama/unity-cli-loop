@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 )
 
@@ -68,35 +67,32 @@ func RunMergePackageReleasePRWithDeps(
 		writeMergePackageReleasePRLine(stderr, err)
 		return 1
 	}
-	config, err = resolveMergePackageReleasePRDispatcherTag(ctx, stdout, config, deps)
-	if err != nil {
-		writeMergePackageReleasePRLine(stderr, err)
-		return 1
-	}
 	return waitAndMergePackageReleasePR(ctx, stdout, stderr, config, deps)
 }
 
-// resolveMergePackageReleasePRDispatcherTag fills in the dispatcher tag from
-// the base branch tip when the caller names none. The release-please path has
-// no published tag to pass, so the tag the base branch already releases is what
-// the package pin has to record for the package to ship the current dispatcher.
-func resolveMergePackageReleasePRDispatcherTag(
+// mergePackageReleasePRDispatcherTag reports the dispatcher release the package
+// pin must record. When the caller names no tag it is read from the base branch
+// manifest on every pass, and never before the open-dispatcher gate: a
+// dispatcher release pull request merged in between would otherwise leave a
+// tag read from the old manifest paired with an already empty open list, which
+// together read as "nothing pending" for a head that still pins the old
+// dispatcher.
+func mergePackageReleasePRDispatcherTag(
 	ctx context.Context,
 	stdout io.Writer,
 	config mergePackageReleasePRConfig,
 	deps mergePackageReleasePRDeps,
-) (mergePackageReleasePRConfig, error) {
+) (string, error) {
 	if config.dispatcherTag != "" {
-		return config, nil
+		return config.dispatcherTag, nil
 	}
 	dispatcherTag, err := dispatcherReleaseTagFromManifestAtRef(ctx, deps.runOutput, config.repository, config.baseBranch)
 	if err != nil {
-		return config, err
+		return "", err
 	}
-	config.dispatcherTag = dispatcherTag
 	writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
 		"Resolved dispatcher release tag %s from the %s release manifest.", dispatcherTag, config.baseBranch))
-	return config, nil
+	return dispatcherTag, nil
 }
 
 func defaultMergePackageReleasePRDeps() mergePackageReleasePRDeps {
@@ -171,7 +167,7 @@ func waitAndMergePackageReleasePR(
 		if !deps.now().Before(deadline) {
 			writeMergePackageReleasePRLine(stderr, fmt.Errorf(
 				"%s: waiting for the Unity package release pull request to record %s timed out; merge the pull request by hand once its checks pass",
-				mergePackageReleasePRCommandName, config.dispatcherTag))
+				mergePackageReleasePRCommandName, mergePackageReleasePRAwaitedTag(config)))
 			return 1
 		}
 		err := deps.sleep(ctx, config.interval)
@@ -180,6 +176,16 @@ func waitAndMergePackageReleasePR(
 			return 1
 		}
 	}
+}
+
+// mergePackageReleasePRAwaitedTag names what the wait was for. The tag is
+// resolved per pass, so the timeout report has to describe the source rather
+// than a value when the caller named no tag.
+func mergePackageReleasePRAwaitedTag(config mergePackageReleasePRConfig) string {
+	if config.dispatcherTag != "" {
+		return config.dispatcherTag
+	}
+	return "the dispatcher release the " + config.baseBranch + " manifest publishes"
 }
 
 // attemptMergePackageReleasePR runs one pass of the wait loop. settled is false
@@ -218,12 +224,18 @@ func attemptMergePackageReleasePR(
 		}
 	}
 
+	dispatcherTag, err := mergePackageReleasePRDispatcherTag(ctx, stdout, config, deps)
+	if err != nil {
+		writeMergePackageReleasePRLine(stderr, err)
+		return true, 1
+	}
+
 	pinnedTag, err := packageReleasePullRequestPinnedTag(ctx, config, releasePR, deps)
 	if err != nil {
 		writeMergePackageReleasePRLine(stderr, err)
 		return true, 1
 	}
-	if pinnedTag != config.dispatcherTag {
+	if pinnedTag != dispatcherTag {
 		writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
 			"PR #%d head %s still pins %s; waiting for release-please to rebase it onto the stamp.",
 			releasePR.Number, releasePR.HeadRefOID, pinnedTag))
@@ -241,24 +253,7 @@ func attemptMergePackageReleasePR(
 		return false, 0
 	}
 
-	if releasePR.IsDraft {
-		err = markPackageReleasePRReady(ctx, config, releasePR, deps)
-		if err != nil {
-			writeMergePackageReleasePRLine(stderr, err)
-			return true, 1
-		}
-		writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
-			"Marked Unity package release PR #%d ready before merging it.", releasePR.Number))
-	}
-
-	err = squashMergePackageReleasePR(ctx, config, releasePR, deps)
-	if err != nil {
-		writeMergePackageReleasePRLine(stderr, err)
-		return true, 1
-	}
-	writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
-		"Merged Unity package release PR #%d at %s; it pins %s.", releasePR.Number, releasePR.HeadRefOID, pinnedTag))
-	return true, 0
+	return readyAndMergePackageReleasePR(ctx, stdout, stderr, config, releasePR, pinnedTag, deps)
 }
 
 func findPackageReleasePullRequest(
@@ -419,43 +414,6 @@ func packageReleasePullRequestRun(
 		}
 	}
 	return mergePackageReleasePRRun{}, false, nil
-}
-
-// markPackageReleasePRReady lifts the draft state the release PR check
-// automation leaves in place. Only draft pull requests are readied, because
-// gh pr ready fails on one that is already ready.
-func markPackageReleasePRReady(
-	ctx context.Context,
-	config mergePackageReleasePRConfig,
-	releasePR mergePackageReleasePullRequest,
-	deps mergePackageReleasePRDeps,
-) error {
-	_, err := deps.runOutput(ctx, "gh", "pr", "ready", strconv.Itoa(releasePR.Number), "--repo", config.repository)
-	return err
-}
-
-// squashMergePackageReleasePR pins the merge to the head this command
-// verified, so a head moved between the check and the merge fails instead of
-// releasing an unchecked commit.
-func squashMergePackageReleasePR(
-	ctx context.Context,
-	config mergePackageReleasePRConfig,
-	releasePR mergePackageReleasePullRequest,
-	deps mergePackageReleasePRDeps,
-) error {
-	_, err := deps.runOutput(
-		ctx,
-		"gh",
-		"pr",
-		"merge",
-		strconv.Itoa(releasePR.Number),
-		"--repo",
-		config.repository,
-		"--squash",
-		"--match-head-commit",
-		releasePR.HeadRefOID,
-	)
-	return err
 }
 
 func writeMergePackageReleasePRLine(writer io.Writer, values ...any) {

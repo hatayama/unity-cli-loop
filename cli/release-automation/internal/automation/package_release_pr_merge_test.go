@@ -27,6 +27,12 @@ type mergePackageReleasePRPoll struct {
 	// manifestByRef answers the contents API for the release manifest, so a
 	// test can pin the dispatcher version the base branch tip releases.
 	manifestByRef map[string]string
+	// failReady and failMerge make the two writes fail the way they do when
+	// another run reached the pull request first.
+	failReady bool
+	failMerge bool
+	// stateJSON answers the re-read that follows a failed write.
+	stateJSON string
 }
 
 type mergePackageReleasePRStub struct {
@@ -63,7 +69,12 @@ func (stub *mergePackageReleasePRStub) runOutput(ctx context.Context, name strin
 		stub.activePoll = stub.nextPoll()
 		return stub.activePoll.prListJSON, nil
 	case strings.HasPrefix(commandLine, "gh pr ready "):
+		if stub.activePoll.failReady {
+			return "", fmt.Errorf("gh pr ready failed")
+		}
 		return "", nil
+	case strings.HasPrefix(commandLine, "gh pr view "):
+		return stub.activePoll.stateJSON, nil
 	case strings.Contains(commandLine, releasePleaseManifestRelativePath):
 		ref := mergePackageReleasePRRequestedRef(commandLine)
 		manifest, known := stub.manifestAt(ref)
@@ -87,20 +98,18 @@ func (stub *mergePackageReleasePRStub) runOutput(ctx context.Context, name strin
 		}
 		return "[]", nil
 	case strings.Contains(commandLine, " --match-head-commit "):
+		if stub.activePoll.failMerge {
+			return "", fmt.Errorf("gh pr merge failed")
+		}
 		return "", nil
 	}
 	return "", fmt.Errorf("unexpected command: %s", commandLine)
 }
 
-// manifestAt answers the release manifest read. The manifest is read before
-// the first pull request listing, so the first poll supplies it until a pass
-// has opened.
+// manifestAt answers the release manifest read of the pass that is open, so a
+// test can change what the base branch releases between passes.
 func (stub *mergePackageReleasePRStub) manifestAt(ref string) (string, bool) {
-	manifestByRef := stub.activePoll.manifestByRef
-	if manifestByRef == nil && len(stub.polls) > 0 {
-		manifestByRef = stub.polls[0].manifestByRef
-	}
-	manifest, known := manifestByRef[ref]
+	manifest, known := stub.activePoll.manifestByRef[ref]
 	return manifest, known
 }
 
@@ -322,6 +331,85 @@ func TestMergePackageReleasePRWithNoWaitLeavesStalePinDraftAfterOnePass(t *testi
 	assertReleasePRCheckLogContains(t, stdout, "is not mergeable yet; leaving it draft.")
 	assertMergePackageReleasePRNeverMerged(t, stub)
 	assertMergePackageReleasePRListCount(t, stub, 1)
+}
+
+// Verifies losing the merge race to the other automated path is a success rather than a failed job: a merge that fails against an already merged pull request reports it and exits 0.
+func TestMergePackageReleasePRAcceptsAPullRequestAnotherRunMerged(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", false),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+			failMerge:       true,
+			stateJSON:       `{"state":"MERGED","isDraft":false}`,
+		},
+	})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "PR #2002 was already merged by another run")
+	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
+}
+
+// Verifies a gh pr ready that the other path won is absorbed and the merge still runs, so the release is not left half-done.
+func TestMergePackageReleasePRContinuesWhenAnotherRunLiftedTheDraft(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", true),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+			failReady:       true,
+			stateJSON:       `{"state":"OPEN","isDraft":false}`,
+		},
+	})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "PR #2002 is already out of draft; continuing to merge it.")
+	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
+}
+
+// Verifies a failed write that no concurrent run explains still fails the command, so a real permission or ruleset error is not swallowed as a lost race.
+func TestMergePackageReleasePRFailsWhenAFailedWriteIsNotARace(t *testing.T) {
+	exitCode, _, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", true),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+			failReady:       true,
+			stateJSON:       `{"state":"OPEN","isDraft":true}`,
+		},
+	})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "gh pr ready failed")
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies the release manifest is never read before the open-dispatcher gate: reading it first would pair a tag from the pre-merge manifest with an already empty open list, which together read as "nothing pending" for a head that still pins the old dispatcher.
+func TestMergePackageReleasePRReadsTheManifestOnlyAfterTheDispatcherGate(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:               packageReleasePRListJSON("package123", true),
+			pinnedTagsByRef:          packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:                     packageReleasePRRunsAt("package123"),
+			manifestByRef:            map[string]string{"main": `{"cli/dispatcher":"3.4.0"}`},
+			openDispatcherPRListJSON: `[{"number":2001}]`,
+		},
+	}, []string{"--require-no-open-dispatcher-pr"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "PR #2002 stays draft: a dispatcher release pull request is open")
+	commandLogText := strings.Join(stub.commandLog, "\n")
+	assertReleasePRCheckLogDoesNotContain(t, commandLogText, releasePleaseManifestRelativePath)
+	assertReleasePRCheckLogDoesNotContain(t, stdout, "Resolved dispatcher release tag")
+	assertMergePackageReleasePRNeverMerged(t, stub)
 }
 
 // Verifies a run that completed on an older head does not count as this head's check result.
