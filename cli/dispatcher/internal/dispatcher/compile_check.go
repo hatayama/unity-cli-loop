@@ -214,10 +214,6 @@ func compileCheckMessage(response compileCheckResponse) string {
 	if count == 0 {
 		return compileCheckNoChangeMessage
 	}
-	if response.ErrorCount == 0 {
-		return fmt.Sprintf("Compiled %d assemblies with 0 errors.", count)
-	}
-
 	return fmt.Sprintf("Compiled %d assemblies with %d errors and %d warnings.",
 		count, response.ErrorCount, response.WarningCount)
 }

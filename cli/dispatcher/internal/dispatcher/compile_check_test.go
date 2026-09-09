@@ -176,3 +176,25 @@ func TestBuildCompileCheckResponseReportsAnUnchangedProject(t *testing.T) {
 		t.Fatalf("expected the no-change message, got %q", response.Message)
 	}
 }
+
+// Verifies that a run without errors still reports how many warnings it found, so a clean summary
+// line does not hide diagnostics the caller only sees in the full payload.
+func TestBuildCompileCheckResponseCountsWarningsOnASuccessfulRun(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units: []compilecheck.UnitResult{{
+			Assembly:  "A",
+			Succeeded: true,
+			Diagnostics: []compilecheck.Diagnostic{
+				{Severity: "warning", Code: "CS0168", Message: "unused variable", File: "Assets/A.cs"},
+			},
+		}},
+	}, "/projects/sample")
+
+	if !response.Success || response.WarningCount != 1 {
+		t.Fatalf("expected a clean run with one warning, got %+v", response)
+	}
+	if response.Message != "Compiled 1 assemblies with 0 errors and 1 warnings." {
+		t.Fatalf("the summary should report the warning count, got %q", response.Message)
+	}
+}

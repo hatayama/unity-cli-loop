@@ -92,7 +92,7 @@ func DetectSourceChange(
 	}
 
 	for _, source := range sources {
-		sourceTime, statErr := modificationTime(filepath.Join(projectRoot, source))
+		sourceTime, statErr := modificationTime(sourcePath(projectRoot, source))
 		if statErr != nil {
 			return ChangeReport{}, statErr
 		}

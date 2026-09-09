@@ -1,9 +1,7 @@
 package compilecheck
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -52,13 +50,8 @@ type assemblyDefinitionContract struct {
 
 // readAssemblyDefinitionContract reads the settings of one .asmdef that reach the compiler.
 func readAssemblyDefinitionContract(path string) (assemblyDefinitionContract, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return assemblyDefinitionContract{}, fmt.Errorf("failed to read %s: %w", path, err)
-	}
-
 	contract := assemblyDefinitionContract{}
-	if err := json.Unmarshal(content, &contract); err != nil {
+	if err := readUnityJSONFile(path, &contract); err != nil {
 		return assemblyDefinitionContract{}, fmt.Errorf("failed to read %s: %w", path, err)
 	}
 

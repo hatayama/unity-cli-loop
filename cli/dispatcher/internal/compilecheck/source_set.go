@@ -1,6 +1,7 @@
 package compilecheck
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -25,6 +26,9 @@ const (
 	assemblyDefinitionIndexError = "failed to index assembly definitions under %s: %w"
 )
 
+// utf8ByteOrderMark is the prefix editors on Windows put in front of UTF-8 text.
+var utf8ByteOrderMark = []byte{0xEF, 0xBB, 0xBF}
+
 // AssemblyDefinition is one .asmdef file, keyed by the assembly name it declares.
 type AssemblyDefinition struct {
 	Name      string
@@ -41,6 +45,7 @@ func IndexAssemblyDefinitions(projectRoot string) (map[string]AssemblyDefinition
 		filepath.Join(projectRoot, packagesDirectoryName),
 		filepath.Join(projectRoot, libraryDirectoryName, packageCacheDirectoryName),
 	}
+	roots = append(roots, localPackageRoots(projectRoot)...)
 	for _, root := range roots {
 		if !directoryExists(root) {
 			continue
@@ -88,17 +93,24 @@ func indexAssemblyDefinitionsUnder(root string, index map[string]AssemblyDefinit
 	})
 }
 
-// readAssemblyDefinitionName reads the assembly name an .asmdef declares.
-func readAssemblyDefinitionName(path string) (string, error) {
+// readUnityJSONFile reads one of Unity's JSON files into target.
+// Why the byte order mark is stripped: editors on Windows write UTF-8 with a BOM by default, and
+// encoding/json rejects it, which would turn one such .asmdef into a failure of the whole command.
+func readUnityJSONFile(path string, target any) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return err
 	}
 
+	return json.Unmarshal(bytes.TrimPrefix(content, utf8ByteOrderMark), target)
+}
+
+// readAssemblyDefinitionName reads the assembly name an .asmdef declares.
+func readAssemblyDefinitionName(path string) (string, error) {
 	var definition struct {
 		Name string `json:"name"`
 	}
-	if err := json.Unmarshal(content, &definition); err != nil {
+	if err := readUnityJSONFile(path, &definition); err != nil {
 		return "", fmt.Errorf("failed to read %s: %w", path, err)
 	}
 	if definition.Name == "" {
@@ -133,7 +145,7 @@ func readAssemblyDefinitionGUID(assemblyDefinitionPath string) string {
 func RebuildSources(projectRoot string, rsp ResponseFile, asmdef *AssemblyDefinition) ([]string, error) {
 	existing := make([]string, 0, len(rsp.Sources))
 	for _, source := range rsp.Sources {
-		if fileExists(filepath.Join(projectRoot, source)) {
+		if fileExists(sourcePath(projectRoot, source)) {
 			existing = append(existing, source)
 		}
 	}
@@ -155,7 +167,7 @@ func RebuildSources(projectRoot string, rsp ResponseFile, asmdef *AssemblyDefini
 	// assembly, and only the response file records where they came from.
 	result := globbed
 	for _, source := range existing {
-		if !isUnderDirectory(filepath.Join(projectRoot, source), asmdef.Directory) {
+		if !isUnderDirectory(sourcePath(projectRoot, source), asmdef.Directory) {
 			result = append(result, source)
 		}
 	}
@@ -184,11 +196,7 @@ func globAssemblySources(projectRoot string, assemblyDirectory string) ([]string
 		if filepath.Ext(path) != cSharpSourceExtension {
 			return nil
 		}
-		relativePath, relErr := filepath.Rel(projectRoot, path)
-		if relErr != nil {
-			return relErr
-		}
-		sources = append(sources, relativePath)
+		sources = append(sources, recordSourcePath(projectRoot, path))
 
 		return nil
 	})
