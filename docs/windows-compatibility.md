@@ -100,7 +100,8 @@ To verify, on a Windows machine with a Unity project that has been built at leas
 
 1. Build the binary for `windows-amd64` — `go build -o uloop.exe ./cmd/dispatcher` from
    `cli/dispatcher`, or `scripts/build-go-cli.sh` from a shell that can run it, which writes
-   `dist/windows-amd64/uloop.exe`. Then run `uloop.exe compile-check --all`.
+   `dist/windows-amd64/uloop.exe`. Then run `.\dist\windows-amd64\uloop.exe compile-check --all`
+   — a bare `uloop.exe` would resolve to an installed release rather than the build under test.
 2. Confirm the Editor was discovered — a run that fails at Editor discovery reports it before any
    compile happens.
 3. Open one `Library\Bee\artifacts\<dag>\*.rsp` and check the separator in its `-out:` line.

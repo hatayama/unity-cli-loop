@@ -50,9 +50,14 @@ The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, 
 
 ## Limitations
 
-- **It replays the last Unity build.** Anything that changes what Unity would compile — a new or
-  deleted `.asmdef`, an added reference, an `.asmdef` that no longer builds for the Editor — stops
-  the run and asks for `uloop compile`.
+- **It replays the last Unity build, and only some staleness is detectable.** Four `.asmdef`
+  settings are compared against the response file, because they reach `csc` and can be read without
+  evaluating defines or package versions: whether the assembly still builds for the Editor, a
+  project reference it gained, `allowUnsafeCode` turning on, and a precompiled reference it gained
+  under `overrideReferences`. A new or deleted `.asmdef` is detected too. Those cases — and only
+  those — stop the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED` and ask for `uloop compile`.
+  Every other edit listed below is invisible to the check: the run proceeds and silently reuses
+  what the last build recorded.
 - **A removed `.asmdef` reference is not detected.** Unity injects references of its own that no
   `.asmdef` declares, so a reference present in the response file but absent from the `.asmdef`
   cannot be told apart from an injected one. Diagnostics may therefore miss an error that removing
@@ -70,9 +75,16 @@ The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, 
 The project has never been built by this Editor, or `Library` was deleted. Open the project once
 (`uloop launch`) and let it compile, then retry.
 
-**`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: an assembly definition was added/removed/edited**
-This is the intended refusal, not a bug. Run `uloop compile` once so Unity rewrites the response
-files, then `compile-check` works again against the new configuration.
+**`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: an assembly definition no longer matches the last build**
+Raised when an `.asmdef` was added or deleted, or when one of the four compared settings changed
+(no longer builds for the Editor, gained a project reference, turned on `allowUnsafeCode`, gained a
+precompiled reference under `overrideReferences`). This is the intended refusal, not a bug. Run
+`uloop compile` once so Unity rewrites the response files, then `compile-check` works again against
+the new configuration.
+
+An `.asmdef` edit that is not one of those does **not** raise this error — see Limitations for what
+goes undetected. In that case the run succeeds against the previous configuration, so run
+`uloop compile` yourself after such an edit rather than trusting a clean result.
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: cannot tell which Bee build to check**
 Both a debug and a release dag exist and neither `tundra.log.json` nor
