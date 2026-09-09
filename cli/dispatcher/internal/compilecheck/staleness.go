@@ -29,6 +29,7 @@ type ChangeReport struct {
 // diagnostics for a configuration the project no longer has.
 func DetectStructuralChange(
 	projectRoot string, rsp ResponseFile, asmdef *AssemblyDefinition, dagDir string,
+	context AssemblyContext,
 ) error {
 	baseline, err := lastBuildTime(projectRoot, rsp, dagDir)
 	if err != nil {
@@ -36,19 +37,42 @@ func DetectStructuralChange(
 	}
 
 	if asmdef != nil {
-		asmdefTime, statErr := modificationTime(asmdef.Path)
-		if statErr != nil {
-			return statErr
-		}
-		if asmdefTime.After(baseline) {
-			return fmt.Errorf(
-				"assembly definition %s changed after the last Unity build; %s",
-				asmdef.Name, runCompileFirstAdvice)
+		if changeErr := detectAssemblyDefinitionChange(
+			*asmdef, rsp, dagDir, baseline, context); changeErr != nil {
+			return changeErr
 		}
 	}
 
 	if rsp.AdditionalFile != "" && !fileExists(filepath.Join(projectRoot, rsp.AdditionalFile)) {
-		return fmt.Errorf("the Bee artifacts are incomplete for %s; %s", rsp.AssemblyName, runCompileFirstAdvice)
+		return unityBuildRequired("the Bee artifacts are incomplete for %s", rsp.AssemblyName)
+	}
+
+	return nil
+}
+
+// detectAssemblyDefinitionChange compares an assembly definition against the response file once its
+// timestamp says it may have moved.
+// Why the timestamp is only a trigger: switching branches rewrites every .asmdef file without
+// changing its content, and Unity's incremental build hashes content, so it rebuilds nothing and
+// the timestamp alone would refuse the project forever.
+func detectAssemblyDefinitionChange(
+	asmdef AssemblyDefinition, rsp ResponseFile, dagDir string,
+	baseline time.Time, context AssemblyContext,
+) error {
+	asmdefTime, err := modificationTime(asmdef.Path)
+	if err != nil {
+		return err
+	}
+	if !asmdefTime.After(baseline) {
+		return nil
+	}
+
+	contract, readErr := readAssemblyDefinitionContract(asmdef.Path)
+	if readErr != nil {
+		return readErr
+	}
+	if reason := detectContractDisagreement(contract, rsp, dagDir, context); reason != "" {
+		return unityBuildRequired("assembly definition %s %s", asmdef.Name, reason)
 	}
 
 	return nil
@@ -110,8 +134,8 @@ func lastBuildTime(projectRoot string, rsp ResponseFile, dagDir string) (time.Ti
 	assemblyPath := filepath.Join(projectRoot, dagDir, rsp.AssemblyName+assemblyExtension)
 	info, err := os.Stat(assemblyPath)
 	if err != nil {
-		return time.Time{}, fmt.Errorf(
-			"the Unity Editor has never built %s; %s", rsp.AssemblyName, runCompileFirstAdvice)
+		return time.Time{}, unityBuildRequired(
+			"the Unity Editor has never built %s", rsp.AssemblyName)
 	}
 
 	return info.ModTime(), nil

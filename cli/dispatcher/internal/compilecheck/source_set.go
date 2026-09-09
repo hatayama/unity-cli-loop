@@ -16,6 +16,8 @@ const (
 	libraryDirectoryName         = "Library"
 	packageCacheDirectoryName    = "PackageCache"
 	assemblyDefinitionExtension  = ".asmdef"
+	assemblyDefinitionMetaSuffix = ".meta"
+	assemblyDefinitionGUIDKey    = "guid:"
 	assemblyReferenceExtension   = ".asmref"
 	cSharpSourceExtension        = ".cs"
 	unityIgnoredDirectorySuffix  = "~"
@@ -28,6 +30,7 @@ type AssemblyDefinition struct {
 	Name      string
 	Path      string // absolute path of the .asmdef file
 	Directory string // absolute path of the directory that owns the assembly
+	GUID      string // the GUID in the sibling .meta, empty when Unity has not written one yet
 }
 
 // IndexAssemblyDefinitions maps every assembly name in the project to the .asmdef that declares it.
@@ -73,7 +76,12 @@ func indexAssemblyDefinitionsUnder(root string, index map[string]AssemblyDefinit
 		// Why the first wins: Unity itself rejects duplicate assembly names, so a second one means a
 		// stale copy, and taking it would point the rebuild at the wrong directory.
 		if _, exists := index[name]; !exists {
-			index[name] = AssemblyDefinition{Name: name, Path: path, Directory: filepath.Dir(path)}
+			index[name] = AssemblyDefinition{
+				Name:      name,
+				Path:      path,
+				Directory: filepath.Dir(path),
+				GUID:      readAssemblyDefinitionGUID(path),
+			}
 		}
 
 		return nil
@@ -98,6 +106,27 @@ func readAssemblyDefinitionName(path string) (string, error) {
 	}
 
 	return definition.Name, nil
+}
+
+// readAssemblyDefinitionGUID reads the GUID Unity assigned an .asmdef, which is how other assembly
+// definitions spell a reference to it. An unreadable .meta yields an empty GUID rather than an
+// error: the GUID only refines a check that already tolerates references it cannot resolve.
+func readAssemblyDefinitionGUID(assemblyDefinitionPath string) string {
+	content, err := os.ReadFile(assemblyDefinitionPath + assemblyDefinitionMetaSuffix)
+	if err != nil {
+		return ""
+	}
+
+	for _, rawLine := range strings.Split(string(content), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if !strings.HasPrefix(line, assemblyDefinitionGUIDKey) {
+			continue
+		}
+
+		return strings.TrimSpace(strings.TrimPrefix(line, assemblyDefinitionGUIDKey))
+	}
+
+	return ""
 }
 
 // RebuildSources lists the sources to compile now, reflecting .cs files added or deleted since Bee ran.

@@ -34,12 +34,10 @@ func DetectAssemblySetChange(
 	}
 
 	if name, found := addedAssemblyName(graph, assemblyDefinitions, buildTime); found {
-		return fmt.Errorf(
-			"assembly definition %s %s; %s", name, changeReasonAssemblyAdded, runCompileFirstAdvice)
+		return unityBuildRequired("assembly definition %s %s", name, changeReasonAssemblyAdded)
 	}
 	if name, found := removedAssemblyName(graph, assemblyDefinitions); found {
-		return fmt.Errorf(
-			"assembly definition %s %s; %s", name, changeReasonAssemblyRemoved, runCompileFirstAdvice)
+		return unityBuildRequired("assembly definition %s %s", name, changeReasonAssemblyRemoved)
 	}
 
 	return nil
@@ -61,6 +59,12 @@ func addedAssemblyName(
 		if _, built := graph.byName[name]; built {
 			continue
 		}
+		// Why the Editor check comes first: an assembly definition Unity does not build for the
+		// Editor legitimately has no response file however recently it was written, and switching
+		// branches rewrites every .asmdef timestamp without changing anything.
+		if !assemblyDefinitionBuildsForEditor(assemblyDefinitions[name].Path) {
+			continue
+		}
 		written, err := modificationTime(assemblyDefinitions[name].Path)
 		if err != nil || !written.After(buildTime) {
 			continue
@@ -70,6 +74,18 @@ func addedAssemblyName(
 	}
 
 	return "", false
+}
+
+// assemblyDefinitionBuildsForEditor reports whether Unity still compiles an .asmdef for the Editor.
+// An unreadable file counts as building, so a parse problem surfaces as the refusal it always was
+// rather than silently hiding an assembly that really is new.
+func assemblyDefinitionBuildsForEditor(path string) bool {
+	contract, err := readAssemblyDefinitionContract(path)
+	if err != nil {
+		return true
+	}
+
+	return contract.buildsForEditor()
 }
 
 // removedAssemblyName names an assembly Bee built whose assembly definition is gone from the project.
@@ -108,8 +124,8 @@ func newestBuildTime(projectRoot string, dagDir string) (time.Time, error) {
 		}
 	}
 	if newest.IsZero() {
-		return time.Time{}, fmt.Errorf(
-			"the Unity Editor has never built %s; %s", dagDirectoryPath, runCompileFirstAdvice)
+		return time.Time{}, unityBuildRequired(
+			"the Unity Editor has never built %s", dagDirectoryPath)
 	}
 
 	return newest, nil

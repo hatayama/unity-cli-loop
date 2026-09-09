@@ -104,12 +104,14 @@ func TestDetectSourceChangeReportsRemovedSource(t *testing.T) {
 	}
 }
 
-// Verifies an assembly definition edited after the last build stops the run instead of compiling.
+// Verifies an assembly definition that gained a reference after the last build stops the run
+// instead of compiling, and says how to recover.
 func TestDetectStructuralChangeRejectsEditedAssemblyDefinition(t *testing.T) {
 	projectRoot, rsp, asmdef := newStalenessProject(t)
+	writeFileAt(t, asmdef.Path, `{"name":"Foo","includePlatforms":["iOS"]}`)
 	setModificationTime(t, asmdef.Path, time.Now().Add(time.Hour))
 
-	err := DetectStructuralChange(projectRoot, rsp, &asmdef, stalenessDagDirectory)
+	err := DetectStructuralChange(projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{})
 	if err == nil {
 		t.Fatal("expected an edited assembly definition to be rejected")
 	}
@@ -125,7 +127,8 @@ func TestDetectStructuralChangeRejectsIncompleteBeeArtifacts(t *testing.T) {
 		t.Fatalf("failed to remove the additional file: %v", err)
 	}
 
-	if err := DetectStructuralChange(projectRoot, rsp, &asmdef, stalenessDagDirectory); err == nil {
+	if err := DetectStructuralChange(
+		projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{}); err == nil {
 		t.Fatal("expected incomplete Bee artifacts to be rejected")
 	}
 }
@@ -137,7 +140,8 @@ func TestDetectStructuralChangeRejectsNeverBuiltAssembly(t *testing.T) {
 		t.Fatalf("failed to remove the assembly: %v", err)
 	}
 
-	if err := DetectStructuralChange(projectRoot, rsp, &asmdef, stalenessDagDirectory); err == nil {
+	if err := DetectStructuralChange(
+		projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{}); err == nil {
 		t.Fatal("expected a never-built assembly to be rejected")
 	}
 }
@@ -146,7 +150,8 @@ func TestDetectStructuralChangeRejectsNeverBuiltAssembly(t *testing.T) {
 func TestDetectStructuralChangeAcceptsUnchangedAssembly(t *testing.T) {
 	projectRoot, rsp, asmdef := newStalenessProject(t)
 
-	if err := DetectStructuralChange(projectRoot, rsp, &asmdef, stalenessDagDirectory); err != nil {
+	if err := DetectStructuralChange(
+		projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{}); err != nil {
 		t.Fatalf("expected the unchanged assembly to pass, got error: %v", err)
 	}
 }
