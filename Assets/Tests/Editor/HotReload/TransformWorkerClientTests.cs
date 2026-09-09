@@ -3240,7 +3240,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 JsonConvert.SerializeObject(output));
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Does.Contain("reuse"));
+            Assert.That(result.ErrorMessage, Does.Contain("name the type it bound"));
         }
 
         /// <summary>

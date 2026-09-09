@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             VibeLogger.LogWarning(
                 HotReloadConstants.VibeLogWorkerHostTempCleanupFailed,
-                "Resident transform worker request files could not be deleted.",
+                "Transform worker request files could not be deleted.",
                 new { path = _directory, reason });
         }
     }

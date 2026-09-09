@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     /// <remarks>
     /// Why nothing else is checked here: the document's content is judged by
-    /// TransformWorkerClient.InterpretOutput, which needs the omissions intact and in one order.
+    /// TransformWorkerOutputInterpreter.InterpretOutput, which needs the omissions intact and in one order.
     /// Coalescing or counting rows here would either hide them or duplicate that order.
     /// </remarks>
     internal static class TransformWorkerOutputReader
