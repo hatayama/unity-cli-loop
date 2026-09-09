@@ -138,3 +138,64 @@ func TestIndexAssemblyDefinitionsCoversEveryProjectRoot(t *testing.T) {
 		t.Errorf("Foo directory = %s", foo.Directory)
 	}
 }
+
+// Verifies an AppleDouble ".asmdef" holding binary bytes is skipped instead of failing the index.
+func TestIndexAssemblyDefinitionsSkipsFilesUnityIgnores(t *testing.T) {
+	projectRoot := newAssemblyProject(t)
+	writeFileAt(t,
+		filepath.Join(projectRoot, "Assets", "Foo", "._Foo.asmdef"),
+		"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X")
+
+	index, err := IndexAssemblyDefinitions(projectRoot)
+	if err != nil {
+		t.Fatalf("expected the index to build, got error: %v", err)
+	}
+
+	if _, found := index["Foo"]; !found {
+		t.Error("the real assembly definition must still reach the index")
+	}
+}
+
+// Verifies an AppleDouble ".cs" is not compiled while the file it shadows still is.
+func TestRebuildSourcesSkipsSourceFilesUnityIgnores(t *testing.T) {
+	projectRoot := newAssemblyProject(t)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Foo", "._A.cs"), "\x00\x05\x16\x07")
+	asmdef := AssemblyDefinition{
+		Name:      "Foo",
+		Path:      filepath.Join(projectRoot, "Assets", "Foo", "Foo.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "Foo"),
+	}
+
+	sources, err := RebuildSources(projectRoot, ResponseFile{}, &asmdef)
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "Foo", "A.cs"),
+		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
+	})
+}
+
+// Verifies a directory whose only assembly definition is an AppleDouble is not an assembly boundary.
+func TestRebuildSourcesDoesNotTreatIgnoredAssemblyDefinitionsAsABoundary(t *testing.T) {
+	projectRoot := newAssemblyProject(t)
+	writeFileAt(t,
+		filepath.Join(projectRoot, "Assets", "Foo", "Sub", "._Other.asmdef"),
+		"\x00\x05\x16\x07")
+	asmdef := AssemblyDefinition{
+		Name:      "Foo",
+		Path:      filepath.Join(projectRoot, "Assets", "Foo", "Foo.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "Foo"),
+	}
+
+	sources, err := RebuildSources(projectRoot, ResponseFile{}, &asmdef)
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "Foo", "A.cs"),
+		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
+	})
+}

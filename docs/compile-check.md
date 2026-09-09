@@ -33,6 +33,10 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    project no longer has.
 5. **Compile in dependency order** and parse the compiler's diagnostics into JSON.
 
+Files and directories Unity ignores — any name starting with a dot or ending with a tilde, which
+covers the `._*` AppleDouble siblings macOS writes on non-native volumes — are skipped everywhere
+the project tree is walked, so their binary content never reaches the index or the compiler.
+
 Assembly definitions are indexed from `Assets`, `Packages` and `Library/PackageCache`, plus every
 directory a `Packages/manifest.json` dependency points at with a `file:` path — a package a project
 develops locally lives outside the project root and would otherwise look like one whose assembly
