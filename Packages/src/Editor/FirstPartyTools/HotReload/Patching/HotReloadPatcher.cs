@@ -230,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // rebuild here can leave the transpiler live: restore the ledger entry in that
                 // case only, so status and the next apply still see the patch that is there.
                 failureReason = "Reverting '" + methodKey + "' failed: " + exception.Message;
-                HotReloadOrchestratorLog.LogHotReloadRevertFailed(methodKey, exception);
+                HotReloadPatcherLog.LogHotReloadRevertFailed(methodKey, exception);
                 if (HasLiveHotReloadTranspiler(method))
                 {
                     generation.ReactivatePatch(removedEntry);

@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // worker so the two ends cannot drift apart.
         public static readonly string[] WorkerSharedSourcePackageRelativePaths =
         {
-            "Editor/FirstPartyTools/HotReload/TransformWorkerServeProtocol.cs"
+            "Editor/FirstPartyTools/HotReload/Shared/TransformWorkerServeProtocol.cs"
         };
 
         public const string WorkerDllFileName = "worker.dll";
