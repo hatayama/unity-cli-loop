@@ -39,12 +39,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (prepared.Kind == HotReloadGroupFilePreparationKind.ResolutionFailed)
                 {
-                    results.Add(HotReloadFileEntryApplier.BuildResolutionFailedResult(
+                    results.Add(HotReloadCompositionRoot.Services.FileEntryApplier.BuildResolutionFailedResult(
                         context, prepared.File, prepared.Resolution));
                     continue;
                 }
 
-                results.Add(HotReloadFileEntryApplier.BuildUnappliedResult(prepared.File));
+                results.Add(HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedResult(prepared.File));
             }
 
             return results;
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool commitsIntroducedTypes = CommitsIntroducedTypes(prepared, files[0].AssemblyName);
             if (commitsIntroducedTypes)
             {
-                HotReloadEntryApplier.RevertUnchangedPatchesPerFile(
+                HotReloadCompositionRoot.Services.EntryApplier.RevertUnchangedPatchesPerFile(
                     files,
                     HotReloadWorkerRowsByFile.Build(context.WorkerOutput, context.ProjectRelativePaths));
             }
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ClearEmptyFileGenerations(context);
                 }
 
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
@@ -144,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                HotReloadFileEntryApplier.ClearFileGeneration(context, file);
+                HotReloadCompositionRoot.Services.FileEntryApplier.ClearFileGeneration(context, file);
             }
         }
 

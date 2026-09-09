@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [SetUp]
         public void SetUp()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             ReleaseTheHold();
         }
 
@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             ReleaseTheHold();
         }
 

@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
             if (!HotReloadGroupProcessorDependencies.Current.ValidateNewSourceMembership(files))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             SnapshotGroupState(files);
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", preparation.ErrorMessage);
                 }
 
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             if (preparation.Prepared == null)
@@ -155,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!workerResult.Success)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", workerResult.ErrorMessage);
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
@@ -182,9 +182,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 && !await RevalidateBeforeRevertAsync(
                     files,
                     ct,
-                    () => HotReloadEntryApplier.RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
+                    () => HotReloadCompositionRoot.Services.EntryApplier.RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             HotReloadApplyContext context = new HotReloadApplyContext(
@@ -204,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             if (gateAndCompile.Outcome == HotReloadGroupGateAndCompileOutcome.Failed)
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             return await CompleteApplyAfterCoverageAsync(
@@ -290,14 +290,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 && gateResult.DidScan
                 && !AppendSignatureChangeCoverageNotices(context, gateResult, compile))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             ct.ThrowIfCancellationRequested();
             if (!TryAppendNewSourceMembershipFailure(context.Files))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
             ct.ThrowIfCancellationRequested();
@@ -305,7 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (staleReason != null)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(context.Files, "(file)", staleReason);
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
             // Why the whole group is resolved before any file is mutated: a file whose entries

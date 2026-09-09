@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [SetUp]
         public void SetUp()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -384,8 +384,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
 
                     return failTheMethod
-                        ? HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files)
-                        : HotReloadEntryApplier.ApplyPreparedEntries(context, compile, preparedFiles);
+                        ? HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files)
+                        : HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries(context, compile, preparedFiles);
                 });
         }
 
@@ -431,7 +431,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 file.ProjectRelativePath));
                     }
 
-                    return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                    return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files);
                 });
         }
 
@@ -462,7 +462,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 file.ProjectRelativePath));
                     }
 
-                    return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                    return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files);
                 });
         }
 
@@ -676,7 +676,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static async Task<HotReloadResponse> RunAgainstTheHostAsync()

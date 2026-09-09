@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
         /// <summary>
@@ -97,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Precondition: Replace of `return _secret + delta;` must patch ComputeWithPrivate " +
                 "plus at least one sibling so revert cannot clear the whole file lookup.");
 
-            HotReloadRevertOutcome reverted = HotReloadPatcher.Revert(computeMethod, out string _);
+            HotReloadRevertOutcome reverted = HotReloadCompositionRoot.Services.Patcher.Revert(computeMethod, out string _);
             Assert.That(reverted, Is.EqualTo(HotReloadRevertOutcome.Reverted));
 
             HotReloadShimFileLookup lookup =
@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task RevertAll_ClearsShimLookup()
         {
             await PatchComputeWithPrivateAsync();
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             HotReloadShimFileLookup lookup =
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);

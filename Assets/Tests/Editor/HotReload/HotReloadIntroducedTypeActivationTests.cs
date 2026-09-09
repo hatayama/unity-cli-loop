@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // normalizer in a test has to do the same.
             HotReloadPackageRootProvider.CaptureCurrent();
             _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TearDown()
         {
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -191,7 +191,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         },
                         HotReloadGroupProcessor.GateAndCompileAsync,
                         HotReloadGroupEntryPreparation.PrepareGroup,
-                        HotReloadEntryApplier.ApplyPreparedEntries)))
+                        HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
                 {
                     HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                         new[] { hostPath, callerPath },
@@ -253,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         },
                         HotReloadGroupProcessor.GateAndCompileAsync,
                         HotReloadGroupEntryPreparation.PrepareGroup,
-                        HotReloadEntryApplier.ApplyPreparedEntries)))
+                        HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
                 {
                     await HotReloadOrchestrator.RunAsync(
                         new[] { callerPath },
@@ -669,7 +669,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(0),
                     "A refused group must activate no type.");
                 Assert.That(
-                    HotReloadPatcher.ActivePatchCount,
+                    HotReloadCompositionRoot.Services.Patcher.ActivePatchCount,
                     Is.EqualTo(0),
                     "A refused group must apply no patch.");
             }
@@ -930,7 +930,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(0),
                 "A run stopped at the commit boundary must activate no type.");
             Assert.That(
-                HotReloadPatcher.ActivePatchCount,
+                HotReloadCompositionRoot.Services.Patcher.ActivePatchCount,
                 Is.EqualTo(0),
                 "A run stopped at the commit boundary must apply no patch.");
         }
@@ -1031,7 +1031,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static HotReloadGroupProcessorDependencies CreateArtifactCapturingDependencies(
@@ -1049,7 +1049,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         // The window between the preparation run and the transform run, which is where an owner
@@ -1067,7 +1067,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         // The window between the shim compile and the commit boundary, which is the last instant
@@ -1087,7 +1087,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return gateAndCompile;
                 },
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         // The reason of the preflight failure this test injects at the PrepareGroupEntries seam.
@@ -1126,7 +1126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "Precondition: the group had to resolve " + failingFileName + " to fail it.");
                     return replaced;
                 },
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static HotReloadPreparedGroupFile FailResolutionOfMatchingFile(
@@ -1174,7 +1174,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         // An artifact whose owner hash is keyed by a path the transform run reported no row for,
@@ -1200,7 +1200,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static Dictionary<string, string> RekeyOwnerHashesToUnreportedPaths(
@@ -1232,7 +1232,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static void BlankSourceHashOf(TransformWorkerOutputDto output, string fileName)
@@ -1374,7 +1374,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
             List<string> stages = new List<string>();
-            int patchesBefore = HotReloadPatcher.ActivePatchCount;
+            int patchesBefore = HotReloadCompositionRoot.Services.Patcher.ActivePatchCount;
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
@@ -1403,7 +1403,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(new[] { ValidateStage, PrepareStage }),
                 "A failed preparation must stop the run before the transform worker.");
             Assert.That(
-                HotReloadPatcher.ActivePatchCount,
+                HotReloadCompositionRoot.Services.Patcher.ActivePatchCount,
                 Is.EqualTo(patchesBefore),
                 "A failed preparation must leave the patch ledger unchanged.");
         }
@@ -1457,7 +1457,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 (context, compileResult, preparedFiles) =>
                 {
                     stages.Add(ApplyStage);
-                    return HotReloadEntryApplier.ApplyPreparedEntries(context, compileResult, preparedFiles);
+                    return HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries(context, compileResult, preparedFiles);
                 });
         }
 
@@ -1488,7 +1488,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         // Why the failure is injected: an artifact compile failure cannot be provoked from a
@@ -1523,7 +1523,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static HotReloadIntroducedTypeArtifact CreateArtifactForTarget(

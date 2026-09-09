@@ -555,7 +555,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         TransformWorkerClientResult.Failure("transform worker failed")),
                     HotReloadGroupProcessor.GateAndCompileAsync,
                     HotReloadGroupEntryPreparation.PrepareGroup,
-                    HotReloadEntryApplier.ApplyPreparedEntries)))
+                    HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
             {
                 results = await HotReloadGroupProcessor.ProcessGroupAsync(
                     new[] { file },

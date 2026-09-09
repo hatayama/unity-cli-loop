@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }
@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "E2E_c_BeforeRevert.cs");
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.True);
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = fixture.ComputeWithPrivate(5);

@@ -62,14 +62,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // The production run captures these at its entry point; a direct call to the path
             // normalizer in a test has to do the same.
             HotReloadPackageRootProvider.CaptureCurrent();
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }
@@ -304,7 +304,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertKind(applied, HotReloadMethodOutcomeKind.Patched, "Scaled");
             AssertKind(applied, HotReloadMethodOutcomeKind.Patched, "CalledFromCrossAssembly");
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
 
             HotReloadOrchestratorResult isolated = await HotReloadOrchestrator.RunAsync(
@@ -936,7 +936,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     // The patches belong to the replacement domain, and the TearDown revert runs
                     // after the scope has already put the outer domain back, which knows nothing
                     // about them and would leave them live in Harmony.
-                    HotReloadPatcher.RevertAll();
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
                 }
             }
         }

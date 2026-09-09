@@ -30,14 +30,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
         }
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_NoChangedFiles_WhenActivePatchExists_ReportsActiveCountAndRecovery()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Func<HotReloadChangedFileAggregationResult> previousDetector =
                 HotReloadTool.DetectChangedFilesForTesting;
             try
@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadTool.DetectChangedFilesForTesting = previousDetector;
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -148,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_NoChangedFiles_WhenNoActivePatches_KeepsOriginalMessageAndNextActions()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Func<HotReloadChangedFileAggregationResult> previousDetector =
                 HotReloadTool.DetectChangedFilesForTesting;
             try
@@ -183,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadTool.DetectChangedFilesForTesting = previousDetector;
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -224,7 +224,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_Status_NeverInvokedActiveRow_SetsNeverInvokedReason()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             try
             {
                 ApplyCoreFixtureTransplant(
@@ -255,7 +255,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -266,7 +266,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_Status_InvokedActiveRow_LeavesReasonEmpty()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             try
             {
                 ApplyCoreFixtureTransplant(
@@ -291,7 +291,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -304,7 +304,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
             const string methodKey = "Host.NewHelper(System.Int32)";
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             try
             {
                 ApplyCoreFixtureTransplant(
@@ -334,7 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -345,7 +345,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Revert_RemovesSupersededMappingForThatMethod()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             try
             {
                 ApplyCoreFixtureTransplant(
@@ -353,7 +353,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     BindingFlags.Instance | BindingFlags.Public,
                     nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
                 IReadOnlyList<HotReloadActivePatchInfo> patches =
-                    HotReloadPatcher.DescribeActivePatches();
+                    HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
                 Assert.That(patches.Count, Is.EqualTo(1));
                 string methodKey = patches[0].MethodKey;
                 new HotReloadDomainTestAccess().RecordSupersededSignature(
@@ -366,7 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     BindingFlags.Instance | BindingFlags.Public);
                 Assert.That(original, Is.Not.Null);
                 Assert.That(
-                    HotReloadPatcher.Revert(original, out string _),
+                    HotReloadCompositionRoot.Services.Patcher.Revert(original, out string _),
                     Is.EqualTo(HotReloadRevertOutcome.Reverted));
 
                 bool found = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
@@ -376,7 +376,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -388,7 +388,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task ExecuteAsync_Status_SupersededActiveRow_SetsSupersededReason()
         {
             const string replacementDisplayName = "Host.Replacement(System.String)";
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             try
             {
                 ApplyCoreFixtureTransplant(
@@ -396,7 +396,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     BindingFlags.Instance | BindingFlags.Public,
                     nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
                 IReadOnlyList<HotReloadActivePatchInfo> patches =
-                    HotReloadPatcher.DescribeActivePatches();
+                    HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
                 Assert.That(patches.Count, Is.EqualTo(1));
                 new HotReloadDomainTestAccess().RecordSupersededSignature(
                     SupersededFixturePath,
@@ -422,7 +422,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -435,7 +435,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedField.cs";
             const string methodKey = "Host.NewHelper(System.Int32)";
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
             try
             {
@@ -469,7 +469,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
                 new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
             }
         }
@@ -914,7 +914,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task ExecuteAsync_RevertAllWithNoActivePatches_ReportsClearedCountZero()
         {
             // Verifies --revert-all succeeds with a clear message when the ledger is empty.
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadTool tool = new HotReloadTool();
             JObject parameters = new JObject
             {
@@ -938,7 +938,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_RevertAll_ClearsAutoRefreshHeld()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             try
             {
                 ApplyCoreFixtureTransplant(
@@ -965,7 +965,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }
@@ -1059,7 +1059,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
             try
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
                 bool held = true;
                 bool isPlaying = true;
                 bool preflightCanProceed = true;
@@ -1089,7 +1089,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }

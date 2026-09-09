@@ -80,7 +80,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                // A lambda, not a method group: the static field below is built once per domain
+                // reload, and a captured instance would keep applying into the domain that was
+                // installed then, while the transpilers read whichever domain is installed now.
+                (context, compileResult, preparedFiles) =>
+                    HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries(
+                        context, compileResult, preparedFiles));
         }
 
         internal static HotReloadGroupProcessorDependencies Create(

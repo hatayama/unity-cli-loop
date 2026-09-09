@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         sourceEndLine: 0));
             }
 
-            return HotReloadPatcher.Apply(method, shimMethod, patchShape, projectRelativePath);
+            return HotReloadCompositionRoot.Services.Patcher.Apply(method, shimMethod, patchShape, projectRelativePath);
         }
 
         internal HotReloadFileGeneration GetOrBeginShimGeneration(string projectRelativePath)

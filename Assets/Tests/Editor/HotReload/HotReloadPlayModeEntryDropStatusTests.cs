@@ -24,13 +24,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             _ledgerSessionScope.Restore();
         }
 

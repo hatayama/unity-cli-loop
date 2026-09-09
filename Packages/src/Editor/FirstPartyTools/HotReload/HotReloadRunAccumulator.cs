@@ -139,7 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 methods: _outcomes,
                 warnings: _warnings,
                 patchedTotal: _patchedTotal,
-                activePatchTotal: HotReloadPatcher.ActiveChangeCount,
+                activePatchTotal: HotReloadCompositionRoot.Services.Patcher.ActiveChangeCount,
                 suppressedPausePointIds: _suppressedPausePointIds,
                 unchangedTotal: _unchangedTotal,
                 retargetedPausePointIds: _retargetedPausePointIds,
