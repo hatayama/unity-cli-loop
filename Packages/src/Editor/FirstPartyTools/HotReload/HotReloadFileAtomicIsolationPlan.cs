@@ -85,7 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (allFilesFailed)
             {
                 HotReloadShimIsolation.IsolationExclusions exclusions =
-                    HotReloadShimIsolation.BuildIsolationExclusions(attribution.FailedEntries, entries);
+                    new HotReloadIsolationOutcomeBuilder().BuildIsolationExclusions(
+                        attribution.FailedEntries,
+                        entries);
                 return new HotReloadFileAtomicIsolationPlan(
                     failedFiles,
                     true,

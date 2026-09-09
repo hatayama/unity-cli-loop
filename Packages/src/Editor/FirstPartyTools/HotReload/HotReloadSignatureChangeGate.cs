@@ -59,7 +59,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     deletedCallerExemptions);
             }
 
-            HotReloadShimIsolation.IsolationExclusions exclusions = HotReloadShimIsolation.BuildIsolationExclusions(gatedReplacements, entries);
+            HotReloadIsolationOutcomeBuilder outcomeBuilder = new HotReloadIsolationOutcomeBuilder();
+            HotReloadShimIsolation.IsolationExclusions exclusions = outcomeBuilder.BuildIsolationExclusions(gatedReplacements, entries);
             Dictionary<string, HashSet<HotReloadQualifiedMethodIdentity>> editedFileMethodIdentitiesByFile =
                 HotReloadSignatureChangeCoverage.CollectEditedFileMethodIdentitiesByFile(
                     context.AssemblyName,
@@ -71,23 +72,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editedFileMethodIdentitiesByFile,
                 context.GroupFilePaths);
             skippedOutcomes.AddRange(
-                HotReloadShimIsolation.BuildSkippedCallerOutcomes(
+                outcomeBuilder.BuildSkippedCallerOutcomes(
                     exclusions.CallerEntries,
                     context.GroupFilePaths,
                     HotReloadConstants.SignatureChangedGatedCallerSkipReason));
 
-            HotReloadShimIsolation.IsolationRetryRunResult retry = await HotReloadShimIsolation.RunIsolationRetryAsync(
+            HotReloadIsolationRetryContext retryContext = new HotReloadIsolationRetryContext(
                 context.WorkerInput,
-                exclusions,
-                new List<HotReloadMethodOutcome>(),
-                new List<HotReloadMethodOutcome>(),
                 context.CompilationAssembly,
                 context.TargetDllPath,
                 context.Defines,
                 context.WorkerOutput.skipped,
                 context.GroupFilePaths,
-                HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
-                context.CorrelationId,
+                context.CorrelationId);
+            HotReloadShimIsolation.IsolationRetryRunResult retry = await HotReloadShimIsolation.RunIsolationRetryAsync(
+                retryContext,
+                exclusions,
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadMethodOutcome>(),
+                new HotReloadSignatureChangeGateIsolationTrigger(),
                 ct).ConfigureAwait(false);
             List<string> gatedReplacementMethodKeys =
                 CollectGatedReplacementMethodKeys(gatedReplacements);
