@@ -81,6 +81,10 @@ The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, 
 - **Changed scripting defines are not detected**; the defines recorded in the last build are reused.
 - **The predefined assemblies** (`Assembly-CSharp` and friends) keep the source list of the last
   build, so a brand-new `.cs` file outside any `.asmdef` is not compiled until Unity imports it.
+- **A new `.cs` file inside an `.asmref` folder is not compiled either.** The sources an `.asmref`
+  attaches come only from the last build's response file, because the glob stops at the folder's
+  assembly boundary, so a file added there waits for Unity to import it just as the predefined
+  assemblies do.
 - **Linux is not supported.** macOS and Windows only.
 
 ## Troubleshooting
