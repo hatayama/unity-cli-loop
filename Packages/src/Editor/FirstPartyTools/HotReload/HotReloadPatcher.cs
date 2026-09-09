@@ -310,7 +310,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadFileGeneration generation = TranspilerDomain.FindGenerationForMethod(original);
             MethodInfo shimMethod = generation?.FindPatchShim(original);
-            Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
             if (shimMethod == null)
             {
                 throw new InvalidOperationException("Shim must be registered before Patch runs.");
@@ -343,17 +342,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadFileGeneration generation = TranspilerDomain.FindGenerationForMethod(original);
             MethodInfo shimMethod = generation?.FindPatchShim(original);
-            Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
             if (shimMethod == null)
             {
                 throw new InvalidOperationException("Shim must be registered before Patch runs.");
             }
 
-
             int argumentSlotCount = original.GetParameters().Length + (original.IsStatic ? 0 : 1);
-            Debug.Assert(
-                argumentSlotCount == shimMethod.GetParameters().Length,
-                "Shim parameter count must equal the original's argument slots (instance receiver included).");
             if (argumentSlotCount != shimMethod.GetParameters().Length)
             {
                 throw new InvalidOperationException(
