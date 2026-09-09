@@ -5052,11 +5052,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
+            List<HotReloadMethodOutcome> outcomes = new HotReloadIsolationOutcomeBuilder().CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
                 HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
-                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
+                new HotReloadShimCompileFailureIsolationTrigger(),
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(2));
@@ -5091,11 +5091,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
+            List<HotReloadMethodOutcome> outcomes = new HotReloadIsolationOutcomeBuilder().CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
                 HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
-                HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
+                new HotReloadSignatureChangeGateIsolationTrigger(),
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(2));
@@ -5122,11 +5122,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
+            List<HotReloadMethodOutcome> outcomes = new HotReloadIsolationOutcomeBuilder().CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
                 HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
-                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
+                new HotReloadShimCompileFailureIsolationTrigger(),
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(1));
