@@ -202,6 +202,8 @@ func TestEvaluateAsmdefPolicyReportsForbiddenReferences(t *testing.T) {
 		rule string
 	}{
 		{name: "tool to tool", from: toolName("A"), to: toolName("B"), rule: asmdefRuleToolIsolation},
+		{name: "sub-assembly to another tool", from: toolName("HotReload.Patching"), to: toolName("RunTests"), rule: asmdefRuleToolIsolation},
+		{name: "sub-assembly to another tool's sub-assembly", from: toolName("HotReload.Patching"), to: toolName("RunTests.TestFramework"), rule: asmdefRuleToolIsolation},
 		{name: "tool to infrastructure", from: toolName("A"), to: asmdefLayerInfrastructure, rule: asmdefRuleLayerDirection},
 		{name: "tool to composition root", from: toolName("A"), to: asmdefLayerCompositionRoot, rule: asmdefRuleLayerDirection},
 		{name: "common to application", from: commonName("X"), to: asmdefLayerApplication, rule: asmdefRuleCommonLayering},
@@ -265,6 +267,8 @@ func TestEvaluateAsmdefPolicyAcceptsAllowedReferences(t *testing.T) {
 		{name: "tool to its own runtime assembly", from: toolName("A"), to: asmdefToolPrefix + "A.Runtime"},
 		{name: "tool to internal bridge", from: toolName("A"), to: asmdefInternalBridgeName},
 		{name: "sub-assembly to parent tool", from: toolName("RunTests.TestFramework"), to: toolName("RunTests")},
+		{name: "parent tool to sub-assembly", from: toolName("RunTests"), to: toolName("RunTests.TestFramework")},
+		{name: "sub-assembly to sibling sub-assembly", from: toolName("HotReload.Patching"), to: toolName("HotReload.Shared")},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

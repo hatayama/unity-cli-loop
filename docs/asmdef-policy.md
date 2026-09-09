@@ -25,7 +25,7 @@ table below does not allow.
 | Runtime | `*.Runtime` |
 | ToolsUmbrella | `UnityCLILoop.FirstPartyTools.Editor` |
 | ToolCommon | `UnityCLILoop.FirstPartyTools.Common.<Name>.Editor` |
-| Tool | `UnityCLILoop.FirstPartyTools.<Tool>.Editor` (sub-assemblies such as `RunTests.TestFramework` belong to their parent tool) |
+| Tool | `UnityCLILoop.FirstPartyTools.<Tool>.Editor` (sub-assemblies such as `RunTests.TestFramework` and `HotReload.Patching` belong to the tool their first name segment names) |
 
 An assembly whose name matches none of these is an error, not a finding: extend
 the naming convention (and this table) before adding it.
@@ -44,13 +44,15 @@ the naming convention (and this table) before adding it.
 | Runtime | other Runtime assemblies | `runtime-isolation` |
 | ToolsUmbrella | Tool, ToolCommon, ToolContracts, Domain | `umbrella-scope` |
 | ToolCommon | ToolContracts, Domain, ToolCommon, Runtime, InternalBridge | `common-layering` |
-| Tool | ToolContracts, Domain, Application, ToolCommon, Runtime, InternalBridge, its own parent tool | `tool-isolation` for another Tool, `layer-direction` otherwise |
+| Tool | ToolContracts, Domain, Application, ToolCommon, Runtime, InternalBridge, every sub-assembly of the same tool | `tool-isolation` for another Tool, `layer-direction` otherwise |
 
 The two rules that motivated the checker:
 
 - **tool-isolation** — a tool must not reference another tool. Tools are meant
   to be independently removable; a tool-to-tool reference turns a helper into a
-  hidden shared dependency.
+  hidden shared dependency. Sub-assemblies of one tool may reference each other
+  in any direction: a tool split into parts is still one removable unit, and the
+  direction between its parts is a question for that tool's own design.
 - **common-layering** — `FirstPartyTools.Common.*` sits below the tools *and*
   below `Application`. A Common assembly that reaches into `Application` can no
   longer be reused by anything that must stay lightweight.
