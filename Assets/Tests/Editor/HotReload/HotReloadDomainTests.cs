@@ -28,17 +28,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private HotReloadDomainTestAccess _access;
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
+            _scope = new HotReloadDomainTestScope();
             _access = new HotReloadDomainTestAccess();
-            _access.ResetDomain();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
         }
 
         /// <summary>

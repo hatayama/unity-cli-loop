@@ -16,10 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadIntroducedTypeResponseTests
     {
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -29,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 

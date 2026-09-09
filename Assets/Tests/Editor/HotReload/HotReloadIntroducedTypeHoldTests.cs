@@ -20,10 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadIntroducedTypeHoldTests
     {
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             ReleaseTheHold();
         }
 
@@ -32,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
             ReleaseTheHold();
         }
 

@@ -37,16 +37,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string RestoreSnapshotSentinel = "SENTINEL_RESTORE_LINE_TEXT";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
+            _scope = new HotReloadDomainTestScope();
             UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }

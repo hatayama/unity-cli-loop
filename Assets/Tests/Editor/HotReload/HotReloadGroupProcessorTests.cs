@@ -31,12 +31,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "BrokenNoticeSource.cs(3,1): error CS1022: Type or namespace definition, or end-of-file expected";
 
 
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
         [TearDown]
         public void TearDown()
         {
-            // Added members and fields live for the whole domain, so a committed name would
-            // outlive this class.
-            new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
+            _scope.Dispose();
         }
 
         /// <summary>

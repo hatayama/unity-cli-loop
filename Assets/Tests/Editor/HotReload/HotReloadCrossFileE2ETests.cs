@@ -56,20 +56,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string IntroducedTypeDeclaration =
             "\n\nnamespace Example\n{\n    public class CrossFileIntroduced\n    {\n    }\n}\n";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            // The production run captures these at its entry point; a direct call to the path
-            // normalizer in a test has to do the same.
-            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }

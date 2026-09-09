@@ -18,20 +18,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string RemovedMethodLabel = "Sample.Host.Scaled(System.Int32)";
         private const string DecoyMethodLabel = "Sample.Host.Other(System.Int32)";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadDomainTestAccess access = new HotReloadDomainTestAccess();
-            access.ResetDomain();
+            _scope = new HotReloadDomainTestScope();
 
             // The recorder writes into the file's generation, so the generation must exist first.
-            access.GetOrBeginAddedMemberGeneration(FixtureProjectRelativePath);
+            new HotReloadDomainTestAccess().GetOrBeginAddedMemberGeneration(FixtureProjectRelativePath);
         }
 
         [TearDown]
         public void TearDown()
         {
-            new HotReloadDomainTestAccess().ResetDomain();
+            _scope.Dispose();
         }
 
         /// <summary>
