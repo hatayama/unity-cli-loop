@@ -13,20 +13,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadSupersededSignatureRecorderTests
     {
+        private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/SupersededFixture.cs";
         private const string TypeMetadataName = "Sample.Host";
         private const string RemovedMethodLabel = "Sample.Host.Scaled(System.Int32)";
         private const string DecoyMethodLabel = "Sample.Host.Other(System.Int32)";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadSupersededSignatureRegistry.ClearAll();
+            _scope = new HotReloadDomainTestScope();
+
+            // The recorder writes into the file's generation, so the generation must exist first.
+            new HotReloadDomainTestAccess().GetOrBeginAddedMemberGeneration(FixtureProjectRelativePath);
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadSupersededSignatureRegistry.ClearAll();
+            _scope.Dispose();
         }
 
         /// <summary>
@@ -38,11 +44,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void RecordFromAppliedEntries_WhenReplacementWasApplied_RecordsTheSupersededSignature()
         {
             HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                HotReloadCompositionRoot.Services.Domain,
+                FixtureProjectRelativePath,
                 new[] { CreateDecoyReplacementEntry(), CreateReplacementEntry() },
                 new[] { CreateRemovedSignature() },
                 Array.Empty<string>());
 
-            bool found = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+            bool found = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 RemovedMethodLabel,
                 out string replacementDisplayName);
 
@@ -59,11 +67,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void RecordFromAppliedEntries_WhenReplacementWasNotApplied_RecordsNothing()
         {
             HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                HotReloadCompositionRoot.Services.Domain,
+                FixtureProjectRelativePath,
                 new List<TransformWorkerEntryDto>(),
                 new[] { CreateRemovedSignature() },
                 Array.Empty<string>());
 
-            bool found = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+            bool found = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 RemovedMethodLabel,
                 out string _);
 
@@ -80,11 +90,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerEntryDto entry = CreateReplacementEntry();
 
             HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                HotReloadCompositionRoot.Services.Domain,
+                FixtureProjectRelativePath,
                 new[] { entry },
                 new[] { CreateRemovedSignature() },
                 new[] { HotReloadMethodKeys.BuildMethodKey(entry) });
 
-            bool found = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+            bool found = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 RemovedMethodLabel,
                 out string _);
 

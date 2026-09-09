@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -19,17 +21,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// The reason this group must not be committed, or null when every recheck passed.
         /// </summary>
-        internal static string DescribeStaleReason(HotReloadApplyContext context)
+        internal static string DescribeStaleReason(
+            HotReloadGroupStageCollaborators collaborators,
+            HotReloadApplyContext context)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             // The Editor may have started compiling or importing while the run awaited its worker.
-            string notReadyReason = HotReloadEditorStateSnapshotProvider.GetNotReadyReason(
-                HotReloadEditorStateSnapshotProvider.CaptureCurrent());
+            string notReadyReason =
+                collaborators.EditorStateSnapshotCapture.CaptureCurrent()
+                    .GetNotReadyReason();
             if (notReadyReason != null)
             {
                 return "The Editor became busy before the reload could be applied: " + notReadyReason;
             }
 
-            string targetAssemblyDrift = DescribeTargetAssemblyDrift(context);
+            string targetAssemblyDrift = DescribeTargetAssemblyDrift(collaborators, context);
             if (targetAssemblyDrift != null)
             {
                 return targetAssemblyDrift;
@@ -54,9 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// assembly carries the module version id of the generation it was compiled for and
         /// stays active for the rest of the domain's life.
         /// </remarks>
-        private static string DescribeTargetAssemblyDrift(HotReloadApplyContext context)
+        private static string DescribeTargetAssemblyDrift(
+            HotReloadGroupStageCollaborators collaborators,
+            HotReloadApplyContext context)
         {
-            if (!HotReloadGroupCommitStage.CommitsIntroducedTypes(
+            if (!collaborators.CommitPolicy.CommitsIntroducedTypes(
                     context.PreparedIntroducedTypes,
                     context.AssemblyName))
             {
@@ -197,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             try
             {
-                return HotReloadAppliedSourceLedger.ComputeContentHash(File.ReadAllBytes(sourcePath));
+                return new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(sourcePath));
             }
             catch (IOException)
             {

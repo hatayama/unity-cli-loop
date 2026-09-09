@@ -16,10 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadIntroducedTypeResponseTests
     {
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadPatcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -29,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -40,9 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesAType_ReportsTheTypeAsAnIntroducedRow()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingOnlyATypeAsync();
 
                 Assert.That(
@@ -72,9 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesAType_LeavesTheMethodAndFieldTotalsUntouched()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingOnlyATypeAsync();
 
                 Assert.That(
@@ -98,9 +98,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesATypeBesideUnchangedMethods_ReportsTheTypeInTheMessage()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingOnlyATypeAsync();
 
                 Assert.That(
@@ -124,9 +123,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunOnlyBindsTypesTheDomainHolds_SaysItBoundThemInsteadOfIntroducing()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 await RunIntroducingOnlyATypeAsync();
                 HotReloadResponse second = await RunIntroducingOnlyATypeAsync();
 
@@ -151,11 +149,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_MethodFailsAfterTheTypesBecameActive_RecommendsAPartialApply()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
-                    CreateFailingApplyDependencies()))
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
+                    CreateFailingApplyDependencies(collaborators)))
                 {
                     HotReloadResponse response = await RunIntroducingATypeAndEditingABodyAsync();
 
@@ -184,11 +181,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_MethodFailsWhileOnlyRetainedTypesWereBound_RecommendsNoPartialApply()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
-                    CreateAlreadyActiveWithFailingApplyDependencies()))
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
+                    CreateAlreadyActiveWithFailingApplyDependencies(collaborators)))
                 {
                     HotReloadResponse response = await RunEditingOnlyABodyAsync();
 
@@ -216,11 +212,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_OnlyATypeFailed_SaysTheDeclarationsWereRefused()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                     CreatePreparationDependencies(
+                        collaborators,
                         HotReloadIntroducedTypePreparationResult.TypeFailures(
                             new[] { CreateInjectedTypeFailure() }))))
                 {
@@ -241,11 +237,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_ATypeAndAMethodFailed_PointsAtBothSections()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
-                    CreateTypeFailingApplyDependencies(failTheMethod: true)))
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
+                    CreateTypeFailingApplyDependencies(collaborators, failTheMethod: true)))
                 {
                     HotReloadResponse response = await RunEditingOnlyABodyAsync();
 
@@ -264,11 +259,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_ATypeFailedBesideAPatchedMethod_StillReportsTheRefusal()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
-                    CreateTypeFailingApplyDependencies(failTheMethod: false)))
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
+                    CreateTypeFailingApplyDependencies(collaborators, failTheMethod: false)))
                 {
                     HotReloadResponse response = await RunEditingOnlyABodyAsync();
 
@@ -295,9 +289,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunPatchesAMethodAndIntroducesAType_ReportsBothInTheMessage()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingATypeAndEditingABodyAsync();
 
                 Assert.That(response.Success, Is.True, response.Message);
@@ -319,17 +312,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesNoType_OmitsBothTypeFieldsFromTheWire()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 string callerPath = FixturePath(CallerFileName);
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { callerPath },
                     HotReloadTestSourceWriter.WriteEditedSource(
                         "IntroducedTypeAbsentCaller.cs",
                         EditTheCallerBody(File.ReadAllText(callerPath))),
                     CancellationToken.None);
-                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(result, null);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
 
                 Assert.That(
                     response.ShouldSerializeIntroducedTypes(),
@@ -347,13 +339,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadResponse> RunIntroducingATypeAndEditingABodyAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeAndBodyHost.cs",
                     EditTheScaledBody(InsertIntroducedType(File.ReadAllText(hostPath)))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
         }
 
         private static HotReloadIntroducedTypeOutcome CreateInjectedTypeFailure()
@@ -369,14 +361,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // own buffer, which is the carrier the response is built from, so the refusal reaches the
         // response beside whatever the methods did.
         private static HotReloadGroupProcessorDependencies CreateTypeFailingApplyDependencies(
+            HotReloadGroupStageCollaborators collaborators,
             bool failTheMethod)
         {
             return HotReloadGroupProcessorDependencies.Create(
-                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
-                HotReloadIntroducedTypePreparation.PrepareAsync,
-                TransformWorkerClient.RunAsync,
-                HotReloadGroupProcessor.GateAndCompileAsync,
-                HotReloadGroupEntryPreparation.PrepareGroup,
+                files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
+                (files, input, ct) =>
+                    HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct),
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
+                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
+                    collaborators, context, compileResult, entriesToPatch),
                 (context, compile, preparedFiles) =>
                 {
                     foreach (HotReloadGroupFile file in context.Files)
@@ -395,8 +390,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
 
                     return failTheMethod
-                        ? HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files)
-                        : HotReloadEntryApplier.ApplyPreparedEntries(context, compile, preparedFiles);
+                        ? HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files)
+                        : HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries(context, compile, preparedFiles);
                 });
         }
 
@@ -404,21 +399,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadResponse> RunEditingOnlyABodyAsync()
         {
             string callerPath = FixturePath(CallerFileName);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { callerPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "RetainedTypeOnlyCaller.cs",
                     EditTheCallerBody(File.ReadAllText(callerPath))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
         }
 
         // The production pipeline with the preparation reporting one retained declaration and the
         // apply stage failing, so the run carries a type row it did not activate itself.
-        private static HotReloadGroupProcessorDependencies CreateAlreadyActiveWithFailingApplyDependencies()
+        private static HotReloadGroupProcessorDependencies CreateAlreadyActiveWithFailingApplyDependencies(
+            HotReloadGroupStageCollaborators collaborators)
         {
             return HotReloadGroupProcessorDependencies.Create(
-                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
                 (files, input, ct) => Task.FromResult(
                     HotReloadIntroducedTypePreparationResult.NoIntroducedTypes(
                         new[]
@@ -428,9 +424,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 "SomeAssembly",
                                 files[0].ProjectRelativePath)
                         })),
-                TransformWorkerClient.RunAsync,
-                HotReloadGroupProcessor.GateAndCompileAsync,
-                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
+                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
+                    collaborators, context, compileResult, entriesToPatch),
                 (context, compile, preparedFiles) =>
                 {
                     foreach (HotReloadGroupFile file in context.Files)
@@ -442,7 +439,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 file.ProjectRelativePath));
                     }
 
-                    return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                    return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files);
                 });
         }
 
@@ -454,14 +451,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // The production pipeline with only the apply stage replaced, so the commit boundary runs
         // for real and the failure lands after the types became active.
-        private static HotReloadGroupProcessorDependencies CreateFailingApplyDependencies()
+        private static HotReloadGroupProcessorDependencies CreateFailingApplyDependencies(
+            HotReloadGroupStageCollaborators collaborators)
         {
             return HotReloadGroupProcessorDependencies.Create(
-                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
-                HotReloadIntroducedTypePreparation.PrepareAsync,
-                TransformWorkerClient.RunAsync,
-                HotReloadGroupProcessor.GateAndCompileAsync,
-                HotReloadGroupEntryPreparation.PrepareGroup,
+                files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
+                (files, input, ct) =>
+                    HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct),
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
+                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
+                    collaborators, context, compileResult, entriesToPatch),
                 (context, compile, preparedFiles) =>
                 {
                     foreach (HotReloadGroupFile file in context.Files)
@@ -473,7 +473,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 file.ProjectRelativePath));
                     }
 
-                    return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                    return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(context.Files);
                 });
         }
 
@@ -500,17 +500,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_DeclarationCannotBeIntroduced_WarnsWithoutFailingTheRun()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 string hostPath = FixturePath(HostFileName);
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { hostPath },
                     HotReloadTestSourceWriter.WriteEditedSource(
                         "IntroducedTypeNoticeHost.cs",
                         InsertUnintroducibleDeclaration(File.ReadAllText(hostPath))),
                     CancellationToken.None);
-                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(result, null);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
 
                 Assert.That(
                     response.Success,
@@ -563,11 +562,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_TypePreparationReportsATypeFailure_FailsTheRunWithATypeRow()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                     CreatePreparationDependencies(
+                        collaborators,
                         HotReloadIntroducedTypePreparationResult.TypeFailures(
                             new[]
                             {
@@ -607,11 +606,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_TypeFailureBesideOtherFindings_KeepsTheReusesAndNotices()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                     CreatePreparationDependencies(
+                        collaborators,
                         HotReloadIntroducedTypePreparationResult.TypeFailures(
                             new[]
                             {
@@ -658,11 +657,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_PreparationWorkerFails_ReportsTheFailureWithoutAnyTypeRow()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                     CreatePreparationDependencies(
+                        collaborators,
                         HotReloadIntroducedTypePreparationResult.WorkerFailure(InjectedWorkerFailureReason))))
                 {
                     HotReloadResponse response = await RunAgainstTheHostAsync();
@@ -683,27 +682,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // The production pipeline with only the preparation stage replaced, which is the one stage
         // whose two failure kinds cannot both be provoked from a fixture the repository compiles.
         private static HotReloadGroupProcessorDependencies CreatePreparationDependencies(
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadIntroducedTypePreparationResult preparationResult)
         {
             return HotReloadGroupProcessorDependencies.Create(
-                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
                 (files, input, ct) => Task.FromResult(preparationResult),
-                TransformWorkerClient.RunAsync,
-                HotReloadGroupProcessor.GateAndCompileAsync,
-                HotReloadGroupEntryPreparation.PrepareGroup,
-                HotReloadEntryApplier.ApplyPreparedEntries);
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
+                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
+                    collaborators, context, compileResult, entriesToPatch),
+                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static async Task<HotReloadResponse> RunAgainstTheHostAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeFailureHost.cs",
                     InsertIntroducedType(File.ReadAllText(hostPath))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
         }
 
         private static int CountTypeRows(HotReloadResponse response, string kind)
@@ -749,7 +750,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadResponse> RunIntroducingOnlyATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeResponseHost.cs",
@@ -760,7 +761,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindFailureReason(result),
                 Is.Null,
                 "Precondition: a reload that only introduces a type must not fail a method.");
-            return HotReloadApplyResponseBuilder.Build(result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
         }
 
         private static string FindFailureReason(HotReloadOrchestratorResult result)

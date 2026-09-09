@@ -20,17 +20,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
-            HotReloadPatcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
             _ledgerSessionScope.Restore();
         }
 
@@ -117,13 +119,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             try
             {
-                using (HotReloadIntroducedTypeHolder.BeginReplacement())
+                using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
                 {
-                    HotReloadIntroducedTypeHolder.Initialize();
                     ActivateArtifactWithOneType();
 
                     Assert.That(
-                        HotReloadActiveChangeCounts.IntroducedTypeCount,
+                        HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                         Is.EqualTo(1),
                         "Arrange: the domain must hold exactly one introduced type.");
 
@@ -167,8 +168,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "artifact.dll",
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         private static async Task<HotReloadResponse> ExecuteStatusAsync(CancellationToken ct)
@@ -194,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(original, Is.Not.Null);
             Assert.That(shim, Is.Not.Null);
 
-            HotReloadPatchResult applyResult = HotReloadPatcher.Apply(
+            HotReloadPatchResult applyResult = new HotReloadDomainTestAccess().ApplyPatch(
                 original,
                 shim,
                 HotReloadPatchShape.Transplant,

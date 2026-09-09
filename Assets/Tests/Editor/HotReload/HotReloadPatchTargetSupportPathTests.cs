@@ -33,14 +33,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             // The production run captures these at its entry point; a direct call to the path
             // normalizer in a test has to do the same.
-            HotReloadPackageRootProvider.CaptureCurrent();
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
         }
 
         [Test]
         public void ToProjectRelativeScriptPath_WhenEmbeddedPackagePhysicalPath_ReturnsLogicalPackagePath()
         {
             // Verifies the physical folder of an embedded package is mapped back to its virtual package path.
-            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(EmbeddedPhysicalPath);
+            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                EmbeddedPhysicalPath);
 
             Assert.That(relative, Is.EqualTo(EmbeddedLogicalPath));
         }
@@ -49,7 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ToProjectRelativeScriptPath_WhenEmbeddedPackageLogicalPath_ReturnsItUnchanged()
         {
             // Verifies a logical package path survives normalization instead of collapsing to the physical folder.
-            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(EmbeddedLogicalPath);
+            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                EmbeddedLogicalPath);
 
             Assert.That(relative, Is.EqualTo(EmbeddedLogicalPath));
         }
@@ -58,7 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ToProjectRelativeScriptPath_WhenGitPackageLogicalPath_ReturnsItUnchanged()
         {
             // Verifies a git package path is not rewritten into its Library/PackageCache location.
-            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(GitPackageLogicalPath);
+            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                GitPackageLogicalPath);
 
             Assert.That(relative, Is.EqualTo(GitPackageLogicalPath));
         }
@@ -67,7 +73,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ToProjectRelativeScriptPath_WhenAssetsRelativePath_ReturnsItUnchanged()
         {
             // Verifies an already project-relative Assets path is left alone.
-            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(AssetsScriptPath);
+            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                AssetsScriptPath);
 
             Assert.That(relative, Is.EqualTo(AssetsScriptPath));
         }
@@ -78,7 +86,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // Verifies an absolute path under Assets becomes project-relative.
             string absolutePath = Path.Combine(Application.dataPath, "Tests/Editor/HotReload/HotReloadToolTests.cs");
 
-            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(absolutePath);
+            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                absolutePath);
 
             Assert.That(relative, Is.EqualTo(AssetsScriptPath));
         }
@@ -87,7 +97,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ToProjectRelativeScriptPath_WhenEmbeddedPackagePhysicalPath_ResolvesTheOwningAssembly()
         {
             // Verifies the normalized path resolves to the package's own assembly instead of Assembly-CSharp-Editor.
-            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(EmbeddedPhysicalPath);
+            string relative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                EmbeddedPhysicalPath);
 
             Assert.That(CompilationPipeline.GetAssemblyNameFromScriptPath(relative), Is.EqualTo(EmbeddedAssemblyName));
         }

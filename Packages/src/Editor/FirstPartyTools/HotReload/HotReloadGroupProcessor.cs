@@ -20,9 +20,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// shim assembly, so a body in one file can call a method or field another file of the same
     /// edit added. The reported and applied unit stays the single file.
     /// </remarks>
-    internal static class HotReloadGroupProcessor
+    internal sealed class HotReloadGroupProcessor
     {
-        internal static async Task<IReadOnlyList<HotReloadFileProcessResult>> ProcessGroupAsync(
+        private readonly HotReloadGroupProcessorDependencies _dependencies;
+        private readonly HotReloadGroupStageCollaborators _collaborators;
+        private readonly HotReloadDomain _domain;
+        private readonly HotReloadFileEntryApplier _fileEntryApplier;
+        private readonly HotReloadEntryApplier _entryApplier;
+        private readonly HotReloadGroupCommitStage _commitStage;
+
+        internal HotReloadGroupProcessor(
+            HotReloadGroupProcessorDependencies dependencies,
+            HotReloadGroupStageCollaborators collaborators,
+            HotReloadGroupCommitStage commitStage)
+        {
+            Debug.Assert(dependencies != null, "dependencies must not be null.");
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
+            Debug.Assert(commitStage != null, "commitStage must not be null.");
+            _dependencies = dependencies;
+            _collaborators = collaborators;
+            _domain = collaborators.Domain;
+            _fileEntryApplier = collaborators.FileEntryApplier;
+            _entryApplier = collaborators.EntryApplier;
+            _commitStage = commitStage;
+        }
+
+        internal async Task<IReadOnlyList<HotReloadFileProcessResult>> ProcessGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             string correlationId,
             CancellationToken ct)
@@ -32,9 +55,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFile firstFile = files[0];
             // Application.dataPath and the ledgers require the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            if (!HotReloadGroupProcessorDependencies.Current.ValidateNewSourceMembership(files))
+            if (!_dependencies.ValidateNewSourceMembership(files))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             SnapshotGroupState(files);
@@ -52,11 +75,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan);
             workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
-                HotReloadIntroducedTypeHolder.Registry,
+                _domain.IntroducedTypes,
                 workerInput.targetAssemblyName,
                 workerInput.targetAssemblyMvid).ToArray();
-            HotReloadIntroducedTypePreparationResult preparation = await HotReloadGroupProcessorDependencies
-                .Current
+            HotReloadIntroducedTypePreparationResult preparation = await _dependencies
                 .PrepareIntroducedTypes(files, workerInput, ct)
                 .ConfigureAwait(false);
             // Why before the failure branch and only here: one preparation covers every
@@ -82,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", preparation.ErrorMessage);
                 }
 
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             if (preparation.Prepared == null)
@@ -103,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Runs the group against the artifact this run prepared, so the transform and the shim
         /// compilation bind the introduced types from the loaded assembly.
         /// </summary>
-        private static async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyPreparedGroupAsync(
+        private async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyPreparedGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
             HotReloadPreparedIntroducedTypes prepared,
@@ -111,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             HotReloadIntroducedTypeArtifact artifact = prepared.Artifact;
-            HotReloadIntroducedTypeRegistry registry = HotReloadIntroducedTypeHolder.Registry;
+            HotReloadIntroducedTypeRegistry registry = _domain.IntroducedTypes;
             List<TransformWorkerIntroducedTypeArtifactDto> records =
                 new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
             records.Add(HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact));
@@ -119,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // The scope answers binds for the prepared assembly while nothing has activated it, so
             // the shim compilation and the reflection it drives can already reach the new types.
-            using (IDisposable preparedScope = HotReloadIntroducedTypeHolder.Resolver.RegisterPrepared(artifact))
+            using (IDisposable preparedScope = _domain.IntroducedTypeResolver.RegisterPrepared(artifact))
             {
                 try
                 {
@@ -139,7 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyGroupAsync(
+        private async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
             HotReloadPreparedIntroducedTypes prepared,
@@ -147,15 +169,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             HotReloadGroupFile firstFile = files[0];
-            TransformWorkerClientResult workerResult = await HotReloadGroupProcessorDependencies
-                .Current
+            TransformWorkerClientResult workerResult = await _dependencies
                 .RunWorker(workerInput, ct)
                 .ConfigureAwait(false);
             HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
             if (!workerResult.Success)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", workerResult.ErrorMessage);
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
@@ -165,7 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadWorkerRowsByFile rows = HotReloadWorkerRowsByFile.Build(
                 workerOutput,
                 CollectProjectRelativePaths(files));
-            AppendPerFileWorkerNotices(files, rows);
+            HotReloadGroupNotices.AppendPerFileWorkerNotices(files, rows);
             // Why once for the group: the worker scans the assembly's unedited siblings for const
             // drift as a whole, so flowing them per file would repeat the same texts.
             if (workerOutput.siblingConstDriftWarnings != null)
@@ -178,13 +199,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why a run that commits types skips it: peeling a patch here would mutate the domain
             // before the commit boundary, which a failed recheck could then no longer undo, so
             // such a run reverts at the boundary instead.
-            if (!HotReloadGroupCommitStage.CommitsIntroducedTypes(prepared, files[0].AssemblyName)
+            if (!_collaborators.CommitPolicy.CommitsIntroducedTypes(prepared, files[0].AssemblyName)
                 && !await RevalidateBeforeRevertAsync(
                     files,
                     ct,
-                    () => HotReloadEntryApplier.RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
+                    () => _entryApplier.RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             HotReloadApplyContext context = new HotReloadApplyContext(
@@ -198,13 +219,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput,
                 files,
                 prepared);
-            HotReloadGroupGateAndCompileResult gateAndCompile = await HotReloadGroupProcessorDependencies
-                .Current
+            HotReloadGroupGateAndCompileResult gateAndCompile = await _dependencies
                 .GateAndCompile(context, ct)
                 .ConfigureAwait(false);
             if (gateAndCompile.Outcome == HotReloadGroupGateAndCompileOutcome.Failed)
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
             return await CompleteApplyAfterCoverageAsync(
@@ -219,9 +239,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// decide whether there is anything left to apply.
         /// </summary>
         internal static async Task<HotReloadGroupGateAndCompileResult> GateAndCompileAsync(
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context,
             CancellationToken ct)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             // The worker-bound continuation after the pre-revert check is not guaranteed to
             // resume on Unity's context, while the signature gate reads compilation state.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -229,12 +251,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadGroupFile> files = context.Files;
             HotReloadGroupFile gateWarningSink = files[0];
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
+                collaborators,
                 context,
                 ct).ConfigureAwait(false);
             HotReloadWorkerNoticeAppender.AppendRetrySiblingConstDriftWarnings(
                 gateWarningSink.Sinks.SiblingDerivedWarnings,
                 gateResult.Isolation);
-            AppendRemovedMemberNotices(context, gateResult);
+            HotReloadGroupNotices.AppendRemovedMemberNotices(collaborators.Patcher, context, gateResult);
             if (gateResult.FileFailed)
             {
                 // Why not apply first-pass entries: a gate retry null means the replacement was
@@ -254,6 +277,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             gateWarningSink.Sinks.Warnings.AddRange(gateResult.Warnings);
 
             HotReloadGroupCompileResult compile = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                collaborators,
                 context,
                 gateResult,
                 ct).ConfigureAwait(false);
@@ -277,7 +301,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Turns a gated and compiled group into applied patches: coverage, the last membership
         /// check, the group-wide preflight that resolves every file, and only then the mutation.
         /// </summary>
-        internal static async Task<IReadOnlyList<HotReloadFileProcessResult>> CompleteApplyAfterCoverageAsync(
+        internal async Task<IReadOnlyList<HotReloadFileProcessResult>> CompleteApplyAfterCoverageAsync(
             HotReloadApplyContext context,
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
             HotReloadGroupCompileResult compile,
@@ -288,24 +312,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // replacement to cover — it reaches the boundary only to commit its types.
             if (compile.HasEntriesToApply
                 && gateResult.DidScan
-                && !AppendSignatureChangeCoverageNotices(context, gateResult, compile))
+                && !HotReloadGroupNotices.AppendSignatureChangeCoverageNotices(context, gateResult, compile))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             ct.ThrowIfCancellationRequested();
-            if (!TryAppendNewSourceMembershipFailure(context.Files))
+            if (!TryAppendNewSourceMembershipFailure(_collaborators, context.Files))
             {
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
             ct.ThrowIfCancellationRequested();
-            string staleReason = HotReloadGroupCommitBoundary.DescribeStaleReason(context);
+            string staleReason =
+                HotReloadGroupCommitBoundary.DescribeStaleReason(_collaborators, context);
             if (staleReason != null)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(context.Files, "(file)", staleReason);
-                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
             // Why the whole group is resolved before any file is mutated: a file whose entries
@@ -314,28 +339,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // no entry has nothing to bind or resolve, so it goes straight to the commit point.
             if (!compile.HasEntriesToApply)
             {
-                return HotReloadGroupCommitStage.Commit(context, gateResult, compile, null);
+                return _commitStage.Commit(context, gateResult, compile, null);
             }
 
-            HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
-            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles = dependencies.PrepareGroupEntries(
+            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles = _dependencies.PrepareGroupEntries(
                 context,
                 compile.CompileResult,
                 compile.EntriesToPatch);
             // Why before the commit point: the preflight decides per file, and a file it could
             // not resolve is the last failure a run can take without having activated anything.
             // Committing anyway would publish a type for a group that goes on to patch nothing.
-            if (HotReloadGroupCommitStage.HoldsUnresolvedFile(preparedFiles))
+            if (_commitStage.HoldsUnresolvedFile(preparedFiles))
             {
-                return HotReloadGroupCommitStage.BuildResolutionFailedResults(context, preparedFiles);
+                return _commitStage.BuildResolutionFailedResults(context, preparedFiles);
             }
 
-            return HotReloadGroupCommitStage.Commit(context, gateResult, compile, preparedFiles);
+            return _commitStage.Commit(context, gateResult, compile, preparedFiles);
         }
 
-        internal static bool TryAppendNewSourceMembershipFailure(IReadOnlyList<HotReloadGroupFile> files)
+        internal static bool TryAppendNewSourceMembershipFailure(
+            HotReloadGroupStageCollaborators collaborators,
+            IReadOnlyList<HotReloadGroupFile> files)
         {
-            string failure = HotReloadNewSourceMembershipValidator.TryRevalidateFiles(files);
+            string failure =
+                HotReloadNewSourceMembershipValidator.TryRevalidateFiles(collaborators, files);
             if (failure == null)
             {
                 return true;
@@ -345,7 +372,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        internal static async Task<bool> RevalidateBeforeRevertAsync(
+        internal async Task<bool> RevalidateBeforeRevertAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             CancellationToken ct,
             Action revertUnchangedPatches)
@@ -353,7 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(revertUnchangedPatches != null, "revertUnchangedPatches must not be null.");
             await MainThreadSwitcher.SwitchToMainThread(ct);
             ct.ThrowIfCancellationRequested();
-            if (!TryAppendNewSourceMembershipFailure(files))
+            if (!TryAppendNewSourceMembershipFailure(_collaborators, files))
             {
                 return false;
             }
@@ -363,85 +390,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        // Returns false when a replacement lost its covering caller and the group must fail.
-        private static bool AppendSignatureChangeCoverageNotices(
-            HotReloadApplyContext context,
-            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
-            HotReloadGroupCompileResult compile)
-        {
-            // Why after entriesToPatch is final and before Harmony: isolation or a gate
-            // retry can drop a covering caller without dropping the replacement. A third
-            // worker run is not allowed (max two); fail the group instead of applying.
-            List<string> lostReplacementKeys = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
-                context.AssemblyName,
-                compile.EntriesToPatch,
-                gateResult.Hits,
-                gateResult.DeletedCallerExemptions);
-            if (lostReplacementKeys.Count > 0)
-            {
-                HotReloadGroupOutcomeRouter.AppendGroupFailure(
-                    context.Files,
-                    "(signature-change-gate)",
-                    string.Format(
-                        HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
-                        string.Join(", ", lostReplacementKeys)));
-                return false;
-            }
-
-            foreach (HotReloadGroupFile file in context.Files)
-            {
-                // Why the group's entries with this file's labels: a caller in one file can cover
-                // a replacement in another, and the snapshot labels decide which file's response
-                // the warning belongs to.
-                HotReloadSignatureChangeCoverage.AppendSignatureChangeCallersRepatchedWarnings(
-                    file.Sinks.Warnings,
-                    context.AssemblyName,
-                    compile.EntriesToPatch,
-                    gateResult.Hits,
-                    file.SnapshotLabels);
-            }
-
-            return true;
-        }
-
-        private static void AppendRemovedMemberNotices(
-            HotReloadApplyContext context,
-            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult)
-        {
-            foreach (HotReloadGroupFile file in context.Files)
-            {
-                // Why after the gate: a gated replacement is not applied, so listing it under
-                // "Removed members stay present... edited bodies no longer call them" is false.
-                string removedMembersWarning = HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
-                    file.FileOutput.removedMembers,
-                    file.FileOutput.removedMethodSignatures,
-                    gateResult.GatedReplacementMethodKeys);
-                if (removedMembersWarning != null)
-                {
-                    file.Sinks.Warnings.Add(removedMembersWarning);
-                }
-
-                HotReloadStalePatchOutcomes.Append(
-                    file.Sinks.Outcomes,
-                    context.WorkerOutput,
-                    file.FileOutput.removedMethodSignatures,
-                    gateResult.GatedReplacementMethodKeys,
-                    file.ProjectRelativePath,
-                    file.AssemblyResolvePath);
-            }
-        }
-
-        private static void SnapshotGroupState(IReadOnlyList<HotReloadGroupFile> files)
+        private void SnapshotGroupState(IReadOnlyList<HotReloadGroupFile> files)
         {
             foreach (HotReloadGroupFile file in files)
             {
                 // Why snapshot at the group's apply entry: runs process groups sequentially, and
                 // RevertUnchangedPatches / BeginFileGeneration mutate ledgers after the worker.
                 // The worker itself does not.
-                file.SnapshotLabels =
-                    HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(file.ProjectRelativePath);
+                file.SnapshotLabels = HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(
+                    _domain,
+                    file.ProjectRelativePath);
                 file.SnapshotAddedLabels = new HashSet<string>(
-                    HotReloadFileGenerations.ListActiveAddedMethodKeys(file.ProjectRelativePath),
+                    _domain.ListActiveAddedMethodKeys(file.ProjectRelativePath),
                     StringComparer.Ordinal);
                 // Why projectRelativePath (not workerSourcePath): contentPathOverride E2E copies
                 // live under Library/UloopHotReload/TestSources/ and are absent from the PDB
@@ -487,37 +447,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     firstFile.CompilationAssembly.sourceFiles),
                 changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths
             };
-        }
-
-        // internal so a test can observe the per-file notices, including the SkipApply decision,
-        // without going through the apply stage the group tests replace wholesale.
-        internal static void AppendPerFileWorkerNotices(
-            IReadOnlyList<HotReloadGroupFile> files,
-            HotReloadWorkerRowsByFile rows)
-        {
-            foreach (HotReloadGroupFile file in files)
-            {
-                IReadOnlyList<TransformWorkerSkippedDto> fileSkipped = rows.SkippedFor(file.ProjectRelativePath);
-                int patchCandidateRowCount = rows.EntriesFor(file.ProjectRelativePath).Count
-                    + fileSkipped.Count
-                    + rows.UnchangedFor(file.ProjectRelativePath).Count;
-                file.FileOutput = rows.FileOutputFor(file.ProjectRelativePath);
-                // Why SkipApply and not an empty entry list: only SkipApply leaves the file
-                // unapplied while keeping its generations, so the previous reload's patches stay
-                // active. The NoEntriesToApply path clears the generation instead.
-                file.SkipApply = file.FileOutput.parseErrors != null && file.FileOutput.parseErrors.Length > 0;
-                file.UnchangedMethodCount = rows.UnchangedFor(file.ProjectRelativePath).Count;
-                HotReloadWorkerNoticeAppender.AppendWorkerNotices(
-                    file.FileOutput,
-                    fileSkipped,
-                    patchCandidateRowCount,
-                    file.SnapshotSource,
-                    file.ProjectRelativePath,
-                    file.AssemblyName,
-                    file.AssemblyResolvePath,
-                    file.Sinks.Outcomes,
-                    file.Sinks.Warnings);
-            }
         }
 
         private static List<string> CollectProjectRelativePaths(IReadOnlyList<HotReloadGroupFile> files)

@@ -172,11 +172,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRetainedArtifactFixture fixture,
             HotReloadShimIsolation.IsolationExclusions exclusions)
         {
-            return await HotReloadShimIsolation.RunIsolationRetryAsync(
+            HotReloadIsolationRetryContext retryContext = new HotReloadIsolationRetryContext(
                 workerInput,
-                exclusions,
-                new List<HotReloadMethodOutcome>(),
-                new List<HotReloadMethodOutcome>(),
                 HotReloadRetainedArtifactFixture.FindCompilationAssembly(),
                 fixture.TargetAssemblyPath,
                 workerInput.defines,
@@ -184,8 +181,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadGroupFilePaths.ForSingleFile(
                     fixture.ProjectRelativePath,
                     fixture.TargetAssemblyPath),
-                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
-                "retained-artifact-propagation",
+                "retained-artifact-propagation");
+            return await HotReloadShimIsolation.RunIsolationRetryAsync(
+                HotReloadCompositionRoot.Services.TransformWorkerClient,
+                retryContext,
+                exclusions,
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadMethodOutcome>(),
+                new HotReloadShimCompileFailureIsolationTrigger(),
                 CancellationToken.None);
         }
 

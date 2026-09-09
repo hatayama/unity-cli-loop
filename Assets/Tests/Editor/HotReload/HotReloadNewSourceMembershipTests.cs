@@ -20,18 +20,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ExistingScriptPath =
             "Assets/Tests/Editor/HotReload/HotReloadNewSourceMembershipTests.cs";
 
-        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
 
         [SetUp]
         public void SetUp()
         {
-            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
         }
 
         /// <summary>
@@ -45,12 +42,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             bool isUpdating,
             bool scriptCompilationFailed)
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(isCompiling, isUpdating, scriptCompilationFailed);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(isCompiling, isUpdating, scriptCompilationFailed)));
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -77,12 +77,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ResolvePatchTarget_WhenEditorStateIsReady_ReturnsMembershipEvidence()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -108,19 +111,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ResolvePatchTarget_WhenAssemblyOwnsAnActiveIntroducedType_KeepsTheLedgerEntry()
         {
             string existingScriptPath = ExistingScriptPath;
-            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
-            HotReloadAppliedSourceLedger.Record(existingScriptPath, "stale-hash", true);
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            // The ledger entry is written and read inside the scope because the scope installs a
+            // whole replacement domain, and the applied source ledger is part of that domain.
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
                 ActivateIntroducedTypeFor(existingScriptPath);
 
                 ResolveExistingScript("introduced-type-active");
-            }
 
-            Assert.That(HotReloadAppliedSourceLedger.TryGet(existingScriptPath), Is.Not.Null);
-            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    Is.Not.Null);
+            }
         }
 
         /// <summary>
@@ -131,24 +135,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ResolvePatchTarget_WhenAssemblyOwnsNoIntroducedType_RunsTheShortCircuit()
         {
             string existingScriptPath = ExistingScriptPath;
-            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
-            HotReloadAppliedSourceLedger.Record(existingScriptPath, "stale-hash", true);
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
                 ResolveExistingScript("introduced-type-absent");
-            }
 
-            Assert.That(HotReloadAppliedSourceLedger.TryGet(existingScriptPath), Is.Null);
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    Is.Null);
+            }
         }
 
         private static void ResolveExistingScript(string correlationId)
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 ExistingScriptPath,
                 ExistingScriptPath,
                 new List<HotReloadMethodOutcome>(),
@@ -173,8 +180,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "artifact.dll",
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         /// <summary>
@@ -205,12 +212,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ResolvePatchTarget_WhenNewPredefinedSourceIsReady_ReturnsMembershipEvidence()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingPredefinedScriptPath,
                 MissingPredefinedScriptPath,
                 outcomes,

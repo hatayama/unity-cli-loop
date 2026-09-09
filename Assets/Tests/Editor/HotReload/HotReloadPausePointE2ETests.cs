@@ -29,16 +29,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
+            _scope = new HotReloadDomainTestScope();
             UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }
@@ -62,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "E2E_c_BeforeRevert.cs");
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.True);
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = fixture.ComputeWithPrivate(5);
@@ -125,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await HotReloadFromEditedSourceAsync(editedSource, "E2E_f_LocalFunction.cs");
 
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             SourcePausePointShimResolution shimResolution =
                 SourcePausePointShimResolver.Resolve(lookup, FixtureProjectRelativePath, enableLine);
@@ -195,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedPath = Path.Combine(directory, fileName);
             File.WriteAllText(editedPath, editedSource);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);

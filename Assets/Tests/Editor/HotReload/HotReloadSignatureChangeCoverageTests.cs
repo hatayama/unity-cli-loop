@@ -93,6 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             List<HotReloadMethodOutcome> outcomes =
                 HotReloadSignatureChangeGate.BuildGatedReplacementSkipOutcomes(
+                    HotReloadCompositionRoot.Services.Domain,
                     new[] { replacement },
                     uncoveredByTarget,
                     editedFileIdentities,
@@ -133,6 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             List<HotReloadMethodOutcome> outcomes =
                 HotReloadSignatureChangeGate.BuildGatedReplacementSkipOutcomes(
+                    HotReloadCompositionRoot.Services.Domain,
                     new[] { replacement },
                     uncoveredByTarget,
                     editedFileIdentities,

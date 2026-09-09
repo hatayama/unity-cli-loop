@@ -34,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIntroducedTypeArtifact artifact = CreateArtifact("one");
             HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
+            // A resolver is constructed detached, so a test that needs it in the bind path attaches it.
+            resolver.Resume();
 
             registry.RegisterPrepared(artifact);
             using (resolver.RegisterPrepared(artifact))
@@ -60,6 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIntroducedTypeArtifact artifact = CreateArtifact("one");
             HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
+            // A resolver is constructed detached, so a test that needs it in the bind path attaches it.
+            resolver.Resume();
             registry.RegisterPrepared(artifact);
             registry.Activate(artifact);
 
@@ -235,6 +239,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
+            // A resolver is constructed detached, so a test that needs it in the bind path attaches it.
+            resolver.Resume();
             using (resolver)
             {
                 Assembly consumerAssembly = Assembly.Load(File.ReadAllBytes(consumerPath));
@@ -304,6 +310,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry))
             {
+                // A resolver is constructed detached, so a test that needs it in the bind path attaches it.
+                resolver.Resume();
                 using (resolver.RegisterPrepared(candidate))
                 {
                     registry.DiscardPrepared(candidate);
@@ -569,6 +577,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateOtherDescriptor("prepared"));
             HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
+            // A resolver is constructed detached, so a test that needs it in the bind path attaches it.
+            resolver.Resume();
             resolver.Dispose();
 
             Assert.Throws<ObjectDisposedException>(() => resolver.RegisterPrepared(artifact));
@@ -592,6 +602,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateOtherDescriptor("prepared"));
             using HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
+            // A resolver is constructed detached, so a test that needs it in the bind path attaches it.
+            resolver.Resume();
             using CancellationTokenSource cancellation = new CancellationTokenSource();
             ResolutionTally tally = new ResolutionTally(prepared, active);
 

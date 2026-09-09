@@ -24,6 +24,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // short-circuit is decided here but applied by the orchestrator so a changed
         // sibling in the same assembly can still pull the file into the group.
         internal static HotReloadPatchTargetResolution ResolvePatchTarget(
+            HotReloadDomain domain,
+            IHotReloadPackageRootCapture packageRootCapture,
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             string assemblyResolvePath,
             string workerSourcePath,
             List<HotReloadMethodOutcome> outcomes,
@@ -31,11 +34,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string correlationId,
             List<HotReloadMethodOutcome> alreadyActiveOutcomes)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
+            Debug.Assert(
+                editorStateSnapshotCapture != null,
+                "editorStateSnapshotCapture must not be null.");
             Debug.Assert(alreadyActiveOutcomes != null, "alreadyActiveOutcomes must not be null.");
 
             // CompilationPipeline.GetAssemblyNameFromScriptPath expects a project-relative path
             // (Assets/... or Packages/...) and returns a file name that already includes ".dll".
-            string projectRelativePath = ToProjectRelativeScriptPath(assemblyResolvePath);
+            string projectRelativePath =
+                ToProjectRelativeScriptPath(packageRootCapture, assemblyResolvePath);
             string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath);
             if (string.IsNullOrEmpty(rawAssemblyName))
             {
@@ -79,8 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (isNewSource)
             {
-                string notReadyReason = HotReloadEditorStateSnapshotProvider.GetNotReadyReason(
-                    HotReloadEditorStateSnapshotProvider.CaptureCurrent());
+                string notReadyReason =
+                    editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
                 if (notReadyReason != null)
                 {
                     outcomes.Add(HotReloadMethodOutcome.Failed("(file)", notReadyReason, assemblyResolvePath));
@@ -118,6 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (isNewSource)
             {
                 string membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
+                    editorStateSnapshotCapture,
                     projectRoot,
                     projectRelativePath,
                     assemblyName,
@@ -137,9 +147,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // an artifact assembly whose owner declaration still has to be verified, so an
             // unchanged source must reach that verification with its ledger entry intact.
             HotReloadUnchangedSourceDecision unchangedDecision = HotReloadUnchangedSourceDecision.NotUnchanged;
-            if (!HotReloadIntroducedTypeHolder.Registry.HasActiveTypesForOriginalAssembly(assemblyName))
+            if (!domain.IntroducedTypes.HasActiveTypesForOriginalAssembly(assemblyName))
             {
                 unchangedDecision = HotReloadAppliedSourceLifecycle.TryShortCircuitUnchangedAppliedSource(
+                    domain,
                     workerSourcePath,
                     projectRelativePath,
                     assemblyResolvePath,
@@ -225,8 +236,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadConstants.AssemblyNotLoadedHint;
         }
 
-        internal static string ToProjectRelativeScriptPath(string path)
+        internal static string ToProjectRelativeScriptPath(
+            IHotReloadPackageRootCapture packageRootCapture,
+            string path)
         {
+            Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(path), "path must not be empty.");
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
@@ -241,7 +255,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadScriptPathNormalizer.ToProjectRelative(
                 fullPath,
                 projectRoot,
-                HotReloadPackageRootProvider.Current,
+                packageRootCapture.Current,
                 comparison);
         }
     }

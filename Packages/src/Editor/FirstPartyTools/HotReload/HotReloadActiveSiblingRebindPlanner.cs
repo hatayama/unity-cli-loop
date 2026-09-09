@@ -35,11 +35,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadActiveSiblingRebindPlanner
     {
         internal static HotReloadActiveSiblingRebindPlan Plan(
+            HotReloadDomain domain,
             string assemblyName,
             string[] assemblySourceFiles,
             IReadOnlyCollection<string> pathsAlreadyInRun,
             Func<string, string> resolveWorkerSourcePath)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be empty.");
             Debug.Assert(assemblySourceFiles != null, "assemblySourceFiles must not be null.");
             Debug.Assert(pathsAlreadyInRun != null, "pathsAlreadyInRun must not be null.");
@@ -47,8 +49,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
             HashSet<string> candidates = new HashSet<string>(comparer);
-            AddCandidatePaths(candidates, HotReloadPatcher.ListActiveFilePaths());
-            AddCandidatePaths(candidates, HotReloadFileGenerations.ListPathsWithActiveAddedMembers());
+            AddCandidatePaths(candidates, domain.ListActiveFilePaths());
+            AddCandidatePaths(
+                candidates,
+                domain.ListPathsWithActiveAddedMembers());
 
             HashSet<string> assemblyFiles = new HashSet<string>(comparer);
             for (int index = 0; index < assemblySourceFiles.Length; index++)
@@ -62,6 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (string path in candidates)
             {
                 ClassifyCandidate(
+                    domain,
                     path,
                     assemblyFiles,
                     pathsAlreadyInRun,
@@ -85,6 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static void ClassifyCandidate(
+            HotReloadDomain domain,
             string path,
             HashSet<string> assemblyFiles,
             IReadOnlyCollection<string> pathsAlreadyInRun,
@@ -97,7 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            (string Hash, bool IsFullyApplied)? recorded = HotReloadAppliedSourceLedger.TryGet(path);
+            (string Hash, bool IsFullyApplied)? recorded =
+                domain.TryGetAppliedSource(path);
             if (recorded == null)
             {
                 return;
@@ -109,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            string probeHash = HotReloadAppliedSourceLedger.ComputeContentHash(
+            string probeHash = new HotReloadSourceContentHasher().ComputeContentHash(
                 File.ReadAllBytes(workerSourcePath));
             if (string.Equals(probeHash, recorded.Value.Hash, StringComparison.Ordinal))
             {

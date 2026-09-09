@@ -22,23 +22,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/Tests/Editor/HotReload/HotReloadToolTests.cs";
         private const string HotReloadTestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
-        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
+
+        private IDisposable _editorStateScope;
 
         [SetUp]
         public void SetUp()
         {
             // The production run captures these at its entry point; a direct call into the patch
             // target resolver in a test has to do the same.
-            HotReloadPackageRootProvider.CaptureCurrent();
-            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
+            _editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(
+                    () => new HotReloadEditorStateSnapshot(false, false, false)));
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
+            _editorStateScope.Dispose();
         }
 
         /// <summary>
@@ -179,6 +180,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,

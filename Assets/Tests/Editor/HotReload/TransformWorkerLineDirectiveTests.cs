@@ -242,7 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 assemblySourcePaths = assemblySourcePaths.ToArray()
             };
 
-            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         private static int FindLineNumberContaining(string source, string fragment)

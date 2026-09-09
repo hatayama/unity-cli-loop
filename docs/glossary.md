@@ -209,7 +209,7 @@ transplanted without rewriting call/load slots. Prefix wrappers are not generate
 The per-file record hot reload publishes after a successful apply so pause points can
 resolve against the patched code: the shim assembly and portable-PDB bytes plus, for
 each patched method, its shim `MethodBase`, source line range, and whether the patch is
-a delegation (`HotReloadShimRegistry`, exposed through
+a delegation (held by the file's `HotReloadFileGeneration`, exposed through
 `HotReloadPausePointCoordination`). A file's registration is replaced by the next
 hot-reload generation, and a method's entry is removed when its patch is reverted;
 consumers treat a missing entry as "cannot re-target", never as an error.

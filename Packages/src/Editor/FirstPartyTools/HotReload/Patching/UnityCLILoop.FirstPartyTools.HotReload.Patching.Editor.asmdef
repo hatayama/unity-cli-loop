@@ -1,0 +1,24 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.HotReload.Patching.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:384dc39e13234d8aae3b1b1c44c9507e",
+        "GUID:1e3293e9639242278dcb27724b34beb4",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:afe86dd49995e46baa33e099a4d2ee1d"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "UnityCliLoop.0Harmony.dll",
+        "Mono.Cecil.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

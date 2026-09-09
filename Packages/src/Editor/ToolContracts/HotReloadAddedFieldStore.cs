@@ -1,31 +1,32 @@
 using System;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
-    /// Side table for hot-reload added fields. Compiled types cannot gain real fields, so
-    /// shims store values here. Instance entries follow the host object's lifetime via
-    /// ConditionalWeakTable; static entries live until Clear or domain reload.
-    /// Editor main thread only. Thread safety is the caller's responsibility (the current
-    /// hot-reload pipeline applies and clears on the main thread).
+    /// The fixed entry point hot-reload shims reach the current domain's added field values
+    /// through, and the store key format they share with the transform worker.
     /// </summary>
+    /// <remarks>
+    /// Why a static gateway rather than an injected value: the callers are emitted IL inside shim
+    /// bodies, which can only call a static method. The values themselves live in
+    /// <see cref="HotReloadAddedFieldValues"/>, owned by the domain and installed here by the
+    /// composition root.
+    /// </remarks>
     public static class HotReloadAddedFieldStore
     {
         // Keep in sync with TransformWorkerProgramMarker.AddedFieldKeySeparator.
         public const string FieldKeySeparator = "::";
 
-        private static ConditionalWeakTable<object, Dictionary<string, object>> InstanceTables =
-            new ConditionalWeakTable<object, Dictionary<string, object>>();
-
-        private static readonly Dictionary<string, object> StaticValues =
-            new Dictionary<string, object>(StringComparer.Ordinal);
+        /// <summary>
+        /// The values of the domain currently installed, or null while none is. Set by the
+        /// composition root only.
+        /// </summary>
+        public static HotReloadAddedFieldValues Current { get; set; }
 
         /// <summary>
-        /// Builds the store key "<TypeMetadataName>::<fieldName>".
+        /// Builds the store key "&lt;TypeMetadataName&gt;::&lt;fieldName&gt;".
         /// </summary>
         public static string FormatFieldKey(string typeMetadataName, string fieldName)
         {
@@ -37,36 +38,26 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// <summary>
         /// Returns the stored instance field, running <paramref name="initializer"/> (or
         /// default(T) when it is null) on first access or after a stored type mismatch.
-        /// Reference-type instances only. Struct hosts box on every access and would always
-        /// reinitialize; the worker (PR-4) skips struct hosts.
         /// </summary>
         public static T GetOrInit<T>(object instance, string fieldKey, Func<T> initializer)
         {
-            Debug.Assert(instance != null, "instance must not be null.");
-            Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
-
-            Dictionary<string, object> fields = GetOrCreateInstanceTable(instance);
-            if (fields.TryGetValue(fieldKey, out object stored))
+            // Why the slot is read once into a local: a shim body can run while the composition
+            // root swaps domains, and reading twice could hit two different value sets.
+            HotReloadAddedFieldValues values = Current;
+            if (values == null)
             {
-                (bool readable, T existing) = TryReadAs<T>(stored);
-                if (readable)
-                {
-                    return existing;
-                }
+                return CreateValue(initializer);
             }
 
-            T created = CreateValue(initializer);
-            fields[fieldKey] = created;
-            return created;
+            return values.GetOrInit(instance, fieldKey, initializer);
         }
 
         public static void Set<T>(object instance, string fieldKey, T value)
         {
-            Debug.Assert(instance != null, "instance must not be null.");
-            Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
-
-            Dictionary<string, object> fields = GetOrCreateInstanceTable(instance);
-            fields[fieldKey] = value;
+            HotReloadAddedFieldValues values = Current;
+            // Why a dropped write is accepted: with no domain installed there is nothing whose
+            // state the value could belong to, and the shim that wrote it cannot be patched in.
+            values?.Set(instance, fieldKey, value);
         }
 
         /// <summary>
@@ -75,45 +66,28 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         public static T GetOrInitStatic<T>(string fieldKey, Func<T> initializer)
         {
-            Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
-
-            if (StaticValues.TryGetValue(fieldKey, out object stored))
+            HotReloadAddedFieldValues values = Current;
+            if (values == null)
             {
-                (bool readable, T existing) = TryReadAs<T>(stored);
-                if (readable)
-                {
-                    return existing;
-                }
+                return CreateValue(initializer);
             }
 
-            T created = CreateValue(initializer);
-            StaticValues[fieldKey] = created;
-            return created;
+            return values.GetOrInitStatic(fieldKey, initializer);
         }
 
         public static void SetStatic<T>(string fieldKey, T value)
         {
-            Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
-            StaticValues[fieldKey] = value;
+            HotReloadAddedFieldValues values = Current;
+            values?.SetStatic(fieldKey, value);
         }
 
         /// <summary>
-        /// Drops every instance and static entry. Called from RevertAll; domain reload also
-        /// drops the tables because they are static.
+        /// Drops every instance and static entry of the installed domain.
         /// </summary>
         public static void Clear()
         {
-            // Why replace rather than ConditionalWeakTable.Clear: replacing drops the old
-            // table for GC even on profiles where Clear is missing, and matches static Clear.
-            InstanceTables = new ConditionalWeakTable<object, Dictionary<string, object>>();
-            StaticValues.Clear();
-        }
-
-        private static Dictionary<string, object> GetOrCreateInstanceTable(object instance)
-        {
-            return InstanceTables.GetValue(
-                instance,
-                _ => new Dictionary<string, object>(StringComparer.Ordinal));
+            HotReloadAddedFieldValues values = Current;
+            values?.Clear();
         }
 
         private static T CreateValue<T>(Func<T> initializer)
@@ -124,25 +98,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
 
             return initializer();
-        }
-
-        private static (bool Readable, T Value) TryReadAs<T>(object stored)
-        {
-            if (stored is T typed)
-            {
-                return (true, typed);
-            }
-
-            // Why treat null as a hit for reference T and Nullable<T>: Set stores a null
-            // dictionary value, and `is T` is false for null. Non-nullable value types are
-            // boxed and never stored as null.
-            if (stored == null
-                && (!typeof(T).IsValueType || Nullable.GetUnderlyingType(typeof(T)) != null))
-            {
-                return (true, default);
-            }
-
-            return (false, default);
         }
     }
 }

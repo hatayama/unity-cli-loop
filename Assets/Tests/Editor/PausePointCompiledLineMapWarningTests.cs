@@ -557,10 +557,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Enable_WhenCompiledLineDriftsFromEditedFile_AddsDriftWarningAndNextAction()
         {
-            Func<string, HotReloadShimFileLookup> previousLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile;
-            Func<string, string> previousSnapshot =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
             HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
                 Array.Empty<byte>(),
                 Array.Empty<byte>(),
@@ -584,8 +581,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             try
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = _ => stubLookup;
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => snapshotSource;
+                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
+                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => snapshotSource;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -646,8 +643,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = previousLookup;
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
+                hotReloadSideScope.Dispose();
             }
         }
 
@@ -658,10 +654,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Enable_WhenCompiledLineMatchesEditedFile_UsesMatchedCompiledLineMapWarning()
         {
-            Func<string, HotReloadShimFileLookup> previousLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile;
-            Func<string, string> previousSnapshot =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
             HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
                 Array.Empty<byte>(),
                 Array.Empty<byte>(),
@@ -680,8 +673,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             try
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = _ => stubLookup;
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => diskSource;
+                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
+                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => diskSource;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -724,8 +717,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = previousLookup;
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
+                hotReloadSideScope.Dispose();
             }
         }
 
@@ -736,10 +728,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Enable_WhenRequestedLineSnapsForward_DisclosesSnapAndSetsNextAction()
         {
-            Func<string, HotReloadShimFileLookup> previousLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile;
-            Func<string, string> previousSnapshot =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
             HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
                 Array.Empty<byte>(),
                 Array.Empty<byte>(),
@@ -758,8 +747,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             try
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = _ => stubLookup;
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => diskSource;
+                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
+                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => diskSource;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -811,8 +800,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = previousLookup;
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
+                hotReloadSideScope.Dispose();
             }
         }
 
@@ -1748,8 +1736,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Enable_WhenResolveFailsAndFileHasActivePatches_UsesResolveFailureWarningAndNextAction()
         {
-            Func<string, HotReloadShimFileLookup> previous =
-                HotReloadPausePointCoordination.GetShimLookupForFile;
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
             HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
                 Array.Empty<byte>(),
                 Array.Empty<byte>(),
@@ -1758,7 +1745,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             try
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = _ => stubLookup;
+                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
                 PausePointResponse withPatches = EnableUnresolvableLine();
 
                 Assert.That(withPatches.Success, Is.False);
@@ -1768,7 +1755,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     withPatches.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction));
 
-                HotReloadPausePointCoordination.GetShimLookupForFile = _ => null;
+                hotReloadSideScope.Port.ShimLookupForFile = _ => null;
                 PausePointResponse withoutPatches = EnableUnresolvableLine();
 
                 Assert.That(withoutPatches.Success, Is.False);
@@ -1780,7 +1767,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = previous;
+                hotReloadSideScope.Dispose();
             }
         }
 
@@ -1820,11 +1807,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compiled-line-drift" + "-probe-unique") + 1;
             Assert.That(requestedLine, Is.GreaterThan(1));
 
-            Func<string, HotReloadShimFileLookup> previous =
-                HotReloadPausePointCoordination.GetShimLookupForFile;
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
             try
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile =
+                hotReloadSideScope.Port.ShimLookupForFile =
                     _ => CreatePdbUnavailableLookup(CompiledLineDriftProbeMethod(), requestedLine);
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -1854,7 +1840,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = previous;
+                hotReloadSideScope.Dispose();
             }
         }
 
@@ -1865,11 +1851,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Enable_WhenPatchedMethodHasNoPdbBytes_EmitsDedicatedWarningOnResolveFailure()
         {
-            Func<string, HotReloadShimFileLookup> previous =
-                HotReloadPausePointCoordination.GetShimLookupForFile;
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
             try
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile =
+                hotReloadSideScope.Port.ShimLookupForFile =
                     _ => CreatePdbUnavailableLookup(CompiledLineDriftProbeMethod(), UnresolvableLine);
                 PausePointResponse response = EnableUnresolvableLine();
 
@@ -1886,7 +1871,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetShimLookupForFile = previous;
+                hotReloadSideScope.Dispose();
             }
         }
 

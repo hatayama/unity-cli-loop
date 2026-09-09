@@ -139,7 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRetainedArtifactFixture fixture =
                 await HotReloadRetainedArtifactFixture.CreateAsync(name, editedSource);
 
-            return await TransformWorkerClient.RunAsync(
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 fixture.BuildTransformInput(
                     new[] { fixture.CreateRecordedArtifact(fixture.RetainedFingerprint) }),
                 CancellationToken.None);

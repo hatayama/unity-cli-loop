@@ -24,17 +24,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostValueAnchor = "    public int Value()";
         private const string CallerCallBodyAnchor = "return host.Value();";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadPatcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }
@@ -56,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerCallBodyAnchor,
                 "return host.Added() + 1;");
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,

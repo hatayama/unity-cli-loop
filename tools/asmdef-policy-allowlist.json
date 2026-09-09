@@ -6,6 +6,21 @@
       "reason": "Hot reload reuses the external compiler path resolver and the compiled assembly loader. Resolution: promote those two pieces to a FirstPartyTools.Common.DynamicCompilation assembly; ExecuteDynamicCode then depends on it as well."
     },
     {
+      "from": "UnityCLILoop.FirstPartyTools.HotReload.Shared.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
+      "reason": "The shared kernel resolves the external compiler paths the transform worker runs. Hot reload reuses the external compiler path resolver and the compiled assembly loader. Resolution: promote those two pieces to a FirstPartyTools.Common.DynamicCompilation assembly; ExecuteDynamicCode then depends on it as well."
+    },
+    {
+      "from": "UnityCLILoop.FirstPartyTools.HotReload.IntroducedType.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
+      "reason": "The introduced-type aggregate compiles new types through the same backend. Hot reload reuses the external compiler path resolver and the compiled assembly loader. Resolution: promote those two pieces to a FirstPartyTools.Common.DynamicCompilation assembly; ExecuteDynamicCode then depends on it as well."
+    },
+    {
+      "from": "UnityCLILoop.FirstPartyTools.HotReload.Patching.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
+      "reason": "The patching aggregate loads compiled shim assemblies through the same loader. Hot reload reuses the external compiler path resolver and the compiled assembly loader. Resolution: promote those two pieces to a FirstPartyTools.Common.DynamicCompilation assembly; ExecuteDynamicCode then depends on it as well."
+    },
+    {
       "from": "UnityCLILoop.FirstPartyTools.Watch.Editor",
       "to": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
       "reason": "Watch evaluates expressions with DynamicCodeCompiler and reports CompilationError. The compiler is a shared foundation, not a tool feature. Resolution: move dynamic compilation into FirstPartyTools.Common.DynamicCompilation (same target as the HotReload entry)."

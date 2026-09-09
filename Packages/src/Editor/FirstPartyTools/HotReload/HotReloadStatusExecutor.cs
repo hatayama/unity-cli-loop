@@ -9,12 +9,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Builds --status and --revert-all responses from the live hot-reload ledgers.
     /// </summary>
-    internal static class HotReloadStatusExecutor
+    internal sealed class HotReloadStatusExecutor
     {
-        public static HotReloadResponse ExecuteRevertAll()
+        private readonly HotReloadDomain _domain;
+        private readonly HotReloadPatcher _patcher;
+
+        internal HotReloadStatusExecutor(HotReloadDomain domain, HotReloadPatcher patcher)
         {
-            int clearedCount = HotReloadPatcher.ActiveChangeCount;
-            HotReloadPatcher.RevertAll();
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(patcher != null, "patcher must not be null.");
+            _domain = domain;
+            _patcher = patcher;
+        }
+
+        public HotReloadResponse ExecuteRevertAll()
+        {
+            int clearedCount = _patcher.ActiveChangeCount;
+            _patcher.RevertAll();
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
@@ -27,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hold.SceneRefreshWarning);
             // Why one snapshot: the total and the sentence that names it must agree, and a second
             // read could answer after another reload activated a type.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadActiveChangeCounts.Capture();
+            HotReloadActiveChangeSnapshot snapshot = _domain.CountActiveChanges();
             return new HotReloadResponse
             {
                 Success = true,
@@ -37,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Warnings = warnings,
                 // Why the rows too: a total without them names nothing, so a caller told that
                 // types stayed loaded could not tell which ones a revert left behind.
-                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(_domain),
                 ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
                 Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
                     clearedCount == 0
@@ -48,10 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        public static HotReloadResponse ExecuteStatus()
+        public HotReloadResponse ExecuteStatus()
         {
-            IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadPatcher.DescribeActivePatches();
-            IReadOnlyList<HotReloadAddedMemberInfo> addedMembers = HotReloadAddedMemberRegistry.Describe();
+            IReadOnlyList<HotReloadActivePatchInfo> active = _patcher.DescribeActivePatches();
+            IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
+                _domain.DescribeAddedMembers();
             List<HotReloadMethodResult> methods =
                 new List<HotReloadMethodResult>(active.Count + addedMembers.Count);
             int neverInvokedCount = 0;
@@ -93,15 +105,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int count = methods.Count;
             IReadOnlyList<HotReloadAddedFieldDescription> addedFields =
-                HotReloadAddedFieldRegistry.DescribeAll();
+                _domain.DescribeAddedFields();
             AppendAddedFieldStatusRows(methods, addedFields);
             // Why one snapshot for the heading, the drop decision, and the reported total: a
             // domain still holding an introduced type has not lost it, and a caller told three
             // different numbers for "what is active" cannot tell which one answers the question.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadActiveChangeCounts.Capture();
-            Debug.Assert(
-                count == snapshot.PatchAndAddedMemberCount,
-                "The rows built from the two ledgers must total what the snapshot counts.");
+            HotReloadActiveChangeSnapshot snapshot = _domain.CountActiveChanges();
             string message = $"{snapshot.RuntimeChangeTotal} change(s) currently active.";
             if (neverInvokedCount > 0)
             {
@@ -133,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = true,
                 Methods = methods,
                 Warnings = warnings,
-                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(_domain),
                 ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
                 ActivePatchTotal = count,
                 AddedFieldTotal = addedFields.Count,
@@ -143,9 +152,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static string ResolveActiveStatusReason(string methodKey, long invocationCount)
+        private string ResolveActiveStatusReason(string methodKey, long invocationCount)
         {
-            if (HotReloadSupersededSignatureRegistry.TryGetReplacement(
+            if (_domain.TryGetSupersededReplacement(
                     methodKey,
                     out string replacementDisplayName))
             {
@@ -162,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return string.Empty;
         }
 
-        private static void AppendAddedFieldStatusRows(
+        private void AppendAddedFieldStatusRows(
             List<HotReloadMethodResult> methods,
             IReadOnlyList<HotReloadAddedFieldDescription> addedFields)
         {

@@ -15,6 +15,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class HotReloadAutoRefreshHoldTests
     {
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _scope.Dispose();
+        }
+
         private sealed class FakeEnvironment
         {
             internal bool Held;
@@ -330,7 +344,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ReconcileForTesting_StaleFlagWithEmptyLedger_AllowsOnceAndClearsFlag()
         {
             FakeEnvironment environment = new FakeEnvironment { Held = true };
-            HotReloadPatcher.RevertAll();
             HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
             try
             {
@@ -338,7 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 // An introduced type is part of the ledger this reconcile reads, and only this
                 // Editor session can hold one, so say the empty ledger out loud.
                 Assert.That(
-                    HotReloadActiveChangeCounts.IntroducedTypeCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                     Is.EqualTo(0),
                     "Precondition: the ledger must be empty for the stale flag to be released.");
 
@@ -365,7 +378,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Held = true,
                 AllowException = new InvalidOperationException("reload")
             };
-            HotReloadPatcher.RevertAll();
             HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
             try
             {

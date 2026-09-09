@@ -19,10 +19,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadJitInliningInvestigationTests
     {
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
         }
 
         /// <summary>
@@ -50,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(warmSum, Is.EqualTo(64), "Precondition: warmed caller must see the compiled Probe.");
 
             string editedPath = WriteEditedSource("JitInliningInvestigationProbe.cs", editedSource);
-            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);

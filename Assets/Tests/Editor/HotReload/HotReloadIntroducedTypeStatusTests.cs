@@ -22,17 +22,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FirstMetadataName = "Fixture.IntroducedOne";
         private const string SecondMetadataName = "Fixture.IntroducedTwo";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadPatcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -43,12 +45,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ExecuteStatus_WithActiveIntroducedTypes_ReportsOneRowPerTypeWithoutCountingThemAsPatches()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 ActivateArtifactWithTwoTypes();
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteStatus();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus();
 
                 Assert.That(response.IntroducedTypes.Count, Is.EqualTo(2));
                 Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(2));
@@ -67,11 +68,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ExecuteStatus_WithNoActiveIntroducedType_OmitsBothTypeFields()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteStatus();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus();
 
                 Assert.That(response.IntroducedTypes.Count, Is.EqualTo(0));
                 Assert.That(response.ShouldSerializeIntroducedTypes(), Is.False);
@@ -87,12 +87,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ExecuteRevertAll_WithActiveIntroducedTypes_SaysTheyStayUntilTheNextDomainReload()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 ActivateArtifactWithTwoTypes();
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteRevertAll();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
 
                 Assert.That(
                     response.Message,
@@ -116,11 +115,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ExecuteRevertAll_WithNoActiveIntroducedType_KeepsThePlainMessage()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteRevertAll();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
 
                 Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
                 Assert.That(response.ShouldSerializeActiveIntroducedTypeTotal(), Is.False);
@@ -135,9 +133,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_WhenAnIntroducedTypeIsActiveAndTheApplyIsRefused_WarnsThatChangesRemain()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 ActivateArtifactWithTwoTypes();
 
                 HotReloadTool tool = new HotReloadTool();
@@ -174,8 +171,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor(FirstMetadataName),
                     CreateDescriptor(SecondMetadataName)
                 });
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         private static HotReloadIntroducedTypeDescriptor CreateDescriptor(string metadataName)

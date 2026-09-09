@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Failed outcome per file (method-attributed when the group holds a single entry).
         /// </summary>
         internal static async Task<HotReloadShimIsolationResult> TryIsolateShimCompileFailureAsync(
+            TransformWorkerClient transformWorkerClient,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
             HotReloadShimCompileResult compileResult,
@@ -57,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            List<string> groupPaths = CollectSourceProjectRelativePaths(workerInput);
+            HotReloadIsolationOutcomeBuilder outcomeBuilder = new HotReloadIsolationOutcomeBuilder();
+            List<string> groupPaths = outcomeBuilder.CollectSourceProjectRelativePaths(workerInput);
             HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
                 workerOutput.entries,
                 attribution,
@@ -70,42 +72,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 plan.ExcludedMethodKeys,
                 plan.ExcludedAddedMethodKeys,
                 plan.CallerEntries);
-            List<HotReloadMethodOutcome> skippedCallerOutcomes = BuildSkippedCallerOutcomes(
+            List<HotReloadMethodOutcome> skippedCallerOutcomes = outcomeBuilder.BuildSkippedCallerOutcomes(
                 plan.CallerEntries,
                 groupFilePaths,
                 HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
 
-            IsolationRetryRunResult retry = await RunIsolationRetryAsync(
+            HotReloadIsolationRetryContext retryContext = new HotReloadIsolationRetryContext(
                 workerInput,
-                exclusions,
-                failedMethodOutcomes,
-                skippedCallerOutcomes,
                 compilationAssembly,
                 targetDllPath,
                 defines,
                 workerOutput.skipped,
                 groupFilePaths,
-                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
-                correlationId,
+                correlationId);
+            IsolationRetryRunResult retry = await RunIsolationRetryAsync(
+                transformWorkerClient,
+                retryContext,
+                exclusions,
+                failedMethodOutcomes,
+                skippedCallerOutcomes,
+                new HotReloadShimCompileFailureIsolationTrigger(),
                 ct).ConfigureAwait(false);
             retry.Isolation?.AttachPlan(plan);
             return retry.Isolation;
         }
 
         internal static async Task<IsolationRetryRunResult> RunIsolationRetryAsync(
-            TransformWorkerInputDto workerInput,
+            TransformWorkerClient transformWorkerClient,
+            HotReloadIsolationRetryContext context,
             IsolationExclusions exclusions,
             List<HotReloadMethodOutcome> failedMethodOutcomes,
             List<HotReloadMethodOutcome> skippedCallerOutcomes,
-            UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
-            string[] defines,
-            TransformWorkerSkippedDto[] firstPassSkipped,
-            HotReloadGroupFilePaths groupFilePaths,
-            string trigger,
-            string correlationId,
+            IHotReloadIsolationTrigger trigger,
             CancellationToken ct)
         {
+            TransformWorkerInputDto workerInput = context.WorkerInput;
             TransformWorkerInputDto retryInput = new TransformWorkerInputDto
             {
                 // Why share the array: the worker only reads it, and each source carries the
@@ -131,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             TransformWorkerClientResult retryWorkerResult =
-                await TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
+                await transformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
             if (!retryWorkerResult.Success)
             {
                 HotReloadOrchestratorLog.LogHotReloadIsolationRetry(
@@ -141,12 +142,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0,
                     0,
                     false,
-                    trigger,
-                    correlationId);
+                    trigger.LogName,
+                    context.CorrelationId);
                 return IsolationRetryRunResult.Failed(
                     "Retry worker failed: " + retryWorkerResult.ErrorMessage);
             }
 
+            HotReloadIsolationOutcomeBuilder outcomeBuilder = new HotReloadIsolationOutcomeBuilder();
             TransformWorkerOutputDto retryOutput = retryWorkerResult.Output;
             Debug.Assert(
                 retryOutput.files.Length == workerInput.sources.Length,
@@ -154,10 +156,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why drop first-pass (Method, Reason) pairs: consuming them again would duplicate
             // every per-file skip. Retry-only pairs are new — typically transitive callers of
             // excluded added methods — and must surface or the edit is applied nowhere.
-            List<HotReloadMethodOutcome> retryOnlySkipped = CollectRetryOnlySkippedOutcomes(
-                firstPassSkipped,
+            List<HotReloadMethodOutcome> retryOnlySkipped = outcomeBuilder.CollectRetryOnlySkippedOutcomes(
+                context.FirstPassSkipped,
                 retryOutput.skipped,
-                groupFilePaths,
+                context.GroupFilePaths,
                 trigger,
                 exclusions.ExcludedAddedMethodKeys);
             skippedCallerOutcomes.AddRange(retryOnlySkipped);
@@ -168,8 +170,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retryOutput.skipped?.Length ?? 0,
                 retryOnlySkipped.Count,
                 true,
-                trigger,
-                correlationId);
+                trigger.LogName,
+                context.CorrelationId);
             if (string.IsNullOrEmpty(retryOutput.shimSource) || retryOutput.entries.Length == 0)
             {
                 return IsolationRetryRunResult.Succeeded(
@@ -186,8 +188,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool includeHarmonyReference = HotReloadShimReferenceBuilder.NeedsHarmonyReference(retryOutput);
             bool includeAddedFieldStoreReference = HotReloadShimReferenceBuilder.NeedsAddedFieldStoreReference(retryOutput);
             HotReloadShimReferenceBuilder.ShimReferencePathsResult shimReferencePaths = HotReloadShimReferenceBuilder.TryBuildShimReferencePaths(
-                compilationAssembly,
-                targetDllPath,
+                context.CompilationAssembly,
+                context.TargetDllPath,
                 includeHarmonyReference,
                 includeAddedFieldStoreReference,
                 workerInput.introducedTypeArtifacts);
@@ -203,15 +205,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimCompileResult retryCompileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
                 retryOutput.shimSource,
                 shimReferences,
-                defines,
-                CollectSourceProjectRelativePaths(workerInput),
+                context.Defines,
+                outcomeBuilder.CollectSourceProjectRelativePaths(workerInput),
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
                 HotReloadOrchestratorLog.LogHotReloadShimCompileFailed(
                     retryCompileResult,
                     HotReloadConstants.VibeLogShimCompileStageRetry,
-                    correlationId);
+                    context.CorrelationId);
                 return IsolationRetryRunResult.Failed(
                     "Retry shim compile failed: " + retryCompileResult.ErrorMessage);
             }
@@ -224,263 +226,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     retryCompileResult,
                     retryOutput.files,
                     retryOutput.siblingConstDriftWarnings));
-        }
-
-        /// <summary>
-        /// Converts retry-worker skips that are not already in the first-pass skipped list into
-        /// outcomes. Match is (Method, Reason) Ordinal equality so a method skipped for a new
-        /// reason on retry still surfaces. Why rewrite only on shim-compile-failure isolation:
-        /// signature-change-gate retry must keep UnavailableAddedCall for indirect callers.
-        /// </summary>
-        internal static List<HotReloadMethodOutcome> CollectRetryOnlySkippedOutcomes(
-            TransformWorkerSkippedDto[] firstPassSkipped,
-            TransformWorkerSkippedDto[] retrySkipped,
-            HotReloadGroupFilePaths groupFilePaths,
-            string trigger,
-            IReadOnlyCollection<string> excludedAddedMethodKeys)
-        {
-            List<HotReloadMethodOutcome> retryOnly = new List<HotReloadMethodOutcome>();
-            if (retrySkipped == null)
-            {
-                return retryOnly;
-            }
-
-            TransformWorkerSkippedDto[] baseline =
-                firstPassSkipped ?? Array.Empty<TransformWorkerSkippedDto>();
-            List<TransformWorkerSkippedDto> retryOnlyRows = new List<TransformWorkerSkippedDto>();
-            foreach (TransformWorkerSkippedDto retryRow in retrySkipped)
-            {
-                if (FirstPassContainsSkippedPair(baseline, retryRow))
-                {
-                    continue;
-                }
-
-                retryOnlyRows.Add(retryRow);
-            }
-
-            if (string.Equals(
-                trigger,
-                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
-                StringComparison.Ordinal))
-            {
-                RewriteShimCompileFailureIndirectCallerReasons(retryOnlyRows, excludedAddedMethodKeys);
-            }
-
-            foreach (TransformWorkerSkippedDto retryRow in retryOnlyRows)
-            {
-                retryOnly.Add(
-                    HotReloadMethodOutcome.Skipped(
-                        retryRow.method ?? "(unknown)",
-                        retryRow.reason ?? string.Empty,
-                        groupFilePaths.ResolveAssemblyResolvePath(retryRow.sourceProjectRelativePath)));
-            }
-
-            return retryOnly;
-        }
-
-        private static void RewriteShimCompileFailureIndirectCallerReasons(
-            List<TransformWorkerSkippedDto> retryOnlyRows,
-            IReadOnlyCollection<string> excludedAddedMethodKeys)
-        {
-            HashSet<string> reachable = new HashSet<string>(StringComparer.Ordinal);
-            if (excludedAddedMethodKeys != null)
-            {
-                foreach (string key in excludedAddedMethodKeys)
-                {
-                    if (!string.IsNullOrEmpty(key))
-                    {
-                        reachable.Add(key);
-                    }
-                }
-            }
-
-            bool progressed = true;
-            while (progressed)
-            {
-                progressed = false;
-                foreach (TransformWorkerSkippedDto row in retryOnlyRows)
-                {
-                    if (!string.Equals(
-                        row.reason,
-                        HotReloadConstants.UnavailableAddedCallSkipReason,
-                        StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    if (string.IsNullOrEmpty(row.calledAddedMethodKey)
-                        || !reachable.Contains(row.calledAddedMethodKey))
-                    {
-                        continue;
-                    }
-
-                    row.reason = HotReloadConstants.IsolatedAddedMethodCallerSkipReason;
-                    progressed = true;
-                    if (!string.IsNullOrEmpty(row.methodKey))
-                    {
-                        reachable.Add(row.methodKey);
-                    }
-                }
-            }
-        }
-
-        private static bool FirstPassContainsSkippedPair(
-            TransformWorkerSkippedDto[] firstPassSkipped,
-            TransformWorkerSkippedDto retryRow)
-        {
-            string retryMethod = retryRow.method ?? string.Empty;
-            string retryReason = retryRow.reason ?? string.Empty;
-            foreach (TransformWorkerSkippedDto firstPassRow in firstPassSkipped)
-            {
-                string firstMethod = firstPassRow.method ?? string.Empty;
-                string firstReason = firstPassRow.reason ?? string.Empty;
-                if (string.Equals(firstMethod, retryMethod, StringComparison.Ordinal)
-                    && string.Equals(firstReason, retryReason, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        // The project-relative paths of every source the run transformed, for shim-diagnostic
-        // line mapping.
-        internal static List<string> CollectSourceProjectRelativePaths(TransformWorkerInputDto workerInput)
-        {
-            List<string> projectRelativePaths = new List<string>(workerInput.sources.Length);
-            foreach (TransformWorkerSourceDto source in workerInput.sources)
-            {
-                projectRelativePaths.Add(source.projectRelativePath);
-            }
-
-            return projectRelativePaths;
-        }
-
-        internal static IsolationExclusions BuildIsolationExclusions(
-            IReadOnlyList<TransformWorkerEntryDto> failedEntries,
-            TransformWorkerEntryDto[] allEntries)
-        {
-            HashSet<string> excludedKeys = new HashSet<string>(StringComparer.Ordinal);
-            HashSet<string> excludedAddedMethodKeys = new HashSet<string>(StringComparer.Ordinal);
-            HashSet<string> failedAddedMethodKeys = new HashSet<string>(StringComparer.Ordinal);
-            List<TransformWorkerEntryDto> excludedCallerEntries = new List<TransformWorkerEntryDto>();
-            foreach (TransformWorkerEntryDto failedEntry in failedEntries)
-            {
-                string methodKey = HotReloadMethodKeys.BuildMethodKey(failedEntry);
-                if (failedEntry.patchKind == HotReloadConstants.PatchKindAddedMethod)
-                {
-                    // Why a separate set: dropping a healthy added shim via excludedMethodKeys
-                    // leaves remaining callers with CS0103 (G1). A broken added body must still
-                    // be excluded together with its callers so retry does not re-emit it.
-                    failedAddedMethodKeys.Add(methodKey);
-                    excludedAddedMethodKeys.Add(methodKey);
-                    continue;
-                }
-
-                excludedKeys.Add(methodKey);
-            }
-
-            HashSet<string> failedEntryKeys = new HashSet<string>(StringComparer.Ordinal);
-            foreach (TransformWorkerEntryDto failedEntry in failedEntries)
-            {
-                failedEntryKeys.Add(HotReloadMethodKeys.BuildMethodKey(failedEntry));
-            }
-
-            List<TransformWorkerEntryDto> callers = CollectCallerEntriesOfAddedMethods(
-                failedAddedMethodKeys,
-                failedEntryKeys,
-                allEntries);
-            foreach (TransformWorkerEntryDto entry in callers)
-            {
-                excludedCallerEntries.Add(entry);
-                string callerKey = HotReloadMethodKeys.BuildMethodKey(entry);
-                if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
-                {
-                    excludedAddedMethodKeys.Add(callerKey);
-                }
-                else
-                {
-                    excludedKeys.Add(callerKey);
-                }
-            }
-
-            string[] excludedMethodKeys = new string[excludedKeys.Count];
-            excludedKeys.CopyTo(excludedMethodKeys);
-            string[] excludedAddedKeys = new string[excludedAddedMethodKeys.Count];
-            excludedAddedMethodKeys.CopyTo(excludedAddedKeys);
-            return new IsolationExclusions(
-                excludedMethodKeys,
-                excludedAddedKeys,
-                excludedCallerEntries);
-        }
-
-        private static List<TransformWorkerEntryDto> CollectCallerEntriesOfAddedMethods(
-            HashSet<string> addedMethodKeys,
-            HashSet<string> alreadyExcludedEntryKeys,
-            TransformWorkerEntryDto[] allEntries)
-        {
-            List<TransformWorkerEntryDto> callerEntries = new List<TransformWorkerEntryDto>();
-            if (addedMethodKeys.Count == 0 || allEntries == null)
-            {
-                return callerEntries;
-            }
-
-            foreach (TransformWorkerEntryDto entry in allEntries)
-            {
-                if (entry.calledAddedMethodKeys == null)
-                {
-                    continue;
-                }
-
-                string callerKey = HotReloadMethodKeys.BuildMethodKey(entry);
-                if (alreadyExcludedEntryKeys.Contains(callerKey))
-                {
-                    continue;
-                }
-
-                bool callsAdded = false;
-                foreach (string calledKey in entry.calledAddedMethodKeys)
-                {
-                    if (addedMethodKeys.Contains(calledKey))
-                    {
-                        callsAdded = true;
-                        break;
-                    }
-                }
-
-                if (!callsAdded)
-                {
-                    continue;
-                }
-
-                callerEntries.Add(entry);
-            }
-
-            return callerEntries;
-        }
-
-        internal static List<HotReloadMethodOutcome> BuildSkippedCallerOutcomes(
-            IReadOnlyList<TransformWorkerEntryDto> callerEntries,
-            HotReloadGroupFilePaths groupFilePaths,
-            string skipReason)
-        {
-            List<HotReloadMethodOutcome> skippedCallerOutcomes = new List<HotReloadMethodOutcome>();
-            foreach (TransformWorkerEntryDto caller in callerEntries)
-            {
-                string methodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                    new HotReloadMetadataTypeName(caller.typeMetadataName),
-                    caller.methodName,
-                    caller.parameterTypeFullNames ?? Array.Empty<string>(),
-                    caller.genericArity);
-                skippedCallerOutcomes.Add(
-                    HotReloadMethodOutcome.Skipped(
-                        methodLabel,
-                        skipReason,
-                        groupFilePaths.ResolveAssemblyResolvePath(caller.sourceProjectRelativePath)));
-            }
-
-            return skippedCallerOutcomes;
         }
 
         internal sealed class IsolationExclusions

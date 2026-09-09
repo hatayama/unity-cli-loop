@@ -176,14 +176,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [UnityCliLoopTool]
     public class HotReloadTool : UnityCliLoopTool<HotReloadSchema, HotReloadResponse>
     {
-        // Why internal seams: compile-pipeline enumeration and apply execution cannot use planted
-        // fixtures, so tests substitute them while production keeps these default implementations.
-        internal static Func<HotReloadChangedFileAggregationResult> DetectChangedFilesForTesting =
-            HotReloadChangedFileAggregator.Detect;
-
-        internal static Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>>
-            RunApplyAsyncForTesting = RunApplyAsync;
-
         public override string ToolName => UnityCliLoopConstants.TOOL_NAME_HOT_RELOAD;
 
         protected override async Task<HotReloadResponse> ExecuteAsync(
@@ -193,12 +185,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
             Debug.Assert(parameters != null, "parameters must not be null.");
 
+            // Read once: every branch below has to run against the same services, and a
+            // replacement that closes mid-run must not move the tail of this run to another domain.
+            HotReloadServices services = HotReloadCompositionRoot.Services;
+
             if (parameters.Status)
             {
                 if (parameters.RevertAll
                     || (parameters.Files != null && parameters.Files.Length > 0))
                 {
                     return CreateValidationFailure(
+                        services,
                         new HotReloadValidationFailure(
                             "--status cannot be combined with --files or --revert-all.",
                             HotReloadValidationErrorCodes.StatusConflict,
@@ -209,29 +206,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             }));
                 }
 
-                return HotReloadStatusExecutor.ExecuteStatus();
+                return services.StatusExecutor.ExecuteStatus();
             }
 
             if (parameters.RevertAll)
             {
-                return HotReloadStatusExecutor.ExecuteRevertAll();
+                return services.StatusExecutor.ExecuteRevertAll();
             }
 
             HotReloadValidationFailure validationFailure = ValidateApplyParameters(parameters);
             if (validationFailure != null)
             {
-                return CreateValidationFailure(validationFailure);
+                return CreateValidationFailure(services, validationFailure);
             }
 
+            // Why here and not only at the run entry: the tool normalizes script paths for its own
+            // selection and response rows, and PackageInfo is main-thread only, which this path is.
+            services.PackageRootCapture.CaptureCurrent();
             HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
                 parameters.Files,
-                DetectChangedFilesForTesting);
+                services.ChangeDetector.Detect);
             if (selection.ValidationFailure != null)
             {
-                return CreateValidationFailure(selection.ValidationFailure);
+                return CreateValidationFailure(services, selection.ValidationFailure);
             }
 
-            HotReloadOrchestratorResult result = await RunApplyAsyncForTesting(selection.Files, ct)
+            HotReloadOrchestratorResult result = await services.Orchestrator
+                .RunAsync(selection.Files, contentPathOverride: null, ct)
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -239,7 +240,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.Methods,
                 result.IntroducedTypes);
 
-            HotReloadResponse response = BuildApplyResponse(result, selection.ScanLimitWarnings);
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                services,
+                result,
+                selection.ScanLimitWarnings);
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
             {
                 response.Message = selection.SelectionMessage + " " + response.Message;
@@ -274,28 +278,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
+        // Why this reads the services itself: the apply path above passes the services it read
+        // at its own entry, and this shim exists only for callers that hold a result but not the
+        // run that produced it.
         internal static HotReloadResponse BuildApplyResponse(
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings = null)
         {
-            return HotReloadApplyResponseBuilder.Build(result, additionalWarnings);
+            return HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                result,
+                additionalWarnings);
         }
 
-        private static Task<HotReloadOrchestratorResult> RunApplyAsync(
-            IReadOnlyList<string> files,
-            CancellationToken ct)
+        private static HotReloadResponse CreateValidationFailure(
+            HotReloadServices services,
+            HotReloadValidationFailure failure)
         {
-            return HotReloadOrchestrator.RunAsync(files, contentPathOverride: null, ct);
-        }
-
-        private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)
-        {
+            Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(failure != null, "failure must not be null.");
             // Why two numbers from one read: the suffix warns that the refusal left something
             // live, and an introduced type is live even when nothing is patched. ActivePatchTotal
             // counts patched methods and added members, which is what callers read it against
             // PatchedTotal for; the runtime total adds the introduced types on top.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadActiveChangeCounts.Capture();
+            HotReloadActiveChangeSnapshot snapshot = services.Domain.CountActiveChanges();
             int activePatchTotal = snapshot.PatchAndAddedMemberCount;
             int runtimeChangeTotal = snapshot.RuntimeChangeTotal;
             string message = failure.Message;

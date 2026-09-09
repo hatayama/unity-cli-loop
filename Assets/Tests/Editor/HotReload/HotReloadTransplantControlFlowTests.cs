@@ -17,10 +17,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadTransplantControlFlowTests
     {
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
         }
 
         // Why NoInlining: repo convention for patch-target fixtures — without it the
@@ -136,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadTransplantControlFlowTests), shimName);
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
@@ -218,7 +226,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadTransplantControlFlowTests), nameof(ShimToCenterThrowInTry));
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 

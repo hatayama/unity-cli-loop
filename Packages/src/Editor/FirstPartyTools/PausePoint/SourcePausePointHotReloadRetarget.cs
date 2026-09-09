@@ -184,7 +184,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 HotReloadShimFileLookup lookup =
-                    HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(request.NormalizedFile);
+                    HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(
+                        request.NormalizedFile);
                 if (lookup == null)
                 {
                     SuppressMarkerRetargetFailed(id);

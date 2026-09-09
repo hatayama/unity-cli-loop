@@ -14,9 +14,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadApplyResponseBuilder
     {
         public static HotReloadResponse Build(
+            HotReloadServices services,
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings)
         {
+            Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
 
             List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(result.Methods.Count);
@@ -67,6 +69,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.Methods,
                 HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
                 HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot,
+                path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                    services.PackageRootCapture,
+                    path),
                 result.ReappliedSiblingPaths);
 
             // Why before the count snapshot: a Skipped method is applied by 'uloop compile' like
@@ -120,10 +125,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Methods = methods,
                 Warnings = warnings,
                 IntroducedTypes = HotReloadIntroducedTypeResponseSection.BuildRows(result.IntroducedTypes),
-                ActiveIntroducedTypeTotal = HotReloadActiveChangeCounts.IntroducedTypeCount,
+                ActiveIntroducedTypeTotal = services.Domain.IntroducedTypeCount,
                 PatchedTotal = result.PatchedTotal,
                 ActivePatchTotal = result.ActivePatchTotal,
-                AddedFieldTotal = HotReloadAddedFieldRegistry.DescribeAll().Count,
+                AddedFieldTotal = services.Domain.DescribeAddedFields().Count,
                 UnchangedTotal = result.UnchangedTotal,
                 ClearedCount = result.RevertedUnchangedTotal,
                 AddedFields = result.AddedFields,
@@ -143,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void AppendRetargetLineDriftWarnings(List<string> warnings)
         {
             IReadOnlyList<(string Id, string OldText, string NewText)> driftWarnings =
-                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings?.Invoke();
+                HotReloadPausePointCoordination.PausePointSide?.ConsumeRetargetLineDriftWarnings();
             if (driftWarnings == null || driftWarnings.Count == 0)
             {
                 return;
@@ -164,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void AppendExpiredNotRetargetedWarnings(List<string> warnings)
         {
             IReadOnlyList<string> expiredIds =
-                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds?.Invoke();
+                HotReloadPausePointCoordination.PausePointSide?.ConsumeExpiredNotRetargetedMarkerIds();
             if (expiredIds == null || expiredIds.Count == 0)
             {
                 return;

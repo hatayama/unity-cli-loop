@@ -24,14 +24,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadPlayModeEntryDropRecorderTests
     {
         private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
-        private Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>> _previousApply;
+
+        private HotReloadDomainTestScope _scope;
 
         [SetUp]
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
-            _previousApply = HotReloadTool.RunApplyAsyncForTesting;
-            HotReloadPatcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -41,8 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadTool.RunApplyAsyncForTesting = _previousApply;
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
         }
@@ -179,39 +178,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task CollectActiveIdentities_AfterARunThatPatchedAMethodAndIntroducedAType_ReturnsBoth()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                HotReloadOrchestratorResult result = await RunPatchingABodyAndIntroducingATypeAsync();
+                try
+                {
+                    HotReloadOrchestratorResult result = await RunPatchingABodyAndIntroducingATypeAsync();
 
-                Assert.That(
-                    result.ActivePatchTotal,
-                    Is.EqualTo(1),
-                    "Precondition: the run must have patched exactly one method.");
-                Assert.That(
-                    result.IntroducedTypes.Count,
-                    Is.EqualTo(1),
-                    "Precondition: the run must have introduced exactly one type.");
-                HotReloadIntroducedTypeOutcome introduced = result.IntroducedTypes[0];
+                    Assert.That(
+                        result.ActivePatchTotal,
+                        Is.EqualTo(1),
+                        "Precondition: the run must have patched exactly one method.");
+                    Assert.That(
+                        result.IntroducedTypes.Count,
+                        Is.EqualTo(1),
+                        "Precondition: the run must have introduced exactly one type.");
+                    HotReloadIntroducedTypeOutcome introduced = result.IntroducedTypes[0];
 
-                List<string> identities =
-                    new List<string>(HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities());
+                    List<string> identities =
+                        new List<string>(HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities());
 
-                Assert.That(
-                    identities.Count,
-                    Is.EqualTo(2),
-                    "One patch and one type are two changes the reload would discard.");
-                Assert.That(
-                    identities,
-                    Does.Contain(
-                        HotReloadPlayModeEntryDropIdentity.ForType(
-                            introduced.OriginalAssemblyName,
-                            introduced.MetadataName)),
-                    "The type must be recorded in the shape a later apply can recover.");
-                Assert.That(
-                    identities.FindAll(identity => identity.Contains("Scaled")).Count,
-                    Is.EqualTo(1),
-                    "The patched method must still be collected next to the type.");
+                    Assert.That(
+                        identities.Count,
+                        Is.EqualTo(2),
+                        "One patch and one type are two changes the reload would discard.");
+                    Assert.That(
+                        identities,
+                        Does.Contain(
+                            HotReloadPlayModeEntryDropIdentity.ForType(
+                                introduced.OriginalAssemblyName,
+                                introduced.MetadataName)),
+                        "The type must be recorded in the shape a later apply can recover.");
+                    Assert.That(
+                        identities.FindAll(identity => identity.Contains("Scaled")).Count,
+                        Is.EqualTo(1),
+                        "The patched method must still be collected next to the type.");
+                }
+                finally
+                {
+                    // The patch belongs to the replacement domain, and the TearDown revert runs
+                    // after the scope has already put the outer domain back, which knows nothing
+                    // about it and would leave it live in Harmony.
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
             }
         }
 
@@ -250,9 +258,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void CollectActiveIdentities_WithNoActiveChange_ReturnsNothing()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
 
                 IReadOnlyList<string> identities =
                     HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities();
@@ -278,14 +285,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
                 "PlayModeEntryDropRecoveryHost.cs",
                 InsertIntroducedType(File.ReadAllText(hostPath)));
-            // Why the substitution: only the tool entry route is under test, and the run needs the
-            // edited copy as its content source, which the production apply cannot be told about.
-            HotReloadTool.RunApplyAsyncForTesting = (files, ct) =>
-                HotReloadOrchestrator.RunAsync(files, editedPath, ct);
-
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
+                // Why the substitution: only the tool entry route is under test, and the run needs
+                // the edited copy as its content source, which the tool cannot be told about.
+                IHotReloadOrchestrator productionOrchestrator = HotReloadCompositionRoot.Services.Orchestrator;
+                using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                    new HotReloadStubOrchestrator(
+                        (files, ct) => productionOrchestrator.RunAsync(files, editedPath, ct)));
                 HotReloadResponse introducing = await ExecuteApplyAsync(hostPath);
 
                 Assert.That(
@@ -324,7 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadOrchestratorResult> RunPatchingABodyAndIntroducingATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            return await HotReloadOrchestrator.RunAsync(
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "PlayModeEntryDropIdentityHost.cs",

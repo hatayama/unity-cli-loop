@@ -21,10 +21,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadPatcherTests
     {
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            _scope.Dispose();
+        }
+
+        /// <summary>
+        /// Real Harmony for every call except the unpatch a test wants to see fail, so the
+        /// transpiler under test is genuinely live while the rebuild is refused.
+        /// </summary>
+        private sealed class RefusingUnpatchHarmony : IHotReloadHarmony
+        {
+            private readonly IHotReloadHarmony _inner;
+
+            internal RefusingUnpatchHarmony(IHotReloadHarmony inner)
+            {
+                _inner = inner;
+            }
+
+            internal bool RefuseUnpatch { get; set; }
+
+            public void Patch(MethodBase original, HarmonyMethod transpiler)
+            {
+                _inner.Patch(original, transpiler);
+            }
+
+            public void Unpatch(MethodBase original, HarmonyPatchType patchType, string harmonyId)
+            {
+                if (RefuseUnpatch)
+                {
+                    throw new InvalidOperationException("rebuild failed");
+                }
+
+                _inner.Unpatch(original, patchType, harmonyId);
+            }
+
+            public void UnpatchAll(string harmonyId)
+            {
+                _inner.UnpatchAll(harmonyId);
+            }
+        }
+
+        private static RefusingUnpatchHarmony CreateRefusingUnpatchHarmony()
+        {
+            return new RefusingUnpatchHarmony(
+                new HotReloadHarmonyGateway(new Harmony(HotReloadConstants.HarmonyId)));
+        }
+
+        private static IDisposable BeginReplacementWith(IHotReloadHarmony harmony)
+        {
+            HotReloadPackageRootCapture packageRootCapture = new HotReloadPackageRootCapture();
+            packageRootCapture.CaptureCurrent();
+            return HotReloadCompositionRoot.BeginReplacement(
+                HotReloadCompositionRoot.CreateServices(
+                    HotReloadCompositionRoot.CreateProductionDomain(),
+                    harmony,
+                    packageRootCapture,
+                    new HotReloadEditorStateSnapshotCapture(),
+                    TransformWorkerHost.Shared,
+                    HotReloadGroupProcessorDependencies.CreateProduction));
         }
 
         /// <summary>
@@ -41,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5), "Precondition: original sentinel body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
@@ -59,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.StaticPing__shim0));
 
             Assert.That(HotReloadCoreFixture.StaticPing(), Is.EqualTo("original"));
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(HotReloadCoreFixture.StaticPing(), Is.EqualTo("patched"));
@@ -80,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             fixture.VoidBump();
             Assert.That(fixture.VoidHits, Is.EqualTo(-1), "Precondition: original void body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             fixture.VoidBump();
@@ -100,12 +164,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
 
-            HotReloadPatcher.RevertAll();
-            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(0));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(HotReloadCompositionRoot.Services.Patcher.ActivePatchCount, Is.EqualTo(0));
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5));
         }
 
@@ -121,15 +185,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string staticKey = HotReloadAddedFieldStore.FormatFieldKey("Host", "seed");
             HotReloadAddedFieldStore.Set(host, instanceKey, 1);
             HotReloadAddedFieldStore.SetStatic(staticKey, 2);
-            HotReloadAddedFieldRegistry.ReplaceForFile(
+            new HotReloadDomainTestAccess().ReplaceAddedFields(
                 "Assets/Tests/Editor/HotReload/Host.cs",
                 new[] { "Host.count" });
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             Assert.That(HotReloadAddedFieldStore.GetOrInit(host, instanceKey, () => 10), Is.EqualTo(10));
             Assert.That(HotReloadAddedFieldStore.GetOrInitStatic(staticKey, () => 20), Is.EqualTo(20));
-            Assert.That(HotReloadAddedFieldRegistry.GetFieldsForType("Host"), Is.Empty);
+            Assert.That(HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType("Host"), Is.Empty);
         }
 
         /// <summary>
@@ -139,14 +203,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void RevertAll_RunsTheDomainStoreReset()
         {
-            HotReloadAddedFieldRegistry.ReplaceForFile(
+            new HotReloadDomainTestAccess().ReplaceAddedFields(
                 "Assets/Tests/Editor/HotReload/PatcherResetHost.cs",
                 new[] { "PatcherResetHost.count" });
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
-            Assert.That(HotReloadPatcher.ActiveChangeCount, Is.EqualTo(0));
-            Assert.That(HotReloadAddedFieldRegistry.DescribeAll(), Is.Empty);
+            Assert.That(HotReloadCompositionRoot.Services.Patcher.ActiveChangeCount, Is.EqualTo(0));
+            Assert.That(HotReloadCompositionRoot.Services.Domain.DescribeAddedFields(), Is.Empty);
         }
 
         /// <summary>
@@ -162,19 +226,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
 
             Assert.That(
-                HotReloadPatcher.Apply(
+                new HotReloadDomainTestAccess().ApplyPatch(
                     original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
 
-            IReadOnlyList<HotReloadActivePatchInfo> afterApply = HotReloadPatcher.DescribeActivePatches();
+            IReadOnlyList<HotReloadActivePatchInfo> afterApply = HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
             Assert.That(afterApply.Count, Is.EqualTo(1));
             Assert.That(
                 afterApply[0].MethodKey,
                 Does.Contain(nameof(HotReloadCoreFixture)).And.Contain(nameof(HotReloadCoreFixture.ReplaceableCompute)));
             Assert.That(afterApply[0].FilePath, Is.EqualTo("Assets/Tests/Fixture.cs"));
 
-            HotReloadPatcher.RevertAll();
-            IReadOnlyList<HotReloadActivePatchInfo> afterRevert = HotReloadPatcher.DescribeActivePatches();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            IReadOnlyList<HotReloadActivePatchInfo> afterRevert = HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
             Assert.That(afterRevert, Is.Empty);
         }
 
@@ -193,12 +257,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
 
             Assert.That(
-                HotReloadPatcher.Apply(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(100));
 
@@ -208,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .Where(patch => patch.owner == HotReloadConstants.HarmonyId)
                 .ToArray();
             Assert.That(ownedTranspilers.Length, Is.EqualTo(1), "Re-apply must not stack hot-reload transpilers.");
-            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(1));
+            Assert.That(HotReloadCompositionRoot.Services.Patcher.ActivePatchCount, Is.EqualTo(1));
         }
 
         /// <summary>
@@ -221,7 +285,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(HotReloadPatchFailureReason.UnpatchableValueType));
@@ -246,13 +310,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(-5),
                 "Precondition: original async sentinel body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Delegation, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(await fixture.ReplaceableComputeAsync(5), Is.EqualTo(10 + 5 + 1));
 
-            HotReloadPatcher.RevertAll();
-            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(0));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(HotReloadCompositionRoot.Services.Patcher.ActivePatchCount, Is.EqualTo(0));
             Assert.That(await fixture.ReplaceableComputeAsync(5), Is.EqualTo(-5));
         }
 
@@ -272,13 +336,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadPatcherTests), nameof(ExternShimStub));
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(HotReloadPatchFailureReason.ApplyFailed));
             Assert.That(result.ErrorMessage, Does.Contain("ReplaceableCompute"));
-            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(0));
+            Assert.That(HotReloadCompositionRoot.Services.Patcher.ActivePatchCount, Is.EqualTo(0));
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5), "Original body must survive.");
@@ -299,7 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(
                 HotReloadInvocationRegistry.GetCount(methodKey),
@@ -322,9 +386,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(status.Methods[0].Method, Is.EqualTo(methodKey));
             Assert.That(status.Methods[0].InvocationCount, Is.EqualTo(2L));
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
-            Assert.That(HotReloadPatcher.DescribeActivePatches(), Is.Empty);
+            Assert.That(HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches(), Is.Empty);
         }
 
         /// <summary>
@@ -344,14 +408,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
 
             Assert.That(
-                HotReloadPatcher.Apply(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(
                 HotReloadInvocationRegistry.GetCount(methodKey),
@@ -458,87 +522,102 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo survivingShim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.StaticPing__shim0));
             string failingKey = HotReloadMethodKeys.FormatMethodLabel(failing);
-            Assert.That(
-                HotReloadPatcher.Apply(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
-                Is.True);
-            Assert.That(
-                HotReloadPatcher.Apply(surviving, survivingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
-                Is.True);
-            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(2));
-
-            HotReloadRevertOutcome failedOutcome;
-            string failureReason;
-            HotReloadPatcher.UnpatchForTesting = _ => throw new InvalidOperationException("rebuild failed");
-            try
+            RefusingUnpatchHarmony harmony = CreateRefusingUnpatchHarmony();
+            using (BeginReplacementWith(harmony))
             {
-                failedOutcome = HotReloadPatcher.Revert(failing, out failureReason);
-            }
-            finally
-            {
-                HotReloadPatcher.UnpatchForTesting = null;
-            }
+                try
+                {
+                    Assert.That(
+                        new HotReloadDomainTestAccess().ApplyPatch(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                        Is.True);
+                    Assert.That(
+                        new HotReloadDomainTestAccess().ApplyPatch(surviving, survivingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                        Is.True);
+                    Assert.That(HotReloadCompositionRoot.Services.Patcher.ActivePatchCount, Is.EqualTo(2));
 
-            Assert.That(failedOutcome, Is.EqualTo(HotReloadRevertOutcome.UnpatchFailed));
-            Assert.That(failureReason, Does.Contain("rebuild failed"));
-            Assert.That(
-                HotReloadPatcher.ActivePatchCount,
-                Is.EqualTo(2),
-                "The transpiler is still live, so the ledger must keep describing it.");
-            Assert.That(
-                HotReloadPatcher.DescribeActivePatches().Select(patch => patch.MethodKey),
-                Does.Contain(failingKey),
-                "Status has to keep reporting a patch Harmony could not remove.");
-            Assert.That(
-                HotReloadPatcher.Revert(failing, out string _),
-                Is.EqualTo(HotReloadRevertOutcome.Reverted),
-                "Once the rebuild works, the retained entry must revert instead of reporting NotPatched.");
-            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(1));
-            Assert.That(
-                HotReloadPatcher.Revert(surviving, out string _),
-                Is.EqualTo(HotReloadRevertOutcome.Reverted),
-                "A contained revert failure must not stop the remaining methods from reverting.");
+                    harmony.RefuseUnpatch = true;
+                    HotReloadRevertOutcome failedOutcome =
+                        HotReloadCompositionRoot.Services.Patcher.Revert(failing, out string failureReason);
+                    harmony.RefuseUnpatch = false;
+
+                    Assert.That(failedOutcome, Is.EqualTo(HotReloadRevertOutcome.UnpatchFailed));
+                    Assert.That(failureReason, Does.Contain("rebuild failed"));
+                    Assert.That(
+                        HotReloadCompositionRoot.Services.Patcher.ActivePatchCount,
+                        Is.EqualTo(2),
+                        "The transpiler is still live, so the ledger must keep describing it.");
+                    Assert.That(
+                        HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches().Select(patch => patch.MethodKey),
+                        Does.Contain(failingKey),
+                        "Status has to keep reporting a patch Harmony could not remove.");
+                    Assert.That(
+                        HotReloadCompositionRoot.Services.Patcher.Revert(failing, out string _),
+                        Is.EqualTo(HotReloadRevertOutcome.Reverted),
+                        "Once the rebuild works, the retained entry must revert instead of reporting NotPatched.");
+                    Assert.That(HotReloadCompositionRoot.Services.Patcher.ActivePatchCount, Is.EqualTo(1));
+                    Assert.That(
+                        HotReloadCompositionRoot.Services.Patcher.Revert(surviving, out string _),
+                        Is.EqualTo(HotReloadRevertOutcome.Reverted),
+                        "A contained revert failure must not stop the remaining methods from reverting.");
+                }
+                finally
+                {
+                    harmony.RefuseUnpatch = false;
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
+            }
         }
 
         /// <summary>
-        /// What: a Harmony rebuild failure while reverting keeps the whole ledger entry of the
-        /// still-patched method, including the transplant locals and preamble length that
-        /// pause-point reads when it joins the shim chain.
+        /// What: a Harmony rebuild failure while reverting leaves the method's generation holding
+        /// the patch whole, including the transplant locals and preamble length that pause point
+        /// reads when it joins the shim chain.
         /// </summary>
         [Test]
-        public void Revert_WhenHarmonyCannotRebuild_KeepsTransplantLedgerForTheLivePatch()
+        public void Revert_WhenHarmonyCannotRebuild_KeepsTheLivePatchInItsGeneration()
         {
             MethodInfo failing = AccessTools.Method(
                 typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
             MethodInfo failingShim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
-            Assert.That(
-                HotReloadPatcher.Apply(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
-                Is.True);
-            Assert.That(
-                HotReloadPausePointCoordination.GetTransplantLocals(failing),
-                Is.Not.Null,
-                "A transplant apply must record the shim locals the test then checks are retained.");
-
-            HotReloadPatcher.UnpatchForTesting = _ => throw new InvalidOperationException("rebuild failed");
-            try
+            RefusingUnpatchHarmony harmony = CreateRefusingUnpatchHarmony();
+            using (BeginReplacementWith(harmony))
             {
-                Assert.That(
-                    HotReloadPatcher.Revert(failing, out string _),
-                    Is.EqualTo(HotReloadRevertOutcome.UnpatchFailed));
-            }
-            finally
-            {
-                HotReloadPatcher.UnpatchForTesting = null;
-            }
+                try
+                {
+                    Assert.That(
+                        new HotReloadDomainTestAccess().ApplyPatch(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                        Is.True);
+                    Assert.That(
+                        HotReloadPausePointCoordination.HotReloadSide.GetTransplantLocals(failing),
+                        Is.Not.Null,
+                        "A transplant apply must record the shim locals the test then checks are retained.");
 
-            Assert.That(
-                HotReloadPausePointCoordination.GetTransplantLocals(failing),
-                Is.Not.Null,
-                "The transpiler is still live, so pause-point must still find its transplant locals.");
-            Assert.That(
-                HotReloadPausePointCoordination.GetTransplantPreambleLength(failing),
-                Is.GreaterThan(0),
-                "The retained entry must keep the preamble length pause-point offsets against.");
+                    harmony.RefuseUnpatch = true;
+                    Assert.That(
+                        HotReloadCompositionRoot.Services.Patcher.Revert(failing, out string _),
+                        Is.EqualTo(HotReloadRevertOutcome.UnpatchFailed));
+                    harmony.RefuseUnpatch = false;
+
+                    HotReloadFileGeneration generation =
+                        HotReloadCompositionRoot.Services.Domain.FindGenerationForMethod(failing);
+                    Assert.That(generation, Is.Not.Null, "The refused revert must leave the method claimed.");
+                    Assert.That(generation.IsPatchActive(failing), Is.True);
+                    Assert.That(
+                        HotReloadPausePointCoordination.HotReloadSide.GetTransplantLocals(failing),
+                        Is.Not.Null,
+                        "The transpiler is still live, so pause point must still find its transplant locals.");
+                    Assert.That(
+                        HotReloadPausePointCoordination.HotReloadSide.GetTransplantPreambleLength(failing),
+                        Is.GreaterThan(0),
+                        "The retained patch must keep the preamble length pause point offsets against.");
+                }
+                finally
+                {
+                    harmony.RefuseUnpatch = false;
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
+            }
         }
 
         /// <summary>
@@ -555,13 +634,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
 
             Assert.That(
-                HotReloadPatcher.Revert(original, out string _),
+                HotReloadCompositionRoot.Services.Patcher.Revert(original, out string _),
                 Is.EqualTo(HotReloadRevertOutcome.Reverted));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5));

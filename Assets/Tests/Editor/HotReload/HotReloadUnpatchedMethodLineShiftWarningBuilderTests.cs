@@ -128,6 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -162,6 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -193,6 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
                     ? "line1\nline2"
                     : "same\ncount",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -224,6 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
                     ? "line1\nline2"
                     : "a\nb",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(2));
@@ -256,6 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -287,6 +292,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(2));
@@ -321,6 +327,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 new[] { "Assets/Scripts/Enemy.cs" });
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -352,6 +359,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 new[] { "Assets/Scripts/Enemy.cs" });
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -383,6 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -407,9 +416,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
             File.WriteAllText(absolutePath, "line1\nline2\nline3");
 
-            Func<string, string> previousLoader =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => "line1\nline2";
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => "line1\nline2";
             try
             {
                 HotReloadResponse response = HotReloadTool.BuildApplyResponse(
@@ -437,7 +445,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousLoader;
+                snapshotScope.Dispose();
                 if (File.Exists(absolutePath))
                 {
                     File.Delete(absolutePath);
@@ -460,9 +468,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
             File.WriteAllText(absolutePath, "line1\nline2\nline3");
 
-            Func<string, string> previousLoader =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => "line1\nline2";
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => "line1\nline2";
             try
             {
                 HotReloadResponse response = HotReloadTool.BuildApplyResponse(
@@ -485,12 +492,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousLoader;
+                snapshotScope.Dispose();
                 if (File.Exists(absolutePath))
                 {
                     File.Delete(absolutePath);
                 }
             }
+        }
+
+        // The path spelling the production response builder passes, so these tests key their
+        // warnings on the same file names a real run does.
+        private static string ToProjectRelativeScriptPath(string path)
+        {
+            return HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                path);
         }
     }
 }
