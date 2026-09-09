@@ -21,8 +21,8 @@ const (
 	assemblyDefinitionGUIDKey    = "guid:"
 	assemblyReferenceExtension   = ".asmref"
 	cSharpSourceExtension        = ".cs"
-	unityIgnoredDirectorySuffix  = "~"
-	unityHiddenDirectoryPrefix   = "."
+	unityIgnoredNameSuffix       = "~"
+	unityHiddenNamePrefix        = "."
 	assemblyDefinitionIndexError = "failed to index assembly definitions under %s: %w"
 )
 
@@ -65,10 +65,13 @@ func indexAssemblyDefinitionsUnder(root string, index map[string]AssemblyDefinit
 			return err
 		}
 		if entry.IsDir() {
-			if path != root && isUnityIgnoredDirectory(entry.Name()) {
+			if path != root && isUnityIgnoredName(entry.Name()) {
 				return filepath.SkipDir
 			}
 
+			return nil
+		}
+		if isUnityIgnoredName(entry.Name()) {
 			return nil
 		}
 		if filepath.Ext(path) != assemblyDefinitionExtension {
@@ -187,10 +190,13 @@ func globAssemblySources(projectRoot string, assemblyDirectory string) ([]string
 			if path == assemblyDirectory {
 				return nil
 			}
-			if isUnityIgnoredDirectory(entry.Name()) || directoryOwnsOwnAssembly(path) {
+			if isUnityIgnoredName(entry.Name()) || directoryOwnsOwnAssembly(path) {
 				return filepath.SkipDir
 			}
 
+			return nil
+		}
+		if isUnityIgnoredName(entry.Name()) {
 			return nil
 		}
 		if filepath.Ext(path) != cSharpSourceExtension {
@@ -214,7 +220,7 @@ func directoryOwnsOwnAssembly(path string) bool {
 		return false
 	}
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || isUnityIgnoredName(entry.Name()) {
 			continue
 		}
 		extension := filepath.Ext(entry.Name())
@@ -226,10 +232,13 @@ func directoryOwnsOwnAssembly(path string) bool {
 	return false
 }
 
-// isUnityIgnoredDirectory reports whether Unity excludes a directory from compilation by its name.
-func isUnityIgnoredDirectory(name string) bool {
-	return strings.HasSuffix(name, unityIgnoredDirectorySuffix) ||
-		strings.HasPrefix(name, unityHiddenDirectoryPrefix)
+// isUnityIgnoredName reports whether Unity excludes a file or directory from compilation by its
+// name. Why files matter as much as directories: macOS writes AppleDouble siblings named "._X" next
+// to files on non-native volumes, so a project can hold a "._X.asmdef" whose content is binary
+// resource-fork metadata and a "._X.cs" that is not C# at all.
+func isUnityIgnoredName(name string) bool {
+	return strings.HasSuffix(name, unityIgnoredNameSuffix) ||
+		strings.HasPrefix(name, unityHiddenNamePrefix)
 }
 
 // isUnderPackageCache reports whether a directory belongs to the read-only package cache.
