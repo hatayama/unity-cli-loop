@@ -70,6 +70,13 @@ func (c Compiler) CompileUnit(
 		return UnitResult{}, fmt.Errorf("failed to create %s: %w", outputDirectoryPath, err)
 	}
 
+	// Why the previous run's outputs go first: csc writes nothing when it fails, so a leftover
+	// reference assembly from an earlier run would keep describing an assembly that no longer
+	// compiles, and every dependent would be checked against an API that is gone.
+	if err := removeUnitOutputs(outputDirectoryPath, unit); err != nil {
+		return UnitResult{}, err
+	}
+
 	responseFilePath, err := writeRewrittenResponseFile(c.ProjectRoot, plan, unit)
 	if err != nil {
 		return UnitResult{}, err
@@ -96,6 +103,22 @@ func (c Compiler) CompileUnit(
 	}
 
 	return buildUnitResult(unit.Assembly.AssemblyName, stdout, stderr, exitCode, duration), nil
+}
+
+// removeUnitOutputs deletes what a previous run left for this assembly in the check's output directory.
+func removeUnitOutputs(outputDirectoryPath string, unit CompileUnit) error {
+	names := []string{
+		unit.Assembly.AssemblyName + assemblyExtension,
+		unit.Assembly.AssemblyName + referenceAssemblyExtension,
+	}
+	for _, name := range names {
+		path := filepath.Join(outputDirectoryPath, name)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove %s: %w", path, err)
+		}
+	}
+
+	return nil
 }
 
 // buildUnitResult turns one compiler invocation's output into the result for its assembly.
@@ -192,8 +215,13 @@ func writeRewrittenResponseFile(
 	rsp := unit.Assembly
 	lines := []string{
 		compilerLibraryTargetFlag,
-		quoteFlag("-out:", filepath.Join(plan.OutputDir, filepath.Base(rsp.OutputPath))),
-		quoteFlag("-refout:", filepath.Join(plan.OutputDir, filepath.Base(rsp.RefOutputPath))),
+		quoteFlag(outputFlagPrefix, filepath.Join(plan.OutputDir, filepath.Base(rsp.OutputPath))),
+	}
+	// Why the guard: an assembly built without a reference assembly has no base name to join, and
+	// joining an empty one would point -refout at the output directory itself.
+	if rsp.RefOutputPath != "" {
+		lines = append(lines, quoteFlag(
+			referenceOutputFlagPref, filepath.Join(plan.OutputDir, filepath.Base(rsp.RefOutputPath))))
 	}
 	for _, define := range rsp.Defines {
 		lines = append(lines, defineFlagPrefix+define)

@@ -27,6 +27,20 @@ func writePlanAssembly(t *testing.T, projectRoot string, name string, references
 	writeFileAt(t, filepath.Join(projectRoot, planDagDirectory, name+".UnityAdditionalFile.txt"), "")
 	writeFileAt(t, filepath.Join(projectRoot, planDagDirectory, name+".dll"), "")
 	writeFileAt(t, filepath.Join(projectRoot, "Assets", name, name+".cs"), "")
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", name, name+".asmdef"), `{"name":"`+name+`"}`)
+}
+
+// settlePlanProject dates every source and assembly definition before the build that produced the dlls.
+func settlePlanProject(t *testing.T, projectRoot string, names ...string) {
+	t.Helper()
+	buildTime := time.Now()
+	for _, name := range names {
+		setModificationTime(t,
+			filepath.Join(projectRoot, "Assets", name, name+".cs"), buildTime.Add(-time.Hour))
+		setModificationTime(t,
+			filepath.Join(projectRoot, "Assets", name, name+".asmdef"), buildTime.Add(-time.Hour))
+		setModificationTime(t, filepath.Join(projectRoot, planDagDirectory, name+".dll"), buildTime)
+	}
 }
 
 // joinLines assembles a response file body from its lines.
@@ -50,11 +64,20 @@ func newPlanProject(t *testing.T) string {
 	writePlanAssembly(t, projectRoot, "B", []string{"A"})
 	writePlanAssembly(t, projectRoot, "C", []string{"B"})
 
-	buildTime := time.Now()
-	for _, name := range []string{"A", "B", "C"} {
-		setModificationTime(t, filepath.Join(projectRoot, "Assets", name, name+".cs"), buildTime.Add(-time.Hour))
-		setModificationTime(t, filepath.Join(projectRoot, planDagDirectory, name+".dll"), buildTime)
-	}
+	settlePlanProject(t, projectRoot, "A", "B", "C")
+
+	return projectRoot
+}
+
+// newReversePlanProject builds a project whose dependency order is the reverse of its name order:
+// A references B references C, so a correct plan compiles C, B, A.
+func newReversePlanProject(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	writePlanAssembly(t, projectRoot, "C", nil)
+	writePlanAssembly(t, projectRoot, "B", []string{"C"})
+	writePlanAssembly(t, projectRoot, "A", []string{"B"})
+	settlePlanProject(t, projectRoot, "A", "B", "C")
 
 	return projectRoot
 }
@@ -190,5 +213,67 @@ func TestBuildCompilePlanRejectsCyclicReferences(t *testing.T) {
 
 	if _, err := BuildCompilePlan(projectRoot, planDagDirectory, true); err == nil {
 		t.Fatal("expected cyclic assembly references to be rejected")
+	}
+}
+
+// Verifies dependency order wins over name order when a change propagates to dependents.
+func TestBuildCompilePlanOrdersAgainstNameOrder(t *testing.T) {
+	projectRoot := newReversePlanProject(t)
+	touchSource(t, projectRoot, "C")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, false)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertStrings(t, "plan order", unitNames(plan), []string{"C", "B", "A"})
+}
+
+// Verifies --all also orders by dependency rather than by name.
+func TestBuildCompilePlanWithAllOrdersAgainstNameOrder(t *testing.T) {
+	projectRoot := newReversePlanProject(t)
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertStrings(t, "plan order", unitNames(plan), []string{"C", "B", "A"})
+}
+
+// Verifies an assembly definition added since the last build stops the run instead of being ignored.
+func TestBuildCompilePlanRejectsAnAssemblyDefinitionAddedAfterTheBuild(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "D", "D.asmdef"), `{"name":"D"}`)
+	setModificationTime(t,
+		filepath.Join(projectRoot, "Assets", "D", "D.asmdef"), time.Now().Add(time.Hour))
+
+	if _, err := BuildCompilePlan(projectRoot, planDagDirectory, false); err == nil {
+		t.Fatal("expected a newly added assembly definition to be refused")
+	}
+}
+
+// Verifies an assembly definition Bee never built is accepted while it predates the build.
+// Platform-excluded and test-only assemblies legitimately have no response file.
+func TestBuildCompilePlanAcceptsAnAssemblyDefinitionOlderThanTheBuild(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "D", "D.asmdef"), `{"name":"D"}`)
+	setModificationTime(t,
+		filepath.Join(projectRoot, "Assets", "D", "D.asmdef"), time.Now().Add(-2*time.Hour))
+
+	if _, err := BuildCompilePlan(projectRoot, planDagDirectory, false); err != nil {
+		t.Fatalf("expected an assembly definition older than the build to be accepted, got: %v", err)
+	}
+}
+
+// Verifies an assembly definition deleted since the last build stops the run.
+func TestBuildCompilePlanRejectsARemovedAssemblyDefinition(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	if err := os.Remove(filepath.Join(projectRoot, "Assets", "C", "C.asmdef")); err != nil {
+		t.Fatalf("failed to remove the assembly definition: %v", err)
+	}
+
+	if _, err := BuildCompilePlan(projectRoot, planDagDirectory, false); err == nil {
+		t.Fatal("expected a removed assembly definition to be refused")
 	}
 }

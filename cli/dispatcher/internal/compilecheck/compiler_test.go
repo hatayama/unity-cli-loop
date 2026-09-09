@@ -210,3 +210,63 @@ func TestCompileUnitKeepsOutputWhenOnlyWarningsAccompanyAFailure(t *testing.T) {
 		t.Errorf("diagnostics = %+v, want the warning to survive", result.Diagnostics)
 	}
 }
+
+// Verifies a failed unit cannot leave a previous run's reference assembly behind for its dependents.
+func TestCompileUnitDropsAStaleReferenceAssemblyOfAFailedUnit(t *testing.T) {
+	projectRoot := t.TempDir()
+	plan := newCompilerPlan()
+	stale := filepath.Join(projectRoot, plan.OutputDir, "A.ref.dll")
+	writeFileAt(t, stale, "from an earlier run")
+
+	failing := exec.Cmd{}
+	compiler := Compiler{
+		Paths:       EditorCompilerPaths{DotnetHostPath: "/dotnet", CompilerDllPath: "/csc.dll"},
+		ProjectRoot: projectRoot,
+		Timeout:     time.Minute,
+		Run:         stubRunner("Assets/A/A.cs(1,1): error CS1002: ; expected", 1, &failing),
+	}
+
+	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[0]); err != nil {
+		t.Fatalf("expected the failing unit to report diagnostics, got error: %v", err)
+	}
+	if fileExists(stale) {
+		t.Fatal("expected the previous run's reference assembly to be gone")
+	}
+
+	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[1]); err != nil {
+		t.Fatalf("expected the dependent to compile, got error: %v", err)
+	}
+
+	written, err := os.ReadFile(filepath.Join(projectRoot, plan.OutputDir, "B.rsp"))
+	if err != nil {
+		t.Fatalf("failed to read the rewritten response file: %v", err)
+	}
+	if !strings.Contains(string(written), `-r:"`+filepath.Join(planDagDirectory, "A.ref.dll")+`"`) {
+		t.Errorf("expected the reference to fall back to the Bee artifact, got:\n%s", written)
+	}
+}
+
+// Verifies an assembly built without a reference assembly gets no -refout line at all.
+func TestCompileUnitOmitsRefOutWhenTheAssemblyHasNone(t *testing.T) {
+	projectRoot := t.TempDir()
+	plan := newCompilerPlan()
+	captured := exec.Cmd{}
+	compiler := Compiler{
+		Paths:       EditorCompilerPaths{DotnetHostPath: "/dotnet", CompilerDllPath: "/csc.dll"},
+		ProjectRoot: projectRoot,
+		Timeout:     time.Minute,
+		Run:         stubRunner("", 0, &captured),
+	}
+
+	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[0]); err != nil {
+		t.Fatalf("expected the unit to compile, got error: %v", err)
+	}
+
+	written, err := os.ReadFile(filepath.Join(projectRoot, plan.OutputDir, "A.rsp"))
+	if err != nil {
+		t.Fatalf("failed to read the rewritten response file: %v", err)
+	}
+	if strings.Contains(string(written), referenceOutputFlagPref) {
+		t.Errorf("expected no -refout line, got:\n%s", written)
+	}
+}

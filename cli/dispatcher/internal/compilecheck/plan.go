@@ -141,6 +141,10 @@ func selectChangedAssemblies(
 		return nil, err
 	}
 
+	if setErr := DetectAssemblySetChange(projectRoot, dagDir, graph, assemblyDefinitions); setErr != nil {
+		return nil, setErr
+	}
+
 	reasons := map[string]string{}
 	for _, name := range graph.names {
 		rsp := graph.byName[name]
