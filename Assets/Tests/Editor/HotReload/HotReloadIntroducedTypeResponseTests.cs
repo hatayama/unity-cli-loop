@@ -40,9 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesAType_ReportsTheTypeAsAnIntroducedRow()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingOnlyATypeAsync();
 
                 Assert.That(
@@ -72,9 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesAType_LeavesTheMethodAndFieldTotalsUntouched()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingOnlyATypeAsync();
 
                 Assert.That(
@@ -98,9 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesATypeBesideUnchangedMethods_ReportsTheTypeInTheMessage()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingOnlyATypeAsync();
 
                 Assert.That(
@@ -124,9 +121,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunOnlyBindsTypesTheDomainHolds_SaysItBoundThemInsteadOfIntroducing()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 await RunIntroducingOnlyATypeAsync();
                 HotReloadResponse second = await RunIntroducingOnlyATypeAsync();
 
@@ -151,9 +147,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_MethodFailsAfterTheTypesBecameActive_RecommendsAPartialApply()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateFailingApplyDependencies()))
                 {
@@ -184,9 +179,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_MethodFailsWhileOnlyRetainedTypesWereBound_RecommendsNoPartialApply()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateAlreadyActiveWithFailingApplyDependencies()))
                 {
@@ -216,9 +210,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_OnlyATypeFailed_SaysTheDeclarationsWereRefused()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreatePreparationDependencies(
                         HotReloadIntroducedTypePreparationResult.TypeFailures(
@@ -241,9 +234,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_ATypeAndAMethodFailed_PointsAtBothSections()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateTypeFailingApplyDependencies(failTheMethod: true)))
                 {
@@ -264,9 +256,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_ATypeFailedBesideAPatchedMethod_StillReportsTheRefusal()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateTypeFailingApplyDependencies(failTheMethod: false)))
                 {
@@ -295,9 +286,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunPatchesAMethodAndIntroducesAType_ReportsBothInTheMessage()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse response = await RunIntroducingATypeAndEditingABodyAsync();
 
                 Assert.That(response.Success, Is.True, response.Message);
@@ -319,9 +309,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_RunIntroducesNoType_OmitsBothTypeFieldsFromTheWire()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 string callerPath = FixturePath(CallerFileName);
                 HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                     new[] { callerPath },
@@ -500,9 +489,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_DeclarationCannotBeIntroduced_WarnsWithoutFailingTheRun()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 string hostPath = FixturePath(HostFileName);
                 HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                     new[] { hostPath },
@@ -563,9 +551,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_TypePreparationReportsATypeFailure_FailsTheRunWithATypeRow()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreatePreparationDependencies(
                         HotReloadIntroducedTypePreparationResult.TypeFailures(
@@ -607,9 +594,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_TypeFailureBesideOtherFindings_KeepsTheReusesAndNotices()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreatePreparationDependencies(
                         HotReloadIntroducedTypePreparationResult.TypeFailures(
@@ -658,9 +644,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Build_PreparationWorkerFails_ReportsTheFailureWithoutAnyTypeRow()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreatePreparationDependencies(
                         HotReloadIntroducedTypePreparationResult.WorkerFailure(InjectedWorkerFailureReason))))

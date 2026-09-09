@@ -179,9 +179,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task CollectActiveIdentities_AfterARunThatPatchedAMethodAndIntroducedAType_ReturnsBoth()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadOrchestratorResult result = await RunPatchingABodyAndIntroducingATypeAsync();
 
                 Assert.That(
@@ -250,9 +249,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void CollectActiveIdentities_WithNoActiveChange_ReturnsNothing()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
 
                 IReadOnlyList<string> identities =
                     HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities();
@@ -283,9 +281,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadTool.RunApplyAsyncForTesting = (files, ct) =>
                 HotReloadOrchestrator.RunAsync(files, editedPath, ct);
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadResponse introducing = await ExecuteApplyAsync(hostPath);
 
                 Assert.That(

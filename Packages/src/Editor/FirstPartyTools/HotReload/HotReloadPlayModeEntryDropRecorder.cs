@@ -203,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             IReadOnlyList<HotReloadActivePatchInfo> patches = HotReloadPatcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
-                HotReloadDomainSlot.Current.DescribeAddedMembers();
+                HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers();
             List<string> identities = new List<string>(patches.Count + addedMembers.Count);
             for (int index = 0; index < patches.Count; index++)
             {
@@ -218,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why the types belong here: they live in artifact assemblies only a domain reload
             // unloads, so Play entry discards them exactly as it discards a patch.
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> introducedTypes =
-                HotReloadIntroducedTypeHolder.Registry.DescribeActive();
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.DescribeActive();
             for (int index = 0; index < introducedTypes.Count; index++)
             {
                 HotReloadIntroducedTypeDescriptor descriptor = introducedTypes[index];

@@ -97,10 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(HostProjectRelativePath()), Is.True);
             Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(CallerProjectRelativePath()), Is.True);
             Assert.That(
-                HotReloadDomainSlot.Current.IsActiveMember(HostProjectRelativePath(), HostAddedMethodLabel),
+                HotReloadCompositionRoot.Services.Domain.IsActiveMember(HostProjectRelativePath(), HostAddedMethodLabel),
                 Is.True);
             Assert.That(
-                HotReloadDomainSlot.Current.IsActiveMember(CallerProjectRelativePath(), HostAddedMethodLabel),
+                HotReloadCompositionRoot.Services.Domain.IsActiveMember(CallerProjectRelativePath(), HostAddedMethodLabel),
                 Is.False);
         }
 
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller.Call(host), Is.EqualTo(41));
             Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
-                HotReloadDomainSlot.Current.GetAddedFieldsForType(
+                HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(
                     typeof(HotReloadCrossFileAddedMemberHost).FullName),
                 Is.EqualTo(new[] { "Counter" }));
             Assert.That(result.AddedFields, Has.Length.EqualTo(1));
@@ -181,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller.Call(host), Is.EqualTo(41));
             Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
-                HotReloadDomainSlot.Current.GetAddedFieldsForType(
+                HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(
                     typeof(HotReloadCrossFileAddedMemberHost).FullName),
                 Is.EqualTo(new[] { "Count" }));
             Assert.That(result.AddedFields, Has.Length.EqualTo(1));
@@ -884,47 +884,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
                 "RefusedTypeSiblingCaller.cs",
                 ReplaceCallerBody(CallerOtherBodyAnchor, "return 8;"));
-            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
-                new[] { callerPath },
-                contentPathOverride: null,
-                CancellationToken.None,
-                new Dictionary<string, string> { [callerPath] = callerEditPath });
-            FindOutcomeForFile(
-                patched,
-                callerPath,
-                HotReloadMethodOutcomeKind.Patched,
-                "Other");
 
-            // Arranged in this order on purpose: the type has to be active before the host
-            // declares it again, or the run would introduce it instead of refusing it.
-            string hostEditPath = HotReloadTestSourceWriter.WriteEditedSource(
-                "RefusedTypeSiblingHost.cs",
-                ReadFixture(HostFileName) + IntroducedTypeDeclaration);
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            // Both runs happen inside one scope because the sibling warning is about a patch the
+            // first run applied: a scope opened between them would put the patch in the domain it
+            // replaces, and the refused run would see no active sibling at all.
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                ActivateStaleIntroducedTypeFor(hostPath);
-                HotReloadOrchestratorResult refused = await HotReloadOrchestrator.RunAsync(
-                    new[] { hostPath },
-                    contentPathOverride: null,
-                    CancellationToken.None,
-                    new Dictionary<string, string>
-                    {
-                        [hostPath] = hostEditPath,
-                        [callerPath] = callerEditPath
-                    });
+                try
+                {
+                    HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                        new[] { callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        new Dictionary<string, string> { [callerPath] = callerEditPath });
+                    FindOutcomeForFile(
+                        patched,
+                        callerPath,
+                        HotReloadMethodOutcomeKind.Patched,
+                        "Other");
 
-                Assert.That(
-                    CountWarningsContaining(refused, SiblingRebindFailedWarningNeedle),
-                    Is.EqualTo(0),
-                    string.Join("\n", refused.Warnings));
-                Assert.That(
-                    refused.Warnings,
-                    Does.Contain(
-                        string.Format(
-                            HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat,
-                            CallerProjectRelativePath())),
-                    string.Join("\n", refused.Warnings));
+                    // Arranged in this order on purpose: the type has to be active before the host
+                    // declares it again, or the run would introduce it instead of refusing it.
+                    string hostEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RefusedTypeSiblingHost.cs",
+                        ReadFixture(HostFileName) + IntroducedTypeDeclaration);
+                    ActivateStaleIntroducedTypeFor(hostPath);
+                    HotReloadOrchestratorResult refused = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        new Dictionary<string, string>
+                        {
+                            [hostPath] = hostEditPath,
+                            [callerPath] = callerEditPath
+                        });
+
+                    Assert.That(
+                        CountWarningsContaining(refused, SiblingRebindFailedWarningNeedle),
+                        Is.EqualTo(0),
+                        string.Join("\n", refused.Warnings));
+                    Assert.That(
+                        refused.Warnings,
+                        Does.Contain(
+                            string.Format(
+                                HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat,
+                                CallerProjectRelativePath())),
+                        string.Join("\n", refused.Warnings));
+                }
+                finally
+                {
+                    // The patches belong to the replacement domain, and the TearDown revert runs
+                    // after the scope has already put the outer domain back, which knows nothing
+                    // about them and would leave them live in Harmony.
+                    HotReloadPatcher.RevertAll();
+                }
             }
         }
 
@@ -949,8 +962,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 artifactPath,
                 Path.ChangeExtension(artifactPath, ".pdb"),
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         // The retained assembly the record points at. Written once per session and loaded from

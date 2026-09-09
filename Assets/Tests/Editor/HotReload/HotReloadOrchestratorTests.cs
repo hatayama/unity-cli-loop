@@ -1973,35 +1973,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
-                new[] { fixturePath },
-                editedPath,
-                CancellationToken.None);
-            AssertNoFileLevelFailure(first);
-            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
-
             int membershipValidations = 0;
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            // The first apply belongs inside the scope: the second request is only "unchanged"
+            // relative to the applied source that apply recorded, and a scope opened between them
+            // would leave that record in the domain it replaces.
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                ActivateIntroducedTypeForFixtureAssembly(fixturePath);
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
-                    HotReloadGroupProcessorDependencies.Create(
-                        files =>
-                        {
-                            membershipValidations++;
-                            return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
-                        },
-                        HotReloadIntroducedTypePreparation.PrepareAsync,
-                        TransformWorkerClient.RunAsync,
-                        HotReloadGroupProcessor.GateAndCompileAsync,
-                        HotReloadGroupEntryPreparation.PrepareGroup,
-                        HotReloadEntryApplier.ApplyPreparedEntries)))
+                try
                 {
-                    await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
                         new[] { fixturePath },
                         editedPath,
                         CancellationToken.None);
+                    AssertNoFileLevelFailure(first);
+                    AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+                    ActivateIntroducedTypeForFixtureAssembly(fixturePath);
+                    using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                        HotReloadGroupProcessorDependencies.Create(
+                            files =>
+                            {
+                                membershipValidations++;
+                                return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
+                            },
+                            HotReloadIntroducedTypePreparation.PrepareAsync,
+                            TransformWorkerClient.RunAsync,
+                            HotReloadGroupProcessor.GateAndCompileAsync,
+                            HotReloadGroupEntryPreparation.PrepareGroup,
+                            HotReloadEntryApplier.ApplyPreparedEntries)))
+                    {
+                        await HotReloadOrchestrator.RunAsync(
+                            new[] { fixturePath },
+                            editedPath,
+                            CancellationToken.None);
+                    }
+                }
+                finally
+                {
+                    // The patches belong to the replacement domain, and the TearDown revert runs
+                    // after the scope has already put the outer domain back, which knows nothing
+                    // about them and would leave them live in Harmony.
+                    HotReloadPatcher.RevertAll();
                 }
             }
 
@@ -2028,8 +2040,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "artifact.dll",
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         /// <summary>
@@ -2702,7 +2714,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.AddedFields, Is.Empty);
             AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
             Assert.That(
-                HotReloadDomainSlot.Current.GetAddedFieldsForType(
+                HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(
                     typeof(HotReloadAtomicFileApplyFixture).FullName),
                 Is.Empty);
         }
@@ -2794,7 +2806,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoPatchedOrAddedOutcomes(result);
             Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(projectRelativePath), Is.False);
             Assert.That(new HotReloadDomainTestAccess().HasAddedMemberGeneration(projectRelativePath), Is.False);
-            Assert.That(HotReloadDomainSlot.Current.GetAddedFieldsForType(typeName), Is.Empty);
+            Assert.That(HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(typeName), Is.Empty);
         }
 
         /// <summary>
@@ -3056,7 +3068,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Array.Empty<string>());
 
                 Assert.That(
-                    HotReloadDomainSlot.Current.TryGetSupersededReplacement(removedMethodLabel, out string _),
+                    HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(removedMethodLabel, out string _),
                     Is.False);
             }
             finally
@@ -3631,7 +3643,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.ActivePatchTotal, Is.EqualTo(2));
 
             bool foundAddedStatus = false;
-            foreach (HotReloadAddedMemberInfo added in HotReloadDomainSlot.Current.DescribeAddedMembers())
+            foreach (HotReloadAddedMemberInfo added in HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers())
             {
                 if (added.MethodKey.Contains("AddedPing"))
                 {
@@ -3784,7 +3796,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string typeName = typeof(HotReloadAddedFieldApplyFixture).FullName;
             Assert.That(
-                HotReloadDomainSlot.Current.GetAddedFieldsForType(typeName),
+                HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(typeName),
                 Is.EqualTo(new[] { "AddedCount" }));
 
             string failed = WithAddedFieldAccessesCallingMissingHelper(onDisk);
@@ -3806,7 +3818,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundFailure, Is.True, "Expected a Failed outcome.\n" + FormatOutcomes(second));
             Assert.That(second.AddedFields, Is.Empty);
             Assert.That(
-                HotReloadDomainSlot.Current.GetAddedFieldsForType(typeName),
+                HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(typeName),
                 Is.EqualTo(new[] { "AddedCount" }));
         }
 
@@ -4043,7 +4055,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + FormatOutcomes(second));
             }
 
-            foreach (HotReloadAddedMemberInfo added in HotReloadDomainSlot.Current.DescribeAddedMembers())
+            foreach (HotReloadAddedMemberInfo added in HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers())
             {
                 Assert.That(
                     added.MethodKey,
@@ -4501,7 +4513,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(oldTarget, Is.Not.Null);
             string oldKey = HotReloadMethodKeys.FormatMethodLabel(oldTarget);
-            bool recorded = HotReloadDomainSlot.Current.TryGetSupersededReplacement(
+            bool recorded = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 oldKey,
                 out string replacement);
 
@@ -4539,7 +4551,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(deleted, Is.Not.Null);
             string deletedKey = HotReloadMethodKeys.FormatMethodLabel(deleted);
-            bool recorded = HotReloadDomainSlot.Current.TryGetSupersededReplacement(
+            bool recorded = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 deletedKey,
                 out string _);
 
@@ -4592,10 +4604,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(longTarget, Is.Not.Null);
             string intKey = HotReloadMethodKeys.FormatMethodLabel(intTarget);
             string longKey = HotReloadMethodKeys.FormatMethodLabel(longTarget);
-            bool intRecorded = HotReloadDomainSlot.Current.TryGetSupersededReplacement(
+            bool intRecorded = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 intKey,
                 out string intReplacement);
-            bool longRecorded = HotReloadDomainSlot.Current.TryGetSupersededReplacement(
+            bool longRecorded = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 longKey,
                 out string _);
 
@@ -4838,7 +4850,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(gatedTarget, Is.Not.Null);
             string gatedKey = HotReloadMethodKeys.FormatMethodLabel(gatedTarget);
-            bool recorded = HotReloadDomainSlot.Current.TryGetSupersededReplacement(
+            bool recorded = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 gatedKey,
                 out string _);
 
@@ -5917,7 +5929,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(second.Methods, Is.Empty, FormatOutcomes(second));
             Assert.That(second.UnchangedTotal, Is.GreaterThan(0));
             Assert.That(second.ActivePatchTotal, Is.EqualTo(0));
-            foreach (HotReloadAddedMemberInfo added in HotReloadDomainSlot.Current.DescribeAddedMembers())
+            foreach (HotReloadAddedMemberInfo added in HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers())
             {
                 Assert.That(
                     added.MethodKey,
@@ -7225,7 +7237,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static int CountAddedMembersContaining(string methodName)
         {
             int count = 0;
-            foreach (HotReloadAddedMemberInfo added in HotReloadDomainSlot.Current.DescribeAddedMembers())
+            foreach (HotReloadAddedMemberInfo added in HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers())
             {
                 if (added.MethodKey.Contains(methodName))
                 {

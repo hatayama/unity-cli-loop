@@ -23,13 +23,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// assemblies at the same time, so a hash that survived it would short-circuit a reload whose
     /// patches are already gone.
     /// </remarks>
-    internal sealed class HotReloadDomain
+    internal sealed class HotReloadDomain : IDisposable
     {
         private readonly Dictionary<string, HotReloadFileGeneration> _generationsByPath =
             new Dictionary<string, HotReloadFileGeneration>(StringComparer.Ordinal);
 
         private readonly Dictionary<string, (string Hash, bool IsFullyApplied)> _appliedSourceByPath =
             new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
+
+        internal HotReloadDomain(
+            HotReloadIntroducedTypeRegistry introducedTypes,
+            HotReloadIntroducedTypeAssemblyResolver introducedTypeResolver)
+        {
+            Debug.Assert(introducedTypes != null, "introducedTypes must not be null.");
+            Debug.Assert(introducedTypeResolver != null, "introducedTypeResolver must not be null.");
+
+            IntroducedTypes = introducedTypes;
+            IntroducedTypeResolver = introducedTypeResolver;
+        }
+
+        /// <summary>
+        /// The types this domain introduced. Their lifetime is the Unity domain's, not a
+        /// generation's: a revert cannot drop a type whose identity is already bound.
+        /// </summary>
+        internal HotReloadIntroducedTypeRegistry IntroducedTypes { get; }
+
+        /// <summary>Answers binds for the artifact assemblies the introduced types live in.</summary>
+        internal HotReloadIntroducedTypeAssemblyResolver IntroducedTypeResolver { get; }
+
+        /// <summary>The values of the added fields the shims of this domain read and write.</summary>
+        internal HotReloadAddedFieldValues AddedFieldValues { get; } = new HotReloadAddedFieldValues();
+
+        /// <summary>How many times each patched body of this domain has run.</summary>
+        internal HotReloadInvocationCounts Invocations { get; } = new HotReloadInvocationCounts();
+
+        /// <summary>
+        /// Stops this domain's resolver from answering binds. The generations are not reverted
+        /// here: Harmony patches are removed through the patcher, which owns that side.
+        /// </summary>
+        public void Dispose()
+        {
+            IntroducedTypeResolver.Dispose();
+        }
 
         /// <summary>
         /// Starts a new shim generation for one file, replacing whatever the previous apply left.
@@ -412,8 +447,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _generationsByPath.Clear();
             _appliedSourceByPath.Clear();
-            HotReloadAddedFieldStore.Clear();
-            HotReloadInvocationRegistry.Clear();
+            AddedFieldValues.Clear();
+            Invocations.Clear();
             return revertedMethods;
         }
 
@@ -461,6 +496,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why one accessor: the registry counts artifact assemblies as well as types, and a report
         // that reached for the artifact count would total two types of one batch as one.
-        internal int IntroducedTypeCount => HotReloadIntroducedTypeHolder.Registry.ActiveTypeCount;
+        internal int IntroducedTypeCount => IntroducedTypes.ActiveTypeCount;
     }
 }

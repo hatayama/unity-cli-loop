@@ -21,16 +21,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadSourceSnapshotter.CaptureAfterDomainReload();
             }
 
-            // The resolver subscribes to AppDomain.AssemblyResolve when it is built, and that
-            // subscription is lost on every domain reload, so the pair is rebuilt here rather than
-            // on first use.
-            HotReloadIntroducedTypeHolder.Initialize();
+            // The services are rebuilt here rather than on first use because the introduced type
+            // resolver subscribes to AppDomain.AssemblyResolve when it is built, and that
+            // subscription is lost on every domain reload.
+            HotReloadCompositionRoot.Initialize();
             // Why here and not in a static constructor of the counting side: a static constructor
             // runs when something first touches that type, which a domain that only introduced a
             // type may never do, and the tools that warn about a domain reload would then read a
             // null delegate as "nothing to lose".
             HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount =
-                () => HotReloadDomainSlot.Current.CountActiveChanges().RuntimeChangeTotal;
+                () => HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();

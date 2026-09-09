@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPreparedIntroducedTypes prepared = context.PreparedIntroducedTypes;
             if (prepared != null)
             {
-                HotReloadIntroducedTypeHolder.Registry.Activate(prepared.Artifact);
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(prepared.Artifact);
                 // Why after the activation and not at preparation: only a type the boundary
                 // published is introduced, so a run that never reached here must report none.
                 HotReloadIntroducedTypeOutcomeSink.Append(files, BuildIntroducedRows(prepared.Artifact));
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetAssemblyName)
         {
             return prepared != null
-                || HotReloadIntroducedTypeHolder.Registry.HasActiveTypesForOriginalAssembly(targetAssemblyName);
+                || HotReloadCompositionRoot.Services.Domain.IntroducedTypes.HasActiveTypesForOriginalAssembly(targetAssemblyName);
         }
 
         // Deleting an added method and restoring its callers yields empty entries, so the

@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Harmony resolves transpilers as static methods, so the domain cannot be a parameter of
         // one; the transpilers below read it from the slot instead.
-        private static HotReloadDomain Domain => HotReloadDomainSlot.Current;
+        private static HotReloadDomain Domain => HotReloadTranspilerDomainGateway.Current;
 
         /// <summary>
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using

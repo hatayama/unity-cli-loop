@@ -108,19 +108,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ResolvePatchTarget_WhenAssemblyOwnsAnActiveIntroducedType_KeepsTheLedgerEntry()
         {
             string existingScriptPath = ExistingScriptPath;
-            HotReloadDomainSlot.Current.ClearAppliedSource(existingScriptPath);
-            HotReloadDomainSlot.Current.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            // The ledger entry is written and read inside the scope because the scope installs a
+            // whole replacement domain, and the applied source ledger is part of that domain.
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
                 ActivateIntroducedTypeFor(existingScriptPath);
 
                 ResolveExistingScript("introduced-type-active");
-            }
 
-            Assert.That(HotReloadDomainSlot.Current.TryGetAppliedSource(existingScriptPath), Is.Not.Null);
-            HotReloadDomainSlot.Current.ClearAppliedSource(existingScriptPath);
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    Is.Not.Null);
+            }
         }
 
         /// <summary>
@@ -131,17 +132,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ResolvePatchTarget_WhenAssemblyOwnsNoIntroducedType_RunsTheShortCircuit()
         {
             string existingScriptPath = ExistingScriptPath;
-            HotReloadDomainSlot.Current.ClearAppliedSource(existingScriptPath);
-            HotReloadDomainSlot.Current.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
                 ResolveExistingScript("introduced-type-absent");
-            }
 
-            Assert.That(HotReloadDomainSlot.Current.TryGetAppliedSource(existingScriptPath), Is.Null);
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    Is.Null);
+            }
         }
 
         private static void ResolveExistingScript(string correlationId)
@@ -173,8 +174,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "artifact.dll",
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         /// <summary>

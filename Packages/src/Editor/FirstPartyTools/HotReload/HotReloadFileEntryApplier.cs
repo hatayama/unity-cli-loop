@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(fileEntries.Length > 0, "An applied file must hold an entry.");
             Debug.Assert(resolution != null && resolution.AllResolved, "resolution must be resolved.");
 
-            HotReloadDomainSlot.Current.BeginGeneration(
+            HotReloadCompositionRoot.Services.Domain.BeginGeneration(
                 file.ProjectRelativePath,
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
@@ -76,9 +76,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(file != null, "file must not be null.");
 
             IReadOnlyList<string> addedLabelsAtClear =
-                HotReloadDomainSlot.Current.ListActiveAddedMethodKeys(file.ProjectRelativePath);
+                HotReloadCompositionRoot.Services.Domain.ListActiveAddedMethodKeys(file.ProjectRelativePath);
             HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, context.CorrelationId);
-            HotReloadDomainSlot.Current.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
+            HotReloadCompositionRoot.Services.Domain.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
             // Why AddedFieldNames first: a retry (gate or isolation) replaces this file's added
             // field names, and committing the first-pass names would resurrect a field the
             // retry no longer emits. The worker row is the first-pass fallback.
@@ -268,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> retargetedPausePointIds)
         {
             HotReloadFileGeneration generation =
-                HotReloadDomainSlot.Current.FindGeneration(projectRelativePath);
+                HotReloadCompositionRoot.Services.Domain.FindGeneration(projectRelativePath);
             Debug.Assert(generation != null, "The file's generation must have started before its entries apply.");
             if (resolved.IsAddedMethod)
             {

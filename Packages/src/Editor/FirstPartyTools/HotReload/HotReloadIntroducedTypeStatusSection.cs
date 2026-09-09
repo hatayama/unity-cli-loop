@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static List<HotReloadIntroducedTypeResult> BuildActiveRows()
         {
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors =
-                HotReloadIntroducedTypeHolder.Registry.DescribeActive();
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.DescribeActive();
             List<HotReloadIntroducedTypeResult> rows =
                 new List<HotReloadIntroducedTypeResult>(descriptors.Count);
             foreach (HotReloadIntroducedTypeDescriptor descriptor in descriptors)

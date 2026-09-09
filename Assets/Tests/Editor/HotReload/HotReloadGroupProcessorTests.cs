@@ -365,7 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.Failed));
             Assert.That(new HotReloadDomainTestAccess().HasAddedMemberGeneration(file.ProjectRelativePath), Is.True);
-            Assert.That(HotReloadDomainSlot.Current.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
+            Assert.That(HotReloadCompositionRoot.Services.Domain.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
             Assert.That(file.ClearedAddedFieldNames, Is.Null);
         }
 
@@ -387,7 +387,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
             Assert.That(new HotReloadDomainTestAccess().HasAddedMemberGeneration(file.ProjectRelativePath), Is.True);
-            Assert.That(HotReloadDomainSlot.Current.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.False);
+            Assert.That(HotReloadCompositionRoot.Services.Domain.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.False);
             Assert.That(file.ClearedAddedFieldNames, Is.Not.Null);
         }
 
@@ -624,7 +624,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
-            Assert.That(HotReloadDomainSlot.Current.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
+            Assert.That(HotReloadCompositionRoot.Services.Domain.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
             Assert.That(file.ClearedAddedFieldNames, Is.Null);
         }
 

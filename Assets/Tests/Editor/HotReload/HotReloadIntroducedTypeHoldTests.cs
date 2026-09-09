@@ -49,9 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.False,
                 "Precondition: no patch and no introduced type must leave Auto Refresh allowed.");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadOrchestratorResult result = await RunIntroducingOnlyATypeAsync();
 
                 // Why the result and not the live flag: the 0.5s reconcile can fire while the run
@@ -101,9 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ReconcileAfterTheTypesAreGone_ReleasesTheHold()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 ActivateArtifactWithOneType();
                 HotReloadAutoRefreshHold.ReconcileForTesting();
 
@@ -116,12 +114,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // A second replacement is what a Domain Reload leaves behind: an empty registry. Why
             // not the registry the scope above restored: that is the live one of this Editor
             // session, which may hold types a developer reloaded before running the tests.
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
 
                 Assert.That(
-                    HotReloadDomainSlot.Current.IntroducedTypeCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                     Is.EqualTo(0),
                     "Arrange: the reloaded domain must hold no introduced type.");
 
@@ -142,9 +139,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void BuildResult_WhenTheReconcileArmsTheHoldMidRun_StillReportsTheRunAsNewlyArmed()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadRunAccumulator run = new HotReloadRunAccumulator(
                     autoRefreshHeldAtStart: HotReloadAutoRefreshHold.IsHeld);
 
@@ -175,9 +171,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void BuildResult_WhenTheHoldWasAlreadyArmedBeforeTheRun_DoesNotReportItAsNewlyArmed()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 ActivateArtifactWithOneType();
                 HotReloadAutoRefreshHold.ReconcileForTesting();
 
@@ -206,12 +201,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ActiveIntroducedType_LeavesThePatchCountsAtZero()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 ActivateArtifactWithOneType();
 
-                Assert.That(HotReloadDomainSlot.Current.IntroducedTypeCount, Is.EqualTo(1));
+                Assert.That(HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount, Is.EqualTo(1));
                 Assert.That(
                     HotReloadStatusExecutor.ExecuteStatus().ActivePatchTotal,
                     Is.EqualTo(0),
@@ -226,11 +220,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void NoPatchAndNoIntroducedType_TotalsNoRuntimeChange()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
 
-                Assert.That(HotReloadDomainSlot.Current.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(0));
+                Assert.That(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(0));
 
                 HotReloadAutoRefreshHold.ReconcileForTesting();
 
@@ -251,9 +244,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Not.Null,
                 "The hot-reload startup must publish the runtime-change count for the other tools.");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
 
                 Assert.That(reader(), Is.EqualTo(0), "An empty domain discards nothing.");
 
@@ -276,9 +268,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task RunPatchingAMethodAndIntroducingAType_TotalsBothKindsOfChange()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadOrchestratorResult result = await RunPatchingABodyAndIntroducingATypeAsync();
 
                 Assert.That(
@@ -286,14 +277,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(1),
                     "Precondition: the run must have patched exactly one method.");
                 Assert.That(
-                    HotReloadDomainSlot.Current.IntroducedTypeCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                     Is.EqualTo(1),
                     "Precondition: the run must have introduced exactly one type.");
                 Assert.That(
                     HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount(),
                     Is.EqualTo(2),
                     "One patch and one type are two changes to lose, not one.");
-                Assert.That(HotReloadDomainSlot.Current.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(2));
+                Assert.That(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(2));
             }
         }
 
@@ -314,7 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(0),
                 "Precondition: this run must patch no method, so only the type can hold refresh.");
             Assert.That(
-                HotReloadDomainSlot.Current.IntroducedTypeCount,
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                 Is.EqualTo(1),
                 "Precondition: the run must have activated its introduced type.");
             return result;
@@ -349,8 +340,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "artifact.dll",
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor>(descriptors));
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         private static HotReloadIntroducedTypeDescriptor CreateDescriptor(string metadataName)

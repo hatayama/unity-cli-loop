@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan);
             workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
-                HotReloadIntroducedTypeHolder.Registry,
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes,
                 workerInput.targetAssemblyName,
                 workerInput.targetAssemblyMvid).ToArray();
             HotReloadIntroducedTypePreparationResult preparation = await HotReloadGroupProcessorDependencies
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             HotReloadIntroducedTypeArtifact artifact = prepared.Artifact;
-            HotReloadIntroducedTypeRegistry registry = HotReloadIntroducedTypeHolder.Registry;
+            HotReloadIntroducedTypeRegistry registry = HotReloadCompositionRoot.Services.Domain.IntroducedTypes;
             List<TransformWorkerIntroducedTypeArtifactDto> records =
                 new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
             records.Add(HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact));
@@ -119,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // The scope answers binds for the prepared assembly while nothing has activated it, so
             // the shim compilation and the reflection it drives can already reach the new types.
-            using (IDisposable preparedScope = HotReloadIntroducedTypeHolder.Resolver.RegisterPrepared(artifact))
+            using (IDisposable preparedScope = HotReloadCompositionRoot.Services.Domain.IntroducedTypeResolver.RegisterPrepared(artifact))
             {
                 try
                 {
@@ -441,7 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.SnapshotLabels =
                     HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(file.ProjectRelativePath);
                 file.SnapshotAddedLabels = new HashSet<string>(
-                    HotReloadDomainSlot.Current.ListActiveAddedMethodKeys(file.ProjectRelativePath),
+                    HotReloadCompositionRoot.Services.Domain.ListActiveAddedMethodKeys(file.ProjectRelativePath),
                     StringComparer.Ordinal);
                 // Why projectRelativePath (not workerSourcePath): contentPathOverride E2E copies
                 // live under Library/UloopHotReload/TestSources/ and are absent from the PDB

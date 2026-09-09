@@ -129,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(HotReloadAddedFieldStore.GetOrInit(host, instanceKey, () => 10), Is.EqualTo(10));
             Assert.That(HotReloadAddedFieldStore.GetOrInitStatic(staticKey, () => 20), Is.EqualTo(20));
-            Assert.That(HotReloadDomainSlot.Current.GetAddedFieldsForType("Host"), Is.Empty);
+            Assert.That(HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType("Host"), Is.Empty);
         }
 
         /// <summary>
@@ -146,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPatcher.RevertAll();
 
             Assert.That(HotReloadPatcher.ActiveChangeCount, Is.EqualTo(0));
-            Assert.That(HotReloadDomainSlot.Current.DescribeAddedFields(), Is.Empty);
+            Assert.That(HotReloadCompositionRoot.Services.Domain.DescribeAddedFields(), Is.Empty);
         }
 
         /// <summary>

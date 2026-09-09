@@ -295,7 +295,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // live, and an introduced type is live even when nothing is patched. ActivePatchTotal
             // counts patched methods and added members, which is what callers read it against
             // PatchedTotal for; the runtime total adds the introduced types on top.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadDomainSlot.Current.CountActiveChanges();
+            HotReloadActiveChangeSnapshot snapshot = HotReloadCompositionRoot.Services.Domain.CountActiveChanges();
             int activePatchTotal = snapshot.PatchAndAddedMemberCount;
             int runtimeChangeTotal = snapshot.RuntimeChangeTotal;
             string message = failure.Message;
