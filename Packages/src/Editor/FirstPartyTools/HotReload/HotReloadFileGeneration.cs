@@ -96,7 +96,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(originalMethod != null, "originalMethod must not be null.");
             Debug.Assert(entry != null, "entry must not be null.");
-            Debug.Assert(HasShimGeneration, "BeginShimGeneration must run before RegisterShimMethod.");
+            if (!HasShimGeneration)
+            {
+                throw new InvalidOperationException(
+                    "BeginShimGeneration must run before RegisterShimMethod.");
+            }
 
             _shimMethodsByMethod[originalMethod] = entry;
         }
@@ -105,7 +109,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
             Debug.Assert(shimMethod != null, "shimMethod must not be null.");
-            Debug.Assert(HasAddedMemberGeneration, "BeginAddedMemberGeneration must run before RegisterAddedMethod.");
+            if (!HasAddedMemberGeneration)
+            {
+                throw new InvalidOperationException(
+                    "BeginAddedMemberGeneration must run before RegisterAddedMethod.");
+            }
 
             _addedMembersByMethodKey[methodKey] =
                 new HotReloadAddedMemberInfo(methodKey, filePath ?? string.Empty, shimMethod);
@@ -118,9 +126,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void RemoveShimMethod(MethodBase originalMethod)
         {
             Debug.Assert(originalMethod != null, "originalMethod must not be null.");
-            Debug.Assert(
-                !IsPatchActive(originalMethod),
-                "A method with an active patch must be deactivated before its shim is removed.");
+            if (IsPatchActive(originalMethod))
+            {
+                throw new InvalidOperationException(
+                    "A method with an active patch must be deactivated before its shim is removed.");
+            }
 
             _shimMethodsByMethod.Remove(originalMethod);
         }
@@ -180,12 +190,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(method != null, "method must not be null.");
             Debug.Assert(shim != null, "shim must not be null.");
-            Debug.Assert(
-                _shimMethodsByMethod.ContainsKey(method),
-                "A shim must be registered for this method before its patch begins.");
-            Debug.Assert(
-                !_patchesByMethod.ContainsKey(method),
-                "This method already holds a pending or active patch.");
+            if (!_shimMethodsByMethod.ContainsKey(method))
+            {
+                throw new InvalidOperationException(
+                    "A shim must be registered for this method before its patch begins.");
+            }
+
+            if (_patchesByMethod.ContainsKey(method))
+            {
+                throw new InvalidOperationException(
+                    "This method already holds a pending or active patch.");
+            }
 
             _patchesByMethod[method] = new HotReloadActivePatchEntry(method, shim);
         }
@@ -196,11 +211,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(method != null, "method must not be null.");
             if (!_patchesByMethod.TryGetValue(method, out HotReloadActivePatchEntry entry))
             {
-                Debug.Assert(false, "CommitPatch needs a pending patch for this method.");
-                return;
+                throw new InvalidOperationException("CommitPatch needs a pending patch for this method.");
             }
 
-            Debug.Assert(!entry.IsActive, "CommitPatch needs a pending patch, not an active one.");
+            if (entry.IsActive)
+            {
+                throw new InvalidOperationException("CommitPatch needs a pending patch, not an active one.");
+            }
             entry.Activate();
         }
 
