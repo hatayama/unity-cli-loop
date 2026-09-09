@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Failed outcome per file (method-attributed when the group holds a single entry).
         /// </summary>
         internal static async Task<HotReloadShimIsolationResult> TryIsolateShimCompileFailureAsync(
+            TransformWorkerClient transformWorkerClient,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
             HotReloadShimCompileResult compileResult,
@@ -85,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 groupFilePaths,
                 correlationId);
             IsolationRetryRunResult retry = await RunIsolationRetryAsync(
+                transformWorkerClient,
                 retryContext,
                 exclusions,
                 failedMethodOutcomes,
@@ -96,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static async Task<IsolationRetryRunResult> RunIsolationRetryAsync(
+            TransformWorkerClient transformWorkerClient,
             HotReloadIsolationRetryContext context,
             IsolationExclusions exclusions,
             List<HotReloadMethodOutcome> failedMethodOutcomes,
@@ -129,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             TransformWorkerClientResult retryWorkerResult =
-                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
+                await transformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
             if (!retryWorkerResult.Success)
             {
                 HotReloadOrchestratorLog.LogHotReloadIsolationRetry(

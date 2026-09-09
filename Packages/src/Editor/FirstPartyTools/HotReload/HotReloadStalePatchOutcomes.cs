@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -11,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadStalePatchOutcomes
     {
         public static void Append(
+            HotReloadPatcher patcher,
             List<HotReloadMethodOutcome> outcomes,
             TransformWorkerOutputDto workerOutput,
             TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
@@ -18,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             string assemblyResolvePath)
         {
+            Debug.Assert(patcher != null, "patcher must not be null.");
             if (workerOutput == null
                 || removedMethodSignatures == null || removedMethodSignatures.Length == 0)
             {
@@ -25,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HashSet<string> activeDisplayKeys = new HashSet<string>(
-                HotReloadCompositionRoot.Services.Patcher.ListActiveMethodKeys(projectRelativePath),
+                patcher.ListActiveMethodKeys(projectRelativePath),
                 StringComparer.Ordinal);
             if (activeDisplayKeys.Count == 0)
             {

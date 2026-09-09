@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileEntryApplier fileEntryApplier,
             HotReloadEntryApplier entryApplier,
             TransformWorkerClient transformWorkerClient,
+            HotReloadGroupStageCollaborators groupStageCollaborators,
             HotReloadGroupCommitStage groupCommitStage,
             HotReloadGroupProcessor groupProcessor,
             IHotReloadOrchestrator orchestrator,
@@ -29,6 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(fileEntryApplier != null, "fileEntryApplier must not be null.");
             Debug.Assert(entryApplier != null, "entryApplier must not be null.");
             Debug.Assert(transformWorkerClient != null, "transformWorkerClient must not be null.");
+            Debug.Assert(
+                groupStageCollaborators != null, "groupStageCollaborators must not be null.");
             Debug.Assert(groupCommitStage != null, "groupCommitStage must not be null.");
             Debug.Assert(groupProcessor != null, "groupProcessor must not be null.");
             Debug.Assert(orchestrator != null, "orchestrator must not be null.");
@@ -43,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FileEntryApplier = fileEntryApplier;
             EntryApplier = entryApplier;
             TransformWorkerClient = transformWorkerClient;
+            GroupStageCollaborators = groupStageCollaborators;
             GroupCommitStage = groupCommitStage;
             GroupProcessor = groupProcessor;
             Orchestrator = orchestrator;
@@ -63,6 +67,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadEntryApplier EntryApplier { get; }
 
         internal TransformWorkerClient TransformWorkerClient { get; }
+
+        /// <summary>
+        /// The collaborators one group run's stages were bound to. Kept here so a test that calls
+        /// a stage directly passes the same bundle the installed run uses.
+        /// </summary>
+        internal HotReloadGroupStageCollaborators GroupStageCollaborators { get; }
 
         internal HotReloadGroupCommitStage GroupCommitStage { get; }
 
@@ -92,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FileEntryApplier,
                 EntryApplier,
                 TransformWorkerClient,
+                GroupStageCollaborators,
                 GroupCommitStage,
                 GroupProcessor,
                 orchestrator,
@@ -114,6 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FileEntryApplier,
                 EntryApplier,
                 TransformWorkerClient,
+                GroupStageCollaborators,
                 GroupCommitStage,
                 GroupProcessor,
                 Orchestrator,

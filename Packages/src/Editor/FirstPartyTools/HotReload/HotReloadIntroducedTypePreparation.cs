@@ -18,14 +18,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly string SessionId = Guid.NewGuid().ToString("N");
 
         public static async Task<HotReloadIntroducedTypePreparationResult> PrepareAsync(
+            HotReloadGroupStageCollaborators collaborators,
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto transformInput,
             CancellationToken ct)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             Debug.Assert(files != null && files.Count > 0, "A group must hold a file.");
             Debug.Assert(transformInput != null, "The preparation reuses the transform input.");
 
-            TransformWorkerClientResult prepareResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult prepareResult = await collaborators.TransformWorkerClient.RunAsync(
                 BuildPrepareInput(transformInput),
                 ct).ConfigureAwait(false);
             if (!prepareResult.Success)

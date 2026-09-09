@@ -1988,18 +1988,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
 
                     ActivateIntroducedTypeForFixtureAssembly(fixturePath);
-                    using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
+                    using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                         HotReloadGroupProcessorDependencies.Create(
                             files =>
                             {
                                 membershipValidations++;
-                                return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
+                                return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files);
                             },
-                            HotReloadIntroducedTypePreparation.PrepareAsync,
-                            transformWorkerClient.RunAsync,
-                            HotReloadGroupProcessor.GateAndCompileAsync,
-                            HotReloadGroupEntryPreparation.PrepareGroup,
-                            entryApplier.ApplyPreparedEntries)))
+                            (files, input, ct) =>
+                                HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct),
+                            collaborators.TransformWorkerClient.RunAsync,
+                            (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                            (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
+                                collaborators, context, compileResult, entriesToPatch),
+                            collaborators.EntryApplier.ApplyPreparedEntries)))
                     {
                         await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                             new[] { fixturePath },
@@ -2024,7 +2026,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static void ActivateIntroducedTypeForFixtureAssembly(string fixturePath)
         {
-            string projectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(fixturePath);
+            string projectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                fixturePath);
             string assemblyName = Path.GetFileNameWithoutExtension(
                 UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath));
             HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
@@ -3060,6 +3064,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(context.Files[0].Sinks.AppliedEntries, Is.EqualTo(new[] { patchedEntry }));
 
                 HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                HotReloadCompositionRoot.Services.Domain,
                     projectRelativePath,
                     context.Files[0].Sinks.AppliedEntries,
                     context.Files[0].FileOutput.removedMethodSignatures,
@@ -3160,7 +3165,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries(
                 context,
                 compileResult,
-                HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch));
+                HotReloadGroupEntryPreparation.PrepareGroup(
+                    HotReloadCompositionRoot.Services.GroupStageCollaborators,
+                    context,
+                    compileResult,
+                    entriesToPatch));
         }
 
         private static HotReloadApplyContext CreateApplyContext(

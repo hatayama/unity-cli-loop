@@ -144,6 +144,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
                 HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                    HotReloadCompositionRoot.Services.Domain,
+                    HotReloadCompositionRoot.Services.Patcher,
                     autoRefreshHeldAtStart: HotReloadAutoRefreshHold.IsHeld);
 
                 Assert.That(
@@ -184,6 +186,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Arrange: the hold must already be armed when the run starts.");
 
                 HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                    HotReloadCompositionRoot.Services.Domain,
+                    HotReloadCompositionRoot.Services.Patcher,
                     autoRefreshHeldAtStart: HotReloadAutoRefreshHold.IsHeld);
 
                 HotReloadOrchestratorResult result = run.BuildResult("correlation-already-armed");

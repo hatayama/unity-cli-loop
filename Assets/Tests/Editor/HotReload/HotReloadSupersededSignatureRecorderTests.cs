@@ -44,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void RecordFromAppliedEntries_WhenReplacementWasApplied_RecordsTheSupersededSignature()
         {
             HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                HotReloadCompositionRoot.Services.Domain,
                 FixtureProjectRelativePath,
                 new[] { CreateDecoyReplacementEntry(), CreateReplacementEntry() },
                 new[] { CreateRemovedSignature() },
@@ -66,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void RecordFromAppliedEntries_WhenReplacementWasNotApplied_RecordsNothing()
         {
             HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                HotReloadCompositionRoot.Services.Domain,
                 FixtureProjectRelativePath,
                 new List<TransformWorkerEntryDto>(),
                 new[] { CreateRemovedSignature() },
@@ -88,6 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerEntryDto entry = CreateReplacementEntry();
 
             HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                HotReloadCompositionRoot.Services.Domain,
                 FixtureProjectRelativePath,
                 new[] { entry },
                 new[] { CreateRemovedSignature() },

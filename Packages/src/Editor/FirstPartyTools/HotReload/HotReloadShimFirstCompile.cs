@@ -18,15 +18,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why a helper: the gate-retry / empty-entries / first-pass compile fork is one
         // entries-to-patch stage and kept the group pipeline over CA1502.
         internal static async Task<HotReloadGroupCompileResult> ResolveEntriesToPatchAsync(
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context,
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
             CancellationToken ct)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(gateResult != null, "gateResult must not be null.");
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            if (!HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(context.Files))
+            if (!HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, context.Files))
             {
                 return HotReloadGroupCompileResult.Failed();
             }
@@ -54,17 +56,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why a run that commits types skips it: clearing a generation here would mutate
                 // the domain before the commit boundary, which a failed recheck could then no
                 // longer undo, so such a run clears at the boundary instead.
-                if (!HotReloadCompositionRoot.Services.GroupCommitStage.CommitsIntroducedTypes(
+                if (!collaborators.CommitPolicy.CommitsIntroducedTypes(
                         context.PreparedIntroducedTypes,
                         context.AssemblyName))
                 {
-                    HotReloadCompositionRoot.Services.GroupCommitStage.ClearEmptyFileGenerations(context);
+                    collaborators.CommitPolicy.ClearEmptyFileGenerations(context);
                 }
 
                 return HotReloadGroupCompileResult.ReadyWithoutMethods();
             }
 
-            return await CompileShimForGroupAsync(context, ct).ConfigureAwait(false);
+            return await CompileShimForGroupAsync(collaborators, context, ct).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -73,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// they already consumed the one worker retry.
         /// </summary>
         private static async Task<HotReloadGroupCompileResult> CompileShimForGroupAsync(
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context,
             CancellationToken ct)
         {
@@ -119,6 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // third worker run. Gate retry compile failures return Failed from the gate and
             // never reach this first-compile path.
             HotReloadShimIsolation.HotReloadShimIsolationResult isolation = await HotReloadShimIsolation.TryIsolateShimCompileFailureAsync(
+                collaborators.TransformWorkerClient,
                 context.WorkerInput,
                 workerOutput,
                 compileResult,

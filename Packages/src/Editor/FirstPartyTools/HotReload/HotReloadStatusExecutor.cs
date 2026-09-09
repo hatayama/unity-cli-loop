@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Warnings = warnings,
                 // Why the rows too: a total without them names nothing, so a caller told that
                 // types stayed loaded could not tell which ones a revert left behind.
-                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(_domain),
                 ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
                 Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
                     clearedCount == 0
@@ -142,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = true,
                 Methods = methods,
                 Warnings = warnings,
-                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(_domain),
                 ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
                 ActivePatchTotal = count,
                 AddedFieldTotal = addedFields.Count,

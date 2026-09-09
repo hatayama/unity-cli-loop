@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using UnityEditor;
@@ -15,6 +16,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadPlayModeEntryDropRecorder
     {
         private static int _currentCompilationErrorCount;
+
+        /// <summary>
+        /// Reads the installed services when Play entry collects what it would drop.
+        /// </summary>
+        /// <remarks>
+        /// Why a provider and not a captured value: the collectors run from Editor callbacks that
+        /// take no argument, and a replacement scope installs another domain while those callbacks
+        /// stay registered, so a value captured at startup would list the wrong domain's changes.
+        /// </remarks>
+        internal static Func<HotReloadServices> GetServices { get; set; }
 
         // Why static: a domain reload wipes this list. The next playModeStateChanged
         // in the same domain therefore means Play entry was cancelled and the just-recorded
@@ -201,9 +212,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static IReadOnlyList<string> CollectActiveIdentities()
         {
-            IReadOnlyList<HotReloadActivePatchInfo> patches = HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
+            Debug.Assert(GetServices != null, "GetServices must be set before identities are collected.");
+            HotReloadServices services = GetServices();
+            IReadOnlyList<HotReloadActivePatchInfo> patches = services.Patcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
-                HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers();
+                services.Domain.DescribeAddedMembers();
             List<string> identities = new List<string>(patches.Count + addedMembers.Count);
             for (int index = 0; index < patches.Count; index++)
             {
@@ -218,7 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why the types belong here: they live in artifact assemblies only a domain reload
             // unloads, so Play entry discards them exactly as it discards a patch.
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> introducedTypes =
-                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.DescribeActive();
+                services.Domain.IntroducedTypes.DescribeActive();
             for (int index = 0; index < introducedTypes.Count; index++)
             {
                 HotReloadIntroducedTypeDescriptor descriptor = introducedTypes[index];

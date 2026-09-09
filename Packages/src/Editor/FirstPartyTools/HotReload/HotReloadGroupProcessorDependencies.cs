@@ -72,16 +72,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// The production stages, bound to the services of one domain.
         /// </summary>
         internal static HotReloadGroupProcessorDependencies CreateProduction(
-            TransformWorkerClient transformWorkerClient,
-            HotReloadEntryApplier entryApplier)
+            HotReloadGroupStageCollaborators collaborators)
         {
             return new HotReloadGroupProcessorDependencies(
-                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
-                HotReloadIntroducedTypePreparation.PrepareAsync,
-                transformWorkerClient.RunAsync,
-                HotReloadGroupProcessor.GateAndCompileAsync,
-                HotReloadGroupEntryPreparation.PrepareGroup,
-                entryApplier.ApplyPreparedEntries);
+                files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
+                (files, input, ct) =>
+                    HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct),
+                collaborators.TransformWorkerClient.RunAsync,
+                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
+                    collaborators, context, compileResult, entriesToPatch),
+                collaborators.EntryApplier.ApplyPreparedEntries);
         }
 
         internal static HotReloadGroupProcessorDependencies Create(

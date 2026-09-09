@@ -56,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static void AppendRemovedMemberNotices(
+            HotReloadPatcher patcher,
             HotReloadApplyContext context,
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult)
         {
@@ -73,6 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 HotReloadStalePatchOutcomes.Append(
+                    patcher,
                     file.Sinks.Outcomes,
                     context.WorkerOutput,
                     file.FileOutput.removedMethodSignatures,

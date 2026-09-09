@@ -18,11 +18,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // that stale hash. Non-baseline matches still Clear; Stage/Record writes the same
         // hash+flag back so the next identical reload warns again.
         internal static HotReloadUnchangedSourceDecision TryShortCircuitUnchangedAppliedSource(
+            HotReloadDomain domain,
             string workerSourcePath,
             string projectRelativePath,
             string assemblyResolvePath,
             List<HotReloadMethodOutcome> outcomes)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(workerSourcePath), "workerSourcePath must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
@@ -39,14 +41,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             byte[] probeBytes = File.ReadAllBytes(fullWorkerSourcePath);
             string probeHash = new HotReloadSourceContentHasher().ComputeContentHash(probeBytes);
-            HashSet<string> activeLabels = CollectActiveLabelsForFile(projectRelativePath);
+            HashSet<string> activeLabels = CollectActiveLabelsForFile(domain, projectRelativePath);
             (string Hash, bool IsFullyApplied)? recorded =
-                HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(projectRelativePath);
+                domain.TryGetAppliedSource(projectRelativePath);
             if (recorded == null
                 || !string.Equals(probeHash, recorded.Value.Hash, StringComparison.Ordinal)
                 || (recorded.Value.IsFullyApplied && activeLabels.Count == 0))
             {
-                HotReloadCompositionRoot.Services.Domain.ClearAppliedSource(projectRelativePath);
+                domain.ClearAppliedSource(projectRelativePath);
                 return HotReloadUnchangedSourceDecision.NotUnchanged;
             }
 
@@ -57,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 for (int index = 0; index < sortedLabels.Count; index++)
                 {
                     string label = sortedLabels[index];
-                    string reason = HotReloadCompositionRoot.Services.Domain.IsActiveMember(
+                    string reason = domain.IsActiveMember(
                         projectRelativePath,
                         label)
                         ? HotReloadConstants.AlreadyActiveAddedMemberReason
@@ -69,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadUnchangedSourceDecision.ShortCircuited;
             }
 
-            HotReloadCompositionRoot.Services.Domain.ClearAppliedSource(projectRelativePath);
+            domain.ClearAppliedSource(projectRelativePath);
             return HotReloadUnchangedSourceDecision.ReapplyNonBaseline;
         }
 
@@ -144,19 +146,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        internal static HashSet<string> CollectActiveLabelsForFile(string projectRelativePath)
+        internal static HashSet<string> CollectActiveLabelsForFile(
+            HotReloadDomain domain,
+            string projectRelativePath)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
             IReadOnlyList<string> addedKeys =
-                HotReloadCompositionRoot.Services.Domain.ListActiveAddedMethodKeys(projectRelativePath);
+                domain.ListActiveAddedMethodKeys(projectRelativePath);
             for (int index = 0; index < addedKeys.Count; index++)
             {
                 labels.Add(addedKeys[index]);
             }
 
             IReadOnlyList<string> patchedKeys =
-                HotReloadCompositionRoot.Services.Domain.ListActiveMethodKeys(projectRelativePath);
+                domain.ListActiveMethodKeys(projectRelativePath);
             for (int index = 0; index < patchedKeys.Count; index++)
             {
                 labels.Add(patchedKeys[index]);
@@ -231,6 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static void AppendDeactivatedPatchesWarning(
+            HotReloadDomain domain,
             List<string> warnings,
             HashSet<string> snapshotLabels,
             HashSet<string> snapshotAddedLabels,
@@ -238,12 +244,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerOutputDto workerOutput,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
             Debug.Assert(snapshotAddedLabels != null, "snapshotAddedLabels must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
 
-            HashSet<string> currentLabels = CollectActiveLabelsForFile(projectRelativePath);
+            HashSet<string> currentLabels = CollectActiveLabelsForFile(domain, projectRelativePath);
             HashSet<string> stillDeclaredAdded = CollectStillDeclaredAddedLabels(workerOutput, outcomes);
             List<string> deactivatedAdded = new List<string>();
             List<string> deactivatedPatches = new List<string>();

@@ -11,6 +11,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadSiblingRebindReporter
     {
+        private readonly HotReloadDomain _domain;
+
+        internal HotReloadSiblingRebindReporter(HotReloadDomain domain)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            _domain = domain;
+        }
+
         // Why the resolver arrives per call: the reporter holds no collaborator of its own, and
         // the orchestrator already owns the one resolver this run uses.
         internal void AppendActiveSiblingsToGroup(
@@ -22,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadGroupFile firstFile = filesOfGroup[0];
             HotReloadActiveSiblingRebindPlan rebind = HotReloadActiveSiblingRebindPlanner.Plan(
+                _domain,
                 firstFile.AssemblyName,
                 firstFile.CompilationAssembly.sourceFiles,
                 pathsInRun,

@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadPackageRootCapture packageRootCapture,
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             TransformWorkerHost transformWorkerHost,
-            Func<TransformWorkerClient, HotReloadEntryApplier, HotReloadGroupProcessorDependencies>
+            Func<HotReloadGroupStageCollaborators, HotReloadGroupProcessorDependencies>
                 buildDependencies)
         {
             // Built in dependency order, and every collaborator takes what it needs here: nothing
@@ -95,19 +95,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadEntryApplier entryApplier =
                 new HotReloadEntryApplier(domain, patcher, fileEntryApplier);
             TransformWorkerClient transformWorkerClient = new TransformWorkerClient(transformWorkerHost);
+            HotReloadGroupStageCollaborators collaborators = new HotReloadGroupStageCollaborators(
+                domain,
+                patcher,
+                fileEntryApplier,
+                entryApplier,
+                transformWorkerClient,
+                packageRootCapture,
+                editorStateSnapshotCapture,
+                new HotReloadGroupCommitPolicy(domain, fileEntryApplier));
             // A factory, not a built value: the stages are bound to the collaborators built here,
             // and a caller that built them from the installed services would bind a replacement's
             // group run back to the domain that was installed when it called.
-            HotReloadGroupProcessorDependencies dependencies =
-                buildDependencies(transformWorkerClient, entryApplier);
+            HotReloadGroupProcessorDependencies dependencies = buildDependencies(collaborators);
             Debug.Assert(dependencies != null, "buildDependencies must not return null.");
-            HotReloadGroupCommitStage groupCommitStage =
-                new HotReloadGroupCommitStage(domain, dependencies, fileEntryApplier, entryApplier);
-            HotReloadGroupProcessor groupProcessor = new HotReloadGroupProcessor(
-                dependencies,
+            HotReloadGroupCommitStage groupCommitStage = new HotReloadGroupCommitStage(
                 domain,
+                dependencies,
                 fileEntryApplier,
                 entryApplier,
+                collaborators.CommitPolicy);
+            HotReloadGroupProcessor groupProcessor = new HotReloadGroupProcessor(
+                dependencies,
+                collaborators,
                 groupCommitStage);
             return new HotReloadServices(
                 domain,
@@ -116,13 +126,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileEntryApplier,
                 entryApplier,
                 transformWorkerClient,
+                collaborators,
                 groupCommitStage,
                 groupProcessor,
                 new HotReloadOrchestrator(
+                    domain,
+                    patcher,
                     groupProcessor,
-                    new HotReloadInputFileResolver(),
+                    new HotReloadInputFileResolver(
+                        domain,
+                        packageRootCapture,
+                        editorStateSnapshotCapture),
                     new HotReloadDeferredInputClassifier(),
-                    new HotReloadSiblingRebindReporter(),
+                    new HotReloadSiblingRebindReporter(domain),
                     packageRootCapture),
                 new HotReloadStatusExecutor(domain, patcher),
                 packageRootCapture,
