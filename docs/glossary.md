@@ -46,6 +46,13 @@ Routed by `InternalBridgeCommandRouter`; names use `UnityCliLoopConstants.COMMAN
 constants. Anything an end user or third-party extension should call is a tool, not an
 internal bridge command.
 
+### Native command
+
+A command the Go CLI implements itself, without going through a Unity tool (`launch`,
+`compile-check`, `skills` and the rest). `clicore.NativeCommands` is the single list of them and
+records for each whether the dispatcher answers it (dispatcher-owned) or the project runner does
+(runner-owned).
+
 ### Server
 
 The local IPC endpoint hosted inside the Unity Editor by the package

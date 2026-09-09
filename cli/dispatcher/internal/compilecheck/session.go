@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,8 +119,7 @@ func ResolveActiveDagDir(projectRoot string) (string, error) {
 
 	name, found := dagNameFromScriptDebugSetting(projectRoot, candidates)
 	if !found {
-		return "", fmt.Errorf(
-			"cannot tell which Bee build to check in %s; %s", artifactsDirectory, runCompileFirstAdvice)
+		return "", unityBuildRequired("cannot tell which Bee build to check in %s", artifactsDirectory)
 	}
 
 	return relativeDagDir(name), nil
@@ -136,8 +134,7 @@ func relativeDagDir(name string) string {
 func dagDirectoryNames(artifactsDirectory string) ([]string, error) {
 	entries, err := os.ReadDir(artifactsDirectory)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"no Bee build artifacts found in %s; %s", artifactsDirectory, runCompileFirstAdvice)
+		return nil, unityBuildRequired("no Bee build artifacts found in %s", artifactsDirectory)
 	}
 
 	names := []string{}
@@ -150,8 +147,7 @@ func dagDirectoryNames(artifactsDirectory string) ([]string, error) {
 		}
 	}
 	if len(names) == 0 {
-		return nil, fmt.Errorf(
-			"no Bee build artifacts found in %s; %s", artifactsDirectory, runCompileFirstAdvice)
+		return nil, unityBuildRequired("no Bee build artifacts found in %s", artifactsDirectory)
 	}
 	sort.Strings(names)
 

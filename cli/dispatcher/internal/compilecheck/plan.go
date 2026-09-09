@@ -125,8 +125,7 @@ func listResponseFiles(dagDirectoryPath string) ([]string, error) {
 		paths = append(paths, path)
 	}
 	if len(paths) == 0 {
-		return nil, fmt.Errorf(
-			"no Bee response files found in %s; %s", dagDirectoryPath, runCompileFirstAdvice)
+		return nil, unityBuildRequired("no Bee response files found in %s", dagDirectoryPath)
 	}
 
 	return paths, nil
@@ -145,11 +144,13 @@ func selectChangedAssemblies(
 		return nil, setErr
 	}
 
+	context := NewAssemblyContext(graph, assemblyDefinitions)
 	reasons := map[string]string{}
 	for _, name := range graph.names {
 		rsp := graph.byName[name]
 		asmdef := lookupAssemblyDefinition(assemblyDefinitions, name)
-		if structuralErr := DetectStructuralChange(projectRoot, rsp, asmdef, dagDir); structuralErr != nil {
+		if structuralErr := DetectStructuralChange(
+			projectRoot, rsp, asmdef, dagDir, context); structuralErr != nil {
 			return nil, structuralErr
 		}
 

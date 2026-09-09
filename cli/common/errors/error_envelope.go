@@ -38,7 +38,10 @@ const (
 	ErrorCodePackageManifestInvalid = "PACKAGE_MANIFEST_INVALID"
 	// ErrorCodePackageRegistryUnavailable is returned when the OpenUPM registry HTTP lookup fails.
 	ErrorCodePackageRegistryUnavailable = "PACKAGE_REGISTRY_UNAVAILABLE"
-	ErrorCodeInternalError              = "INTERNAL_ERROR"
+	// ErrorCodeCompileCheckUnityBuildRequired is returned when compile-check cannot replay the Bee
+	// response files because the project changed in a way only a Unity build can record.
+	ErrorCodeCompileCheckUnityBuildRequired = "COMPILE_CHECK_UNITY_BUILD_REQUIRED"
+	ErrorCodeInternalError                  = "INTERNAL_ERROR"
 
 	ErrorPhaseArgumentParsing = "argument_parsing"
 	ErrorPhaseProjectResolve  = "project_resolution"
