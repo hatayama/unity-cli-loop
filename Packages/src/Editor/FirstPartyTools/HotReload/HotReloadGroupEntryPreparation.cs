@@ -39,14 +39,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new List<HotReloadPreparedGroupFile>(context.Files.Count);
             foreach (HotReloadGroupFile file in context.Files)
             {
-                prepared.Add(PrepareFile(context, compileResult, file, entriesByFile, bindFailures));
+                prepared.Add(PrepareFile(compileResult, file, entriesByFile, bindFailures));
             }
 
             return prepared;
         }
 
         private static HotReloadPreparedGroupFile PrepareFile(
-            HotReloadApplyContext context,
             HotReloadShimCompileResult compileResult,
             HotReloadGroupFile file,
             Dictionary<string, List<TransformWorkerEntryDto>> entriesByFile,
@@ -65,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerEntryDto[] entries = fileEntries.ToArray();
             HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
-                context.AssemblyName,
+                HotReloadTypeHome.ScriptAssemblies(file.AssemblyName, file.TargetDllPath),
                 file.AssemblyResolvePath,
                 compileResult.Assembly,
                 entries,

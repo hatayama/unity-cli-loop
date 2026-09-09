@@ -95,12 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // aborting the peel, so the remaining unchanged methods still get reverted.
         // Returns how many Revert calls actually removed a live patch.
         internal int RevertUnchangedPatches(
-            string assemblyName,
+            HotReloadTypeHome home,
             TransformWorkerUnchangedMethodDto[] unchangedMethods,
             List<HotReloadMethodOutcome> outcomes,
             string assemblyResolvePath)
         {
-            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+            Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
 
@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // and parameters. Arity 0 would resolve the generic unchanged row to the
                 // non-generic sibling and peel its live patch.
                 HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
-                    assemblyName,
+                    home,
                     unchanged.typeMetadataName,
                     unchanged.methodName,
                     unchanged.parameterTypeFullNames,
@@ -172,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 file.RevertedUnchangedCount = RevertUnchangedPatches(
-                    file.AssemblyName,
+                    HotReloadTypeHome.ScriptAssemblies(file.AssemblyName, file.TargetDllPath),
                     unchangedMethods,
                     file.Sinks.Outcomes,
                     file.AssemblyResolvePath);
