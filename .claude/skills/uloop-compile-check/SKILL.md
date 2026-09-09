@@ -21,7 +21,7 @@ in `Library/uloop/compile-check/` and are never handed to the Editor.
 ## When not to use
 
 - You want the change reflected in the Editor (play mode, tests, a tool call): run `uloop compile`.
-- You just added or removed an `.asmdef`, changed its references, or changed scripting defines:
+- You just added or removed an `.asmdef`, added a reference to one, or changed scripting defines:
   run `uloop compile` once first. The response files describe the previous build only, so
   compile-check refuses the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED` instead of reporting
   diagnostics for a configuration the project no longer has.

@@ -104,8 +104,8 @@ func TestDetectSourceChangeReportsRemovedSource(t *testing.T) {
 	}
 }
 
-// Verifies an assembly definition that gained a reference after the last build stops the run
-// instead of compiling, and says how to recover.
+// Verifies an assembly definition that stopped building for the Editor after the last build stops
+// the run instead of compiling, and says how to recover.
 func TestDetectStructuralChangeRejectsEditedAssemblyDefinition(t *testing.T) {
 	projectRoot, rsp, asmdef := newStalenessProject(t)
 	writeFileAt(t, asmdef.Path, `{"name":"Foo","includePlatforms":["iOS"]}`)
