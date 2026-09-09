@@ -108,8 +108,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ResolvePatchTarget_WhenAssemblyOwnsAnActiveIntroducedType_KeepsTheLedgerEntry()
         {
             string existingScriptPath = ExistingScriptPath;
-            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
-            HotReloadAppliedSourceLedger.Record(existingScriptPath, "stale-hash", true);
+            HotReloadDomainSlot.Current.ClearAppliedSource(existingScriptPath);
+            HotReloadDomainSlot.Current.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
             using (HotReloadIntroducedTypeHolder.BeginReplacement())
             {
@@ -119,8 +119,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ResolveExistingScript("introduced-type-active");
             }
 
-            Assert.That(HotReloadAppliedSourceLedger.TryGet(existingScriptPath), Is.Not.Null);
-            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
+            Assert.That(HotReloadDomainSlot.Current.TryGetAppliedSource(existingScriptPath), Is.Not.Null);
+            HotReloadDomainSlot.Current.ClearAppliedSource(existingScriptPath);
         }
 
         /// <summary>
@@ -131,8 +131,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ResolvePatchTarget_WhenAssemblyOwnsNoIntroducedType_RunsTheShortCircuit()
         {
             string existingScriptPath = ExistingScriptPath;
-            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
-            HotReloadAppliedSourceLedger.Record(existingScriptPath, "stale-hash", true);
+            HotReloadDomainSlot.Current.ClearAppliedSource(existingScriptPath);
+            HotReloadDomainSlot.Current.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
             using (HotReloadIntroducedTypeHolder.BeginReplacement())
             {
@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ResolveExistingScript("introduced-type-absent");
             }
 
-            Assert.That(HotReloadAppliedSourceLedger.TryGet(existingScriptPath), Is.Null);
+            Assert.That(HotReloadDomainSlot.Current.TryGetAppliedSource(existingScriptPath), Is.Null);
         }
 
         private static void ResolveExistingScript(string correlationId)

@@ -98,7 +98,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in _appliedSourceHashByPath)
             {
-                HotReloadAppliedSourceLedger.Record(pair.Key, pair.Value.Hash, pair.Value.IsFullyApplied);
+                HotReloadDomainSlot.Current.RecordAppliedSource(
+                    pair.Key,
+                    pair.Value.Hash,
+                    pair.Value.IsFullyApplied);
             }
         }
 

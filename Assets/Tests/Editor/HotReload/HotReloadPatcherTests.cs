@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5), "Precondition: original sentinel body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.StaticPing__shim0));
 
             Assert.That(HotReloadCoreFixture.StaticPing(), Is.EqualTo("original"));
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(HotReloadCoreFixture.StaticPing(), Is.EqualTo("patched"));
@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             fixture.VoidBump();
             Assert.That(fixture.VoidHits, Is.EqualTo(-1), "Precondition: original void body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             fixture.VoidBump();
@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
 
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string staticKey = HotReloadAddedFieldStore.FormatFieldKey("Host", "seed");
             HotReloadAddedFieldStore.Set(host, instanceKey, 1);
             HotReloadAddedFieldStore.SetStatic(staticKey, 2);
-            HotReloadAddedFieldRegistry.ReplaceForFile(
+            new HotReloadDomainTestAccess().ReplaceAddedFields(
                 "Assets/Tests/Editor/HotReload/Host.cs",
                 new[] { "Host.count" });
 
@@ -129,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(HotReloadAddedFieldStore.GetOrInit(host, instanceKey, () => 10), Is.EqualTo(10));
             Assert.That(HotReloadAddedFieldStore.GetOrInitStatic(staticKey, () => 20), Is.EqualTo(20));
-            Assert.That(HotReloadAddedFieldRegistry.GetFieldsForType("Host"), Is.Empty);
+            Assert.That(HotReloadDomainSlot.Current.GetAddedFieldsForType("Host"), Is.Empty);
         }
 
         /// <summary>
@@ -139,14 +139,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void RevertAll_RunsTheDomainStoreReset()
         {
-            HotReloadAddedFieldRegistry.ReplaceForFile(
+            new HotReloadDomainTestAccess().ReplaceAddedFields(
                 "Assets/Tests/Editor/HotReload/PatcherResetHost.cs",
                 new[] { "PatcherResetHost.count" });
 
             HotReloadPatcher.RevertAll();
 
             Assert.That(HotReloadPatcher.ActiveChangeCount, Is.EqualTo(0));
-            Assert.That(HotReloadAddedFieldRegistry.DescribeAll(), Is.Empty);
+            Assert.That(HotReloadDomainSlot.Current.DescribeAddedFields(), Is.Empty);
         }
 
         /// <summary>
@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
 
             Assert.That(
-                HotReloadPatcher.Apply(
+                new HotReloadDomainTestAccess().ApplyPatch(
                     original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
 
@@ -193,12 +193,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
 
             Assert.That(
-                HotReloadPatcher.Apply(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(100));
 
@@ -221,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(HotReloadPatchFailureReason.UnpatchableValueType));
@@ -246,7 +246,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(-5),
                 "Precondition: original async sentinel body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Delegation, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(await fixture.ReplaceableComputeAsync(5), Is.EqualTo(10 + 5 + 1));
@@ -272,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadPatcherTests), nameof(ExternShimStub));
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
 
             Assert.That(result.Success, Is.False);
@@ -299,7 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(
                 HotReloadInvocationRegistry.GetCount(methodKey),
@@ -344,14 +344,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim0, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
 
             Assert.That(
-                HotReloadPatcher.Apply(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim1, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(
                 HotReloadInvocationRegistry.GetCount(methodKey),
@@ -459,10 +459,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.StaticPing__shim0));
             string failingKey = HotReloadMethodKeys.FormatMethodLabel(failing);
             Assert.That(
-                HotReloadPatcher.Apply(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(
-                HotReloadPatcher.Apply(surviving, survivingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(surviving, survivingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(2));
 
@@ -512,7 +512,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo failingShim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
             Assert.That(
-                HotReloadPatcher.Apply(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(
                 HotReloadPausePointCoordination.GetTransplantLocals(failing),
@@ -555,7 +555,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));

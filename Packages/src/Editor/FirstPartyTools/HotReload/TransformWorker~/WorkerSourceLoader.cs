@@ -76,7 +76,7 @@ internal static class WorkerSourceLoader
         }
     }
 
-    // Keep in sync with HotReloadAppliedSourceLedger.ComputeContentHash (lowercase hex SHA-256).
+    // Keep in sync with HotReloadSourceContentHasher.ComputeContentHash (lowercase hex SHA-256).
     private static string ComputeSourceContentSha256(byte[] bytes)
     {
         using SHA256 sha256 = SHA256.Create();

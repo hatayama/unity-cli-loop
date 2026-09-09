@@ -94,13 +94,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(42));
-            Assert.That(HotReloadShimRegistry.HasGeneration(HostProjectRelativePath()), Is.True);
-            Assert.That(HotReloadShimRegistry.HasGeneration(CallerProjectRelativePath()), Is.True);
+            Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(HostProjectRelativePath()), Is.True);
+            Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(CallerProjectRelativePath()), Is.True);
             Assert.That(
-                HotReloadAddedMemberRegistry.IsActiveMember(HostProjectRelativePath(), HostAddedMethodLabel),
+                HotReloadDomainSlot.Current.IsActiveMember(HostProjectRelativePath(), HostAddedMethodLabel),
                 Is.True);
             Assert.That(
-                HotReloadAddedMemberRegistry.IsActiveMember(CallerProjectRelativePath(), HostAddedMethodLabel),
+                HotReloadDomainSlot.Current.IsActiveMember(CallerProjectRelativePath(), HostAddedMethodLabel),
                 Is.False);
         }
 
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller.Call(host), Is.EqualTo(41));
             Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
-                HotReloadAddedFieldRegistry.GetFieldsForType(
+                HotReloadDomainSlot.Current.GetAddedFieldsForType(
                     typeof(HotReloadCrossFileAddedMemberHost).FullName),
                 Is.EqualTo(new[] { "Counter" }));
             Assert.That(result.AddedFields, Has.Length.EqualTo(1));
@@ -181,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller.Call(host), Is.EqualTo(41));
             Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
-                HotReloadAddedFieldRegistry.GetFieldsForType(
+                HotReloadDomainSlot.Current.GetAddedFieldsForType(
                     typeof(HotReloadCrossFileAddedMemberHost).FullName),
                 Is.EqualTo(new[] { "Count" }));
             Assert.That(result.AddedFields, Has.Length.EqualTo(1));
@@ -239,8 +239,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(failure.FilePath, Is.EqualTo(FixturePath(CallerFileName)));
             Assert.That(atomicSkip.FilePath, Is.EqualTo(FixturePath(CallerFileName)));
             Assert.That(new HotReloadCrossFileAddedMemberHost().Scaled(1), Is.EqualTo(101));
-            Assert.That(HotReloadShimRegistry.HasGeneration(HostProjectRelativePath()), Is.True);
-            Assert.That(HotReloadShimRegistry.HasGeneration(CallerProjectRelativePath()), Is.False);
+            Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(HostProjectRelativePath()), Is.True);
+            Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(CallerProjectRelativePath()), Is.False);
         }
 
         /// <summary>

@@ -136,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadTransplantControlFlowTests), shimName);
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
@@ -218,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadTransplantControlFlowTests), nameof(ShimToCenterThrowInTry));
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(
+            HotReloadPatchResult result = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 

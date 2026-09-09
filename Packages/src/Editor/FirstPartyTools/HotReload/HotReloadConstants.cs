@@ -98,10 +98,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // in TransformWorker~/PatchKinds.cs.
         public const string PatchKindAddedMethod = "addedMethod";
 
-        // --status Kind for rows sourced from HotReloadAddedMemberRegistry (no compiled MethodBase).
+        // --status Kind for rows sourced from a generation's added members (no compiled MethodBase).
         public const string AddedMemberStatusKind = "Added";
 
-        // --status Kind for rows sourced from HotReloadAddedFieldRegistry (live added fields).
+        // --status Kind for rows sourced from a generation's added fields (live added fields).
         public const string AddedFieldKind = "AddedField";
 
         // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
