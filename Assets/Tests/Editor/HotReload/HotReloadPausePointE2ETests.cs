@@ -125,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await HotReloadFromEditedSourceAsync(editedSource, "E2E_f_LocalFunction.cs");
 
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             SourcePausePointShimResolution shimResolution =
                 SourcePausePointShimResolver.Resolve(lookup, FixtureProjectRelativePath, enableLine);

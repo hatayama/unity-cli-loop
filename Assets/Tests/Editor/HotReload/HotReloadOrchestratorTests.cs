@@ -5964,7 +5964,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string projectRelativePath =
                 "Assets/Tests/Editor/HotReload/HotReloadAddedMethodApplyFixture.cs";
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(projectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(projectRelativePath);
             Assert.That(
                 lookup,
                 Is.Not.Null,

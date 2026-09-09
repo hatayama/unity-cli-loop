@@ -837,9 +837,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void BuildApplyResponse_WithRetargetLineDrift_AddsDriftWarning()
         {
-            Func<IReadOnlyList<(string Id, string OldText, string NewText)>> previous =
-                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings;
-            HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings = () =>
+            PausePointSidePortScope pausePointScope = new PausePointSidePortScope();
+            pausePointScope.Port.RetargetLineDriftWarnings = () =>
                 new List<(string, string, string)>
                 {
                     ("Assets/Scripts/A.cs:10", "return a;", "return a + 1;")
@@ -866,7 +865,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings = previous;
+                pausePointScope.Dispose();
             }
         }
 
@@ -876,9 +875,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void BuildApplyResponse_WithExpiredNotRetargetedIds_AddsAggregatedWarning()
         {
-            Func<IReadOnlyList<string>> previous =
-                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds;
-            HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds = () =>
+            PausePointSidePortScope pausePointScope = new PausePointSidePortScope();
+            pausePointScope.Port.ExpiredNotRetargetedMarkerIds = () =>
                 new List<string> { "Assets/Scripts/A.cs:10" };
             try
             {
@@ -900,7 +898,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds = previous;
+                pausePointScope.Dispose();
             }
         }
 

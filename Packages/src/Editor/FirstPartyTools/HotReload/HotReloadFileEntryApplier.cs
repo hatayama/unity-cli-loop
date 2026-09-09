@@ -351,16 +351,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds)
         {
-            IReadOnlyList<string> armedIds =
-                HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod?.Invoke(method);
+            IPausePointHotReloadPort pausePointSide = HotReloadPausePointCoordination.PausePointSide;
+            IReadOnlyList<string> armedIds = pausePointSide?.GetArmedMarkerIdsOnMethod(method);
             if (armedIds == null || armedIds.Count == 0)
             {
                 return;
             }
 
             IReadOnlyList<string> suppressedIds =
-                HotReloadPausePointCoordination.GetSuppressedMarkerIdsOnMethod?.Invoke(method)
-                ?? Array.Empty<string>();
+                pausePointSide.GetSuppressedMarkerIdsOnMethod(method) ?? Array.Empty<string>();
 
             // The same method can be patched twice in one run (duplicate file inputs,
             // re-applied edits); the aggregated warning must list each marker id once.

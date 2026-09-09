@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string dllPath,
             int resolvedLine)
         {
-            string snapshot = HotReloadPausePointCoordination.GetVerifiedSnapshotSource?.Invoke(
+            string snapshot = HotReloadPausePointCoordination.HotReloadSide?.GetVerifiedSnapshotSource(
                 projectRelativeFile,
                 dllPath);
             return SourcePausePointSourceLineReader.ReadLineTextFromSource(snapshot, resolvedLine);

@@ -170,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             await HotReloadFromEditedSourceAsync(editedSource, "ContractDelegationLambda.cs");
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             HotReloadShimMethodLookup lambdaEntry = lookup.Methods.FirstOrDefault(
                 m => m.OriginalMethod != null
@@ -551,7 +551,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await HotReloadFromEditedSourceAsync(editedSource, "ContractAsyncMoveNext.cs");
 
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             SourcePausePointShimResolution shimResolution =
                 SourcePausePointShimResolver.Resolve(lookup, FixtureProjectRelativePath, enableLine);

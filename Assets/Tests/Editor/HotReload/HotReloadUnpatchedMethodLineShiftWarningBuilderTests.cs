@@ -407,9 +407,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
             File.WriteAllText(absolutePath, "line1\nline2\nline3");
 
-            Func<string, string> previousLoader =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => "line1\nline2";
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => "line1\nline2";
             try
             {
                 HotReloadResponse response = HotReloadTool.BuildApplyResponse(
@@ -437,7 +436,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousLoader;
+                snapshotScope.Dispose();
                 if (File.Exists(absolutePath))
                 {
                     File.Delete(absolutePath);
@@ -460,9 +459,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
             File.WriteAllText(absolutePath, "line1\nline2\nline3");
 
-            Func<string, string> previousLoader =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => "line1\nline2";
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => "line1\nline2";
             try
             {
                 HotReloadResponse response = HotReloadTool.BuildApplyResponse(
@@ -485,7 +483,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousLoader;
+                snapshotScope.Dispose();
                 if (File.Exists(absolutePath))
                 {
                     File.Delete(absolutePath);

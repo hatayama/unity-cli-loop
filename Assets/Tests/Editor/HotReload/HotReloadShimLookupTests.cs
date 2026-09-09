@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await PatchComputeWithPrivateAsync();
 
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             Assert.That(lookup.AssemblyBytes, Is.Not.Null.And.Not.Empty);
             Assert.That(lookup.PdbBytes, Is.Not.Null.And.Not.Empty);
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string absoluteFixturePath = Path.GetFullPath(
                 Path.Combine(projectRoot, FixtureProjectRelativePath));
             HotReloadShimFileLookup absoluteLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(absoluteFixturePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(absoluteFixturePath);
             Assert.That(
                 absoluteLookup,
                 Is.Not.Null,
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(computeMethod, Is.Not.Null);
 
             HotReloadShimFileLookup beforeLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(beforeLookup, Is.Not.Null);
             Assert.That(
                 beforeLookup.Methods.Count,
@@ -101,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(reverted, Is.EqualTo(HotReloadRevertOutcome.Reverted));
 
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             Assert.That(lookup.Methods, Is.Not.Empty);
 
@@ -123,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Null);
         }
 
@@ -135,13 +135,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             await PatchComputeWithPrivateAsync(extraDelta: 100);
             HotReloadShimFileLookup firstLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(firstLookup, Is.Not.Null);
             Assembly firstAssembly = firstLookup.LoadedAssembly;
 
             await PatchComputeWithPrivateAsync(extraDelta: 200);
             HotReloadShimFileLookup secondLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(secondLookup, Is.Not.Null);
             Assert.That(
                 ReferenceEquals(secondLookup.LoadedAssembly, firstAssembly),
@@ -163,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(computeMethod, Is.Not.Null);
 
             HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
 
             MethodBase shimMethod = null;
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(shimBody, Is.Not.Null);
 
             IReadOnlyList<LocalBuilder> locals =
-                HotReloadPausePointCoordination.GetTransplantLocals?.Invoke(computeMethod);
+                HotReloadPausePointCoordination.HotReloadSide?.GetTransplantLocals(computeMethod);
             Assert.That(locals, Is.Not.Null);
             Assert.That(locals.Count, Is.EqualTo(shimBody.LocalVariables.Count));
         }

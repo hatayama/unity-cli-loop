@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FixtureFilePath = "Assets/Tests/Editor/PausePointToolsFixture.cs";
         private const int FixtureLine = 12;
 
-        private Func<string, IReadOnlyList<string>> _originalAddedFieldsLookup;
+        private HotReloadSidePortScope _hotReloadSideScope;
 
         [SetUp]
         public void SetUp()
@@ -27,8 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
 
             // This assembly must not reference the hot-reload tool, so the added fields are
-            // published through the same coordination delegate the hot-reload side sets.
-            _originalAddedFieldsLookup = HotReloadPausePointCoordination.GetAddedFieldsForType;
+            // published through the same coordination port the hot-reload side installs.
+            _hotReloadSideScope = new HotReloadSidePortScope();
         }
 
         [TearDown]
@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
-            HotReloadPausePointCoordination.GetAddedFieldsForType = _originalAddedFieldsLookup;
+            _hotReloadSideScope.Dispose();
         }
 
         /// <summary>
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private void PublishAddedFields(string typeName, IReadOnlyList<string> simpleFieldNames)
         {
-            HotReloadPausePointCoordination.GetAddedFieldsForType = queriedTypeName =>
+            _hotReloadSideScope.Port.AddedFieldsForType = queriedTypeName =>
                 string.Equals(queriedTypeName, typeName, StringComparison.Ordinal)
                     ? simpleFieldNames
                     : Array.Empty<string>();

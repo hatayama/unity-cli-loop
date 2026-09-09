@@ -25,20 +25,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FixturesDirectory = "Assets/Tests/Editor/SourcePausePointPatcher/Fixtures/";
 
         private FakePausePointPauseController _pauseController;
-        private Func<MethodBase, MethodBase> _previousGetActiveShim;
+        private HotReloadSidePortScope _hotReloadSideScope;
 
         [SetUp]
         public void SetUp()
         {
             _pauseController = new FakePausePointPauseController();
             UloopPausePointRegistry.ConfigureForTests(_pauseController, () => DateTime.UtcNow);
-            _previousGetActiveShim = HotReloadPausePointCoordination.GetActiveShimForMethod;
+            _hotReloadSideScope = new HotReloadSidePortScope();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPausePointCoordination.GetActiveShimForMethod = _previousGetActiveShim;
+            _hotReloadSideScope.Dispose();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }
@@ -732,7 +732,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Patch_OnHotReloadedMethod_WithoutCompiledSpan_KeepsExistingMessage()
         {
             MethodBase method = typeof(PatcherStaticMethodFixture).GetMethod(nameof(PatcherStaticMethodFixture.Add));
-            HotReloadPausePointCoordination.GetActiveShimForMethod = _ => method;
+            _hotReloadSideScope.Port.ActiveShimForMethod = _ => method;
             const int requestedLine = 42;
             SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
                 "patcher-hot-reload-no-span",
@@ -761,7 +761,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Patch_OnHotReloadedMethod_WithCompiledSpan_AppendsSpanSentence()
         {
             MethodBase method = typeof(PatcherStaticMethodFixture).GetMethod(nameof(PatcherStaticMethodFixture.Add));
-            HotReloadPausePointCoordination.GetActiveShimForMethod = _ => method;
+            _hotReloadSideScope.Port.ActiveShimForMethod = _ => method;
             const int requestedLine = 42;
             const int compiledStart = 10;
             const int compiledEnd = 20;

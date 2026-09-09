@@ -11,7 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
             string snapshotSource =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile?.Invoke(normalizedFile);
+                HotReloadPausePointCoordination.HotReloadSide?.GetVerifiedSnapshotSourceForFile(
+                    normalizedFile);
             return snapshotSource ?? string.Empty;
         }
     }

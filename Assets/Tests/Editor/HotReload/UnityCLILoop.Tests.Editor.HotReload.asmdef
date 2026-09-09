@@ -2,6 +2,7 @@
     "name": "UnityCLILoop.Tests.Editor.HotReload",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor",
     "references": [
+        "GUID:cec8bc9a73a34dd0a7f85035927e546f",
         "GUID:0acc523941302664db1f4e527237feb3",
         "GUID:27619889b8ba8c24980f49ee34dbb44a",
         "GUID:afe86dd49995e46baa33e099a4d2ee1d",
