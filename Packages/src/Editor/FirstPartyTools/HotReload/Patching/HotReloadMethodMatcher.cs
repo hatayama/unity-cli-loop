@@ -1,4 +1,3 @@
-using System;
 using System.IO;
 using System.Reflection;
 
@@ -17,28 +16,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         /// <summary>
         /// Resolves <paramref name="methodName"/> on <paramref name="typeMetadataName"/> inside
-        /// <paramref name="assemblyName"/> whose parameters and generic arity match
+        /// the assembly <paramref name="home"/> names, whose parameters and generic arity match
         /// <paramref name="parameterTypeFullNames"/> and <paramref name="genericArity"/>
         /// exactly (Cecil FullName, no <c>this</c>).
         /// </summary>
         public static HotReloadMethodMatchResult Resolve(
-            string assemblyName,
+            HotReloadTypeHome home,
             string typeMetadataName,
             string methodName,
             string[] parameterTypeFullNames,
             int genericArity)
         {
-            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+            Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(typeMetadataName), "typeMetadataName must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
             Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
             Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
 
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string dllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            string dllPath = home.DllPath;
 
             if (!File.Exists(dllPath))
             {
@@ -56,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return HotReloadMethodMatchResult.Failure(
                     HotReloadMethodMatchFailureReason.TypeNotFound,
-                    $"Type '{typeMetadataName}' was not found in assembly '{assemblyName}'.");
+                    $"Type '{typeMetadataName}' was not found in assembly '{home.AssemblyName}'.");
             }
 
             MethodDefinition methodDefinition = FindMatchingMethod(
@@ -73,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int metadataToken = methodDefinition.MetadataToken.ToInt32();
             string compiledMvid = assemblyDefinition.MainModule.Mvid.ToString();
-            return ResolveLoadedMethod(assemblyName, compiledMvid, metadataToken);
+            return ResolveLoadedMethod(home, compiledMvid, metadataToken);
         }
 
         private static MethodDefinition FindMatchingMethod(
@@ -120,33 +115,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // internal so EditMode tests can exercise the Mvid guard without rewriting ScriptAssemblies.
         internal static HotReloadMethodMatchResult ResolveLoadedMethod(
-            string assemblyName,
+            HotReloadTypeHome home,
             string compiledMvid,
             int metadataToken)
         {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            Debug.Assert(home != null, "home must not be null.");
+
+            HotReloadLoadedAssemblyResolution resolution = home.ResolveLoadedAssembly(compiledMvid);
+            if (resolution.State == HotReloadLoadedAssemblyState.Stale)
             {
-                if (assembly.GetName().Name != assemblyName)
-                {
-                    continue;
-                }
-
-                if (assembly.ManifestModule.ModuleVersionId.ToString() != compiledMvid)
-                {
-                    return HotReloadMethodMatchResult.Failure(
-                        HotReloadMethodMatchFailureReason.StaleAssembly,
-                        $"The loaded assembly '{assemblyName}' no longer matches the compiled assembly on disk.",
-                        HotReloadConstants.StaleAssemblyHint);
-                }
-
-                MethodBase method = assembly.ManifestModule.ResolveMethod(metadataToken);
-                return HotReloadMethodMatchResult.SuccessResult(method);
+                return HotReloadMethodMatchResult.Failure(
+                    HotReloadMethodMatchFailureReason.StaleAssembly,
+                    $"The loaded assembly '{home.AssemblyName}' no longer matches the compiled assembly on disk.",
+                    HotReloadConstants.StaleAssemblyHint);
             }
 
-            return HotReloadMethodMatchResult.Failure(
-                HotReloadMethodMatchFailureReason.AssemblyNotLoaded,
-                $"Assembly '{assemblyName}' is not currently loaded in the AppDomain.",
-                HotReloadConstants.AssemblyNotLoadedHint);
+            if (resolution.State == HotReloadLoadedAssemblyState.NotLoaded)
+            {
+                return HotReloadMethodMatchResult.Failure(
+                    HotReloadMethodMatchFailureReason.AssemblyNotLoaded,
+                    $"Assembly '{home.AssemblyName}' is not currently loaded in the AppDomain.",
+                    HotReloadConstants.AssemblyNotLoadedHint);
+            }
+
+            MethodBase method = resolution.Assembly.ManifestModule.ResolveMethod(metadataToken);
+            return HotReloadMethodMatchResult.SuccessResult(method);
         }
     }
 }

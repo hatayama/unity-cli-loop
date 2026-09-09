@@ -169,7 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
                     evidence.TargetDllMvid,
                     StringComparison.Ordinal)
-                || HotReloadPatchTargetSupport.CheckMvidGuard(evidence.AssemblyName, targetDllPath) != null)
+                || HotReloadPatchTargetSupport.CheckMvidGuard(
+                    HotReloadTypeHome.ScriptAssemblies(evidence.AssemblyName, targetDllPath)) != null)
             {
                 return "The compiled assembly changed while hot reload was preparing. Compile the project and retry hot reload.";
             }
