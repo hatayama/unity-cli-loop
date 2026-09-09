@@ -82,8 +82,13 @@ check against, not as an observed result.
 
 What the implementation assumes:
 
-- **Editor layout.** The bundled compiler is looked up under `Editor\Data\...` on Windows and
-  `Contents/...` on macOS; the two layouts are selected by `runtime.GOOS`, not by probing.
+- **Editor layout.** The layout is probed, not chosen from `runtime.GOOS`. The Editor's content
+  root is the macOS `Contents` directory when the executable sits in a `MacOS` directory inside it,
+  and otherwise a `Data` directory beside the executable — which is what a Windows install is
+  expected to look like. The compiler directory under that root is found by a bounded scan, so a
+  layout that moved is reported rather than silently missed. The one place `runtime.GOOS` is
+  consulted is the host file name (`dotnet.exe` versus `dotnet`). What a Windows run has to confirm
+  is that `Data` really does sit beside `Unity.exe` for a Hub install.
 - **Separators in response files.** Bee writes forward slashes inside `.rsp` files on both
   platforms. Every comparison against a response-file path normalizes with `filepath.ToSlash`
   before matching (`ProjectAssemblyReferences`, `recordSourcePath`), and every path handed back to
@@ -93,8 +98,9 @@ What the implementation assumes:
 
 To verify, on a Windows machine with a Unity project that has been built at least once:
 
-1. Build the binary (`scripts\build-go-cli.ps1` or the Go build for `windows-amd64`) and run
-   `uloop.exe compile-check --all`.
+1. Build the binary for `windows-amd64` — `go build -o uloop.exe ./cmd/dispatcher` from
+   `cli/dispatcher`, or `scripts/build-go-cli.sh` from a shell that can run it, which writes
+   `dist/windows-amd64/uloop.exe`. Then run `uloop.exe compile-check --all`.
 2. Confirm the Editor was discovered — a run that fails at Editor discovery reports it before any
    compile happens.
 3. Open one `Library\Bee\artifacts\<dag>\*.rsp` and check the separator in its `-out:` line.

@@ -17,7 +17,7 @@ references, scripting defines and analyzers. `compile-check` replays those respo
 1. **Pick the build to replay.** `Library/Bee/tundra.log.json` names the dag file the Editor last
    opened; that is the authoritative answer. When the log is unreadable and the project has exactly
    one dag directory, that one is used. When there are two (a debug and a release dag) the choice
-   falls back to `m_ScriptDebugInfoEnabled` in `Library/EditorScriptingSettings.json`. If none of
+   falls back to `m_ScriptDebugInfoEnabled` in `Library/EditorOnlyScriptingSettings.json`. If none of
    these can decide, the run stops with `COMPILE_CHECK_UNITY_BUILD_REQUIRED`.
 2. **Find the compiler.** The Editor version comes from `ProjectVersion.txt` (or `--editor-version`),
    and the Editor install is located the same way `uloop launch` locates it. The compiler is the one
@@ -76,7 +76,7 @@ files, then `compile-check` works again against the new configuration.
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: cannot tell which Bee build to check**
 Both a debug and a release dag exist and neither `tundra.log.json` nor
-`Library/EditorScriptingSettings.json` could be read. Building once from the Editor restores the
+`Library/EditorOnlyScriptingSettings.json` could be read. Building once from the Editor restores the
 log.
 
 **The Editor install cannot be found**
