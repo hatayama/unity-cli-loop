@@ -87,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadShimReferenceBuilder.NeedsAddedFieldStoreReference(workerOutput);
             HotReloadShimReferenceBuilder.ShimReferencePathsResult shimReferencePaths = HotReloadShimReferenceBuilder.TryBuildShimReferencePaths(
                 context.CompilationAssembly,
-                context.TargetDllPath,
+                context.Home,
                 includeHarmonyReference,
                 includeAddedFieldStoreReference,
                 context.WorkerInput.introducedTypeArtifacts);
@@ -127,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput,
                 compileResult,
                 context.CompilationAssembly,
-                context.TargetDllPath,
+                context.Home,
                 context.Defines,
                 context.GroupFilePaths,
                 context.CorrelationId,

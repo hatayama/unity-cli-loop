@@ -175,7 +175,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIsolationRetryContext retryContext = new HotReloadIsolationRetryContext(
                 workerInput,
                 HotReloadRetainedArtifactFixture.FindCompilationAssembly(),
-                fixture.TargetAssemblyPath,
+                HotReloadTypeHome.ScriptAssemblies(fixture.TargetAssemblyName, fixture.TargetAssemblyPath),
                 workerInput.defines,
                 Array.Empty<TransformWorkerSkippedDto>(),
                 HotReloadGroupFilePaths.ForSingleFile(
