@@ -16,10 +16,10 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// EditMode coverage for shim registration exposed through hot-reload / pause-point
+    /// EditMode coverage for the shim lookup exposed through hot-reload / pause-point
     /// coordination after orchestrated apply / revert.
     /// </summary>
-    public class HotReloadShimRegistryTests
+    public class HotReloadShimLookupTests
     {
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
@@ -213,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 projectRoot,
                 HotReloadConstants.TestSourcesRelativeDirectory);
             Directory.CreateDirectory(directory);
-            string editedPath = Path.Combine(directory, "ShimRegistryCompute_" + extraDelta + ".cs");
+            string editedPath = Path.Combine(directory, "ShimLookupCompute_" + extraDelta + ".cs");
             File.WriteAllText(editedPath, editedSource);
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(

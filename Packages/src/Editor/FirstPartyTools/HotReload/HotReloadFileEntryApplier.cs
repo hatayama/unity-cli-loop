@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(fileEntries.Length > 0, "An applied file must hold an entry.");
             Debug.Assert(resolution != null && resolution.AllResolved, "resolution must be resolved.");
 
-            HotReloadFileGenerations.BeginFileGeneration(
+            HotReloadDomainSlot.Current.BeginGeneration(
                 file.ProjectRelativePath,
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
@@ -76,9 +76,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(file != null, "file must not be null.");
 
             IReadOnlyList<string> addedLabelsAtClear =
-                HotReloadFileGenerations.ListActiveAddedMethodKeys(file.ProjectRelativePath);
+                HotReloadDomainSlot.Current.ListActiveAddedMethodKeys(file.ProjectRelativePath);
             HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, context.CorrelationId);
-            HotReloadFileGenerations.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
+            HotReloadDomainSlot.Current.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
             // Why AddedFieldNames first: a retry (gate or isolation) replaces this file's added
             // field names, and committing the first-pass names would resurrect a field the
             // retry no longer emits. The worker row is the first-pass fallback.
@@ -267,10 +267,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds)
         {
+            HotReloadFileGeneration generation =
+                HotReloadDomainSlot.Current.FindGeneration(projectRelativePath);
+            Debug.Assert(generation != null, "The file's generation must have started before its entries apply.");
             if (resolved.IsAddedMethod)
             {
-                HotReloadFileGenerations.RegisterAddedMethod(
-                    projectRelativePath,
+                generation.RegisterAddedMethod(
                     resolved.MethodLabel,
                     resolved.ShimMethod,
                     resolved.FilePath);
@@ -282,10 +284,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why before Apply: Apply notifies OnHotReloadPatchStateChanged(true) after the
             // ledger write; registration must already expose this method's shim for retarget.
-            HotReloadFileGenerations.RegisterShimMethod(
-                projectRelativePath,
+            generation.RegisterShimMethod(
                 resolved.OriginalMethod,
-                new HotReloadShimRegistry.MethodEntry(
+                new HotReloadShimMethodEntry(
                     resolved.ShimMethod,
                     resolved.PatchShape == HotReloadPatchShape.Delegation,
                     resolved.Entry.sourceStartLine,
@@ -297,7 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (!patchResult.Success)
             {
-                HotReloadFileGenerations.RemoveShimMethod(resolved.OriginalMethod);
+                generation.RemoveShimMethod(resolved.OriginalMethod);
                 return HotReloadMethodOutcome.Failed(
                     resolved.MethodLabel,
                     patchResult.ErrorMessage,

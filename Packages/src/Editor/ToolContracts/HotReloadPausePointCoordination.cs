@@ -17,12 +17,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// </summary>
     public static class HotReloadPausePointCoordination
     {
-        // Set by HotReloadPatcher. Returns the active shim MethodBase for a patched
+        // Set by the hot-reload side. Returns the active shim MethodBase for a patched
         // original method, or null when the method is not hot-reload patched.
         public static Func<MethodBase, MethodBase> GetActiveShimForMethod { get; set; }
 
         /// <summary>
-        /// Set by HotReloadShimRegistry. Argument is a forward-slash path (absolute or
+        /// Set by the hot-reload side. Argument is a forward-slash path (absolute or
         /// project-relative); returns null when that file has no active shim generation.
         /// A method may still report an active shim via <see cref="GetActiveShimForMethod"/>
         /// while missing from this file lookup (a newer generation replaced the file and
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public static Func<string, string, string> GetVerifiedSnapshotSource { get; set; }
 
         /// <summary>
-        /// Set by HotReloadPatcher. Returns the LocalBuilder array (shim slot order) from
+        /// Set by the hot-reload side. Returns the LocalBuilder array (shim slot order) from
         /// the latest transplant rebuild of the original method, or null when none.
         /// Returned LocalBuilders are tied to the ILGenerator of that rebuild and are valid
         /// only inside the same rebuild (the pause-point transpiler that runs after the
@@ -55,14 +55,14 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public static Func<MethodBase, IReadOnlyList<LocalBuilder>> GetTransplantLocals { get; set; }
 
         /// <summary>
-        /// Set by HotReloadPatcher. Returns how many instructions the latest rebuild prepended
+        /// Set by the hot-reload side. Returns how many instructions the latest rebuild prepended
         /// before the patched body (0 when none). Pause-point must add this only to
         /// TransplantChainJoin indexes; ShimDirect and OriginalBody have no transplant preamble.
         /// </summary>
         public static Func<MethodBase, int> GetTransplantPreambleLength { get; set; }
 
         /// <summary>
-        /// Set by HotReloadAddedFieldRegistry. Argument is a type full name (reflection
+        /// Set by the hot-reload side. Argument is a type full name (reflection
         /// <c>Outer+Inner</c> or Cecil <c>Outer/Inner</c>); returns the simple names of fields
         /// hot reload added to that type across every file, or empty when none.
         /// </summary>

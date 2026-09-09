@@ -37,51 +37,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new[] { typeof(string) },
                 null);
 
-        // The live patch of each method: the shim whose call replaced it, the project-relative
-        // (or test) path of the applied source, the transplant LocalBuilders in shim slot order,
-        // and how many instructions PrependInvocationCountIncrement inserted on the latest
-        // rebuild. Pause-point reads the last two only for chain-join.
-        private static readonly HotReloadActivePatchLedger Ledger = new HotReloadActivePatchLedger();
-
-        // Harmony resolves transpilers as static methods, so the shim cannot be a parameter.
-        // Production looks up the target method in the ledger; the apply path also stashes the
-        // pending shim here so the first Patch call can read it before the ledger entry
-        // exists (Patch invokes the transpiler synchronously on the main thread).
-        private static MethodInfo _pendingShimMethod;
-        private static MethodBase _pendingOriginalMethod;
-
-        static HotReloadPatcher()
-        {
-            // Why also expose _pending*: with Priority.First, hot-reload runs before pause-point
-            // during Apply. The ledger is written only after Patch returns, so without the pending
-            // shim pause-point would try to inject original-body indexes into the shim stream.
-            HotReloadPausePointCoordination.GetActiveShimForMethod = method =>
-            {
-                MethodInfo shimMethod = Ledger.FindShim(method);
-                if (shimMethod != null)
-                {
-                    return shimMethod;
-                }
-
-                // Why Equals (not ReferenceEquals): match MethodBase equality used by
-                // the ledger lookup rather than Harmony's instance identity.
-                if (_pendingShimMethod != null
-                    && _pendingOriginalMethod != null
-                    && method != null
-                    && method.Equals(_pendingOriginalMethod))
-                {
-                    return _pendingShimMethod;
-                }
-
-                return null;
-            };
-            HotReloadPausePointCoordination.GetTransplantLocals = method =>
-                Ledger.FindTransplantLocals(method);
-            HotReloadPausePointCoordination.GetTransplantPreambleLength = method =>
-                Ledger.FindTransplantPreambleLength(method);
-            HotReloadPausePointCoordination.GetAddedFieldsForType =
-                HotReloadAddedFieldRegistry.GetFieldsForType;
-        }
+        // Harmony resolves transpilers as static methods, so the domain cannot be a parameter of
+        // one; the transpilers below read it from the slot instead.
+        private static HotReloadDomain Domain => HotReloadDomainSlot.Current;
 
         /// <summary>
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
@@ -116,19 +74,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return patchability;
             }
 
-            if (Ledger.IsActive(method))
+            HotReloadFileGeneration generation = Domain.FindGeneration(filePath);
+            if (generation == null)
             {
-                // Why ledger before Unpatch: same as Revert — during Unpatch Harmony rebuilds
-                // the method and pause-point ChainJoin must see GetActiveShimForMethod == null,
-                // or it injects donor instruction indexes into the restored original IL stream.
-                // Do not RemoveMethod from the shim registry here: ApplyEntry already registered
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.ApplyFailed,
+                    $"'{method}' has no hot-reload generation for '{filePath}' to patch into.");
+            }
+
+            if (generation.IsPatchActive(method))
+            {
+                // Why the patch is retired before Unpatch: same as Revert — during Unpatch Harmony
+                // rebuilds the method and pause-point ChainJoin must see GetActiveShimForMethod ==
+                // null, or it injects donor instruction indexes into the restored original IL
+                // stream. Do not remove the shim registration here: ApplyEntry already registered
                 // this method into the new generation before calling Apply.
-                Ledger.Remove(method);
+                generation.DeactivatePatch(method);
                 HotReloadInvocationRegistry.Remove(HotReloadMethodKeys.FormatMethodLabel(method));
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
-                // Mirror the ledger removal: if the re-Patch below fails, its contained Unpatch
-                // rebuilds with markers restored (ledger empty), and RevertAll can never reach
-                // this method again — leaving suppress stuck true would make status lie forever.
+                // Mirror the removal: if the re-Patch below fails, its contained Unpatch rebuilds
+                // with markers restored (no live patch), and RevertAll can never reach this method
+                // again — leaving suppress stuck true would make status lie forever.
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
             }
 
@@ -136,10 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ? DelegationTranspilerMethodInfo
                 : TransplantTranspilerMethodInfo;
 
-            // Ledger is updated after Patch succeeds. During Patch the transpiler reads the
-            // pending shim because Harmony resolves transpilers statically (no MethodInfo arg).
-            _pendingShimMethod = shimMethodInfo;
-            _pendingOriginalMethod = method;
+            // The patch is committed only after Patch succeeds. During Patch the transpiler reads
+            // the pending entry because Harmony resolves transpilers statically (no MethodInfo arg).
+            generation.BeginPatch(method, shimMethodInfo);
             try
             {
                 // Why Priority.First: same numeric priority sorts by registration index, and
@@ -151,22 +116,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         priority = Priority.First
                     });
-                Ledger.Activate(method, shimMethodInfo, filePath ?? string.Empty);
+                generation.CommitPatch(method);
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, true);
             }
             catch (Exception exception)
             {
-                // Why clear pending before Unpatch: cleanup rebuild must see "not patched"
-                // so pause-point markers re-instrument the restored original body. Leaving
-                // pending set would make GetActiveShimForMethod return the failed shim and
-                // suppress that re-instrumentation (regression vs the old ContainsKey probe).
-                _pendingShimMethod = null;
-                _pendingOriginalMethod = null;
-                // Why Remove before Unpatch: Invoke(true) may have activated the ledger entry
-                // before a later failure; rebuild must not see an active shim (same as re-apply
-                // path). Dropping the transplant tables in the same call is safe: with no active
-                // shim, pause-point never picks TransplantChainJoin and so never reads them.
-                Ledger.Remove(method);
+                // Why the entry goes before Unpatch, pending or live: the cleanup rebuild must see
+                // "not patched" so pause-point markers re-instrument the restored original body.
+                // Leaving it would make GetActiveShimForMethod return the failed shim and suppress
+                // that re-instrumentation. Invoke(true) may already have committed the patch before
+                // a later failure, so both states are dropped here. Losing the transplant state in
+                // the same call is safe: with no live patch, pause-point never picks
+                // TransplantChainJoin and so never reads it.
+                generation.AbandonPatch(method);
+                generation.DeactivatePatch(method);
                 HotReloadInvocationRegistry.Remove(HotReloadMethodKeys.FormatMethodLabel(method));
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
                 // failures cannot be pre-validated (the IL shape is only known inside
@@ -193,11 +156,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Applying the patch to '{method}' failed: " +
                     $"{exception.GetType().Name}: {exception.Message}{rootCauseSuffix}");
             }
-            finally
-            {
-                _pendingShimMethod = null;
-                _pendingOriginalMethod = null;
-            }
 
             return HotReloadPatchResult.SuccessResult(IsLikelyJitInlined(method));
         }
@@ -208,16 +166,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static void RevertAll()
         {
-            // Snapshot and clear the ledger BEFORE UnpatchAll: Harmony rebuilds every
-            // patched method during UnpatchAll, and the pause-point transpiler guard
-            // must see those methods as unpatched so armed markers are re-instrumented
-            // into the restored original IL. Shim registration clears in the same window
-            // so GetActiveShimForMethod / GetShimLookupForFile agree during rebuild.
-            List<MethodBase> revertedMethods = Ledger.ListMethods();
-            Ledger.Clear();
-            HotReloadDomainStores.ResetForRevertAll();
-            _pendingShimMethod = null;
-            _pendingOriginalMethod = null;
+            // Snapshot and empty the domain BEFORE UnpatchAll: Harmony rebuilds every patched
+            // method during UnpatchAll, and the pause-point transpiler guard must see those
+            // methods as unpatched so armed markers are re-instrumented into the restored
+            // original IL. Shim registration clears in the same window so GetActiveShimForMethod
+            // and GetShimLookupForFile agree during rebuild.
+            IReadOnlyList<MethodBase> revertedMethods = Domain.RevertAll();
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
             foreach (MethodBase revertedMethod in revertedMethods)
             {
@@ -246,18 +200,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // next apply's "unpatch the previous transpiler first" decision and pause-point's
             // chain-join offsets all read it, so a rebuild failure that leaves the patch live must
             // leave the whole entry describing that patch.
-            HotReloadActivePatchEntry removedEntry = Ledger.Remove(method);
+            HotReloadFileGeneration generation = Domain.FindGenerationForMethod(method);
+            HotReloadActivePatchEntry removedEntry = generation?.DeactivatePatch(method);
             if (removedEntry == null)
             {
                 return HotReloadRevertOutcome.NotPatched;
             }
 
-            HotReloadFileGenerations.RemoveShimMethod(method);
+            generation.RemoveShimMethod(method);
             string methodKey = HotReloadMethodKeys.FormatMethodLabel(method);
             HotReloadInvocationRegistry.Remove(methodKey);
             // Why here, not only RevertAll: RevertUnchangedPatches uses this path, and a
             // later apply of the same compiled key must not inherit a stale superseded Reason.
-            HotReloadSupersededSignatureRegistry.Remove(methodKey);
+            generation.RemoveSupersededSignature(methodKey);
             try
             {
                 Unpatch(method);
@@ -274,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadOrchestratorLog.LogHotReloadRevertFailed(methodKey, exception);
                 if (HasLiveHotReloadTranspiler(method))
                 {
-                    Ledger.Restore(method, removedEntry);
+                    generation.ReactivatePatch(removedEntry);
                     return HotReloadRevertOutcome.UnpatchFailed;
                 }
 
@@ -319,16 +274,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// How many methods currently have an active patch recorded in the ledger.
+        /// How many methods currently have a live hot-reload patch.
         /// </summary>
-        public static int ActivePatchCount => Ledger.Count;
+        public static int ActivePatchCount => Domain.ActivePatchCount;
 
         /// <summary>
         /// Harmony patches plus added-method shims. Domain reload drops both, so Play-entry
         /// warnings and ActivePatchTotal count this sum.
         /// </summary>
-        public static int ActiveChangeCount =>
-            Ledger.Count + HotReloadAddedMemberRegistry.Count;
+        public static int ActiveChangeCount => Domain.ActiveChangeCount;
 
         /// <summary>
         /// Returns a sorted list of active patches (method key + source file path) for status
@@ -336,52 +290,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static IReadOnlyList<HotReloadActivePatchInfo> DescribeActivePatches()
         {
-            List<HotReloadActivePatchInfo> patches =
-                new List<HotReloadActivePatchInfo>(Ledger.Count);
-            foreach (KeyValuePair<MethodBase, MethodInfo> pair in Ledger.ShimEntries)
-            {
-                string methodKey = HotReloadMethodKeys.FormatMethodLabel(pair.Key);
-                patches.Add(new HotReloadActivePatchInfo(methodKey, Ledger.FindFilePath(pair.Key)));
-            }
-
-            patches.Sort(
-                (left, right) => string.CompareOrdinal(left.MethodKey, right.MethodKey));
-            return patches;
+            return Domain.DescribeActivePatches();
         }
 
-        // Why projectRelativePath, not DescribeActivePatches FilePath filtering by callers:
-        // the ledger records the orchestrator's project-relative path.
+        // Why projectRelativePath, not DescribeActivePatches FilePath filtering by callers: a
+        // patch belongs to the generation of the orchestrator's project-relative path.
         public static IReadOnlyList<string> ListActiveMethodKeys(string projectRelativePath)
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            List<string> keys = new List<string>();
-            foreach (KeyValuePair<MethodBase, string> pair in Ledger.FilePathEntries)
-            {
-                if (!string.Equals(pair.Value, projectRelativePath, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                keys.Add(HotReloadMethodKeys.FormatMethodLabel(pair.Key));
-            }
-
-            return keys;
+            return Domain.ListActiveMethodKeys(projectRelativePath);
         }
 
         public static IReadOnlyList<string> ListActiveFilePaths()
         {
-            HashSet<string> paths = new HashSet<string>(StringComparer.Ordinal);
-            foreach (KeyValuePair<MethodBase, string> pair in Ledger.FilePathEntries)
-            {
-                if (string.IsNullOrEmpty(pair.Value))
-                {
-                    continue;
-                }
-
-                paths.Add(pair.Value);
-            }
-
-            return new List<string>(paths);
+            return Domain.ListActiveFilePaths();
         }
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
@@ -389,7 +310,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ILGenerator generator,
             MethodBase original)
         {
-            MethodInfo shimMethod = ResolveShimMethod(original);
+            HotReloadFileGeneration generation = Domain.FindGenerationForMethod(original);
+            MethodInfo shimMethod = generation?.FindPatchShim(original);
             Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
             // Discard the original (and any prior transpiler) instructions entirely — the shim IL
             // is the whole replacement body.
@@ -402,9 +324,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new List<CodeInstruction>(PatchProcessor.GetOriginalInstructions(shimMethod));
             IReadOnlyList<LocalBuilder> transplantLocals =
                 HotReloadPatchIlRebind.RebindShortFormLocals(shimMethod, generator, transplanted);
-            Ledger.RecordTransplantLocals(original, transplantLocals);
+            generation.RecordTransplantLocals(original, transplantLocals);
             HotReloadPatchIlRebind.RebindLabels(generator, transplanted);
-            PrependInvocationCountIncrement(transplanted, original);
+            PrependInvocationCountIncrement(transplanted, original, generation);
             return transplanted;
         }
 
@@ -416,7 +338,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IEnumerable<CodeInstruction> instructions,
             MethodBase original)
         {
-            MethodInfo shimMethod = ResolveShimMethod(original);
+            HotReloadFileGeneration generation = Domain.FindGenerationForMethod(original);
+            MethodInfo shimMethod = generation?.FindPatchShim(original);
             Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
 
             int argumentSlotCount = original.GetParameters().Length + (original.IsStatic ? 0 : 1);
@@ -425,7 +348,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Shim parameter count must equal the original's argument slots (instance receiver included).");
 
             List<CodeInstruction> forwarding = new List<CodeInstruction>(argumentSlotCount + 4);
-            PrependInvocationCountIncrement(forwarding, original);
+            PrependInvocationCountIncrement(forwarding, original, generation);
             for (int slot = 0; slot < argumentSlotCount; slot++)
             {
                 forwarding.Add(CreateLoadArgumentInstruction(slot));
@@ -441,7 +364,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // still hit the counter when that instruction is no longer at offset 0.
         private static void PrependInvocationCountIncrement(
             List<CodeInstruction> instructions,
-            MethodBase original)
+            MethodBase original,
+            HotReloadFileGeneration generation)
         {
             Debug.Assert(IncrementInvocationMethodInfo != null, "Increment method must resolve.");
             CodeInstruction loadKey = new CodeInstruction(OpCodes.Ldstr, HotReloadMethodKeys.FormatMethodLabel(original));
@@ -455,7 +379,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int countBeforeInsert = instructions.Count;
             instructions.Insert(0, increment);
             instructions.Insert(0, loadKey);
-            Ledger.RecordTransplantPreambleLength(original, instructions.Count - countBeforeInsert);
+            generation.RecordTransplantPreambleLength(original, instructions.Count - countBeforeInsert);
         }
 
         private static CodeInstruction CreateLoadArgumentInstruction(int slot)
@@ -485,17 +409,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new CodeInstruction(OpCodes.Ldarg_S, (byte)slot);
-        }
-
-        private static MethodInfo ResolveShimMethod(MethodBase original)
-        {
-            MethodInfo shimMethod = Ledger.FindShim(original);
-            if (shimMethod != null)
-            {
-                return shimMethod;
-            }
-
-            return _pendingShimMethod;
         }
 
         // Why internal: preflight validation must run these five checks before any

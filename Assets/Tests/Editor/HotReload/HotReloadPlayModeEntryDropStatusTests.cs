@@ -123,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     ActivateArtifactWithOneType();
 
                     Assert.That(
-                        HotReloadActiveChangeCounts.IntroducedTypeCount,
+                        HotReloadDomainSlot.Current.IntroducedTypeCount,
                         Is.EqualTo(1),
                         "Arrange: the domain must hold exactly one introduced type.");
 
@@ -194,7 +194,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(original, Is.Not.Null);
             Assert.That(shim, Is.Not.Null);
 
-            HotReloadPatchResult applyResult = HotReloadPatcher.Apply(
+            HotReloadPatchResult applyResult = new HotReloadDomainTestAccess().ApplyPatch(
                 original,
                 shim,
                 HotReloadPatchShape.Transplant,

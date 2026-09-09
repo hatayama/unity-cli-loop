@@ -197,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             try
             {
-                return HotReloadAppliedSourceLedger.ComputeContentHash(File.ReadAllBytes(sourcePath));
+                return new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(sourcePath));
             }
             catch (IOException)
             {

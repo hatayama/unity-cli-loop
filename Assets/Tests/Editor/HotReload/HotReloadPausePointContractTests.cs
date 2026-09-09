@@ -636,7 +636,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
 
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
 
             const int requestedLine = 42;
@@ -678,7 +678,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
 
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
 
             const int requestedLine = 42;
@@ -764,7 +764,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
 
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
             HotReloadPatcher.RevertAll();
 
@@ -796,7 +796,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 SourcePausePointPatcher.Patch(id, BuildSyntheticResolution(original, instructionIndex: 10)).Success,
                 Is.True);
 
-            HotReloadPatchResult applyResult = HotReloadPatcher.Apply(
+            HotReloadPatchResult applyResult = new HotReloadDomainTestAccess().ApplyPatch(
                 original, shim, HotReloadPatchShape.Delegation, "Assets/Tests/Fixture.cs");
             Assert.That(applyResult.Success, Is.True, applyResult.ErrorMessage);
             Assert.That(UloopPausePointRegistry.GetStatus(id).SuppressedByHotReload, Is.True);

@@ -42,9 +42,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TearDown()
         {
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
-            HotReloadAddedMemberRegistry.Clear();
-            // The added-field ledger is global, so a committed name would outlive this class.
-            HotReloadAddedFieldRegistry.ReplaceForFile(CoverageCallerPath, Array.Empty<string>());
+            // Added members and fields live for the whole domain, so a committed name would
+            // outlive this class.
+            new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
         }
 
         /// <summary>
@@ -364,8 +364,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.Failed));
-            Assert.That(HotReloadAddedMemberRegistry.HasGeneration(file.ProjectRelativePath), Is.True);
-            Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
+            Assert.That(new HotReloadDomainTestAccess().HasAddedMemberGeneration(file.ProjectRelativePath), Is.True);
+            Assert.That(HotReloadDomainSlot.Current.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
             Assert.That(file.ClearedAddedFieldNames, Is.Null);
         }
 
@@ -386,8 +386,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
-            Assert.That(HotReloadAddedMemberRegistry.HasGeneration(file.ProjectRelativePath), Is.True);
-            Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.False);
+            Assert.That(new HotReloadDomainTestAccess().HasAddedMemberGeneration(file.ProjectRelativePath), Is.True);
+            Assert.That(HotReloadDomainSlot.Current.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.False);
             Assert.That(file.ClearedAddedFieldNames, Is.Not.Null);
         }
 
@@ -624,7 +624,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
-            Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
+            Assert.That(HotReloadDomainSlot.Current.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
             Assert.That(file.ClearedAddedFieldNames, Is.Null);
         }
 
@@ -861,7 +861,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             file.FileOutput = new TransformWorkerFileOutputDto
             {
                 projectRelativePath = path,
-                sourceContentSha256 = HotReloadAppliedSourceLedger.ComputeContentHash(
+                sourceContentSha256 = new HotReloadSourceContentHasher().ComputeContentHash(
                     File.ReadAllBytes(workerSourcePath)),
                 removedMethodSignatures = Array.Empty<TransformWorkerRemovedMethodSignatureDto>()
             };
@@ -911,8 +911,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(AddedMemberShim),
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
             Assert.That(shimMethod, Is.Not.Null);
-            HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
-            HotReloadAddedMemberRegistry.Register(
+            new HotReloadDomainTestAccess().RegisterAddedMember(
                 projectRelativePath,
                 PersistedAddedMemberKey,
                 shimMethod,

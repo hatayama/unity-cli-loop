@@ -15,11 +15,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// compiled signature it would have superseded.
         /// </remarks>
         public static void RecordFromAppliedEntries(
+            string projectRelativePath,
             IReadOnlyList<TransformWorkerEntryDto> appliedEntries,
             IReadOnlyList<TransformWorkerRemovedMethodSignatureDto> removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
             if (appliedEntries == null || removedMethodSignatures == null)
+            {
+                return;
+            }
+
+            // Why the file's own generation: the signature a patch superseded belongs to the file
+            // whose apply superseded it, and is discarded with that file's generation.
+            HotReloadFileGeneration generation =
+                HotReloadDomainSlot.Current.FindGeneration(projectRelativePath);
+            if (generation == null)
             {
                 return;
             }
@@ -64,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     replacement.methodName,
                     replacement.parameterTypeFullNames ?? Array.Empty<string>(),
                     replacement.genericArity);
-                HotReloadSupersededSignatureRegistry.Record(oldKey, newDisplayName);
+                generation.RecordSupersededSignature(oldKey, newDisplayName);
             }
         }
     }

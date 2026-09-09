@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using NUnit.Framework;
 
@@ -18,10 +19,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FixtureFilePath = "Assets/Tests/Editor/PausePointToolsFixture.cs";
         private const int FixtureLine = 12;
 
+        private Func<string, IReadOnlyList<string>> _originalAddedFieldsLookup;
+
         [SetUp]
         public void SetUp()
         {
             UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
+
+            // This assembly must not reference the hot-reload tool, so the added fields are
+            // published through the same coordination delegate the hot-reload side sets.
+            _originalAddedFieldsLookup = HotReloadPausePointCoordination.GetAddedFieldsForType;
         }
 
         [TearDown]
@@ -29,7 +36,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
-            HotReloadAddedFieldRegistry.ClearAll();
+            HotReloadPausePointCoordination.GetAddedFieldsForType = _originalAddedFieldsLookup;
+        }
+
+        /// <summary>
+        /// Publishes added field simple names for one type, sorted the way the hot-reload
+        /// domain sorts them.
+        /// </summary>
+        private void PublishAddedFields(string typeName, IReadOnlyList<string> simpleFieldNames)
+        {
+            HotReloadPausePointCoordination.GetAddedFieldsForType = queriedTypeName =>
+                string.Equals(queriedTypeName, typeName, StringComparison.Ordinal)
+                    ? simpleFieldNames
+                    : Array.Empty<string>();
         }
 
         /// <summary>
@@ -40,9 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Enable_WhenDeclaringTypeHasAddedFields_AppendsCapturedVariablesWarning()
         {
             string typeName = typeof(EnableBySourceLocationFixture).FullName;
-            HotReloadAddedFieldRegistry.ReplaceForFile(
-                FixtureFilePath,
-                new[] { typeName + ".beta", typeName + ".alpha" });
+            PublishAddedFields(typeName, new[] { "alpha", "beta" });
 
             PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
             {
@@ -77,9 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Enable_WhenDeclaringTypeHasAddedFields_WarningDoesNotRecommendExecuteDynamicCode()
         {
             string typeName = typeof(EnableBySourceLocationFixture).FullName;
-            HotReloadAddedFieldRegistry.ReplaceForFile(
-                FixtureFilePath,
-                new[] { typeName + ".beta", typeName + ".alpha" });
+            PublishAddedFields(typeName, new[] { "alpha", "beta" });
 
             PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
             {
