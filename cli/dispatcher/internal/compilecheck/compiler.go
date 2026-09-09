@@ -199,7 +199,8 @@ func writeRewrittenResponseFile(
 		lines = append(lines, defineFlagPrefix+define)
 	}
 	for _, reference := range rsp.References {
-		lines = append(lines, quoteFlag(referenceFlagPrefix, rewriteReference(plan, reference)))
+		lines = append(lines,
+			quoteFlag(referenceFlagPrefix, rewriteReference(projectRoot, plan, reference)))
 	}
 	for _, analyzer := range rsp.Analyzers {
 		lines = append(lines, quoteFlag(analyzerFlagPrefix, analyzer))
@@ -227,14 +228,20 @@ func writeRewrittenResponseFile(
 
 // rewriteReference points a reference at this run's own output when this run rebuilds that assembly.
 // Why the others stay: an assembly this run skipped is unchanged, so Unity's own reference assembly
-// still describes it exactly.
-func rewriteReference(plan BuildPlan, reference string) string {
+// still describes it exactly. An assembly this run failed to compile wrote no reference assembly at
+// all, so it falls back to Unity's too rather than failing the dependent on a missing file.
+func rewriteReference(projectRoot string, plan BuildPlan, reference string) string {
 	name, ok := projectAssemblyReferenceName(reference, plan.DagDir)
 	if !ok || !planCompiles(plan, name) {
 		return reference
 	}
 
-	return filepath.Join(plan.OutputDir, name+referenceAssemblyExtension)
+	rewritten := filepath.Join(plan.OutputDir, name+referenceAssemblyExtension)
+	if !fileExists(filepath.Join(projectRoot, rewritten)) {
+		return reference
+	}
+
+	return rewritten
 }
 
 // planCompiles reports whether a plan rebuilds a given assembly.

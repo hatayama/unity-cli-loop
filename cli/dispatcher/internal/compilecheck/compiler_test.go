@@ -60,6 +60,9 @@ func compileSecondUnit(t *testing.T, stdout string, exitCode int) (string, UnitR
 		Run:         stubRunner(stdout, exitCode, &captured),
 	}
 
+	// The referenced assembly is compiled first in a real run, so its reference assembly exists.
+	writeFileAt(t, filepath.Join(projectRoot, plan.OutputDir, "A.ref.dll"), "")
+
 	result, err := compiler.CompileUnit(context.Background(), plan, plan.Units[1])
 	if err != nil {
 		t.Fatalf("expected the unit to compile, got error: %v", err)
@@ -137,6 +140,31 @@ func TestCompileUnitRewritesTheResponseFile(t *testing.T) {
 	}
 	if strings.Contains(written, filepath.Join(planDagDirectory, "B.dll")) {
 		t.Error("the rewritten response file must not write into the Bee artifacts directory")
+	}
+}
+
+// Verifies a reference falls back to Unity's own reference assembly when this run produced none.
+func TestCompileUnitFallsBackWhenTheRebuiltReferenceIsMissing(t *testing.T) {
+	projectRoot := t.TempDir()
+	plan := newCompilerPlan()
+	captured := exec.Cmd{}
+	compiler := Compiler{
+		Paths:       EditorCompilerPaths{DotnetHostPath: "/dotnet", CompilerDllPath: "/csc.dll"},
+		ProjectRoot: projectRoot,
+		Timeout:     time.Minute,
+		Run:         stubRunner("", 0, &captured),
+	}
+
+	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[1]); err != nil {
+		t.Fatalf("expected the unit to compile, got error: %v", err)
+	}
+
+	written, err := os.ReadFile(filepath.Join(projectRoot, plan.OutputDir, "B.rsp"))
+	if err != nil {
+		t.Fatalf("failed to read the rewritten response file: %v", err)
+	}
+	if !strings.Contains(string(written), `-r:"`+filepath.Join(planDagDirectory, "A.ref.dll")+`"`) {
+		t.Errorf("expected the reference to fall back to the Bee artifact, got:\n%s", written)
 	}
 }
 
