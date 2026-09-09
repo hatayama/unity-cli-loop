@@ -318,7 +318,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
                 new List<(int InputIndex, string AssemblyName, string ProjectRelativePath)>();
 
-            HotReloadOrchestrator.ResolveInputFile(
+            new HotReloadInputFileResolver().ResolveInputFile(
                 MissingNewSourcePath,
                 0,
                 null,
