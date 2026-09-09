@@ -25,20 +25,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int ThrowLine = 29;
 
         private FakePausePointPauseController _pauseController;
-        private Func<MethodBase, MethodBase> _previousGetActiveShim;
+        private HotReloadSidePortScope _hotReloadSideScope;
 
         [SetUp]
         public void SetUp()
         {
             _pauseController = new FakePausePointPauseController();
             UloopPausePointRegistry.ConfigureForTests(_pauseController, () => DateTime.UtcNow);
-            _previousGetActiveShim = HotReloadPausePointCoordination.GetActiveShimForMethod;
+            _hotReloadSideScope = new HotReloadSidePortScope();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPausePointCoordination.GetActiveShimForMethod = _previousGetActiveShim;
+            _hotReloadSideScope.Dispose();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }

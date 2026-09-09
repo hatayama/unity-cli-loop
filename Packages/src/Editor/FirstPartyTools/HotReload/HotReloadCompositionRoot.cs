@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             // Uninstalling first because a second Initialize would otherwise leave the previous
             // domain's resolver attached to AppDomain.AssemblyResolve with nothing owning it.
-            Uninstall(_services);
+            UninstallServices(_services);
             Install(CreateProductionServices());
         }
 
@@ -168,17 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTranspilerDomainGateway.Current = domain;
             HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames =
                 () => DescribeActiveTypeNames(domain);
-            HotReloadPausePointCoordination.GetShimLookupForFile = domain.LookupShimsForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile =
-                domain.LoadVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSource = LoadVerifiedSnapshotSource;
-            HotReloadPausePointCoordination.GetAddedFieldsForType = domain.GetAddedFieldsForType;
-            HotReloadPausePointCoordination.GetActiveShimForMethod =
-                method => domain.FindGenerationForMethod(method)?.FindPatchShim(method);
-            HotReloadPausePointCoordination.GetTransplantLocals =
-                method => domain.FindGenerationForMethod(method)?.FindTransplantLocals(method);
-            HotReloadPausePointCoordination.GetTransplantPreambleLength =
-                method => domain.FindGenerationForMethod(method)?.FindTransplantPreambleLength(method) ?? 0;
+            HotReloadPausePointCoordination.HotReloadSide = new HotReloadPausePointPort(domain);
             // Attaching last keeps the invariant across the gap: the resolver only starts
             // answering binds once every gateway already points at the domain behind it.
             domain.IntroducedTypeResolver.Resume();
@@ -192,9 +182,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAddedFieldStore.Current = null;
             HotReloadInvocationRegistry.Current = null;
             HotReloadTranspilerDomainGateway.Current = null;
+            // The sibling tools are told "no domain installed" here too: leaving the port behind
+            // would keep answering pause point from the domain the uninstall is about to dispose.
+            HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames = null;
+            HotReloadPausePointCoordination.HotReloadSide = null;
         }
 
-        private static void Uninstall(HotReloadServices services)
+        /// <summary>
+        /// Drops the installed services and their wiring, leaving the sibling tools reading the
+        /// documented "no domain installed" answer. Production reaches this state only through
+        /// <see cref="Initialize"/>; a test calls it to observe that state and restores with
+        /// <see cref="Initialize"/>.
+        /// </summary>
+        internal static void UninstallInstalledServices()
+        {
+            HotReloadServices installed = _services;
+            _services = null;
+            UninstallServices(installed);
+        }
+
+        private static void UninstallServices(HotReloadServices services)
         {
             ClearWiring();
             // Why the domain is disposed after the wiring is dropped: disposing unsubscribes its
@@ -212,16 +219,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return names;
-        }
-
-        private static string LoadVerifiedSnapshotSource(string projectRelativeFile, string dllPath)
-        {
-            if (string.IsNullOrEmpty(projectRelativeFile) || string.IsNullOrEmpty(dllPath))
-            {
-                return null;
-            }
-
-            return HotReloadSourceBaseline.LoadVerifiedSnapshotSource(projectRelativeFile, dllPath);
         }
 
         private sealed class ReplacementScope : IDisposable
@@ -257,9 +254,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return;
                 }
 
-                Uninstall(_installed);
+                UninstallServices(_installed);
                 // Install reattaches the resolver that came back, so the replacement's has to be
-                // gone by now: Uninstall disposed it, which leaves it detached for good.
+                // gone by now: UninstallServices disposed it, which leaves it detached for good.
                 Install(_previous);
             }
         }

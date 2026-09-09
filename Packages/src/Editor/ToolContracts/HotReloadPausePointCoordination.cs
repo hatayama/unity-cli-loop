@@ -1,94 +1,29 @@
-using System;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Reflection.Emit;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
     /// Editor-domain coordination point between the hot-reload tool and the source
     /// pause-point tool. The two tools live in sibling assemblies that must not
-    /// reference each other, so each side publishes its state through delegates
-    /// wired in its own static constructor (the same pattern as
-    /// UloopPausePointRegistry's OnCleared wiring). A null delegate means the owning
-    /// side has not initialized in this domain, which also means it has no state
-    /// worth querying; callers treat null as "no patches" / "no markers" /
-    /// "no shim lookup".
+    /// reference each other, so each side publishes one port implementation, wired by the
+    /// side that owns it (the same pattern as UloopPausePointRegistry's OnCleared wiring).
+    /// A null port means the owning side has not initialized in this domain, which also
+    /// means it has no state worth querying; callers treat null as "no patches" /
+    /// "no markers" / "no shim lookup".
     /// </summary>
     public static class HotReloadPausePointCoordination
     {
-        // Set by the hot-reload side. Returns the active shim MethodBase for a patched
-        // original method, or null when the method is not hot-reload patched.
-        public static Func<MethodBase, MethodBase> GetActiveShimForMethod { get; set; }
+        /// <summary>
+        /// Set by the hot-reload composition root when it installs a domain, and cleared when it
+        /// uninstalls one. Never points at a domain that is no longer installed.
+        /// </summary>
+        public static IHotReloadPausePointPort HotReloadSide { get; set; }
 
         /// <summary>
-        /// Set by the hot-reload side. Argument is a forward-slash path (absolute or
-        /// project-relative); returns null when that file has no active shim generation.
-        /// A method may still report an active shim via <see cref="GetActiveShimForMethod"/>
-        /// while missing from this file lookup (a newer generation replaced the file and
-        /// the method was skipped, bind-failed, or isolation-excluded). Consumers must treat
-        /// that combination as retarget-impossible (suppress the marker).
+        /// Set by the pause-point patcher when it initializes in this domain.
         /// </summary>
-        public static Func<string, HotReloadShimFileLookup> GetShimLookupForFile { get; set; }
-
-        /// <summary>
-        /// Set by HotReload. Returns the PDB-checksum-verified compiled snapshot text for a
-        /// project-relative source file, or null when no snapshot is available.
-        /// </summary>
-        public static Func<string, string> GetVerifiedSnapshotSourceForFile { get; set; }
-
-        /// <summary>
-        /// Set by HotReload. Arguments are the project-relative source path and the compiled
-        /// assembly path; returns the PDB-checksum-verified snapshot text, or null when none.
-        /// Use this after the shim registry is cleared (revert/restore) when file lookup
-        /// can no longer find a generation.
-        /// </summary>
-        public static Func<string, string, string> GetVerifiedSnapshotSource { get; set; }
-
-        /// <summary>
-        /// Set by the hot-reload side. Returns the LocalBuilder array (shim slot order) from
-        /// the latest transplant rebuild of the original method, or null when none.
-        /// Returned LocalBuilders are tied to the ILGenerator of that rebuild and are valid
-        /// only inside the same rebuild (the pause-point transpiler that runs after the
-        /// hot-reload transpiler). Do not retain or use them outside that rebuild.
-        /// </summary>
-        public static Func<MethodBase, IReadOnlyList<LocalBuilder>> GetTransplantLocals { get; set; }
-
-        /// <summary>
-        /// Set by the hot-reload side. Returns how many instructions the latest rebuild prepended
-        /// before the patched body (0 when none). Pause-point must add this only to
-        /// TransplantChainJoin indexes; ShimDirect and OriginalBody have no transplant preamble.
-        /// </summary>
-        public static Func<MethodBase, int> GetTransplantPreambleLength { get; set; }
-
-        /// <summary>
-        /// Set by the hot-reload side. Argument is a type full name (reflection
-        /// <c>Outer+Inner</c> or Cecil <c>Outer/Inner</c>); returns the simple names of fields
-        /// hot reload added to that type across every file, or empty when none.
-        /// </summary>
-        public static Func<string, IReadOnlyList<string>> GetAddedFieldsForType { get; set; }
-
-        // Set by SourcePausePointPatcher. Returns the marker ids currently injected
-        // into the method (empty when none).
-        public static Func<MethodBase, IReadOnlyList<string>> GetArmedMarkerIdsOnMethod { get; set; }
-
-        // Set by SourcePausePointPatcher. Returns marker ids whose logical owner is the
-        // method and whose registry entry is currently SuppressedByHotReload.
-        public static Func<MethodBase, IReadOnlyList<string>> GetSuppressedMarkerIdsOnMethod { get; set; }
-
-        // Set by SourcePausePointPatcher. Drains marker ids recorded during the latest
-        // hot-reload patch transition that were skipped for retarget because they were
-        // already Expired (not a scan of residual expired ledger state).
-        public static Func<IReadOnlyList<string>> ConsumeExpiredNotRetargetedMarkerIds { get; set; }
-
-        // Set by SourcePausePointPatcher. Drains (id, oldText, newText) triples recorded when
-        // retarget changed the resolved line text of an armed marker.
-        public static Func<IReadOnlyList<(string Id, string OldText, string NewText)>>
-            ConsumeRetargetLineDriftWarnings { get; set; }
-
-        // Set by SourcePausePointPatcher. Invoked by HotReloadPatcher after a
-        // method's patch state changes (true = patched, false = reverted).
-        public static Action<MethodBase, bool> OnHotReloadPatchStateChanged { get; set; }
+        public static IPausePointHotReloadPort PausePointSide { get; set; }
     }
 
     /// <summary>

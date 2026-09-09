@@ -295,10 +295,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(_access.Domain.ActivePatchCount, Is.EqualTo(0));
             Assert.That(
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FileOne),
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FileOne),
                 Is.Null);
             Assert.That(
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FileTwo),
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FileTwo),
                 Is.Null);
         }
 

@@ -47,20 +47,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string ExpectedNoSnapshotFailureMessage =
             "No method named 'UniqueTarget' with a sequence point on or after line 16 was found. Nearby methods in the last compiled source: 'EditedLineRemapFixture.UniqueOther' spans lines 15-18.";
 
-        private Func<string, string> _previousSnapshotLoader;
+        private HotReloadSidePortScope _hotReloadSideScope;
 
         [SetUp]
         public void SetUp()
         {
             UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
-            _previousSnapshotLoader = HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = null;
+            _hotReloadSideScope = new HotReloadSidePortScope();
+            _hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => null;
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _previousSnapshotLoader;
+            _hotReloadSideScope.Dispose();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }
@@ -331,13 +331,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Is.EqualTo(ExpectedRoundForwardFailureMessage));
         }
 
-        private static void InstallSnapshotFromFile(string projectRelativeFile)
+        private void InstallSnapshotFromFile(string projectRelativeFile)
         {
             string absoluteFilePath = Path.Combine(
                 UnityCliLoopPathResolver.GetProjectRoot(),
                 projectRelativeFile);
             string snapshotSource = File.ReadAllText(absoluteFilePath);
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => snapshotSource;
+            _hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => snapshotSource;
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

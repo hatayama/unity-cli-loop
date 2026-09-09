@@ -73,8 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             await HotReloadFromEditedSourceAsync(edited, "LineDriftUnpatched.cs");
 
-            Func<string, string> previousSnapshot = HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => BuildSentinelSnapshot(
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => BuildSentinelSnapshot(
                 CompiledSnapshotSentinel,
                 80);
             PausePointResponse enable;
@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
+                snapshotScope.Dispose();
             }
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
@@ -229,8 +229,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int editedUnpatchedLine = FindLineNumber(edited, "return 22;");
             await HotReloadFromEditedSourceAsync(edited, "LineDriftNoSnapshot.cs");
 
-            Func<string, string> previous = HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => null;
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => null;
             PausePointResponse enable;
             try
             {
@@ -244,7 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previous;
+                snapshotScope.Dispose();
             }
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
@@ -261,9 +261,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             PausePointResponse enable = await EnablePatchedLineThenPrepareRestoreAsync(
                 "LineDriftRestoreSentinel.cs");
-            Func<string, string, string> previous =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSource;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSource =
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSource =
                 (string file, string dllPath) =>
                 {
                     Assert.That(file, Does.Contain("HotReloadPausePointLineDriftFixture.cs"));
@@ -276,7 +275,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSource = previous;
+                snapshotScope.Dispose();
             }
 
             UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
@@ -285,24 +284,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: restore-after-revert leaves ResolvedLineText empty when the (file, dll)
-        /// snapshot Func is unset, and does not fall back to disk.
+        /// What: restore-after-revert leaves ResolvedLineText empty when hot reload has no
+        /// (file, dll) snapshot to give, and does not fall back to disk.
         /// </summary>
         [Test]
-        public async Task RevertAll_RestoreWithoutSnapshotFunc_LeavesResolvedLineTextEmpty()
+        public async Task RevertAll_RestoreWithoutSnapshot_LeavesResolvedLineTextEmpty()
         {
             PausePointResponse enable = await EnablePatchedLineThenPrepareRestoreAsync(
                 "LineDriftRestoreNoSnapshot.cs");
-            Func<string, string, string> previous =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSource;
-            HotReloadPausePointCoordination.GetVerifiedSnapshotSource = null;
+            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
+            snapshotScope.Port.VerifiedSnapshotSource = (string file, string dllPath) => null;
             try
             {
                 HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
             finally
             {
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSource = previous;
+                snapshotScope.Dispose();
             }
 
             UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
@@ -348,10 +346,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static HotReloadShimMethodLookup FindPatchedShimEntry()
         {
-            Func<string, HotReloadShimFileLookup> getLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile;
-            Assert.That(getLookup, Is.Not.Null);
-            HotReloadShimFileLookup lookup = getLookup(FixtureProjectRelativePath);
+            IHotReloadPausePointPort hotReloadSide = HotReloadPausePointCoordination.HotReloadSide;
+            Assert.That(hotReloadSide, Is.Not.Null);
+            HotReloadShimFileLookup lookup = hotReloadSide.GetShimLookupForFile(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             Assert.That(lookup.Methods, Is.Not.Null);
 

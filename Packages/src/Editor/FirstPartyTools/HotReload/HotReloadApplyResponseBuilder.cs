@@ -143,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void AppendRetargetLineDriftWarnings(List<string> warnings)
         {
             IReadOnlyList<(string Id, string OldText, string NewText)> driftWarnings =
-                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings?.Invoke();
+                HotReloadPausePointCoordination.PausePointSide?.ConsumeRetargetLineDriftWarnings();
             if (driftWarnings == null || driftWarnings.Count == 0)
             {
                 return;
@@ -164,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void AppendExpiredNotRetargetedWarnings(List<string> warnings)
         {
             IReadOnlyList<string> expiredIds =
-                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds?.Invoke();
+                HotReloadPausePointCoordination.PausePointSide?.ConsumeExpiredNotRetargetedMarkerIds();
             if (expiredIds == null || expiredIds.Count == 0)
             {
                 return;

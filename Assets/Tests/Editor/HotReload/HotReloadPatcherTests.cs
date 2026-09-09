@@ -581,7 +581,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         new HotReloadDomainTestAccess().ApplyPatch(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                         Is.True);
                     Assert.That(
-                        HotReloadPausePointCoordination.GetTransplantLocals(failing),
+                        HotReloadPausePointCoordination.HotReloadSide.GetTransplantLocals(failing),
                         Is.Not.Null,
                         "A transplant apply must record the shim locals the test then checks are retained.");
 
@@ -592,11 +592,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     harmony.RefuseUnpatch = false;
 
                     Assert.That(
-                        HotReloadPausePointCoordination.GetTransplantLocals(failing),
+                        HotReloadPausePointCoordination.HotReloadSide.GetTransplantLocals(failing),
                         Is.Not.Null,
                         "The transpiler is still live, so pause-point must still find its transplant locals.");
                     Assert.That(
-                        HotReloadPausePointCoordination.GetTransplantPreambleLength(failing),
+                        HotReloadPausePointCoordination.HotReloadSide.GetTransplantPreambleLength(failing),
                         Is.GreaterThan(0),
                         "The retained entry must keep the preamble length pause-point offsets against.");
                 }

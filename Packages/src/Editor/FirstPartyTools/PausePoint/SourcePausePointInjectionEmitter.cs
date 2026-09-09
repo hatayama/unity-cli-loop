@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             MethodBase activeShim =
-                HotReloadPausePointCoordination.GetActiveShimForMethod?.Invoke(original);
+                HotReloadPausePointCoordination.HotReloadSide?.GetActiveShimForMethod(original);
 
             foreach (SourcePausePointPatchInjection injection in injections.OrderByDescending(i => i.InstructionIndex))
             {
@@ -188,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (injection.TargetKind == SourcePausePointPatchInjectionTargetKind.TransplantChainJoin)
             {
                 IReadOnlyList<LocalBuilder> transplantLocals =
-                    HotReloadPausePointCoordination.GetTransplantLocals?.Invoke(method);
+                    HotReloadPausePointCoordination.HotReloadSide?.GetTransplantLocals(method);
                 MethodBody donorBody = injection.DonorShim != null
                     ? injection.DonorShim.GetMethodBody()
                     : null;

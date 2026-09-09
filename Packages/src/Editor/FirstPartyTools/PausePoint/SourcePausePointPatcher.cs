@@ -42,16 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UloopPausePointRegistry.OnCleared = Unpatch;
             UloopPausePointRegistry.OnClearedAll = UnpatchAll;
-            HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod =
-                SourcePausePointHotReloadRetarget.GetArmedMarkerIds;
-            HotReloadPausePointCoordination.GetSuppressedMarkerIdsOnMethod =
-                SourcePausePointHotReloadRetarget.GetSuppressedMarkerIds;
-            HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds =
-                SourcePausePointHotReloadRetarget.ConsumeExpiredNotRetargetedMarkerIds;
-            HotReloadPausePointCoordination.OnHotReloadPatchStateChanged =
-                SourcePausePointHotReloadRetarget.HandleHotReloadPatchStateChanged;
-            HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings =
-                SourcePausePointHotReloadRetarget.ConsumeRetargetLineDriftWarnings;
+            HotReloadPausePointCoordination.PausePointSide = new PausePointHotReloadPort();
         }
 
         public static SourcePausePointPatchResult Patch(
@@ -77,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             bool patchedByHotReload =
-                HotReloadPausePointCoordination.GetActiveShimForMethod?.Invoke(method) != null;
+                HotReloadPausePointCoordination.HotReloadSide?.GetActiveShimForMethod(method) != null;
             if (patchedByHotReload)
             {
                 string typeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
@@ -215,14 +206,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return instructionIndex;
             }
 
-            Func<MethodBase, int> getPreambleLength =
-                HotReloadPausePointCoordination.GetTransplantPreambleLength;
-            if (getPreambleLength == null)
+            IHotReloadPausePointPort hotReloadSide = HotReloadPausePointCoordination.HotReloadSide;
+            if (hotReloadSide == null)
             {
                 return instructionIndex;
             }
 
-            return instructionIndex + getPreambleLength(method);
+            return instructionIndex + hotReloadSide.GetTransplantPreambleLength(method);
         }
 
         // Why compare the injection site too: the same file:line id re-enabled with the other

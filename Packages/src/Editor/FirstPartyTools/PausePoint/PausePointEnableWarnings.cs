@@ -23,9 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return string.Empty;
             }
 
-            Func<string, IReadOnlyList<string>> getter =
-                HotReloadPausePointCoordination.GetAddedFieldsForType;
-            if (getter == null)
+            IHotReloadPausePointPort hotReloadSide = HotReloadPausePointCoordination.HotReloadSide;
+            if (hotReloadSide == null)
             {
                 return string.Empty;
             }
@@ -36,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return string.Empty;
             }
 
-            IReadOnlyList<string> addedFields = getter(typeName);
+            IReadOnlyList<string> addedFields = hotReloadSide.GetAddedFieldsForType(typeName);
             if (addedFields == null || addedFields.Count == 0)
             {
                 return string.Empty;

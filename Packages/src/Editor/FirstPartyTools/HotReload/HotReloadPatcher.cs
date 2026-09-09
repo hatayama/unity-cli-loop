@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Mirror the removal: if the re-Patch below fails, its contained Unpatch rebuilds
                 // with markers restored (no live patch), and RevertAll can never reach this method
                 // again — leaving suppress stuck true would make status lie forever.
-                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
+                HotReloadPausePointCoordination.PausePointSide?.OnHotReloadPatchStateChanged(method, false);
             }
 
             MethodInfo transpilerMethodInfo = patchShape == HotReloadPatchShape.Delegation
@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         priority = Priority.First
                     });
                 generation.CommitPatch(method);
-                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, true);
+                HotReloadPausePointCoordination.PausePointSide?.OnHotReloadPatchStateChanged(method, true);
             }
             catch (Exception exception)
             {
@@ -156,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _harmony.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 // Why after Unpatch: retarget may have already replaced markers onto the shim;
                 // restore them onto the original body now that GetActiveShim is null.
-                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
+                HotReloadPausePointCoordination.PausePointSide?.OnHotReloadPatchStateChanged(method, false);
                 Exception rootCause = exception;
                 while (rootCause.InnerException != null)
                 {
@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _harmony.UnpatchAll(HotReloadConstants.HarmonyId);
             foreach (MethodBase revertedMethod in revertedMethods)
             {
-                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(revertedMethod, false);
+                HotReloadPausePointCoordination.PausePointSide?.OnHotReloadPatchStateChanged(revertedMethod, false);
             }
         }
 
@@ -243,11 +243,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return HotReloadRevertOutcome.UnpatchFailed;
                 }
 
-                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
+                HotReloadPausePointCoordination.PausePointSide?.OnHotReloadPatchStateChanged(method, false);
                 return HotReloadRevertOutcome.UnpatchFailed;
             }
 
-            HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
+            HotReloadPausePointCoordination.PausePointSide?.OnHotReloadPatchStateChanged(method, false);
             return HotReloadRevertOutcome.Reverted;
         }
 

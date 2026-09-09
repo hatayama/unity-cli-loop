@@ -184,6 +184,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return File.ReadAllText(absolutePath);
         }
 
+        // Why hot reload reads its own snapshot through the port it publishes for pause point:
+        // this reader is handed to Append as a Func by the response builder, and the builder still
+        // reaches the domain through the installed services. Passing the domain in belongs with
+        // that call site, not here.
         internal static string ReadCompiledSnapshot(string projectRelativePath)
         {
             if (string.IsNullOrEmpty(projectRelativePath))
@@ -191,13 +195,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            Func<string, string> loader = HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
-            if (loader == null)
-            {
-                return null;
-            }
-
-            return loader(HotReloadSourcePathNormalizer.ToForwardSlashes(projectRelativePath));
+            return HotReloadPausePointCoordination.HotReloadSide?.GetVerifiedSnapshotSourceForFile(
+                HotReloadSourcePathNormalizer.ToForwardSlashes(projectRelativePath));
         }
 
         // Why the same split as pause-point compiled-line reads: --line is 1-based against that split,

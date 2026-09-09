@@ -7,6 +7,7 @@ using HarmonyLib;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -67,6 +68,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(HotReloadCompositionRoot.Services, Is.SameAs(previous));
             Assert.Throws<ObjectDisposedException>(() => ownedDomain.IntroducedTypeResolver.Suspend());
+        }
+
+        /// <summary>
+        /// Uninstalling clears the coordination point, so the pause point side reads the
+        /// documented "no domain installed" answer instead of a port that would keep answering
+        /// from the domain the uninstall just disposed.
+        /// </summary>
+        [Test]
+        public void UninstallInstalledServices_LeavesTheSiblingToolsReadingNoDomainInstalled()
+        {
+            IHotReloadPausePointPort installedPort = HotReloadPausePointCoordination.HotReloadSide;
+            Assert.That(installedPort, Is.Not.Null, "the production services must be installed here.");
+
+            try
+            {
+                HotReloadCompositionRoot.UninstallInstalledServices();
+
+                Assert.That(HotReloadPausePointCoordination.HotReloadSide, Is.Null);
+                Assert.That(HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames, Is.Null);
+            }
+            finally
+            {
+                // The uninstall disposed the domain the rest of the suite runs on, so the next
+                // test needs the production services back.
+                HotReloadCompositionRoot.Initialize();
+            }
+
+            Assert.That(HotReloadPausePointCoordination.HotReloadSide, Is.Not.Null);
+            Assert.That(HotReloadPausePointCoordination.HotReloadSide, Is.Not.SameAs(installedPort));
         }
 
         private static HotReloadServices CreateServicesSharing(HotReloadDomain domain)

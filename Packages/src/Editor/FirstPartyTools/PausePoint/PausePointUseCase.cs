@@ -220,7 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointSnapshotTiming snapshotTiming = ParseSnapshotTiming(parameters.SnapshotTiming);
 
             HotReloadShimFileLookup shimLookup =
-                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(normalizedFile);
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(normalizedFile);
             if (shimLookup != null)
             {
                 SourcePausePointShimResolution shimResolution =
