@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
         // Why NoInlining: repo convention for patch-target fixtures — without it the

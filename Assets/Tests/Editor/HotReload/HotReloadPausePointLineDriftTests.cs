@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }
@@ -272,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 };
             try
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
             finally
             {
@@ -298,7 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPausePointCoordination.GetVerifiedSnapshotSource = null;
             try
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
             finally
             {

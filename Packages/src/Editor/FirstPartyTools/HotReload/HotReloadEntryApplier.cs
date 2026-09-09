@@ -13,8 +13,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Applies worker entries: bind accessors, Harmony patch/revert, added-method register.
     /// </summary>
-    internal static class HotReloadEntryApplier
+    internal sealed class HotReloadEntryApplier
     {
+        private readonly HotReloadDomain _domain;
+        private readonly HotReloadPatcher _patcher;
+        private readonly HotReloadFileEntryApplier _fileEntryApplier;
+
+        internal HotReloadEntryApplier(
+            HotReloadDomain domain,
+            HotReloadPatcher patcher,
+            HotReloadFileEntryApplier fileEntryApplier)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(patcher != null, "patcher must not be null.");
+            Debug.Assert(fileEntryApplier != null, "fileEntryApplier must not be null.");
+            _domain = domain;
+            _patcher = patcher;
+            _fileEntryApplier = fileEntryApplier;
+        }
+
         /// <summary>
         /// Applies the group's prepared files against the one compiled shim assembly, and returns
         /// one result per file in the order the files were sent to the worker.
@@ -26,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// (bound and resolved) by an earlier stage, so nothing is mutated while a sibling can
         /// still fail preflight.
         /// </remarks>
-        internal static IReadOnlyList<HotReloadFileProcessResult> ApplyPreparedEntries(
+        internal IReadOnlyList<HotReloadFileProcessResult> ApplyPreparedEntries(
             HotReloadApplyContext context,
             HotReloadShimCompileResult compileResult,
             IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
@@ -45,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return results;
         }
 
-        private static HotReloadFileProcessResult ApplyPreparedFile(
+        private HotReloadFileProcessResult ApplyPreparedFile(
             HotReloadApplyContext context,
             HotReloadShimCompileResult compileResult,
             HotReloadPreparedGroupFile prepared)
@@ -53,32 +70,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFile file = prepared.File;
             if (prepared.Kind == HotReloadGroupFilePreparationKind.SkippedByGroup)
             {
-                return HotReloadFileEntryApplier.BuildUnappliedResult(file);
+                return _fileEntryApplier.BuildUnappliedResult(file);
             }
 
             if (prepared.Kind == HotReloadGroupFilePreparationKind.NoEntriesToApply)
             {
-                HotReloadFileEntryApplier.ClearFileGeneration(context, file);
-                return HotReloadFileEntryApplier.BuildUnappliedResult(file);
+                _fileEntryApplier.ClearFileGeneration(context, file);
+                return _fileEntryApplier.BuildUnappliedResult(file);
             }
 
             if (prepared.Kind == HotReloadGroupFilePreparationKind.ResolutionFailed)
             {
-                return HotReloadFileEntryApplier.BuildResolutionFailedResult(
+                return _fileEntryApplier.BuildResolutionFailedResult(
                     context, file, prepared.Resolution);
             }
 
-            return HotReloadFileEntryApplier.ApplyResolvedFileAndBuildResult(
+            return _fileEntryApplier.ApplyResolvedFileAndBuildResult(
                 context, file, compileResult, prepared.Entries, prepared.Resolution);
-        }
-
-        // Why only here and the empty-entries deactivation: a failed worker or shim compile
-        // returns empty AddedFieldNames while leaving existing patches, so writing the ledger
-        // from the run response would wipe added fields that are still live.
-        internal static void CommitAddedFieldsForFile(string projectRelativePath, string[] addedFieldNames)
-        {
-            HotReloadCompositionRoot.Services.Domain.FindGeneration(projectRelativePath)?.ReplaceAddedFields(
-                addedFieldNames ?? Array.Empty<string>());
         }
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.
@@ -86,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // A method Harmony could not restore becomes that method's Failed outcome instead of
         // aborting the peel, so the remaining unchanged methods still get reverted.
         // Returns how many Revert calls actually removed a live patch.
-        internal static int RevertUnchangedPatches(
+        internal int RevertUnchangedPatches(
             string assemblyName,
             TransformWorkerUnchangedMethodDto[] unchangedMethods,
             List<HotReloadMethodOutcome> outcomes,
@@ -122,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                HotReloadRevertOutcome revertOutcome = HotReloadPatcher.Revert(
+                HotReloadRevertOutcome revertOutcome = _patcher.Revert(
                     matchResult.Method,
                     out string revertFailureReason);
                 if (revertOutcome == HotReloadRevertOutcome.Reverted)
@@ -148,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Peels every file's leftover patches on the methods the worker reported unchanged, and
         /// records per file how many patches that removed.
         /// </summary>
-        internal static void RevertUnchangedPatchesPerFile(
+        internal void RevertUnchangedPatchesPerFile(
             IReadOnlyList<HotReloadGroupFile> files,
             HotReloadWorkerRowsByFile rows)
         {
@@ -179,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Internal so tests can pin the failure contract directly — an end-to-end bind failure
         /// cannot be fabricated once shim compilation has succeeded against the same assembly.
         /// </summary>
-        internal static Dictionary<string, string> BindShimAccessors(Assembly shimAssembly)
+        internal Dictionary<string, string> BindShimAccessors(Assembly shimAssembly)
         {
             Debug.Assert(shimAssembly != null, "shimAssembly must not be null.");
 

@@ -18,9 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// forwards every argument to a normally-JIT-compiled shim whose inaccessible accesses
     /// were rewritten to accessor delegates.
     /// </summary>
-    internal static class HotReloadPatcher
+    internal sealed class HotReloadPatcher
     {
-        private static readonly Harmony HarmonyInstance = new Harmony(HotReloadConstants.HarmonyId);
         private static readonly MethodInfo TransplantTranspilerMethodInfo =
             typeof(HotReloadPatcher).GetMethod(
                 nameof(ReplaceWithTransplantSourceTranspiler),
@@ -37,9 +36,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new[] { typeof(string) },
                 null);
 
+        private readonly HotReloadDomain _domain;
+        private readonly IHotReloadHarmony _harmony;
+
+        internal HotReloadPatcher(HotReloadDomain domain, IHotReloadHarmony harmony)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(harmony != null, "harmony must not be null.");
+            _domain = domain;
+            _harmony = harmony;
+        }
+
         // Harmony resolves transpilers as static methods, so the domain cannot be a parameter of
-        // one; the transpilers below read it from the slot instead.
-        private static HotReloadDomain Domain => HotReloadTranspilerDomainGateway.Current;
+        // one; the transpilers below read it from the gateway instead.
+        private static HotReloadDomain TranspilerDomain => HotReloadTranspilerDomainGateway.Current;
 
         /// <summary>
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
@@ -48,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Engine failures during apply never throw; they are contained as an
         /// <see cref="HotReloadPatchFailureReason.ApplyFailed"/> result for that method only.
         /// </summary>
-        public static HotReloadPatchResult Apply(
+        public HotReloadPatchResult Apply(
             MethodBase method,
             MethodInfo shimMethodInfo,
             HotReloadPatchShape patchShape,
@@ -74,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return patchability;
             }
 
-            HotReloadFileGeneration generation = Domain.FindGeneration(filePath);
+            HotReloadFileGeneration generation = _domain.FindGeneration(filePath);
             if (generation == null)
             {
                 return HotReloadPatchResult.Failure(
@@ -86,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // generation: a method's live patch belongs to whichever file's generation applied it,
             // and a rename or move re-applies the same method from a different path. Asking only
             // this generation would miss that patch and stack a second transpiler on the method.
-            HotReloadFileGeneration patchOwner = Domain.FindGenerationForMethod(method);
+            HotReloadFileGeneration patchOwner = _domain.FindGenerationForMethod(method);
             if (patchOwner != null && patchOwner.IsPatchActive(method))
             {
                 // Why the patch is retired before Unpatch: same as Revert — during Unpatch Harmony
@@ -96,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // this method into the new generation before calling Apply.
                 patchOwner.DeactivatePatch(method);
                 HotReloadInvocationRegistry.Remove(HotReloadMethodKeys.FormatMethodLabel(method));
-                HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                _harmony.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 // Mirror the removal: if the re-Patch below fails, its contained Unpatch rebuilds
                 // with markers restored (no live patch), and RevertAll can never reach this method
                 // again — leaving suppress stuck true would make status lie forever.
@@ -115,9 +125,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why Priority.First: same numeric priority sorts by registration index, and
                 // Unpatch does not reindex — Patch/Unpatch cycles make same-priority order
                 // unstable. pause-point must run after hot-reload so it sees the shim stream.
-                HarmonyInstance.Patch(
+                _harmony.Patch(
                     method,
-                    transpiler: new HarmonyMethod(transpilerMethodInfo)
+                    new HarmonyMethod(transpilerMethodInfo)
                     {
                         priority = Priority.First
                     });
@@ -143,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // method's Failed outcome so the per-method contract holds. Unpatch removes
                 // the transpiler this call registered before failing and rebuilds the
                 // wrapper, restoring the original body (verified by the extern-shim test).
-                HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                _harmony.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 // Why after Unpatch: retarget may have already replaced markers onto the shim;
                 // restore them onto the original body now that GetActiveShim is null.
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
@@ -169,30 +179,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Removes every hot-reload patch owned by this patcher and clears every
         /// domain-scoped store.
         /// </summary>
-        public static void RevertAll()
+        public void RevertAll()
         {
             // Snapshot and empty the domain BEFORE UnpatchAll: Harmony rebuilds every patched
             // method during UnpatchAll, and the pause-point transpiler guard must see those
             // methods as unpatched so armed markers are re-instrumented into the restored
             // original IL. Shim registration clears in the same window so GetActiveShimForMethod
             // and GetShimLookupForFile agree during rebuild.
-            IReadOnlyList<MethodBase> revertedMethods = Domain.RevertAll();
-            HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
+            IReadOnlyList<MethodBase> revertedMethods = _domain.RevertAll();
+            _harmony.UnpatchAll(HotReloadConstants.HarmonyId);
             foreach (MethodBase revertedMethod in revertedMethods)
             {
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(revertedMethod, false);
             }
         }
 
-        // Set by tests only. A Harmony rebuild failure cannot be provoked from outside, and the
-        // contained-failure contract of Revert has to be pinned by a test. Production leaves it
-        // null and reverts through Harmony.
-        internal static Action<MethodBase> UnpatchForTesting;
-
         /// <summary>
         /// Removes the hot-reload patch on <paramref name="method"/> when one is recorded.
         /// </summary>
-        public static HotReloadRevertOutcome Revert(MethodBase method, out string failureReason)
+        public HotReloadRevertOutcome Revert(MethodBase method, out string failureReason)
         {
             Debug.Assert(method != null, "method must not be null.");
 
@@ -205,7 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // next apply's "unpatch the previous transpiler first" decision and pause-point's
             // chain-join offsets all read it, so a rebuild failure that leaves the patch live must
             // leave the whole entry describing that patch.
-            HotReloadFileGeneration generation = Domain.FindGenerationForMethod(method);
+            HotReloadFileGeneration generation = _domain.FindGenerationForMethod(method);
             HotReloadActivePatchEntry removedEntry = generation?.DeactivatePatch(method);
             if (removedEntry == null)
             {
@@ -267,47 +272,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static void Unpatch(MethodBase method)
+        private void Unpatch(MethodBase method)
         {
-            if (UnpatchForTesting != null)
-            {
-                UnpatchForTesting(method);
-                return;
-            }
-
-            HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+            _harmony.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
         }
 
         /// <summary>
         /// How many methods currently have a live hot-reload patch.
         /// </summary>
-        public static int ActivePatchCount => Domain.ActivePatchCount;
+        public int ActivePatchCount => _domain.ActivePatchCount;
 
         /// <summary>
         /// Harmony patches plus added-method shims. Domain reload drops both, so Play-entry
         /// warnings and ActivePatchTotal count this sum.
         /// </summary>
-        public static int ActiveChangeCount => Domain.ActiveChangeCount;
+        public int ActiveChangeCount => _domain.ActiveChangeCount;
 
         /// <summary>
         /// Returns a sorted list of active patches (method key + source file path) for status
         /// reporting without applying or reverting patches.
         /// </summary>
-        public static IReadOnlyList<HotReloadActivePatchInfo> DescribeActivePatches()
+        public IReadOnlyList<HotReloadActivePatchInfo> DescribeActivePatches()
         {
-            return Domain.DescribeActivePatches();
+            return _domain.DescribeActivePatches();
         }
 
         // Why projectRelativePath, not DescribeActivePatches FilePath filtering by callers: a
         // patch belongs to the generation of the orchestrator's project-relative path.
-        public static IReadOnlyList<string> ListActiveMethodKeys(string projectRelativePath)
+        public IReadOnlyList<string> ListActiveMethodKeys(string projectRelativePath)
         {
-            return Domain.ListActiveMethodKeys(projectRelativePath);
+            return _domain.ListActiveMethodKeys(projectRelativePath);
         }
 
-        public static IReadOnlyList<string> ListActiveFilePaths()
+        public IReadOnlyList<string> ListActiveFilePaths()
         {
-            return Domain.ListActiveFilePaths();
+            return _domain.ListActiveFilePaths();
         }
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
@@ -315,7 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ILGenerator generator,
             MethodBase original)
         {
-            HotReloadFileGeneration generation = Domain.FindGenerationForMethod(original);
+            HotReloadFileGeneration generation = TranspilerDomain.FindGenerationForMethod(original);
             MethodInfo shimMethod = generation?.FindPatchShim(original);
             Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
             // Discard the original (and any prior transpiler) instructions entirely — the shim IL
@@ -343,7 +342,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IEnumerable<CodeInstruction> instructions,
             MethodBase original)
         {
-            HotReloadFileGeneration generation = Domain.FindGenerationForMethod(original);
+            HotReloadFileGeneration generation = TranspilerDomain.FindGenerationForMethod(original);
             MethodInfo shimMethod = generation?.FindPatchShim(original);
             Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
 

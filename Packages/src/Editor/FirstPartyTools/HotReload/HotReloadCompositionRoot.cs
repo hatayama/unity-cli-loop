@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using HarmonyLib;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -41,12 +43,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static HotReloadServices CreateProductionServices()
         {
+            HotReloadHarmonyGateway harmony =
+                new HotReloadHarmonyGateway(new Harmony(HotReloadConstants.HarmonyId));
+            return CreateServices(CreateProductionDomain(), harmony);
+        }
+
+        /// <summary>
+        /// Builds an empty domain of the shape production runs on. A test that has to substitute
+        /// the patch engine builds the domain through this and passes its own harmony to
+        /// <see cref="CreateServices"/>.
+        /// </summary>
+        internal static HotReloadDomain CreateProductionDomain()
+        {
             HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
             // The resolver comes back detached and answers no bind until Install attaches it, so
-            // building services here can never race the resolver that is still installed.
+            // building a domain here can never race the resolver that is still installed.
             HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
-            return new HotReloadServices(new HotReloadDomain(registry, resolver));
+            return new HotReloadDomain(registry, resolver);
+        }
+
+        /// <summary>
+        /// Builds the services around <paramref name="domain"/> and <paramref name="harmony"/>,
+        /// without installing them. A test replaces the patch engine through this.
+        /// </summary>
+        internal static HotReloadServices CreateServices(HotReloadDomain domain, IHotReloadHarmony harmony)
+        {
+            HotReloadPatcher patcher = new HotReloadPatcher(domain, harmony);
+            HotReloadFileEntryApplier fileEntryApplier = new HotReloadFileEntryApplier(domain, patcher);
+            return new HotReloadServices(
+                domain,
+                harmony,
+                patcher,
+                fileEntryApplier,
+                new HotReloadEntryApplier(domain, patcher, fileEntryApplier));
         }
 
         /// <summary>

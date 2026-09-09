@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
         /// <summary>
@@ -290,7 +290,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(FileTwo));
 
             Assert.That(
-                HotReloadPatcher.Revert(original, out string _),
+                HotReloadCompositionRoot.Services.Patcher.Revert(original, out string _),
                 Is.EqualTo(HotReloadRevertOutcome.Reverted));
 
             Assert.That(_access.Domain.ActivePatchCount, Is.EqualTo(0));

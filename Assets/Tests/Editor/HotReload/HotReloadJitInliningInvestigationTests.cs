@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
         /// <summary>

@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why once for the group: every shim type of the group lives in this one assembly, so
             // binding per file would re-run the same binders and hide which file first failed.
             Dictionary<string, string> bindFailures =
-                HotReloadEntryApplier.BindShimAccessors(compileResult.Assembly);
+                HotReloadCompositionRoot.Services.EntryApplier.BindShimAccessors(compileResult.Assembly);
             List<HotReloadPreparedGroupFile> prepared =
                 new List<HotReloadPreparedGroupFile>(context.Files.Count);
             foreach (HotReloadGroupFile file in context.Files)

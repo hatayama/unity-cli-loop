@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
             _previousApply = HotReloadTool.RunApplyAsyncForTesting;
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TearDown()
         {
             HotReloadTool.RunApplyAsyncForTesting = _previousApply;
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
         }

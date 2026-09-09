@@ -35,14 +35,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // The production run captures these at its entry point; a direct call to the path
             // normalizer in a test has to do the same.
             HotReloadPackageRootProvider.CaptureCurrent();
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }
@@ -728,8 +728,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Status must list Active get_HeightAmplitude after apply with the same Method label.");
 
-            HotReloadPatcher.RevertAll();
-            Assert.That(HotReloadPatcher.DescribeActivePatches(), Is.Empty);
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches(), Is.Empty);
             Assert.That(
                 HotReloadPropertyGetterFixture.HeightAmplitude,
                 Is.EqualTo(5f),
@@ -1280,7 +1280,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             int callsBefore = HotReloadBindProbeShim.BindCalls;
 
-            Dictionary<string, string> failures = HotReloadEntryApplier.BindShimAccessors(
+            Dictionary<string, string> failures = HotReloadCompositionRoot.Services.EntryApplier.BindShimAccessors(
                 typeof(HotReloadBindFailShim).Assembly);
 
             Assert.That(HotReloadBindProbeShim.BindCalls, Is.EqualTo(callsBefore + 1));
@@ -2000,7 +2000,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             TransformWorkerClient.RunAsync,
                             HotReloadGroupProcessor.GateAndCompileAsync,
                             HotReloadGroupEntryPreparation.PrepareGroup,
-                            HotReloadEntryApplier.ApplyPreparedEntries)))
+                            HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
                     {
                         await HotReloadOrchestrator.RunAsync(
                             new[] { fixturePath },
@@ -2013,7 +2013,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     // The patches belong to the replacement domain, and the TearDown revert runs
                     // after the scope has already put the outer domain back, which knows nothing
                     // about them and would leave them live in Harmony.
-                    HotReloadPatcher.RevertAll();
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
                 }
             }
 
@@ -2303,7 +2303,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(first);
             AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -2937,7 +2937,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -2981,7 +2981,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -3073,7 +3073,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadPatcher.RevertAll();
+                HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
 
@@ -3159,7 +3159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadShimCompileResult compileResult,
             TransformWorkerEntryDto[] entriesToPatch)
         {
-            return HotReloadEntryApplier.ApplyPreparedEntries(
+            return HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries(
                 context,
                 compileResult,
                 HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch));

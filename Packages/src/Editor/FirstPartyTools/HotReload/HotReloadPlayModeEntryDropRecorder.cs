@@ -201,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static IReadOnlyList<string> CollectActiveIdentities()
         {
-            IReadOnlyList<HotReloadActivePatchInfo> patches = HotReloadPatcher.DescribeActivePatches();
+            IReadOnlyList<HotReloadActivePatchInfo> patches = HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
                 HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers();
             List<string> identities = new List<string>(patches.Count + addedMembers.Count);

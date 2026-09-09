@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }
@@ -376,7 +376,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.True);
 
             UloopPausePointRegistry.SetResolvedLine(enable.Id, 0, null);
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
             Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
@@ -442,7 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enable.Success, Is.True, enable.Message);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
             Assert.That(status.SuppressedByHotReload, Is.True);
@@ -609,7 +609,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
             Assert.That(afterRevert.SuppressedByHotReload, Is.False);
@@ -766,7 +766,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             SourcePausePointResolution resolution = BuildSyntheticResolution(original, instructionIndex: 0);
             SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
@@ -870,7 +870,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ContractRestoreAfterRevert.cs");
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.True);
 
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = fixture.ComputeWithPrivate(5);

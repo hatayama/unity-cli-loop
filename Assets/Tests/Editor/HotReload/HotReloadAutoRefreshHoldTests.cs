@@ -330,7 +330,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ReconcileForTesting_StaleFlagWithEmptyLedger_AllowsOnceAndClearsFlag()
         {
             FakeEnvironment environment = new FakeEnvironment { Held = true };
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
             try
             {
@@ -365,7 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Held = true,
                 AllowException = new InvalidOperationException("reload")
             };
-            HotReloadPatcher.RevertAll();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
             try
             {

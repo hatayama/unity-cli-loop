@@ -13,8 +13,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public static HotReloadResponse ExecuteRevertAll()
         {
-            int clearedCount = HotReloadPatcher.ActiveChangeCount;
-            HotReloadPatcher.RevertAll();
+            int clearedCount = HotReloadCompositionRoot.Services.Patcher.ActiveChangeCount;
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public static HotReloadResponse ExecuteStatus()
         {
-            IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadPatcher.DescribeActivePatches();
+            IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
                 HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers();
             List<HotReloadMethodResult> methods =

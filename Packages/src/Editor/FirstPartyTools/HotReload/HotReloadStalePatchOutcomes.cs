@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HashSet<string> activeDisplayKeys = new HashSet<string>(
-                HotReloadPatcher.ListActiveMethodKeys(projectRelativePath),
+                HotReloadCompositionRoot.Services.Patcher.ListActiveMethodKeys(projectRelativePath),
                 StringComparer.Ordinal);
             if (activeDisplayKeys.Count == 0)
             {
