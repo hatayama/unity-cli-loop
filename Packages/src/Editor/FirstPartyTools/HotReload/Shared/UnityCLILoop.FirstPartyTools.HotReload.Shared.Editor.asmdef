@@ -12,8 +12,8 @@
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
-        "UnityCliLoop.0Harmony.dll",
         "Mono.Cecil.dll",
+        "Mono.Cecil.Pdb.dll",
         "Newtonsoft.Json.dll"
     ],
     "autoReferenced": false,
