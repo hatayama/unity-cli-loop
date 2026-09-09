@@ -155,3 +155,39 @@ func TestDetectStructuralChangeAcceptsUnchangedAssembly(t *testing.T) {
 		t.Fatalf("expected the unchanged assembly to pass, got error: %v", err)
 	}
 }
+
+// Verifies an assembly definition moved into another assembly's source folder after the last build
+// stops the run, since its response file still lists the sources of its old location.
+func TestDetectStructuralChangeRejectsMovedAssemblyDefinition(t *testing.T) {
+	projectRoot, rsp, _ := newStalenessProject(t)
+	movedPath := filepath.Join(projectRoot, "Assets", "Other", "Foo.asmdef")
+	writeFileAt(t, movedPath, `{"name":"Foo"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Other", "C.cs"), "")
+	setModificationTime(t, movedPath, time.Now().Add(time.Hour))
+	asmdef := AssemblyDefinition{Name: "Foo", Path: movedPath, Directory: filepath.Dir(movedPath)}
+
+	err := DetectStructuralChange(projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{})
+	if err == nil {
+		t.Fatal("expected a moved assembly definition to be rejected")
+	}
+	if !strings.Contains(err.Error(), "uloop compile") {
+		t.Errorf("the error should tell the user how to recover, got: %v", err)
+	}
+}
+
+// Verifies an assembly definition whose own folder holds no C# source passes the moved check, since
+// an assembly can own all of its sources through .asmref folders elsewhere.
+func TestDetectStructuralChangeAcceptsAnAssemblyDefinitionWithoutSourcesOfItsOwn(t *testing.T) {
+	projectRoot, rsp, asmdef := newStalenessProject(t)
+	rsp.Sources = []string{filepath.Join("Assets", "Elsewhere", "D.cs")}
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Elsewhere", "D.cs"), "")
+	if err := os.Remove(filepath.Join(projectRoot, "Assets", "Foo", "A.cs")); err != nil {
+		t.Fatalf("failed to remove the source: %v", err)
+	}
+	setModificationTime(t, asmdef.Path, time.Now().Add(time.Hour))
+
+	if err := DetectStructuralChange(
+		projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{}); err != nil {
+		t.Fatalf("expected an assembly without sources of its own to pass, got error: %v", err)
+	}
+}

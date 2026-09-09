@@ -37,16 +37,21 @@ type AssemblyDefinition struct {
 	GUID      string // the GUID in the sibling .meta, empty when Unity has not written one yet
 }
 
-// IndexAssemblyDefinitions maps every assembly name in the project to the .asmdef that declares it.
-func IndexAssemblyDefinitions(projectRoot string) (map[string]AssemblyDefinition, error) {
-	index := map[string]AssemblyDefinition{}
+// projectIndexRoots lists the directories a project keeps compilable C# under.
+func projectIndexRoots(projectRoot string) []string {
 	roots := []string{
 		filepath.Join(projectRoot, assetsDirectoryName),
 		filepath.Join(projectRoot, packagesDirectoryName),
 		filepath.Join(projectRoot, libraryDirectoryName, packageCacheDirectoryName),
 	}
-	roots = append(roots, localPackageRoots(projectRoot)...)
-	for _, root := range roots {
+
+	return append(roots, localPackageRoots(projectRoot)...)
+}
+
+// IndexAssemblyDefinitions maps every assembly name in the project to the .asmdef that declares it.
+func IndexAssemblyDefinitions(projectRoot string) (map[string]AssemblyDefinition, error) {
+	index := map[string]AssemblyDefinition{}
+	for _, root := range projectIndexRoots(projectRoot) {
 		if !directoryExists(root) {
 			continue
 		}

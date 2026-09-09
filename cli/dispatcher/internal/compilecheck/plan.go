@@ -145,6 +145,9 @@ func selectChangedAssemblies(
 	}
 
 	context := NewAssemblyContext(graph, assemblyDefinitions)
+	if referenceErr := DetectAssemblyReferenceChange(projectRoot, dagDir, graph, context); referenceErr != nil {
+		return nil, referenceErr
+	}
 	reasons := map[string]string{}
 	for _, name := range graph.names {
 		rsp := graph.byName[name]

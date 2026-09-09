@@ -29,7 +29,9 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    assembly's sources are re-globbed from its own directory, stopping at nested assembly
    boundaries; the files an `.asmref` attaches to it are taken from the last build's response file
    instead, wherever that folder sits — including inside a nested assembly's directory, which the
-   glob never reaches.
+   glob never reaches. Both an `.asmdef` and an `.asmref` are checked against the response file
+   once their timestamp says they may have moved, because either one can hand a folder's sources to
+   a different assembly without editing a single `.cs` file.
 4. **Check that the response files still describe the project.** An assembly definition that was
    added, removed, or that stopped building for the Editor, and a reference or a precompiled
    reference that was added to one, invalidate the recorded build. The run then stops with
@@ -62,8 +64,12 @@ The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, 
   settings are compared against the response file, because they reach `csc` and can be read without
   evaluating defines or package versions: whether the assembly still builds for the Editor, a
   project reference it gained, `allowUnsafeCode` turning on, and a precompiled reference it gained
-  under `overrideReferences`. A new or deleted `.asmdef` is detected too. Those cases — and only
-  those — stop the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED` and ask for `uloop compile`.
+  under `overrideReferences`. A new or deleted `.asmdef` is detected too, as are the two ways
+  assembly membership moves without any `.cs` file changing: an `.asmdef` that no longer sits over
+  any source its response file recorded (it was moved into another assembly's folder), and an
+  `.asmref` written after the last build whose folder holds sources the assembly it names does not
+  record (it was added or moved). Those cases — and only those — stop the run with
+  `COMPILE_CHECK_UNITY_BUILD_REQUIRED` and ask for `uloop compile`.
   Every other edit listed below is invisible to the check: the run proceeds and silently reuses
   what the last build recorded.
 - **A removed `.asmdef` reference is not detected.** Unity injects references of its own that no
@@ -84,8 +90,9 @@ The project has never been built by this Editor, or `Library` was deleted. Open 
 (`uloop launch`) and let it compile, then retry.
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: an assembly definition no longer matches the last build**
-Raised when an `.asmdef` was added or deleted, or when one of the four compared settings changed
-(no longer builds for the Editor, gained a project reference, turned on `allowUnsafeCode`, gained a
+Raised when an `.asmdef` was added, deleted or moved, when an `.asmref` was added or moved over
+sources another assembly still records, or when one of the four compared settings changed (no
+longer builds for the Editor, gained a project reference, turned on `allowUnsafeCode`, gained a
 precompiled reference under `overrideReferences`). This is the intended refusal, not a bug. Run
 `uloop compile` once so Unity rewrites the response files, then `compile-check` works again against
 the new configuration.
