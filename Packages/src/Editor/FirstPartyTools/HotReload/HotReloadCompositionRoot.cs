@@ -19,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Invariant: at most one hot-reload introduced type resolver is subscribed to
     /// AppDomain.AssemblyResolve at a time, so a single bind is never answered from two domains'
     /// artifacts. A replacement scope keeps it by suspending the resolver it takes over from.
+    /// Ownership of a domain belongs to whoever brought it in: a scope suspends and disposes only
+    /// the domain it installed itself, and a replacement that shares the installed domain does
+    /// neither, because the services it hands back still run on that domain.
     /// </remarks>
     internal static class HotReloadCompositionRoot
     {
