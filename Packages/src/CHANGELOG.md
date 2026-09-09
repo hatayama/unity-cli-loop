@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.2](https://github.com/hatayama/unity-cli-loop/compare/v3.6.1...v3.6.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* Hot reload no longer reports a change that is not actually live ([#2741](https://github.com/hatayama/unity-cli-loop/issues/2741)) ([fa6d872](https://github.com/hatayama/unity-cli-loop/commit/fa6d872108db77443a8ab99a2f4dd9016079e8b2))
+
 ## [3.6.1](https://github.com/hatayama/unity-cli-loop/compare/v3.6.0...v3.6.1) (2026-09-08)
 
 
