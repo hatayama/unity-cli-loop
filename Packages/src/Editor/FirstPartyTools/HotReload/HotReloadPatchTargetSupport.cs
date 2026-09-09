@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // an artifact assembly whose owner declaration still has to be verified, so an
             // unchanged source must reach that verification with its ledger entry intact.
             HotReloadUnchangedSourceDecision unchangedDecision = HotReloadUnchangedSourceDecision.NotUnchanged;
-            if (!HotReloadIntroducedTypeHolder.Registry.HasActiveTypesForOriginalAssembly(assemblyName))
+            if (!HotReloadCompositionRoot.Services.Domain.IntroducedTypes.HasActiveTypesForOriginalAssembly(assemblyName))
             {
                 unchangedDecision = HotReloadAppliedSourceLifecycle.TryShortCircuitUnchangedAppliedSource(
                     workerSourcePath,

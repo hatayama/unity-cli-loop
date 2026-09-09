@@ -41,12 +41,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string probeHash = new HotReloadSourceContentHasher().ComputeContentHash(probeBytes);
             HashSet<string> activeLabels = CollectActiveLabelsForFile(projectRelativePath);
             (string Hash, bool IsFullyApplied)? recorded =
-                HotReloadDomainSlot.Current.TryGetAppliedSource(projectRelativePath);
+                HotReloadTranspilerDomainGateway.Current.TryGetAppliedSource(projectRelativePath);
             if (recorded == null
                 || !string.Equals(probeHash, recorded.Value.Hash, StringComparison.Ordinal)
                 || (recorded.Value.IsFullyApplied && activeLabels.Count == 0))
             {
-                HotReloadDomainSlot.Current.ClearAppliedSource(projectRelativePath);
+                HotReloadTranspilerDomainGateway.Current.ClearAppliedSource(projectRelativePath);
                 return HotReloadUnchangedSourceDecision.NotUnchanged;
             }
 
@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 for (int index = 0; index < sortedLabels.Count; index++)
                 {
                     string label = sortedLabels[index];
-                    string reason = HotReloadDomainSlot.Current.IsActiveMember(
+                    string reason = HotReloadTranspilerDomainGateway.Current.IsActiveMember(
                         projectRelativePath,
                         label)
                         ? HotReloadConstants.AlreadyActiveAddedMemberReason
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadUnchangedSourceDecision.ShortCircuited;
             }
 
-            HotReloadDomainSlot.Current.ClearAppliedSource(projectRelativePath);
+            HotReloadTranspilerDomainGateway.Current.ClearAppliedSource(projectRelativePath);
             return HotReloadUnchangedSourceDecision.ReapplyNonBaseline;
         }
 
@@ -149,14 +149,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
             IReadOnlyList<string> addedKeys =
-                HotReloadDomainSlot.Current.ListActiveAddedMethodKeys(projectRelativePath);
+                HotReloadTranspilerDomainGateway.Current.ListActiveAddedMethodKeys(projectRelativePath);
             for (int index = 0; index < addedKeys.Count; index++)
             {
                 labels.Add(addedKeys[index]);
             }
 
             IReadOnlyList<string> patchedKeys =
-                HotReloadDomainSlot.Current.ListActiveMethodKeys(projectRelativePath);
+                HotReloadTranspilerDomainGateway.Current.ListActiveMethodKeys(projectRelativePath);
             for (int index = 0; index < patchedKeys.Count; index++)
             {
                 labels.Add(patchedKeys[index]);

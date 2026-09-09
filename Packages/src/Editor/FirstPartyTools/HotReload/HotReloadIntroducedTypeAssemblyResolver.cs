@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             new Dictionary<string, Assembly>(StringComparer.Ordinal);
         private int resolutionCount;
         private bool disposed;
+        private bool suspended;
 
         internal int ResolutionCount => Volatile.Read(ref resolutionCount);
 
@@ -50,8 +51,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new PreparedAssemblyScope(gate, preparedAssemblies, artifact.AssemblyFullName);
         }
 
+        /// <summary>
+        /// Detaches this resolver from AppDomain.AssemblyResolve without ending its life, so a
+        /// replacement resolver can be the only one answering binds while it is installed.
+        /// </summary>
+        /// <remarks>
+        /// Why not Dispose: the suspended resolver is put back when the replacement scope closes,
+        /// and a disposed one can neither answer binds nor accept a prepared registration again.
+        /// </remarks>
+        public void Suspend()
+        {
+            bool detach;
+            lock (gate)
+            {
+                RequireNotDisposed();
+                // A second Suspend must not detach a handler this resolver no longer has attached.
+                detach = !suspended;
+                suspended = true;
+            }
+
+            if (!detach)
+            {
+                return;
+            }
+
+            // Detaching outside the gate keeps the handler subscription change off the lock a
+            // resolve on another thread may already hold.
+            AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
+        }
+
+        /// <summary>
+        /// Reattaches a suspended resolver to AppDomain.AssemblyResolve.
+        /// </summary>
+        public void Resume()
+        {
+            bool attach;
+            lock (gate)
+            {
+                RequireNotDisposed();
+                // A second Resume must not subscribe the same handler twice, which would make one
+                // resolver answer a single bind two times.
+                attach = suspended;
+                suspended = false;
+            }
+
+            if (!attach)
+            {
+                return;
+            }
+
+            AppDomain.CurrentDomain.AssemblyResolve += Resolve;
+        }
+
         public void Dispose()
         {
+            bool detach;
             lock (gate)
             {
                 if (disposed)
@@ -60,12 +114,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 disposed = true;
+                // A suspended resolver has already detached its handler, so detaching again would
+                // remove a subscription that belongs to whichever resolver is installed now.
+                detach = !suspended;
                 preparedAssemblies.Clear();
+            }
+
+            if (!detach)
+            {
+                return;
             }
 
             // Detaching outside the gate keeps the handler subscription change off the lock a
             // resolve on another thread may already hold.
             AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
+        }
+
+        // Suspending or resuming a resolver whose handler is already gone for good would leave the
+        // caller believing this domain still answers binds.
+        private void RequireNotDisposed()
+        {
+            if (disposed)
+            {
+                throw new ObjectDisposedException(nameof(HotReloadIntroducedTypeAssemblyResolver));
+            }
         }
 
         internal Assembly ResolveExact(string requestedAssemblyFullName)

@@ -1,35 +1,34 @@
-using System.Collections.Concurrent;
-using System.Threading;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Counts how many times each hot-reload patched method body has run since it was applied.
-    /// Keys match <see cref="HotReloadPatcher"/> status labels so --status can report counts.
+    /// The fixed entry point patched method bodies reach the current domain's invocation counts
+    /// through.
     /// </summary>
+    /// <remarks>
+    /// Why a static gateway rather than an injected value: the caller is emitted IL inside a
+    /// patched body, which can only call a static method. The counts themselves live in
+    /// <see cref="HotReloadInvocationCounts"/>, owned by the domain and installed here by the
+    /// composition root.
+    /// </remarks>
     internal static class HotReloadInvocationRegistry
     {
-        private sealed class Counter
-        {
-            public long Value;
-        }
-
-        private static readonly ConcurrentDictionary<string, Counter> CountsByMethodKey =
-            new ConcurrentDictionary<string, Counter>();
+        /// <summary>
+        /// The counts of the domain currently installed, or null while none is. Set by the
+        /// composition root only.
+        /// </summary>
+        internal static HotReloadInvocationCounts Current { get; set; }
 
         /// <summary>
         /// Increments the counter for <paramref name="methodKey"/>. Called from patched IL on
-        /// every invocation; Interlocked keeps the hot path safe under concurrent callers.
+        /// every invocation, including from threads other than the editor's main thread.
         /// </summary>
         public static void Increment(string methodKey)
         {
-            if (string.IsNullOrEmpty(methodKey))
-            {
-                return;
-            }
-
-            Counter counter = CountsByMethodKey.GetOrAdd(methodKey, _ => new Counter());
-            Interlocked.Increment(ref counter.Value);
+            // Why the slot is read once into a local: a patched body can run while the composition
+            // root swaps domains, and reading twice could increment one set and clear another.
+            // A count lost to that swap is accepted: the patch it counted is being torn down.
+            HotReloadInvocationCounts counts = Current;
+            counts?.Increment(methodKey);
         }
 
         /// <summary>
@@ -37,17 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static long GetCount(string methodKey)
         {
-            if (string.IsNullOrEmpty(methodKey))
-            {
-                return 0L;
-            }
-
-            if (!CountsByMethodKey.TryGetValue(methodKey, out Counter counter))
-            {
-                return 0L;
-            }
-
-            return Interlocked.Read(ref counter.Value);
+            HotReloadInvocationCounts counts = Current;
+            return counts == null ? 0L : counts.GetCount(methodKey);
         }
 
         /// <summary>
@@ -55,12 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static void Remove(string methodKey)
         {
-            if (string.IsNullOrEmpty(methodKey))
-            {
-                return;
-            }
-
-            CountsByMethodKey.TryRemove(methodKey, out _);
+            HotReloadInvocationCounts counts = Current;
+            counts?.Remove(methodKey);
         }
 
         /// <summary>
@@ -68,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static void Clear()
         {
-            CountsByMethodKey.Clear();
+            HotReloadInvocationCounts counts = Current;
+            counts?.Clear();
         }
     }
 }

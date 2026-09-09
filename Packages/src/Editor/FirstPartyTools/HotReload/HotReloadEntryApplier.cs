@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // from the run response would wipe added fields that are still live.
         internal static void CommitAddedFieldsForFile(string projectRelativePath, string[] addedFieldNames)
         {
-            HotReloadDomainSlot.Current.FindGeneration(projectRelativePath)?.ReplaceAddedFields(
+            HotReloadTranspilerDomainGateway.Current.FindGeneration(projectRelativePath)?.ReplaceAddedFields(
                 addedFieldNames ?? Array.Empty<string>());
         }
 

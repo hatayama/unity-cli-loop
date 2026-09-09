@@ -369,7 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadPatcher.Revert(original, out string _),
                     Is.EqualTo(HotReloadRevertOutcome.Reverted));
 
-                bool found = HotReloadDomainSlot.Current.TryGetSupersededReplacement(
+                bool found = HotReloadTranspilerDomainGateway.Current.TryGetSupersededReplacement(
                     methodKey,
                     out string _);
                 Assert.That(found, Is.False);

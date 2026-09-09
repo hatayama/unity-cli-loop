@@ -117,13 +117,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             try
             {
-                using (HotReloadIntroducedTypeHolder.BeginReplacement())
+                using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
                 {
-                    HotReloadIntroducedTypeHolder.Initialize();
                     ActivateArtifactWithOneType();
 
                     Assert.That(
-                        HotReloadDomainSlot.Current.IntroducedTypeCount,
+                        HotReloadTranspilerDomainGateway.Current.IntroducedTypeCount,
                         Is.EqualTo(1),
                         "Arrange: the domain must hold exactly one introduced type.");
 
@@ -167,8 +166,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "artifact.dll",
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
-            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
         private static async Task<HotReloadResponse> ExecuteStatusAsync(CancellationToken ct)

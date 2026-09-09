@@ -48,18 +48,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// exposes activated, so both sides of the pair are the same instance.
         /// </summary>
         [Test]
-        public void Holder_AfterInitialize_ResolverAndRegistryShareOneInstance()
+        public void CompositionRoot_AfterInstall_ResolverAndRegistryShareOneInstance()
         {
             HotReloadIntroducedTypeArtifact artifact = CreateArtifact();
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-                HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
 
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Resolver.ResolveExact(artifact.AssemblyFullName),
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypeResolver.ResolveExact(artifact.AssemblyFullName),
                     Is.SameAs(artifact.Assembly));
             }
         }
@@ -69,15 +68,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// port, so a tool that cannot reference this assembly sees what the registry holds.
         /// </summary>
         [Test]
-        public void Holder_AfterInitialize_PublishesActiveTypeNamesThroughTheToolContractPort()
+        public void CompositionRoot_AfterInstall_PublishesActiveTypeNamesThroughTheToolContractPort()
         {
             HotReloadIntroducedTypeArtifact artifact = CreateArtifact();
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
-                HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
 
                 Func<IReadOnlyList<string>> describe =
                     HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames;
@@ -85,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 List<string> expected = new List<string>();
                 foreach (HotReloadIntroducedTypeDescriptor descriptor
-                    in HotReloadIntroducedTypeHolder.Registry.DescribeActive())
+                    in HotReloadCompositionRoot.Services.Domain.IntroducedTypes.DescribeActive())
                 {
                     expected.Add(descriptor.MetadataName.Value);
                 }
@@ -100,20 +98,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// activated inside the scope is no longer resolvable afterwards.
         /// </summary>
         [Test]
-        public void Holder_ReplacementScopeClosed_RestoresTheOriginalPair()
+        public void CompositionRoot_ReplacementScopeClosed_RestoresTheOriginalPair()
         {
             HotReloadIntroducedTypeArtifact artifact = CreateArtifact();
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                HotReloadIntroducedTypeRegistry scoped = HotReloadIntroducedTypeHolder.Registry;
+                HotReloadIntroducedTypeRegistry scoped = HotReloadCompositionRoot.Services.Domain.IntroducedTypes;
                 scoped.RegisterPrepared(artifact);
                 scoped.Activate(artifact);
             }
 
             Assert.That(
-                HotReloadIntroducedTypeHolder.Resolver.ResolveExact(artifact.AssemblyFullName),
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypeResolver.ResolveExact(artifact.AssemblyFullName),
                 Is.Null);
         }
 
@@ -123,18 +120,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// again through a live resolver.
         /// </summary>
         [Test]
-        public void Holder_ReplacementScopeOpen_OnlyTheReplacementResolverAnswersBinds()
+        public void CompositionRoot_ReplacementScopeOpen_OnlyTheReplacementResolverAnswersBinds()
         {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
-                HotReloadIntroducedTypeRegistry outerRegistry = HotReloadIntroducedTypeHolder.Registry;
-                HotReloadIntroducedTypeAssemblyResolver outerResolver = HotReloadIntroducedTypeHolder.Resolver;
+                HotReloadIntroducedTypeRegistry outerRegistry = HotReloadCompositionRoot.Services.Domain.IntroducedTypes;
+                HotReloadIntroducedTypeAssemblyResolver outerResolver = HotReloadCompositionRoot.Services.Domain.IntroducedTypeResolver;
 
-                using (HotReloadIntroducedTypeHolder.BeginReplacement())
+                using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
                 {
-                    HotReloadIntroducedTypeHolder.Initialize();
-                    HotReloadIntroducedTypeAssemblyResolver innerResolver = HotReloadIntroducedTypeHolder.Resolver;
+                    HotReloadIntroducedTypeAssemblyResolver innerResolver = HotReloadCompositionRoot.Services.Domain.IntroducedTypeResolver;
                     int innerBefore = innerResolver.ResolutionCount;
                     int outerBefore = outerResolver.ResolutionCount;
 
@@ -147,8 +142,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "The taken-over resolver must be unsubscribed, or two resolvers answer one bind.");
                 }
 
-                Assert.That(HotReloadIntroducedTypeHolder.Registry, Is.SameAs(outerRegistry));
-                HotReloadIntroducedTypeAssemblyResolver restoredResolver = HotReloadIntroducedTypeHolder.Resolver;
+                Assert.That(HotReloadCompositionRoot.Services.Domain.IntroducedTypes, Is.SameAs(outerRegistry));
+                HotReloadIntroducedTypeAssemblyResolver restoredResolver = HotReloadCompositionRoot.Services.Domain.IntroducedTypeResolver;
                 int restoredBefore = restoredResolver.ResolutionCount;
 
                 RequestUnknownAssembly();
@@ -174,9 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIntroducedTypeArtifact preparedArtifact = null;
             string ownerAssemblyName = null;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     HotReloadGroupProcessorDependencies.Create(
                         HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
@@ -241,14 +235,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerAssemblyName = ResolveAssemblyName(callerPath);
             TransformWorkerInputDto transformInput = null;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadIntroducedTypeArtifact staleArtifact = CreateArtifactForTarget(
                     callerAssemblyName,
                     "0000000000000000000000000000000000000000");
-                HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(staleArtifact);
-                HotReloadIntroducedTypeHolder.Registry.Activate(staleArtifact);
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(staleArtifact);
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(staleArtifact);
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     HotReloadGroupProcessorDependencies.Create(
                         HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
@@ -293,9 +286,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
             HotReloadIntroducedTypeArtifact preparedArtifact = null;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateArtifactCapturingDependencies(artifact => preparedArtifact = artifact)))
                 {
@@ -310,11 +302,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 Assert.That(preparedArtifact, Is.Not.Null, "The run had to prepare the introduced type.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.PreparedCount,
                     Is.EqualTo(0),
                     "The commit boundary must move the prepared membership, not leave it prepared.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.TryFindActive(
                         preparedArtifact.Descriptors,
                         out HotReloadIntroducedTypeArtifact activeArtifact),
                     Is.True,
@@ -341,9 +333,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIntroducedTypeArtifact firstArtifact = null;
             List<int> preparedDescriptorCounts = new List<int>();
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreatePreparationCountingDependencies(
                         preparedDescriptorCounts,
@@ -395,11 +386,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(new[] { 1, 0 }),
                     "The second run must introduce no type, because the one it declares is active.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(1),
                     "A re-declared type must not add a second active artifact.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.TryFindActive(
                         firstArtifact.Descriptors,
                         out HotReloadIntroducedTypeArtifact activeArtifact),
                     Is.True);
@@ -423,9 +414,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
             HotReloadIntroducedTypeArtifact firstArtifact = null;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateArtifactCapturingDependencies(artifact =>
                     {
@@ -466,15 +456,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(1),
                     "A refused redefinition must leave the already active type in place.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.PreparedCount,
                     Is.EqualTo(0),
                     "A refused redefinition must leave no prepared membership behind.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.TryFindActive(
                         firstArtifact.Descriptors,
                         out HotReloadIntroducedTypeArtifact activeArtifact),
                     Is.True);
@@ -493,9 +483,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateDependenciesWithFailedResolutionFor(Path.GetFileName(callerPath))))
                 {
@@ -522,9 +511,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIntroducedTypeArtifact preparedArtifact = null;
             HotReloadOrchestratorResult result;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateArtifactCapturingDependencies(artifact => preparedArtifact = artifact)))
                 {
@@ -542,11 +530,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.Null,
                     "A reload that only introduces a type must not fail any method.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.PreparedCount,
                     Is.EqualTo(0),
                     "The commit boundary must move the prepared membership, not leave it prepared.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.TryFindActive(
                         preparedArtifact.Descriptors,
                         out HotReloadIntroducedTypeArtifact activeArtifact),
                     Is.True,
@@ -566,9 +554,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             HotReloadOrchestratorResult result;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 result = await HotReloadOrchestrator.RunAsync(
                     new[] { hostPath },
                     HotReloadTestSourceWriter.WriteEditedSource(
@@ -612,9 +599,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadOrchestratorResult baseRun = await HotReloadOrchestrator.RunAsync(
                     new[] { hostPath },
                     WriteBaseTypeSource(hostPath),
@@ -625,7 +611,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.Null,
                     "Precondition: the base type had to be introduced. " + DescribeOutcomes(baseRun));
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(1),
                     "Precondition: the base type had to become active.");
 
@@ -640,7 +626,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "A declaration deriving from an active introduced type must compile. "
                         + DescribeOutcomes(derivedRun));
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(2),
                     "The derived type must become active alongside the base it was compiled against.");
                 Assert.That(
@@ -661,9 +647,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                     new[] { hostPath, callerPath },
                     contentPathOverride: null,
@@ -680,7 +665,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(0),
                     "A type failure must not be reported a second time as a method row.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(0),
                     "A refused group must activate no type.");
                 Assert.That(
@@ -701,9 +686,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
             string holderPath = FixturePath("HotReloadCrossFileAddedMemberHolder.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                     new[] { hostPath, callerPath, holderPath },
                     contentPathOverride: null,
@@ -716,7 +700,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Every file that declares the type must report the refusal. "
                         + DescribeOutcomes(result));
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(0),
                     "A refused group must activate no type.");
             }
@@ -732,9 +716,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                     new[] { hostPath, callerPath },
                     contentPathOverride: null,
@@ -751,7 +734,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "The second double-declared type must be named as well. "
                         + DescribeOutcomes(result));
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(0),
                     "A refused group must activate no type.");
             }
@@ -768,9 +751,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
             HotReloadOrchestratorResult result;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateDependenciesWithAfterGateAction(
                         () => HotReloadEditorStateSnapshotProvider.CaptureForTesting =
@@ -798,9 +780,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateDependenciesWithRebuiltTargetAfterWorker()))
                 {
@@ -828,9 +809,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Dictionary<string, string> edits = CreateIntroducedTypeEdits(hostPath, callerPath, "OwnerDrift");
             HotReloadOrchestratorResult result;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateDependenciesWithBeforeWorkerAction(() => AppendMarkerComment(edits[hostPath]))))
                 {
@@ -856,9 +836,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateDependenciesWithUnverifiableOwner()))
                 {
@@ -884,9 +863,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateDependenciesWithBlankedHashFor(Path.GetFileName(callerPath))))
                 {
@@ -913,9 +891,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Dictionary<string, string> edits = CreateIntroducedTypeEdits(hostPath, callerPath, "RequestDrift");
             HotReloadOrchestratorResult result;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateDependenciesWithAfterGateAction(() => AppendMarkerComment(edits[callerPath]))))
                 {
@@ -945,11 +922,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Not.Null,
                 "The run must report why it stopped at the commit boundary.");
             Assert.That(
-                HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.PreparedCount,
                 Is.EqualTo(0),
                 "A run stopped at the commit boundary must leave no prepared membership.");
             Assert.That(
-                HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                 Is.EqualTo(0),
                 "A run stopped at the commit boundary must activate no type.");
             Assert.That(
@@ -1312,9 +1289,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
             List<string> stages = new List<string>();
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateRecordingDependencies(stages)))
                 {
@@ -1330,7 +1306,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 // The commit boundary that activates a run is a later stage, so the prepared
                 // membership the run registered must be gone again once the run ends.
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.PreparedCount,
                     Is.EqualTo(0),
                     "A finished run must leave no prepared membership behind.");
             }
@@ -1360,9 +1336,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
             List<string> stages = new List<string>();
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateFailingMembershipDependencies(stages)))
                 {
@@ -1374,11 +1349,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.PreparedCount,
                     Is.EqualTo(0),
                     "A group dropped at owner validation must leave no prepared membership.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(0),
                     "A group dropped at owner validation must activate no type.");
             }
@@ -1401,9 +1376,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> stages = new List<string>();
             int patchesBefore = HotReloadPatcher.ActivePatchCount;
 
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadIntroducedTypeHolder.Initialize();
                 using (HotReloadGroupProcessorDependencies.BeginReplacement(
                     CreateFailingPreparationDependencies(stages)))
                 {
@@ -1415,11 +1389,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.PreparedCount,
                     Is.EqualTo(0),
                     "A failed preparation must leave no prepared membership behind.");
                 Assert.That(
-                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveCount,
                     Is.EqualTo(0),
                     "A failed preparation must activate no type.");
             }

@@ -47,10 +47,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
             HashSet<string> candidates = new HashSet<string>(comparer);
-            AddCandidatePaths(candidates, HotReloadDomainSlot.Current.ListActiveFilePaths());
+            AddCandidatePaths(candidates, HotReloadTranspilerDomainGateway.Current.ListActiveFilePaths());
             AddCandidatePaths(
                 candidates,
-                HotReloadDomainSlot.Current.ListPathsWithActiveAddedMembers());
+                HotReloadTranspilerDomainGateway.Current.ListPathsWithActiveAddedMembers());
 
             HashSet<string> assemblyFiles = new HashSet<string>(comparer);
             for (int index = 0; index < assemblySourceFiles.Length; index++)
@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             (string Hash, bool IsFullyApplied)? recorded =
-                HotReloadDomainSlot.Current.TryGetAppliedSource(path);
+                HotReloadTranspilerDomainGateway.Current.TryGetAppliedSource(path);
             if (recorded == null)
             {
                 return;
