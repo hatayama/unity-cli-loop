@@ -435,13 +435,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines = firstFile.CompilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = HotReloadShimReferenceBuilder.BuildWorkerReferencePaths(
                     firstFile.CompilationAssembly,
-                    firstFile.TargetDllPath),
-                targetTypesAssemblyPath = Path.GetFullPath(firstFile.TargetDllPath),
+                    firstFile.Home),
+                targetTypesAssemblyPath = Path.GetFullPath(firstFile.Home.DllPath),
                 // The retained records normalize an introduced type back to the generation of the
                 // assembly that owns its source, so every run has to name that generation even
                 // before it carries a record of its own.
                 targetAssemblyName = firstFile.AssemblyName,
-                targetAssemblyMvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(firstFile.TargetDllPath),
+                targetAssemblyMvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(firstFile.Home.DllPath),
                 assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(
                     firstFile.ProjectRoot,
                     firstFile.CompilationAssembly.sourceFiles),

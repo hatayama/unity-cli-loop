@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadIsolationRetryContext(
             TransformWorkerInputDto workerInput,
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome home,
             string[] defines,
             TransformWorkerSkippedDto[] firstPassSkipped,
             HotReloadGroupFilePaths groupFilePaths,
@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             WorkerInput = workerInput;
             CompilationAssembly = compilationAssembly;
-            TargetDllPath = targetDllPath;
+            Home = home;
             Defines = defines;
             FirstPassSkipped = firstPassSkipped;
             GroupFilePaths = groupFilePaths;
@@ -28,7 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal TransformWorkerInputDto WorkerInput { get; }
         internal UnityCompilationAssembly CompilationAssembly { get; }
-        internal string TargetDllPath { get; }
+        // Where the retried group's patch target types live.
+        internal HotReloadTypeHome Home { get; }
         internal string[] Defines { get; }
 
         // The first-pass skip rows the retry compares against, so only skips new to the retry surface.

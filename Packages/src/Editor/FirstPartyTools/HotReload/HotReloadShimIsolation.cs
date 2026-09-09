@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerOutputDto workerOutput,
             HotReloadShimCompileResult compileResult,
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome targetHome,
             string[] defines,
             HotReloadGroupFilePaths groupFilePaths,
             string correlationId,
@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadIsolationRetryContext retryContext = new HotReloadIsolationRetryContext(
                 workerInput,
                 compilationAssembly,
-                targetDllPath,
+                targetHome,
                 defines,
                 workerOutput.skipped,
                 groupFilePaths,
@@ -189,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool includeAddedFieldStoreReference = HotReloadShimReferenceBuilder.NeedsAddedFieldStoreReference(retryOutput);
             HotReloadShimReferenceBuilder.ShimReferencePathsResult shimReferencePaths = HotReloadShimReferenceBuilder.TryBuildShimReferencePaths(
                 context.CompilationAssembly,
-                context.TargetDllPath,
+                context.Home,
                 includeHarmonyReference,
                 includeAddedFieldStoreReference,
                 workerInput.introducedTypeArtifacts);
