@@ -28,13 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             typeof(HotReloadPatcher).GetMethod(
                 nameof(ReplaceWithDelegationTranspiler),
                 BindingFlags.NonPublic | BindingFlags.Static);
-        private static readonly MethodInfo IncrementInvocationMethodInfo =
-            typeof(HotReloadInvocationRegistry).GetMethod(
-                nameof(HotReloadInvocationRegistry.Increment),
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { typeof(string) },
-                null);
+        private static readonly MethodInfo IncrementInvocationMethodInfo = ResolveIncrementInvocationMethod();
 
         private readonly HotReloadDomain _domain;
         private readonly IHotReloadHarmony _harmony;
@@ -316,7 +310,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadFileGeneration generation = TranspilerDomain.FindGenerationForMethod(original);
             MethodInfo shimMethod = generation?.FindPatchShim(original);
-            Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
+            if (shimMethod == null)
+            {
+                throw new InvalidOperationException("Shim must be registered before Patch runs.");
+            }
+
             // Discard the original (and any prior transpiler) instructions entirely — the shim IL
             // is the whole replacement body.
             // Read shim IL without letting MethodBodyReader declare locals on a throwaway path, then
@@ -344,12 +342,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadFileGeneration generation = TranspilerDomain.FindGenerationForMethod(original);
             MethodInfo shimMethod = generation?.FindPatchShim(original);
-            Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
+            if (shimMethod == null)
+            {
+                throw new InvalidOperationException("Shim must be registered before Patch runs.");
+            }
 
             int argumentSlotCount = original.GetParameters().Length + (original.IsStatic ? 0 : 1);
-            Debug.Assert(
-                argumentSlotCount == shimMethod.GetParameters().Length,
-                "Shim parameter count must equal the original's argument slots (instance receiver included).");
+            if (argumentSlotCount != shimMethod.GetParameters().Length)
+            {
+                throw new InvalidOperationException(
+                    "Shim parameter count must equal the original's argument slots (instance receiver included).");
+            }
 
             List<CodeInstruction> forwarding = new List<CodeInstruction>(argumentSlotCount + 4);
             PrependInvocationCountIncrement(forwarding, original, generation);
@@ -363,6 +366,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return forwarding;
         }
 
+        // Why resolve through a method: every patched body calls this counter, so a signature the
+        // transpiler cannot find has to stop the patch here rather than emit a call to null.
+        private static MethodInfo ResolveIncrementInvocationMethod()
+        {
+            MethodInfo method = typeof(HotReloadInvocationRegistry).GetMethod(
+                nameof(HotReloadInvocationRegistry.Increment),
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(string) },
+                null);
+            if (method == null)
+            {
+                throw new InvalidOperationException("Increment method must resolve.");
+            }
+
+            return method;
+        }
+
         // What: records one invocation before the patched body runs (transplant or delegation).
         // Why move entry labels onto Ldstr: branches targeting the old first instruction must
         // still hit the counter when that instruction is no longer at offset 0.
@@ -371,7 +392,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase original,
             HotReloadFileGeneration generation)
         {
-            Debug.Assert(IncrementInvocationMethodInfo != null, "Increment method must resolve.");
             CodeInstruction loadKey = new CodeInstruction(OpCodes.Ldstr, HotReloadMethodKeys.FormatMethodLabel(original));
             CodeInstruction increment = new CodeInstruction(OpCodes.Call, IncrementInvocationMethodInfo);
             if (instructions.Count > 0 && instructions[0].labels.Count > 0)

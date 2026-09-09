@@ -569,12 +569,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a Harmony rebuild failure while reverting keeps the whole ledger entry of the
-        /// still-patched method, including the transplant locals and preamble length that
-        /// pause-point reads when it joins the shim chain.
+        /// What: a Harmony rebuild failure while reverting leaves the method's generation holding
+        /// the patch whole, including the transplant locals and preamble length that pause point
+        /// reads when it joins the shim chain.
         /// </summary>
         [Test]
-        public void Revert_WhenHarmonyCannotRebuild_KeepsTransplantLedgerForTheLivePatch()
+        public void Revert_WhenHarmonyCannotRebuild_KeepsTheLivePatchInItsGeneration()
         {
             MethodInfo failing = AccessTools.Method(
                 typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
@@ -599,14 +599,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         Is.EqualTo(HotReloadRevertOutcome.UnpatchFailed));
                     harmony.RefuseUnpatch = false;
 
+                    HotReloadFileGeneration generation =
+                        HotReloadCompositionRoot.Services.Domain.FindGenerationForMethod(failing);
+                    Assert.That(generation, Is.Not.Null, "The refused revert must leave the method claimed.");
+                    Assert.That(generation.IsPatchActive(failing), Is.True);
                     Assert.That(
                         HotReloadPausePointCoordination.HotReloadSide.GetTransplantLocals(failing),
                         Is.Not.Null,
-                        "The transpiler is still live, so pause-point must still find its transplant locals.");
+                        "The transpiler is still live, so pause point must still find its transplant locals.");
                     Assert.That(
                         HotReloadPausePointCoordination.HotReloadSide.GetTransplantPreambleLength(failing),
                         Is.GreaterThan(0),
-                        "The retained entry must keep the preamble length pause-point offsets against.");
+                        "The retained patch must keep the preamble length pause point offsets against.");
                 }
                 finally
                 {
