@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
+using HarmonyLib;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -62,6 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void BeginAddedMemberOnlyGeneration_KeepsTheShimGeneration()
         {
             HotReloadFileGeneration generation = _access.GetOrBeginShimGeneration(FileOne);
+            generation.RegisterShimMethod(
+                GetAddedTarget(),
+                new HotReloadShimMethodEntry(GetAddedTarget(), false, 1, 2));
             generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FileOne);
             Assert.That(
                 _access.Domain.ListActiveAddedMethodKeys(FileOne),
@@ -71,7 +75,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _access.Domain.BeginAddedMemberOnlyGeneration(FileOne);
 
             Assert.That(_access.HasShimGeneration(FileOne), Is.True);
+            Assert.That(
+                generation.FindShim(GetAddedTarget()),
+                Is.Not.Null,
+                "The registered shim method must survive an added-member-only start.");
             Assert.That(_access.Domain.ListActiveAddedMethodKeys(FileOne), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: restarting one file's added-member generation drops that file's members only, so a
+        /// sibling file edited in the same run keeps the members it registered.
+        /// </summary>
+        [Test]
+        public void BeginAddedMemberOnlyGeneration_DropsThatFilesMembersOnly()
+        {
+            _access.RegisterAddedMember(FileOne, AddedMethodKey, GetAddedTarget(), FileOne);
+            _access.RegisterAddedMember(FileTwo, OtherAddedMethodKey, GetAddedTarget(), FileTwo);
+
+            _access.Domain.BeginAddedMemberOnlyGeneration(FileOne);
+
+            Assert.That(_access.Domain.ListActiveAddedMethodKeys(FileOne), Is.Empty);
+            Assert.That(
+                _access.Domain.ListActiveAddedMethodKeys(FileTwo),
+                Is.EqualTo(new[] { OtherAddedMethodKey }));
+            Assert.That(
+                _access.Domain.ListPathsWithActiveAddedMembers(),
+                Is.EqualTo(new[] { FileTwo }));
         }
 
         /// <summary>
@@ -231,6 +260,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: re-applying the same method from a different file path retires the patch its
+        /// first path owns, so the method ends up patched once, owned by the newer path, and one
+        /// revert takes it out entirely.
+        /// </summary>
+        [Test]
+        public void ApplyFromASecondPath_RetiresThePatchTheFirstPathOwns()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture),
+                nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims),
+                nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+
+            Assert.That(
+                _access.ApplyPatch(original, shim, HotReloadPatchShape.Transplant, FileOne).Success,
+                Is.True);
+            Assert.That(
+                _access.ApplyPatch(original, shim, HotReloadPatchShape.Transplant, FileTwo).Success,
+                Is.True);
+
+            Assert.That(
+                _access.Domain.ActivePatchCount,
+                Is.EqualTo(1),
+                "The method must hold one live patch, not one per path it was applied from.");
+            Assert.That(
+                _access.Domain.FindGenerationForMethod(original).Path,
+                Is.EqualTo(FileTwo));
+
+            Assert.That(
+                HotReloadPatcher.Revert(original, out string _),
+                Is.EqualTo(HotReloadRevertOutcome.Reverted));
+
+            Assert.That(_access.Domain.ActivePatchCount, Is.EqualTo(0));
+            Assert.That(
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FileOne),
+                Is.Null);
+            Assert.That(
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FileTwo),
+                Is.Null);
+        }
+
+        /// <summary>
         /// What: an added member with no patched method still counts, both as a patch-and-added
         /// member and in the total a Domain Reload would discard.
         /// </summary>
@@ -299,6 +371,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _access.Domain.RevertAll();
 
             Assert.That(_access.HasAddedMemberGeneration(FileOne), Is.False);
+            Assert.That(_access.HasAddedMemberGeneration(FileTwo), Is.False);
+            Assert.That(_access.HasShimGeneration(FileOne), Is.False);
             Assert.That(_access.Domain.ListGenerations(), Is.Empty);
             Assert.That(
                 HotReloadAddedFieldStore.GetOrInitStatic(staticFieldKey, () => 20),
@@ -307,6 +381,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_access.Domain.DescribeAddedMembers(), Is.Empty);
             Assert.That(HotReloadInvocationRegistry.GetCount(AddedMethodKey), Is.EqualTo(0));
             Assert.That(_access.Domain.TryGetAppliedSource(FileOne), Is.Null);
+            Assert.That(_access.Domain.TryGetAppliedSource(FileTwo), Is.Null);
             Assert.That(
                 _access.Domain.TryGetSupersededReplacement(SupersededMethodKey, out string _),
                 Is.False);
@@ -314,11 +389,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private void FillEveryStore(string staticFieldKey)
         {
+            _access.GetOrBeginShimGeneration(FileOne).RegisterShimMethod(
+                GetAddedTarget(),
+                new HotReloadShimMethodEntry(GetAddedTarget(), false, 1, 2));
             _access.RegisterAddedMember(FileOne, AddedMethodKey, GetAddedTarget(), FileOne);
+            _access.RegisterAddedMember(FileTwo, OtherAddedMethodKey, GetAddedTarget(), FileTwo);
             HotReloadAddedFieldStore.SetStatic(staticFieldKey, 2);
             _access.ReplaceAddedFields(FileOne, new[] { "DomainHost.count" });
+            _access.ReplaceAddedFields(FileTwo, new[] { "DomainHost.label" });
             HotReloadInvocationRegistry.Increment(AddedMethodKey);
             _access.Domain.RecordAppliedSource(FileOne, "hash", true);
+            _access.Domain.RecordAppliedSource(FileTwo, "other-hash", false);
             _access.RecordSupersededSignature(FileOne, SupersededMethodKey, "Superseded(int)");
         }
 

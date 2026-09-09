@@ -82,14 +82,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"'{method}' has no hot-reload generation for '{filePath}' to patch into.");
             }
 
-            if (generation.IsPatchActive(method))
+            // Why the owner is looked up across generations rather than asked of this file's
+            // generation: a method's live patch belongs to whichever file's generation applied it,
+            // and a rename or move re-applies the same method from a different path. Asking only
+            // this generation would miss that patch and stack a second transpiler on the method.
+            HotReloadFileGeneration patchOwner = Domain.FindGenerationForMethod(method);
+            if (patchOwner != null && patchOwner.IsPatchActive(method))
             {
                 // Why the patch is retired before Unpatch: same as Revert — during Unpatch Harmony
                 // rebuilds the method and pause-point ChainJoin must see GetActiveShimForMethod ==
                 // null, or it injects donor instruction indexes into the restored original IL
                 // stream. Do not remove the shim registration here: ApplyEntry already registered
                 // this method into the new generation before calling Apply.
-                generation.DeactivatePatch(method);
+                patchOwner.DeactivatePatch(method);
                 HotReloadInvocationRegistry.Remove(HotReloadMethodKeys.FormatMethodLabel(method));
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 // Mirror the removal: if the re-Patch below fails, its contained Unpatch rebuilds
