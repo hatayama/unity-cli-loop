@@ -213,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 firstFile.AssemblyName,
                 correlationId,
                 firstFile.CompilationAssembly,
-                firstFile.TargetDllPath,
+                firstFile.Home,
                 firstFile.CompilationAssembly.defines ?? Array.Empty<string>(),
                 workerInput,
                 workerOutput,

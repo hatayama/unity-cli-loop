@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerEntryDto[] entries = fileEntries.ToArray();
             HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
-                HotReloadTypeHome.ScriptAssemblies(file.AssemblyName, file.TargetDllPath),
+                file.Home,
                 file.AssemblyResolvePath,
                 compileResult.Assembly,
                 entries,

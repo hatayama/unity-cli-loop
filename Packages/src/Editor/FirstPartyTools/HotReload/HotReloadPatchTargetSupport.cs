@@ -97,24 +97,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            HotReloadTypeHome home = domain.ResolveTypeHome(projectRoot, assemblyName);
 
-            if (!File.Exists(targetDllPath))
+            if (!File.Exists(home.DllPath))
             {
                 outcomes.Add(
                     HotReloadMethodOutcome.Failed(
                         "(file)",
-                        "Compiled assembly not found at '" + targetDllPath + "'. Compile the project first.",
+                        "Compiled assembly not found at '" + home.DllPath + "'. Compile the project first.",
                         assemblyResolvePath));
                 return HotReloadPatchTargetResolution.EarlyExit(
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
-            string mvidGuardError = CheckMvidGuard(
-                HotReloadTypeHome.ScriptAssemblies(assemblyName, targetDllPath));
+            string mvidGuardError = CheckMvidGuard(home);
             if (mvidGuardError != null)
             {
                 outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
@@ -131,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     projectRelativePath,
                     assemblyName,
                     compilationAssembly,
-                    targetDllPath,
+                    home.DllPath,
                     out newSourceMembershipEvidence);
                 if (membershipFailure != null)
                 {
@@ -168,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 assemblyName,
                 compilationAssembly,
-                targetDllPath,
+                home,
                 projectRoot,
                 unchangedDecision,
                 newSourceMembershipEvidence);
