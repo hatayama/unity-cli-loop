@@ -105,20 +105,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return generation != null && generation.HasAddedMemberGeneration;
         }
 
-        /// <summary>Drops the added members and fields of every file, leaving live patches alone.</summary>
-        internal void ClearAddedMembersAndFields()
-        {
-            IReadOnlyList<HotReloadFileGeneration> generations = Domain.ListGenerations();
-            for (int index = 0; index < generations.Count; index++)
-            {
-                generations[index].BeginAddedMemberGeneration();
-            }
-        }
-
-        /// <summary>Empties every store the domain owns, as a revert-all would.</summary>
-        internal void ResetDomain()
-        {
-            Domain.RevertAll();
-        }
     }
 }

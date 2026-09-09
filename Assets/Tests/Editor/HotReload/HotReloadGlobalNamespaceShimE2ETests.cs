@@ -24,17 +24,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostValueAnchor = "    public int Value()";
         private const string CallerCallBodyAnchor = "return host.Value();";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }

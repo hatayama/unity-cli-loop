@@ -22,17 +22,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FirstMetadataName = "Fixture.IntroducedOne";
         private const string SecondMetadataName = "Fixture.IntroducedTwo";
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 

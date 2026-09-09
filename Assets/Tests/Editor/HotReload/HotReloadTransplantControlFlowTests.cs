@@ -17,10 +17,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadTransplantControlFlowTests
     {
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
         }
 
         // Why NoInlining: repo convention for patch-target fixtures — without it the

@@ -12,8 +12,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     /// <remarks>
     /// Why one place: the collaborators a test replaces are constructor arguments now, so every
-    /// substitution builds a whole services graph. PR-8 replaces the body of these helpers with
-    /// the domain test scope without touching the tests that call them.
+    /// substitution builds a whole services graph. These helpers stay separate from
+    /// <see cref="HotReloadDomainTestScope"/>: they substitute one collaborator on the installed
+    /// graph, while the domain scope brings a whole graph of its own.
     /// </remarks>
     internal static class HotReloadServicesTestScope
     {

@@ -26,18 +26,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
 
+        private HotReloadDomainTestScope _scope;
+
         [SetUp]
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            _scope.Dispose();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
         }
@@ -194,24 +196,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
             const string methodKey = "Host.NewHelper(System.Int32)";
             RegisterAddedMemberForStatus(filePath, methodKey);
-            try
-            {
-                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
-                HotReloadMethodResult addedRow = FindStatusRow(
-                    response,
-                    HotReloadConstants.AddedMemberStatusKind,
-                    methodKey);
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+            HotReloadMethodResult addedRow = FindStatusRow(
+                response,
+                HotReloadConstants.AddedMemberStatusKind,
+                methodKey);
 
-                Assert.That(
-                    addedRow.Reason,
-                    Is.EqualTo(
-                        "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
-                Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
-            }
-            finally
-            {
-                new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
-            }
+            Assert.That(
+                addedRow.Reason,
+                Is.EqualTo(
+                    "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
+            Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
         }
 
         /// <summary>
@@ -433,7 +428,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedField.cs";
             const string methodKey = "Host.NewHelper(System.Int32)";
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
-            new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
             try
             {
                 ApplyCoreFixtureTransplant(
@@ -467,7 +461,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadCompositionRoot.Services.Patcher.RevertAll();
-                new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
             }
         }
 
@@ -1592,29 +1585,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void BuildApplyResponse_CopiesAddedFieldTotalFromLiveRegistry()
         {
-            new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
-            try
-            {
-                new HotReloadDomainTestAccess().ReplaceAddedFields(
-                    "Assets/Tests/Editor/HotReload/ApplyAddedFieldTotal.cs",
-                    new[] { "Ns.Host.score" });
-                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
-                    new HotReloadOrchestratorResult(
-                        new List<HotReloadMethodOutcome>
-                        {
-                            HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
-                        },
-                        new List<string>(),
-                        patchedTotal: 1,
-                        activePatchTotal: 1));
+            new HotReloadDomainTestAccess().ReplaceAddedFields(
+                "Assets/Tests/Editor/HotReload/ApplyAddedFieldTotal.cs",
+                new[] { "Ns.Host.score" });
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
 
-                Assert.That(response.AddedFieldTotal, Is.EqualTo(1));
-                Assert.That(response.ActivePatchTotal, Is.EqualTo(1));
-            }
-            finally
-            {
-                new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
-            }
+            Assert.That(response.AddedFieldTotal, Is.EqualTo(1));
+            Assert.That(response.ActivePatchTotal, Is.EqualTo(1));
         }
 
         /// <summary>

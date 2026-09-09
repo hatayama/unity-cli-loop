@@ -15,6 +15,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class HotReloadAutoRefreshHoldTests
     {
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _scope.Dispose();
+        }
+
         private sealed class FakeEnvironment
         {
             internal bool Held;
@@ -330,7 +344,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ReconcileForTesting_StaleFlagWithEmptyLedger_AllowsOnceAndClearsFlag()
         {
             FakeEnvironment environment = new FakeEnvironment { Held = true };
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
             try
             {
@@ -365,7 +378,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Held = true,
                 AllowException = new InvalidOperationException("reload")
             };
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
             try
             {
