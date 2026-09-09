@@ -38,6 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // hold from one that merely found it armed. What the caller promised is "the first apply
         // that arms the hold", which only the state before the run answers.
         private readonly bool _autoRefreshHeldAtStart;
+        private readonly HotReloadDomain _domain;
+        private readonly HotReloadPatcher _patcher;
         private int _patchedTotal;
         private int _unchangedTotal;
         private int _revertedUnchangedTotal;
@@ -46,8 +48,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Whether the Auto Refresh hold was already armed when the run started. Read on the Unity
         /// main thread, because the flag lives in SessionState.
         /// </param>
-        public HotReloadRunAccumulator(bool autoRefreshHeldAtStart)
+        public HotReloadRunAccumulator(
+            HotReloadDomain domain,
+            HotReloadPatcher patcher,
+            bool autoRefreshHeldAtStart)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(patcher != null, "patcher must not be null.");
+            _domain = domain;
+            _patcher = patcher;
             _autoRefreshHeldAtStart = autoRefreshHeldAtStart;
         }
 
@@ -98,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in _appliedSourceHashByPath)
             {
-                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(
+                _domain.RecordAppliedSource(
                     pair.Key,
                     pair.Value.Hash,
                     pair.Value.IsFullyApplied);
@@ -139,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 methods: _outcomes,
                 warnings: _warnings,
                 patchedTotal: _patchedTotal,
-                activePatchTotal: HotReloadCompositionRoot.Services.Patcher.ActiveChangeCount,
+                activePatchTotal: _patcher.ActiveChangeCount,
                 suppressedPausePointIds: _suppressedPausePointIds,
                 unchangedTotal: _unchangedTotal,
                 retargetedPausePointIds: _retargetedPausePointIds,

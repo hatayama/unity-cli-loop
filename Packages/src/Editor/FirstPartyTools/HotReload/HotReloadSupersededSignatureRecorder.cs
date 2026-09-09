@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -15,11 +17,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// compiled signature it would have superseded.
         /// </remarks>
         public static void RecordFromAppliedEntries(
+            HotReloadDomain domain,
             string projectRelativePath,
             IReadOnlyList<TransformWorkerEntryDto> appliedEntries,
             IReadOnlyList<TransformWorkerRemovedMethodSignatureDto> removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
             if (appliedEntries == null || removedMethodSignatures == null)
             {
                 return;
@@ -28,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why the file's own generation: the signature a patch superseded belongs to the file
             // whose apply superseded it, and is discarded with that file's generation.
             HotReloadFileGeneration generation =
-                HotReloadCompositionRoot.Services.Domain.FindGeneration(projectRelativePath);
+                domain.FindGeneration(projectRelativePath);
             if (generation == null)
             {
                 return;

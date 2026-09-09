@@ -92,6 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static string TryCapture(
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             string projectRoot,
             string projectRelativePath,
             string assemblyName,
@@ -99,10 +100,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetDllPath,
             out HotReloadNewSourceMembershipEvidence evidence)
         {
+            Debug.Assert(editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             evidence = null;
-            string notReadyReason =
-                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture.CaptureCurrent()
-                    .GetNotReadyReason();
+            string notReadyReason = editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
             if (notReadyReason != null)
             {
                 return notReadyReason;
@@ -140,12 +140,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        internal static string TryRevalidate(HotReloadNewSourceMembershipEvidence evidence)
+        internal static string TryRevalidate(
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
+            HotReloadNewSourceMembershipEvidence evidence)
         {
+            Debug.Assert(editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             Debug.Assert(evidence != null, "evidence must not be null.");
-            string notReadyReason =
-                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture.CaptureCurrent()
-                    .GetNotReadyReason();
+            string notReadyReason = editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
             if (notReadyReason != null)
             {
                 return notReadyReason;
@@ -210,8 +211,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        internal static string TryRevalidateFiles(IReadOnlyList<HotReloadGroupFile> files)
+        internal static string TryRevalidateFiles(
+            HotReloadGroupStageCollaborators collaborators,
+            IReadOnlyList<HotReloadGroupFile> files)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             Debug.Assert(files != null && files.Count > 0, "files must not be empty.");
             for (int index = 0; index < files.Count; index++)
             {
@@ -221,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string failure = TryRevalidate(evidence);
+                string failure = TryRevalidate(collaborators.EditorStateSnapshotCapture, evidence);
                 if (failure != null)
                 {
                     return failure;

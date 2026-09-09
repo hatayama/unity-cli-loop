@@ -17,21 +17,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadGroupProcessorDependencies _dependencies;
         private readonly HotReloadFileEntryApplier _fileEntryApplier;
         private readonly HotReloadEntryApplier _entryApplier;
+        private readonly HotReloadGroupCommitPolicy _commitPolicy;
 
         internal HotReloadGroupCommitStage(
             HotReloadDomain domain,
             HotReloadGroupProcessorDependencies dependencies,
             HotReloadFileEntryApplier fileEntryApplier,
-            HotReloadEntryApplier entryApplier)
+            HotReloadEntryApplier entryApplier,
+            HotReloadGroupCommitPolicy commitPolicy)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(dependencies != null, "dependencies must not be null.");
             Debug.Assert(fileEntryApplier != null, "fileEntryApplier must not be null.");
             Debug.Assert(entryApplier != null, "entryApplier must not be null.");
+            Debug.Assert(commitPolicy != null, "commitPolicy must not be null.");
             _domain = domain;
             _dependencies = dependencies;
             _fileEntryApplier = fileEntryApplier;
             _entryApplier = entryApplier;
+            _commitPolicy = commitPolicy;
         }
 
         internal bool HoldsUnresolvedFile(IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
@@ -92,7 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadIntroducedTypeOutcomeSink.Append(files, BuildIntroducedRows(prepared.Artifact));
             }
 
-            bool commitsIntroducedTypes = CommitsIntroducedTypes(prepared, files[0].AssemblyName);
+            bool commitsIntroducedTypes =
+                _commitPolicy.CommitsIntroducedTypes(prepared, files[0].AssemblyName);
             if (commitsIntroducedTypes)
             {
                 _entryApplier.RevertUnchangedPatchesPerFile(
@@ -107,7 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // a failed recheck can no longer undo. A run without types already cleared.
                 if (commitsIntroducedTypes)
                 {
-                    ClearEmptyFileGenerations(context);
+                    _commitPolicy.ClearEmptyFileGenerations(context);
                 }
 
                 return _fileEntryApplier.BuildUnappliedGroupResults(files);
@@ -138,36 +143,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return rows;
         }
 
-        // A run whose introduced types become active at the commit boundary: the reload either
-        // introduces a type itself, or the assembly it targets already owns one this domain
-        // introduced, in which case its patches resolve through the artifact assemblies too.
-        internal bool CommitsIntroducedTypes(
-            HotReloadPreparedIntroducedTypes prepared,
-            string targetAssemblyName)
-        {
-            return prepared != null
-                || _domain.IntroducedTypes.HasActiveTypesForOriginalAssembly(targetAssemblyName);
-        }
-
-        // Deleting an added method and restoring its callers yields empty entries, so the
-        // post-shim-compile BeginFileGeneration never runs and the previous run's generation would
-        // otherwise stay live.
-        internal void ClearEmptyFileGenerations(HotReloadApplyContext context)
-        {
-            foreach (HotReloadGroupFile file in context.Files)
-            {
-                // A file left unapplied on purpose keeps the previous run's generation even with no
-                // entries: clearing it here would let a reload of broken source silently drop the
-                // added members the previous run applied.
-                if (file.SkipApply)
-                {
-                    continue;
-                }
-
-                _fileEntryApplier.ClearFileGeneration(context, file);
-            }
-        }
-
         // Why per file: a group applies file by file, so only the rows that actually reached
         // Harmony may claim their removed signatures were superseded. A partly applied file
         // patches some rows and leaves the rest failed or file-atomically skipped.
@@ -180,6 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadGroupFile file = context.Files[index];
                 Debug.Assert(file.FileOutput != null, "Every file must carry its worker output row.");
                 HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                    _domain,
                     file.ProjectRelativePath,
                     file.Sinks.AppliedEntries,
                     file.FileOutput.removedMethodSignatures

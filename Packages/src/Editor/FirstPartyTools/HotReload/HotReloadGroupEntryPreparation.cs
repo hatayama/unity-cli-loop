@@ -19,10 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadGroupEntryPreparation
     {
         internal static IReadOnlyList<HotReloadPreparedGroupFile> PrepareGroup(
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context,
             HotReloadShimCompileResult compileResult,
             TransformWorkerEntryDto[] entriesToPatch)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(compileResult != null, "compileResult must not be null.");
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
@@ -32,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why once for the group: every shim type of the group lives in this one assembly, so
             // binding per file would re-run the same binders and hide which file first failed.
             Dictionary<string, string> bindFailures =
-                HotReloadCompositionRoot.Services.EntryApplier.BindShimAccessors(compileResult.Assembly);
+                collaborators.EntryApplier.BindShimAccessors(compileResult.Assembly);
             List<HotReloadPreparedGroupFile> prepared =
                 new List<HotReloadPreparedGroupFile>(context.Files.Count);
             foreach (HotReloadGroupFile file in context.Files)

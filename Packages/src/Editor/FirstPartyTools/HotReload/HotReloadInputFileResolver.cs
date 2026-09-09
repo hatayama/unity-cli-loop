@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -9,6 +11,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadInputFileResolver
     {
+        private readonly HotReloadDomain _domain;
+        private readonly IHotReloadPackageRootCapture _packageRootCapture;
+        private readonly IHotReloadEditorStateSnapshotCapture _editorStateSnapshotCapture;
+
+        internal HotReloadInputFileResolver(
+            HotReloadDomain domain,
+            IHotReloadPackageRootCapture packageRootCapture,
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
+            Debug.Assert(
+                editorStateSnapshotCapture != null,
+                "editorStateSnapshotCapture must not be null.");
+            _domain = domain;
+            _packageRootCapture = packageRootCapture;
+            _editorStateSnapshotCapture = editorStateSnapshotCapture;
+        }
+
         // Resolves one input path's patch target and either records its early result or enrolls
         // it in the group plan.
         internal void ResolveInputFile(
@@ -31,6 +52,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> alreadyActiveOutcomes = new List<HotReloadMethodOutcome>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                _domain,
+                _packageRootCapture,
+                _editorStateSnapshotCapture,
                 filePath,
                 workerSourcePath,
                 sinks.Outcomes,
@@ -40,7 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (resolution.IsEarlyExit)
             {
                 slot.Result = resolution.EarlyResult;
-                slot.ResultPath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
+                slot.ResultPath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                    _packageRootCapture,
+                    filePath);
                 return;
             }
 
@@ -73,7 +99,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
                 foreach (KeyValuePair<string, string> pair in overrideByFile)
                 {
-                    string keyRelative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(pair.Key);
+                    string keyRelative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                        _packageRootCapture,
+                        pair.Key);
                     if (comparer.Equals(keyRelative, projectRelativePath))
                     {
                         return Path.GetFullPath(pair.Value);

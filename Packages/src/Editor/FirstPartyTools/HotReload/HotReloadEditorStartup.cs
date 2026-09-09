@@ -31,6 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // null delegate as "nothing to lose".
             HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount =
                 () => HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal;
+            // Why the same shape for these two: both run from Editor callbacks that take no
+            // argument, so they have to read whichever services are installed when they fire.
+            HotReloadAutoRefreshHold.GetServices = () => HotReloadCompositionRoot.Services;
+            HotReloadPlayModeEntryDropRecorder.GetServices = () => HotReloadCompositionRoot.Services;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();

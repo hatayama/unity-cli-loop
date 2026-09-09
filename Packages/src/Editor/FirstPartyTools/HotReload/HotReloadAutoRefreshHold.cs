@@ -18,6 +18,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static double _nextReconcileTime;
 
         /// <summary>
+        /// Reads the installed services when the hold syncs itself.
+        /// </summary>
+        /// <remarks>
+        /// Why a provider and not a captured value: this syncs from Editor callbacks that take no
+        /// argument, and a replacement scope installs another domain while those callbacks stay
+        /// registered, so a value captured at startup would count the wrong domain's changes.
+        /// </remarks>
+        internal static Func<HotReloadServices> GetServices { get; set; }
+
+        /// <summary>
         /// Test hook that replaces Unity AssetDatabase calls with recording delegates.
         /// </summary>
         internal static HotReloadAutoRefreshHoldService OverrideServiceForTesting
@@ -43,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </remarks>
         internal static HotReloadAutoRefreshHoldSyncResult SyncToActiveChanges()
         {
-            return Sync(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal);
+            Debug.Assert(GetServices != null, "GetServices must be set before the hold syncs.");
+            return Sync(GetServices().Domain.CountActiveChanges().RuntimeChangeTotal);
         }
 
         internal static HotReloadAutoRefreshHoldSyncResult FlushDeferredRefresh()

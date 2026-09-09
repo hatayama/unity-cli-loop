@@ -101,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why after the clear: a still-declared added method can be worker-skipped
             // (virtual/generic), leaving entries empty while the registry drop is real.
             HotReloadAppliedSourceLifecycle.AppendDeactivatedPatchesWarning(
+                _domain,
                 file.Sinks.Warnings,
                 file.SnapshotLabels,
                 file.SnapshotAddedLabels,
@@ -168,6 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why here as well as the empty-entries return: apply can drop a still-declared
             // added member by not re-Registering it after BeginFileGeneration.
             HotReloadAppliedSourceLifecycle.AppendDeactivatedPatchesWarning(
+                _domain,
                 sinks.Warnings,
                 file.SnapshotLabels,
                 file.SnapshotAddedLabels,

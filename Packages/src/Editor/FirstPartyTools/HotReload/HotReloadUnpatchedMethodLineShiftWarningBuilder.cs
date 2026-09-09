@@ -49,12 +49,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadMethodOutcome> methods,
             Func<string, string> readEditedSource,
             Func<string, string> readCompiledSource,
+            Func<string, string> toProjectRelativeScriptPath,
             IReadOnlyCollection<string> reappliedSiblingPaths)
         {
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(methods != null, "methods must not be null.");
             Debug.Assert(readEditedSource != null, "readEditedSource must not be null.");
             Debug.Assert(readCompiledSource != null, "readCompiledSource must not be null.");
+            Debug.Assert(
+                toProjectRelativeScriptPath != null,
+                "toProjectRelativeScriptPath must not be null.");
             Debug.Assert(reappliedSiblingPaths != null, "reappliedSiblingPaths must not be null.");
 
             StringComparer fileComparer = Application.platform == RuntimePlatform.WindowsEditor
@@ -63,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<LineShiftFileBucket> buckets = CollectUniqueFileBuckets(
                 methods,
                 reappliedSiblingPaths,
+                toProjectRelativeScriptPath,
                 fileComparer);
             List<string> continuingFiles = new List<string>();
             for (int index = 0; index < buckets.Count; index++)
@@ -98,11 +103,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static List<LineShiftFileBucket> CollectUniqueFileBuckets(
             IReadOnlyList<HotReloadMethodOutcome> methods,
             IReadOnlyCollection<string> reappliedSiblingPaths,
+            Func<string, string> toProjectRelativeScriptPath,
             StringComparer fileComparer)
         {
             List<LineShiftFileBucket> buckets = new List<LineShiftFileBucket>();
             Dictionary<string, LineShiftFileBucket> byFile = new Dictionary<string, LineShiftFileBucket>(fileComparer);
-            HashSet<string> siblingKeys = BuildReappliedSiblingKeys(reappliedSiblingPaths, fileComparer);
+            HashSet<string> siblingKeys = BuildReappliedSiblingKeys(
+                reappliedSiblingPaths,
+                toProjectRelativeScriptPath,
+                fileComparer);
             for (int index = 0; index < methods.Count; index++)
             {
                 string filePath = methods[index].FilePath;
@@ -111,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string canonicalFile = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
+                string canonicalFile = toProjectRelativeScriptPath(filePath);
                 if (!byFile.TryGetValue(canonicalFile, out LineShiftFileBucket bucket))
                 {
                     bucket = new LineShiftFileBucket { CanonicalFile = canonicalFile };
@@ -133,6 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static HashSet<string> BuildReappliedSiblingKeys(
             IReadOnlyCollection<string> reappliedSiblingPaths,
+            Func<string, string> toProjectRelativeScriptPath,
             StringComparer fileComparer)
         {
             HashSet<string> keys = new HashSet<string>(fileComparer);
@@ -143,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                keys.Add(HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(path));
+                keys.Add(toProjectRelativeScriptPath(path));
             }
 
             return keys;

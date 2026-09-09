@@ -195,6 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     || (parameters.Files != null && parameters.Files.Length > 0))
                 {
                     return CreateValidationFailure(
+                        services,
                         new HotReloadValidationFailure(
                             "--status cannot be combined with --files or --revert-all.",
                             HotReloadValidationErrorCodes.StatusConflict,
@@ -216,7 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadValidationFailure validationFailure = ValidateApplyParameters(parameters);
             if (validationFailure != null)
             {
-                return CreateValidationFailure(validationFailure);
+                return CreateValidationFailure(services, validationFailure);
             }
 
             // Why here and not only at the run entry: the tool normalizes script paths for its own
@@ -227,7 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 services.ChangeDetector.Detect);
             if (selection.ValidationFailure != null)
             {
-                return CreateValidationFailure(selection.ValidationFailure);
+                return CreateValidationFailure(services, selection.ValidationFailure);
             }
 
             HotReloadOrchestratorResult result = await services.Orchestrator
@@ -239,7 +240,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.Methods,
                 result.IntroducedTypes);
 
-            HotReloadResponse response = BuildApplyResponse(result, selection.ScanLimitWarnings);
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                services,
+                result,
+                selection.ScanLimitWarnings);
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
             {
                 response.Message = selection.SelectionMessage + " " + response.Message;
@@ -274,21 +278,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
+        // Why this reads the services itself: the apply path above passes the services it read
+        // at its own entry, and this shim exists only for callers that hold a result but not the
+        // run that produced it.
         internal static HotReloadResponse BuildApplyResponse(
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings = null)
         {
-            return HotReloadApplyResponseBuilder.Build(result, additionalWarnings);
+            return HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                result,
+                additionalWarnings);
         }
 
-        private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)
+        private static HotReloadResponse CreateValidationFailure(
+            HotReloadServices services,
+            HotReloadValidationFailure failure)
         {
+            Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(failure != null, "failure must not be null.");
             // Why two numbers from one read: the suffix warns that the refusal left something
             // live, and an introduced type is live even when nothing is patched. ActivePatchTotal
             // counts patched methods and added members, which is what callers read it against
             // PatchedTotal for; the runtime total adds the introduced types on top.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadCompositionRoot.Services.Domain.CountActiveChanges();
+            HotReloadActiveChangeSnapshot snapshot = services.Domain.CountActiveChanges();
             int activePatchTotal = snapshot.PatchAndAddedMemberCount;
             int runtimeChangeTotal = snapshot.RuntimeChangeTotal;
             string message = failure.Message;

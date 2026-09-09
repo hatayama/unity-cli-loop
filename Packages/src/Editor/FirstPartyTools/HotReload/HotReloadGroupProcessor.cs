@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class HotReloadGroupProcessor
     {
         private readonly HotReloadGroupProcessorDependencies _dependencies;
+        private readonly HotReloadGroupStageCollaborators _collaborators;
         private readonly HotReloadDomain _domain;
         private readonly HotReloadFileEntryApplier _fileEntryApplier;
         private readonly HotReloadEntryApplier _entryApplier;
@@ -30,20 +31,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal HotReloadGroupProcessor(
             HotReloadGroupProcessorDependencies dependencies,
-            HotReloadDomain domain,
-            HotReloadFileEntryApplier fileEntryApplier,
-            HotReloadEntryApplier entryApplier,
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadGroupCommitStage commitStage)
         {
             Debug.Assert(dependencies != null, "dependencies must not be null.");
-            Debug.Assert(domain != null, "domain must not be null.");
-            Debug.Assert(fileEntryApplier != null, "fileEntryApplier must not be null.");
-            Debug.Assert(entryApplier != null, "entryApplier must not be null.");
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             Debug.Assert(commitStage != null, "commitStage must not be null.");
             _dependencies = dependencies;
-            _domain = domain;
-            _fileEntryApplier = fileEntryApplier;
-            _entryApplier = entryApplier;
+            _collaborators = collaborators;
+            _domain = collaborators.Domain;
+            _fileEntryApplier = collaborators.FileEntryApplier;
+            _entryApplier = collaborators.EntryApplier;
             _commitStage = commitStage;
         }
 
@@ -201,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why a run that commits types skips it: peeling a patch here would mutate the domain
             // before the commit boundary, which a failed recheck could then no longer undo, so
             // such a run reverts at the boundary instead.
-            if (!_commitStage.CommitsIntroducedTypes(prepared, files[0].AssemblyName)
+            if (!_collaborators.CommitPolicy.CommitsIntroducedTypes(prepared, files[0].AssemblyName)
                 && !await RevalidateBeforeRevertAsync(
                     files,
                     ct,
@@ -241,9 +239,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// decide whether there is anything left to apply.
         /// </summary>
         internal static async Task<HotReloadGroupGateAndCompileResult> GateAndCompileAsync(
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context,
             CancellationToken ct)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             // The worker-bound continuation after the pre-revert check is not guaranteed to
             // resume on Unity's context, while the signature gate reads compilation state.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -251,12 +251,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadGroupFile> files = context.Files;
             HotReloadGroupFile gateWarningSink = files[0];
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
+                collaborators,
                 context,
                 ct).ConfigureAwait(false);
             HotReloadWorkerNoticeAppender.AppendRetrySiblingConstDriftWarnings(
                 gateWarningSink.Sinks.SiblingDerivedWarnings,
                 gateResult.Isolation);
-            HotReloadGroupNotices.AppendRemovedMemberNotices(context, gateResult);
+            HotReloadGroupNotices.AppendRemovedMemberNotices(collaborators.Patcher, context, gateResult);
             if (gateResult.FileFailed)
             {
                 // Why not apply first-pass entries: a gate retry null means the replacement was
@@ -276,6 +277,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             gateWarningSink.Sinks.Warnings.AddRange(gateResult.Warnings);
 
             HotReloadGroupCompileResult compile = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                collaborators,
                 context,
                 gateResult,
                 ct).ConfigureAwait(false);
@@ -317,13 +319,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             ct.ThrowIfCancellationRequested();
-            if (!TryAppendNewSourceMembershipFailure(context.Files))
+            if (!TryAppendNewSourceMembershipFailure(_collaborators, context.Files))
             {
                 return _fileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
             ct.ThrowIfCancellationRequested();
-            string staleReason = HotReloadGroupCommitBoundary.DescribeStaleReason(context);
+            string staleReason =
+                HotReloadGroupCommitBoundary.DescribeStaleReason(_collaborators, context);
             if (staleReason != null)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(context.Files, "(file)", staleReason);
@@ -354,9 +357,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _commitStage.Commit(context, gateResult, compile, preparedFiles);
         }
 
-        internal static bool TryAppendNewSourceMembershipFailure(IReadOnlyList<HotReloadGroupFile> files)
+        internal static bool TryAppendNewSourceMembershipFailure(
+            HotReloadGroupStageCollaborators collaborators,
+            IReadOnlyList<HotReloadGroupFile> files)
         {
-            string failure = HotReloadNewSourceMembershipValidator.TryRevalidateFiles(files);
+            string failure =
+                HotReloadNewSourceMembershipValidator.TryRevalidateFiles(collaborators, files);
             if (failure == null)
             {
                 return true;
@@ -374,7 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(revertUnchangedPatches != null, "revertUnchangedPatches must not be null.");
             await MainThreadSwitcher.SwitchToMainThread(ct);
             ct.ThrowIfCancellationRequested();
-            if (!TryAppendNewSourceMembershipFailure(files))
+            if (!TryAppendNewSourceMembershipFailure(_collaborators, files))
             {
                 return false;
             }
@@ -391,8 +397,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why snapshot at the group's apply entry: runs process groups sequentially, and
                 // RevertUnchangedPatches / BeginFileGeneration mutate ledgers after the worker.
                 // The worker itself does not.
-                file.SnapshotLabels =
-                    HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(file.ProjectRelativePath);
+                file.SnapshotLabels = HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(
+                    _domain,
+                    file.ProjectRelativePath);
                 file.SnapshotAddedLabels = new HashSet<string>(
                     _domain.ListActiveAddedMethodKeys(file.ProjectRelativePath),
                     StringComparer.Ordinal);

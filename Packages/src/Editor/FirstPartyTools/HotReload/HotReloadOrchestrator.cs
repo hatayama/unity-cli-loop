@@ -20,19 +20,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadDeferredInputClassifier _deferredInputClassifier;
         private readonly HotReloadSiblingRebindReporter _siblingRebindReporter;
         private readonly IHotReloadPackageRootCapture _packageRootCapture;
+        private readonly HotReloadDomain _domain;
+        private readonly HotReloadPatcher _patcher;
 
         internal HotReloadOrchestrator(
+            HotReloadDomain domain,
+            HotReloadPatcher patcher,
             HotReloadGroupProcessor groupProcessor,
             HotReloadInputFileResolver inputFileResolver,
             HotReloadDeferredInputClassifier deferredInputClassifier,
             HotReloadSiblingRebindReporter siblingRebindReporter,
             IHotReloadPackageRootCapture packageRootCapture)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(patcher != null, "patcher must not be null.");
             Debug.Assert(groupProcessor != null, "groupProcessor must not be null.");
             Debug.Assert(inputFileResolver != null, "inputFileResolver must not be null.");
             Debug.Assert(deferredInputClassifier != null, "deferredInputClassifier must not be null.");
             Debug.Assert(siblingRebindReporter != null, "siblingRebindReporter must not be null.");
             Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
+            _domain = domain;
+            _patcher = patcher;
             _groupProcessor = groupProcessor;
             _inputFileResolver = inputFileResolver;
             _deferredInputClassifier = deferredInputClassifier;
@@ -68,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
             // SessionState, which is a main-thread API.
             HotReloadRunAccumulator run =
-                new HotReloadRunAccumulator(HotReloadAutoRefreshHold.IsHeld);
+                new HotReloadRunAccumulator(_domain, _patcher, HotReloadAutoRefreshHold.IsHeld);
             HotReloadInputResolutionSlot[] slots = new HotReloadInputResolutionSlot[files.Count];
             for (int index = 0; index < slots.Length; index++)
             {

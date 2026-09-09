@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Globalization;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -16,10 +18,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// batch that compiled it, so a report built from artifacts would name one row for two
         /// types the caller can each reach by name.
         /// </remarks>
-        internal static List<HotReloadIntroducedTypeResult> BuildActiveRows()
+        internal static List<HotReloadIntroducedTypeResult> BuildActiveRows(HotReloadDomain domain)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors =
-                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.DescribeActive();
+                domain.IntroducedTypes.DescribeActive();
             List<HotReloadIntroducedTypeResult> rows =
                 new List<HotReloadIntroducedTypeResult>(descriptors.Count);
             foreach (HotReloadIntroducedTypeDescriptor descriptor in descriptors)

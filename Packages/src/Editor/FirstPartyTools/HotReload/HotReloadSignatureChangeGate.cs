@@ -17,9 +17,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// trigger means the scanner is not called.
         /// </summary>
         internal static async Task<SignatureChangeGateResult> TryApplySignatureChangeGateAsync(
+            HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context,
             CancellationToken ct)
         {
+            Debug.Assert(collaborators != null, "collaborators must not be null.");
             Debug.Assert(context != null, "context must not be null.");
             TransformWorkerEntryDto[] entries = context.WorkerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
             TransformWorkerRemovedMethodSignatureDto[] removedSignatures = context.RemovedMethodSignatures;
@@ -67,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     entries,
                     context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
             List<HotReloadMethodOutcome> skippedOutcomes = BuildGatedReplacementSkipOutcomes(
+                collaborators.Domain,
                 gatedReplacements,
                 uncoveredCallersByTarget,
                 editedFileMethodIdentitiesByFile,
@@ -86,6 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.GroupFilePaths,
                 context.CorrelationId);
             HotReloadShimIsolation.IsolationRetryRunResult retry = await HotReloadShimIsolation.RunIsolationRetryAsync(
+                collaborators.TransformWorkerClient,
                 retryContext,
                 exclusions,
                 new List<HotReloadMethodOutcome>(),
@@ -263,11 +267,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
+            HotReloadDomain domain,
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget,
             Dictionary<string, HashSet<HotReloadQualifiedMethodIdentity>> editedFileMethodIdentitiesByFile,
             HotReloadGroupFilePaths groupFilePaths)
         {
+            Debug.Assert(domain != null, "domain must not be null.");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto entry in gatedReplacements)
             {
@@ -278,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // this gate, so the previous apply's added members are still listed here.
                 // Why the entry's own file: a group run gates the replacements of several files,
                 // and a member is active per file.
-                if (HotReloadCompositionRoot.Services.Domain.IsActiveMember(
+                if (domain.IsActiveMember(
                         entry.sourceProjectRelativePath,
                         methodLabel))
                 {
