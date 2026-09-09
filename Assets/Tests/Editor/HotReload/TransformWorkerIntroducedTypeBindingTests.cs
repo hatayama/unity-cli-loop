@@ -71,11 +71,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             BindingFixture fixture = CreateFixture("DependencyMovedToArtifact", DirectDependentSource);
 
-            TransformWorkerClientResult beforeSwitch = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult beforeSwitch = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: true, Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                     Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult afterSwitch = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult afterSwitch = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: false, new[] { CreateRetainedArtifact(fixture) },
                     Array.Empty<string>()),
                 CancellationToken.None);
@@ -115,11 +115,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            TransformWorkerClientResult withoutArtifact = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult withoutArtifact = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: true, Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                     Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult withArtifact = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult withArtifact = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: true, new[] { unrelatedArtifact },
                     Array.Empty<string>()),
                 CancellationToken.None);
@@ -142,21 +142,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             BindingFixture fixture = CreateFixture("ArtifactWithoutRecord", DirectDependentSource);
 
-            TransformWorkerClientResult sourceDeclared = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult sourceDeclared = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: true,
                     Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                     Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult recorded = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult recorded = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: false,
                     new[] { CreateRetainedArtifact(fixture) },
                     Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult unrecorded = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult unrecorded = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: false,
@@ -189,10 +189,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerIntroducedTypeArtifactDto reattributed = CreateRetainedArtifact(fixture);
             reattributed.types[0].originalAssemblyMvid = Guid.NewGuid().ToString();
 
-            TransformWorkerClientResult first = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult first = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: false, new[] { recorded }, Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult second = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult second = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: false, new[] { reattributed }, Array.Empty<string>()),
                 CancellationToken.None);
 
@@ -214,14 +214,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string foreignPath = Path.Combine(fixture.Directory, "ForeignRetained.dll");
             CreateRetainedArtifactAssembly(foreignPath, "ForeignRetained");
 
-            TransformWorkerClientResult sourceDeclared = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult sourceDeclared = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: true,
                     Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                     Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult unlisted = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult unlisted = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: false,
@@ -292,7 +292,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: false,
@@ -362,7 +362,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string snapshotSource,
             string introducedMetadataName)
         {
-            TransformWorkerClientResult planned = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult planned = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: false,
@@ -385,7 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource);
             // The declaration is only ever removed by a transform run; planning reports it.
             input.operation = null;
-            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         // The record the reload writes after compiling the planned type into its own assembly:
@@ -441,7 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BindingFixture fixture,
             TransformWorkerIntroducedTypeArtifactDto artifact)
         {
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: true, new[] { artifact }, Array.Empty<string>()),
                 CancellationToken.None);
 
@@ -467,14 +467,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             BindingFixture fixture = CreateFixture("IndirectDependencyMoved", IndirectDependentSource);
 
-            TransformWorkerClientResult beforeSwitch = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult beforeSwitch = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: true,
                     Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                     Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult afterSwitch = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult afterSwitch = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: false,
@@ -501,14 +501,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string foreignPath = Path.Combine(fixture.Directory, "ForeignRetained.dll");
             CreateRetainedArtifactAssembly(foreignPath, "ForeignRetained");
 
-            TransformWorkerClientResult sourceDeclared = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult sourceDeclared = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: true,
                     Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                     Array.Empty<string>()),
                 CancellationToken.None);
-            TransformWorkerClientResult foreignBound = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult foreignBound = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: false,
@@ -533,7 +533,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task Transform_DeclarationReadingRetainedType_StillMatchesItsRecord()
         {
             BindingFixture fixture = CreateFixture("DeclarationReadingRetainedType", DirectDependentSource);
-            TransformWorkerClientResult planned = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult planned = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: true,
@@ -569,7 +569,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<string>());
             // The declaration is only ever removed by a transform run; planning reports it.
             input.operation = null;
-            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         private static TransformWorkerIntroducedTypeArtifactDto CreateDependentArtifact(
@@ -628,7 +628,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             BindingFixture fixture = CreateFixture("DeclarationMatchesActive", DirectDependentSource);
 
-            TransformWorkerClientResult sourceDeclared = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult sourceDeclared = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: true,
@@ -638,7 +638,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(sourceDeclared.Success, Is.True, sourceDeclared.ErrorMessage);
             string activeFingerprint = FindFingerprint(sourceDeclared, "Example.Retained");
 
-            TransformWorkerClientResult reloaded = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult reloaded = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(
                     fixture,
                     includeRetainedSource: true,

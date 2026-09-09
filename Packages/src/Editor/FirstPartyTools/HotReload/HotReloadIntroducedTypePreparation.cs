@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(files != null && files.Count > 0, "A group must hold a file.");
             Debug.Assert(transformInput != null, "The preparation reuses the transform input.");
 
-            TransformWorkerClientResult prepareResult = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult prepareResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 BuildPrepareInput(transformInput),
                 ct).ConfigureAwait(false);
             if (!prepareResult.Success)

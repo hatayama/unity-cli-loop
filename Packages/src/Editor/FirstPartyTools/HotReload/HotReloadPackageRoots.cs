@@ -31,21 +31,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Captures the package folder mapping on the Unity main thread so path normalization can run
     /// on the background threads the hot-reload run switches to.
     /// </summary>
-    internal static class HotReloadPackageRootProvider
+    internal interface IHotReloadPackageRootCapture
     {
-        // Why a replaceable seam: the real mapping is Editor process state, while tests must be able
-        // to prove the normalization against package roots that this project does not contain.
-        internal static Func<IReadOnlyList<HotReloadPackageRoot>> CaptureForTesting = Capture;
-
-        private static IReadOnlyList<HotReloadPackageRoot> _current;
-
         /// <summary>Refreshes the mapping. Must be called from the Unity main thread.</summary>
-        internal static void CaptureCurrent()
+        void CaptureCurrent();
+
+        IReadOnlyList<HotReloadPackageRoot> Current { get; }
+    }
+
+    /// <summary>
+    /// The production capture: reads the packages Unity has registered, and holds the last
+    /// mapping it read.
+    /// </summary>
+    internal sealed class HotReloadPackageRootCapture : IHotReloadPackageRootCapture
+    {
+        private IReadOnlyList<HotReloadPackageRoot> _current;
+
+        public void CaptureCurrent()
         {
-            _current = CaptureForTesting();
+            _current = Capture();
         }
 
-        internal static IReadOnlyList<HotReloadPackageRoot> Current
+        public IReadOnlyList<HotReloadPackageRoot> Current
         {
             get
             {
@@ -56,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     throw new InvalidOperationException(
                         "Hot-reload package roots were never captured. Call "
-                        + nameof(HotReloadPackageRootProvider) + "." + nameof(CaptureCurrent)
+                        + nameof(HotReloadPackageRootCapture) + "." + nameof(CaptureCurrent)
                         + " on the Unity main thread before normalizing script paths.");
                 }
 

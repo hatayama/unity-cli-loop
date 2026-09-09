@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 ActivateArtifactWithTwoTypes();
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteStatus();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus();
 
                 Assert.That(response.IntroducedTypes.Count, Is.EqualTo(2));
                 Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(2));
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteStatus();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus();
 
                 Assert.That(response.IntroducedTypes.Count, Is.EqualTo(0));
                 Assert.That(response.ShouldSerializeIntroducedTypes(), Is.False);
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 ActivateArtifactWithTwoTypes();
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteRevertAll();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
 
                 Assert.That(
                     response.Message,
@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
 
-                HotReloadResponse response = HotReloadStatusExecutor.ExecuteRevertAll();
+                HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
 
                 Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
                 Assert.That(response.ShouldSerializeActiveIntroducedTypeTotal(), Is.False);

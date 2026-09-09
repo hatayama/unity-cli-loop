@@ -56,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerCallBodyAnchor,
                 "return host.Added() + 1;");
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,

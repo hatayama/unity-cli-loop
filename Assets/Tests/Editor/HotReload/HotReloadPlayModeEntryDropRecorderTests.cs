@@ -24,13 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadPlayModeEntryDropRecorderTests
     {
         private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
-        private Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>> _previousApply;
 
         [SetUp]
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
-            _previousApply = HotReloadTool.RunApplyAsyncForTesting;
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
@@ -41,7 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadTool.RunApplyAsyncForTesting = _previousApply;
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
@@ -286,13 +283,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
                 "PlayModeEntryDropRecoveryHost.cs",
                 InsertIntroducedType(File.ReadAllText(hostPath)));
-            // Why the substitution: only the tool entry route is under test, and the run needs the
-            // edited copy as its content source, which the production apply cannot be told about.
-            HotReloadTool.RunApplyAsyncForTesting = (files, ct) =>
-                HotReloadOrchestrator.RunAsync(files, editedPath, ct);
-
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
+                // Why the substitution: only the tool entry route is under test, and the run needs
+                // the edited copy as its content source, which the tool cannot be told about.
+                IHotReloadOrchestrator productionOrchestrator = HotReloadCompositionRoot.Services.Orchestrator;
+                using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                    new HotReloadStubOrchestrator(
+                        (files, ct) => productionOrchestrator.RunAsync(files, editedPath, ct)));
                 HotReloadResponse introducing = await ExecuteApplyAsync(hostPath);
 
                 Assert.That(
@@ -331,7 +329,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadOrchestratorResult> RunPatchingABodyAndIntroducingATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            return await HotReloadOrchestrator.RunAsync(
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "PlayModeEntryDropIdentityHost.cs",

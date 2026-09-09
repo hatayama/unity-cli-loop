@@ -176,14 +176,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [UnityCliLoopTool]
     public class HotReloadTool : UnityCliLoopTool<HotReloadSchema, HotReloadResponse>
     {
-        // Why internal seams: compile-pipeline enumeration and apply execution cannot use planted
-        // fixtures, so tests substitute them while production keeps these default implementations.
-        internal static Func<HotReloadChangedFileAggregationResult> DetectChangedFilesForTesting =
-            HotReloadChangedFileAggregator.Detect;
-
-        internal static Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>>
-            RunApplyAsyncForTesting = RunApplyAsync;
-
         public override string ToolName => UnityCliLoopConstants.TOOL_NAME_HOT_RELOAD;
 
         protected override async Task<HotReloadResponse> ExecuteAsync(
@@ -192,6 +184,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ct.ThrowIfCancellationRequested();
             Debug.Assert(parameters != null, "parameters must not be null.");
+
+            // Read once: every branch below has to run against the same services, and a
+            // replacement that closes mid-run must not move the tail of this run to another domain.
+            HotReloadServices services = HotReloadCompositionRoot.Services;
 
             if (parameters.Status)
             {
@@ -209,12 +205,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             }));
                 }
 
-                return HotReloadStatusExecutor.ExecuteStatus();
+                return services.StatusExecutor.ExecuteStatus();
             }
 
             if (parameters.RevertAll)
             {
-                return HotReloadStatusExecutor.ExecuteRevertAll();
+                return services.StatusExecutor.ExecuteRevertAll();
             }
 
             HotReloadValidationFailure validationFailure = ValidateApplyParameters(parameters);
@@ -223,15 +219,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateValidationFailure(validationFailure);
             }
 
+            // Why here and not only at the run entry: the tool normalizes script paths for its own
+            // selection and response rows, and PackageInfo is main-thread only, which this path is.
+            services.PackageRootCapture.CaptureCurrent();
             HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
                 parameters.Files,
-                DetectChangedFilesForTesting);
+                services.ChangeDetector.Detect);
             if (selection.ValidationFailure != null)
             {
                 return CreateValidationFailure(selection.ValidationFailure);
             }
 
-            HotReloadOrchestratorResult result = await RunApplyAsyncForTesting(selection.Files, ct)
+            HotReloadOrchestratorResult result = await services.Orchestrator
+                .RunAsync(selection.Files, contentPathOverride: null, ct)
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -279,13 +279,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> additionalWarnings = null)
         {
             return HotReloadApplyResponseBuilder.Build(result, additionalWarnings);
-        }
-
-        private static Task<HotReloadOrchestratorResult> RunApplyAsync(
-            IReadOnlyList<string> files,
-            CancellationToken ct)
-        {
-            return HotReloadOrchestrator.RunAsync(files, contentPathOverride: null, ct);
         }
 
         private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)

@@ -25,15 +25,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_WhenFilesAreMissingAndNoBaseline_SerializesStructuredValidationFields()
         {
-            Func<HotReloadChangedFileAggregationResult> previousDetector =
-                HotReloadTool.DetectChangedFilesForTesting;
-            try
-            {
-                HotReloadTool.DetectChangedFilesForTesting = () =>
+            IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(() =>
                     new HotReloadChangedFileAggregationResult(
                         hasBaseline: false,
                         changedProjectRelativePaths: new List<string>(),
-                        scanLimitWarnings: new List<string>());
+                        scanLimitWarnings: new List<string>())));
+            try
+            {
 
                 HotReloadResponse response = await ExecuteAsync(new JObject());
                 JObject json = SerializeResponse(response);
@@ -47,12 +46,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         new[]
                         {
                             "Run 'uloop compile' to create source snapshots.",
-                            "Pass project-relative .cs paths with --files."
+                            "Pass project-relative .cs paths with --files (required for new files "
+                            + "that have not been compiled yet)."
                         }));
             }
             finally
             {
-                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                detectorScope.Dispose();
             }
         }
 

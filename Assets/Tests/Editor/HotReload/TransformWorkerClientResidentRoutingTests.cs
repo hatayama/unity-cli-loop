@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private TransformWorkerHost _host;
         private bool _bootstrapFails;
 
+        private IDisposable _hostScope;
+
         [SetUp]
         public void SetUp()
         {
@@ -31,9 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
+            _hostScope.Dispose();
             _host.Shutdown("test teardown");
             _factory.DisposeAll();
-            TransformWorkerClient.HostOverrideForTests = null;
         }
 
         /// <summary>
@@ -45,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _factory.Enqueue(ScriptStep.Succeed);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildE2EFixtureInput();
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files.Length, Is.EqualTo(input.sources.Length));
@@ -62,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _factory.Enqueue(ScriptStep.Fail);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildE2EFixtureInput();
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("exited with code 1"));
@@ -81,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _factory.Enqueue(ScriptStep.Crash);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildE2EFixtureInput();
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.entries.Length, Is.GreaterThan(0));
@@ -99,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _factory.Enqueue(ScriptStep.Hang);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildE2EFixtureInput();
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("did not answer within"));
@@ -115,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _bootstrapFails = true;
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildE2EFixtureInput();
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("bootstrap failed for test"));
@@ -141,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("introducedTypes"));
@@ -151,7 +154,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private void UseHost(int responseTimeoutMilliseconds)
         {
             _host = new TransformWorkerHost(ResolveFakeTargetAsync, _factory.Start, responseTimeoutMilliseconds);
-            TransformWorkerClient.HostOverrideForTests = _host;
+            _hostScope?.Dispose();
+            _hostScope = HotReloadServicesTestScope.BeginWithWorkerHost(_host);
         }
 
         private Task<TransformWorkerLaunchTarget> ResolveFakeTargetAsync(CancellationToken ct)

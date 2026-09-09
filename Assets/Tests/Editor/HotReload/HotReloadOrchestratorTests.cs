@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             // The production run captures these at its entry point; a direct call to the path
             // normalizer in a test has to do the same.
-            HotReloadPackageRootProvider.CaptureCurrent();
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
@@ -169,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -196,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -221,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int instance)\n        {\n            return _secret + instance + 100;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -247,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta) => _secret + delta + 100;"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -277,7 +277,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return _secret + s.Value + other.Counter + 100;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -310,7 +310,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return _secret + a + b + c + d + e + (a * b) + (c * d) + (e * a);\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -340,7 +340,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sumGridMethod:
                     "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -378,7 +378,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return center;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -407,7 +407,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     callsBaseMethod:
                     "public int CallsBase()\n        {\n            return base.BaseSeed() + 2;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: editedPath,
                 CancellationToken.None);
@@ -448,7 +448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Precondition: FormatStaticCount body must differ from on-disk.");
 
             string editedPath = WriteEditedSource("InterpolationStaticField.cs", editedSource);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: editedPath,
                 CancellationToken.None);
@@ -477,7 +477,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Precondition: FormatAlignedStaticCount body must differ from on-disk.");
 
             string editedPath = WriteEditedSource("InterpolationAlignmentConst.cs", editedSource);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: editedPath,
                 CancellationToken.None);
@@ -495,7 +495,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveE2EFixturePath();
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: null,
                 CancellationToken.None);
@@ -543,7 +543,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "\n"
                     + "        private int this[int index] => _secret + index + 1;"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: editedPath,
                 CancellationToken.None);
@@ -617,7 +617,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: constructor body must differ.");
 
             string editedPath = WriteEditedSource("UnsupportedKindCtor.cs", editedSource);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: editedPath,
                 CancellationToken.None);
@@ -668,7 +668,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(HotReloadPropertyGetterFixture.HeightAmplitude, Is.EqualTo(5f));
 
-            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -757,7 +757,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadDirectiveTriviaFixture fixture = new HotReloadDirectiveTriviaFixture();
             Assert.That(fixture.EditorGuardedReturn(), Is.EqualTo(7));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -788,7 +788,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
             Assert.That(fixture.BuildWithGlobalAlias(), Is.EqualTo("base"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -823,7 +823,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return new Vector3(cell.x + 0.5f, cell.y + 0.5f, cell.z + 0.5f);\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -877,7 +877,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return 22;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -947,7 +947,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath, fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1006,7 +1006,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return 11;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath, fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1079,7 +1079,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public int QueryPrivate()\n        {\n            int[] values = { 1, 2, 3 };\n"
                     + "            return (from value in values where value < _secret select value).Count() + 100;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1114,7 +1114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return _secret;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1147,7 +1147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            yield return _secret;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1181,7 +1181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return pred(threshold) ? 7 : 0;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1212,7 +1212,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return HiddenScore;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1244,7 +1244,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return token.N;\n"
                     + "        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1308,7 +1308,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     callsMissingHelperMethod:
                     "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1356,7 +1356,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public int CallsMissingHelper(int value)\n        {\n            return DescribeValue(value);\n        }\n\n"
                     + "        private int DescribeValue<T>(T value)\n        {\n            return 42;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1404,7 +1404,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public int CallsMissingHelper(int value)\n        {\n            return DescribeValue(value);\n        }\n\n"
                     + "        private int DescribeValue<T>(T value)\n        {\n            return 42;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1444,7 +1444,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     tuningConstDeclaration:
                     "private const int TuningConst = 4;"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1479,7 +1479,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (MutateSiblingTuningValue(7))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { ResolveSiblingConstUserPath() },
                     null,
                     CancellationToken.None);
@@ -1502,7 +1502,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (MutateSiblingTuningValue(7))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { ResolveSiblingConstUserPath(), ResolveSiblingConstDefinitionsPath() },
                     null,
                     CancellationToken.None);
@@ -1534,7 +1534,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (MutateSiblingDefinitionsToAddConst())
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { ResolveSiblingConstDefinitionsPath(), ResolveSiblingConstUserPath() },
                     null,
                     CancellationToken.None);
@@ -1557,7 +1557,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (MutateSiblingTuningValue(7))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { ResolveSiblingConstDefinitionsPath(), ResolveSiblingConstUserPath() },
                     null,
                     CancellationToken.None);
@@ -1589,7 +1589,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (MutateSiblingTuningValue(7))
             using (HideAssemblySnapshotDirectory())
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { ResolveSiblingConstUserPath() },
                     null,
                     CancellationToken.None);
@@ -1614,7 +1614,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (TouchSmallestSiblingsWithTrailingComment(ResolveSiblingConstUserPath(), 51))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { ResolveSiblingConstUserPath() },
                     null,
                     CancellationToken.None);
@@ -1642,7 +1642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1674,7 +1674,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     modeEnumDeclaration:
                     "public enum HotReloadE2EMode\n    {\n        Idle = 0,\n        Active = 2\n    }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1717,7 +1717,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "    }\n"
                 + "}\n");
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1765,7 +1765,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "    }\n"
                 + "}\n");
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1804,7 +1804,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("OrchestratorPropertyKindChange.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1835,7 +1835,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BuildEventFixtureSource(
                     "[MethodImpl(MethodImplOptions.NoInlining)]\n        public void HandleScoreChanged()\n        {\n            HandledCount = HandledCount + 5;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1871,7 +1871,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "StaticEventFixtureEdit.cs",
                 BuildStaticEventFixtureSource());
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1905,7 +1905,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "EventLambdaFixtureEdit.cs",
                 BuildEventLambdaFixtureSource());
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1936,7 +1936,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -1947,7 +1947,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
             Assert.That(patched.ActivePatchTotal, Is.EqualTo(1));
 
-            HotReloadOrchestratorResult reverted = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult reverted = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: null,
                 CancellationToken.None);
@@ -1981,7 +1981,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 try
                 {
-                    HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { fixturePath },
                         editedPath,
                         CancellationToken.None);
@@ -1989,7 +1989,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
 
                     ActivateIntroducedTypeForFixtureAssembly(fixturePath);
-                    using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                         HotReloadGroupProcessorDependencies.Create(
                             files =>
                             {
@@ -1997,12 +1997,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
                             },
                             HotReloadIntroducedTypePreparation.PrepareAsync,
-                            TransformWorkerClient.RunAsync,
+                            transformWorkerClient.RunAsync,
                             HotReloadGroupProcessor.GateAndCompileAsync,
                             HotReloadGroupEntryPreparation.PrepareGroup,
-                            HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
+                            entryApplier.ApplyPreparedEntries)))
                     {
-                        await HotReloadOrchestrator.RunAsync(
+                        await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                             new[] { fixturePath },
                             editedPath,
                             CancellationToken.None);
@@ -2058,7 +2058,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2074,7 +2074,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string methodKey = HotReloadMethodKeys.FormatMethodLabel(computeMethod);
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2105,7 +2105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2115,7 +2115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
 
-            HotReloadOrchestratorResult reverted = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult reverted = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: null,
                 CancellationToken.None);
@@ -2144,7 +2144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     callsMissingHelperMethod:
                     "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2152,7 +2152,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAtomicFileSkip(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasFailed(first, nameof(HotReloadE2EFixture.CallsMissingHelper));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2185,7 +2185,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string firstPath = WriteEditedSource("SkippedMixThenIdentical1.cs", firstSource);
             string skippedMixPath = WriteEditedSource("SkippedMixThenIdentical2.cs", skippedMixSource);
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 firstPath,
                 CancellationToken.None);
@@ -2193,7 +2193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasPatched(first, nameof(HotReloadE2EFixture.SumGrid));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 skippedMixPath,
                 CancellationToken.None);
@@ -2202,7 +2202,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(second, nameof(HotReloadE2EFixture.SumGrid));
             AssertNoAlreadyActive(second);
 
-            HotReloadOrchestratorResult third = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult third = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 skippedMixPath,
                 CancellationToken.None);
@@ -2227,7 +2227,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }"));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2236,7 +2236,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(first.PatchedTotal, Is.EqualTo(0));
             AssertNoUnchangedSourceNonBaselineWarning(first);
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2265,14 +2265,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 skippedPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(first);
             AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 changedPath,
                 CancellationToken.None);
@@ -2295,7 +2295,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2305,7 +2305,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2339,7 +2339,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HideVerifiedSnapshot(projectRelativePath))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { fixturePath },
                     editedPath,
                     CancellationToken.None);
@@ -2373,7 +2373,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HideVerifiedSnapshot(projectRelativePath))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { fixturePath },
                     editedPath,
                     CancellationToken.None);
@@ -2430,7 +2430,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2468,7 +2468,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public int CallsMissingHelper(int value)\n        {\n            return MissingBetaHelper(value);\n        }");
             string editedPath = WriteEditedSource("AllEntriesShimFailure.cs", editedSource);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2542,7 +2542,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { typeof(int).FullName },
                 genericArity: 0);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2581,7 +2581,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 patchedPath,
                 CancellationToken.None);
@@ -2599,7 +2599,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     callsMissingHelperMethod:
                     "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
 
-            HotReloadOrchestratorResult failed = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult failed = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 failingPath,
                 CancellationToken.None);
@@ -2638,7 +2638,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int expectedOriginalLine = FindLineNumberContaining(editedSource, "MissingHelperAddedByEdit");
             Assert.That(expectedOriginalLine, Is.GreaterThan(0));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -2689,7 +2689,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AtomicFileAddedField.cs", edited),
                 CancellationToken.None);
@@ -3268,7 +3268,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("AddedMethodIsolation.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -3322,7 +3322,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("AddedMethodHarmony.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -3352,7 +3352,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedDirectPrivateInstance.cs", edited),
                 CancellationToken.None);
@@ -3382,7 +3382,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedDirectPrivateStatic.cs", edited),
                 CancellationToken.None);
@@ -3412,7 +3412,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedPrivateConstRead.cs", edited),
                 CancellationToken.None);
@@ -3444,7 +3444,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedClosurePrivateConstRead.cs", edited),
                 CancellationToken.None);
@@ -3474,7 +3474,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedMixedConstAndField.cs", edited),
                 CancellationToken.None);
@@ -3510,7 +3510,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
             host.ResetStaticWritable();
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedPrivateStaticWrite.cs", edited),
                 CancellationToken.None);
@@ -3540,7 +3540,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("ExistingDelegationPrivateStaticRead.cs", edited),
                 CancellationToken.None);
@@ -3569,7 +3569,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedDirectPrivateMethod.cs", edited),
                 CancellationToken.None);
@@ -3602,7 +3602,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedSignatureChangePrivateField.cs", edited),
                 CancellationToken.None);
@@ -3632,7 +3632,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("AddedMethodApplyE2E.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -3669,7 +3669,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedOnlyAutoRefreshHeld.cs", edited),
                 CancellationToken.None);
@@ -3697,14 +3697,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
             Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("EmptyEntriesHold1.cs", WithUnusedAddedPing(onDisk)),
                 CancellationToken.None);
             AssertHasAdded(first, "AddedPing");
             Assert.That(first.AutoRefreshHeld, Is.True);
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("EmptyEntriesHold2.cs", onDisk),
                 CancellationToken.None);
@@ -3726,7 +3726,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = WithAddedFieldAccesses(onDisk);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedFieldApplyE2E.cs", edited),
                 CancellationToken.None);
@@ -3741,7 +3741,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(firstHost.ReadAdded(), Is.EqualTo(10));
             Assert.That(secondHost.ReadAdded(), Is.EqualTo(20));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedFieldApplyE2EReapply.cs", edited),
                 CancellationToken.None);
@@ -3764,7 +3764,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = WithThisQualifiedAddedFieldRead(onDisk);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("ThisQualifiedAddedFieldRead.cs", edited),
                 CancellationToken.None);
@@ -3787,7 +3787,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = ResolveAddedFieldApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
             string applied = WithAddedFieldAccesses(onDisk);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedFieldLedgerSuccess.cs", applied),
                 CancellationToken.None);
@@ -3800,7 +3800,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(new[] { "AddedCount" }));
 
             string failed = WithAddedFieldAccessesCallingMissingHelper(onDisk);
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedFieldLedgerShimFailure.cs", failed),
                 CancellationToken.None);
@@ -3853,7 +3853,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        public void WriteAdded(int value)\n        {\n            AlphaField = value;\n        }",
                 StringComparison.Ordinal);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { e2ePath, applyPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -3886,7 +3886,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public int CallsMissingHelper(int value)\n        {\n            return AddedScratch + MissingHelperAddedByEdit(value);\n        }"),
                 "AddedScratch");
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedFieldSingleEntryFailure.cs", edited),
                 CancellationToken.None);
@@ -3924,7 +3924,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public int CallsMissingHelper(int value)\n        {\n            return AddedScratch + MissingHelperAddedByEdit(value);\n        }"),
                 "AddedScratch");
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedFieldIsolatedFailure.cs", edited),
                 CancellationToken.None);
@@ -3969,7 +3969,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(applyEdited, Is.Not.EqualTo(applyOnDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { applyPath },
                 WriteEditedSource("DeclaredButUnrewrittenAddedField.cs", applyEdited),
                 CancellationToken.None);
@@ -3994,7 +3994,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string applyEdited = WithAddedFieldAndConstAccesses(applyOnDisk);
             Assert.That(applyEdited, Is.Not.EqualTo(applyOnDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { applyPath },
                 WriteEditedSource("AddedFieldAndConst.cs", applyEdited),
                 CancellationToken.None);
@@ -4031,7 +4031,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
                 + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedMethodApplyThenRemove1.cs", withAdded),
                 CancellationToken.None);
@@ -4041,7 +4041,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "            return value;\n        }",
                 "            return value + 10;\n        }",
                 StringComparison.Ordinal);
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedMethodApplyThenRemove2.cs", valueOnly),
                 CancellationToken.None);
@@ -4077,14 +4077,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("BrokenAddedAfterSuccess1.cs", WithWorkingAddedPing(onDisk)),
                 CancellationToken.None);
             AssertHasAdded(first, "AddedPing");
             Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("BrokenAddedAfterSuccess2.cs", WithBrokenAddedPing(onDisk)),
                 CancellationToken.None);
@@ -4110,7 +4110,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("BrokenAddedUnrelated1.cs", WithWorkingAddedPing(onDisk)),
                 CancellationToken.None);
@@ -4121,7 +4121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int Unrelated(int value)\n        {\n            return value;\n        }",
                 "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("BrokenAddedUnrelated2.cs", later),
                 CancellationToken.None);
@@ -4149,13 +4149,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
             string edited = WithWorkingAddedPing(onDisk);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("ReapplyWorkingAdded1.cs", edited),
                 CancellationToken.None);
             AssertHasAdded(first, "AddedPing");
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("ReapplyWorkingAdded2.cs", edited),
                 CancellationToken.None);
@@ -4177,7 +4177,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
             string edited = WithWorkingAddedPing(onDisk);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AlreadyActiveAddedReason1.cs", edited),
                 CancellationToken.None);
@@ -4187,7 +4187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadAddedMethodApplyFixture host = new HotReloadAddedMethodApplyFixture();
             Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AlreadyActiveAddedReason2.cs", edited),
                 CancellationToken.None);
@@ -4218,7 +4218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string applyPath = ResolveAddedFieldApplyFixturePath();
             string applyOnDisk = File.ReadAllText(applyPath);
             string applyEdited = WithPrivateAddedFields(applyOnDisk);
-            HotReloadOrchestratorResult withFields = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult withFields = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { applyPath },
                 WriteEditedSource("PrivateAddedFieldsLifetime.cs", applyEdited),
                 CancellationToken.None);
@@ -4234,7 +4234,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(withFields.Warnings, Does.Contain(expectedLifetimeWarning));
 
             string e2ePath = ResolveE2EFixturePath();
-            HotReloadOrchestratorResult bodyOnly = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult bodyOnly = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { e2ePath },
                 WriteEditedSource(
                     "BodyOnlyNoAddedFieldsLifetime.cs",
@@ -4271,7 +4271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("GenericMethodSkip.cs", edited),
                 CancellationToken.None);
@@ -4291,7 +4291,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("BrokenAddedMulti1.cs", WithWorkingAddedPingAndPong(onDisk)),
                 CancellationToken.None);
@@ -4302,7 +4302,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int Unrelated(int value)\n        {\n            return value;\n        }",
                 "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("BrokenAddedMulti2.cs", later),
                 CancellationToken.None);
@@ -4324,7 +4324,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("VirtualAddedAfterSuccess1.cs", WithWorkingAddedPing(onDisk)),
                 CancellationToken.None);
@@ -4334,7 +4334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int Unrelated(int value)\n        {\n            return value;\n        }",
                 "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("VirtualAddedAfterSuccess2.cs", later),
                 CancellationToken.None);
@@ -4353,13 +4353,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("VirtualAddedEmptyEntries1.cs", WithWorkingAddedPing(onDisk)),
                 CancellationToken.None);
             AssertHasAdded(first, "AddedPing");
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("VirtualAddedEmptyEntries2.cs", WithVirtualAddedPing(onDisk)),
                 CancellationToken.None);
@@ -4378,13 +4378,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("DeleteAddedRestoreCaller1.cs", WithWorkingAddedPing(onDisk)),
                 CancellationToken.None);
             AssertHasAdded(first, "AddedPing");
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("DeleteAddedRestoreCaller2.cs", onDisk),
                 CancellationToken.None);
@@ -4401,7 +4401,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveSignatureChangeSameFileFixturePath();
             string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeSameFile.cs", edited),
                 CancellationToken.None);
@@ -4432,7 +4432,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveSignatureChangeSameFileFixturePath();
             string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeSameFileNoStale.cs", edited),
                 CancellationToken.None);
@@ -4463,14 +4463,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(bodyOnlyEdit, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult firstRun = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeSameFileBodyFirst.cs", bodyOnlyEdit),
                 CancellationToken.None);
             AssertNoFileLevelFailure(firstRun);
             AssertHasPatched(firstRun, nameof(HotReloadSignatureChangeSameFileFixture.Target));
 
-            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult secondRun = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeSameFileReturnSecond.cs", WithSameFileReturnTypeChange(onDisk)),
                 CancellationToken.None);
@@ -4502,7 +4502,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveSignatureChangeSameFileFixturePath();
             string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeSupersededRecord.cs", edited),
                 CancellationToken.None);
@@ -4539,7 +4539,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             Assert.That(edited, Does.Not.Contain("ToDelete"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeDeletedNoSupersede.cs", edited),
                 CancellationToken.None);
@@ -4582,7 +4582,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeOverloadSupersede.cs", edited),
                 CancellationToken.None);
@@ -4626,7 +4626,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveSignatureChangeAlreadyActiveFixturePath();
             string applied = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeAlreadyActive1.cs", applied),
                 CancellationToken.None);
@@ -4648,7 +4648,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(later, Is.Not.EqualTo(applied));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeAlreadyActive2.cs", later),
                 CancellationToken.None);
@@ -4678,7 +4678,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveSignatureChangeAlreadyActiveFixturePath();
             string applied = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGatedDeactivate1.cs", applied),
                 CancellationToken.None);
@@ -4700,7 +4700,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(later, Is.Not.EqualTo(applied));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGatedDeactivate2.cs", later),
                 CancellationToken.None);
@@ -4780,7 +4780,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeExternal.cs", edited),
                 CancellationToken.None);
@@ -4839,7 +4839,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGatedNoSupersede.cs", edited),
                 CancellationToken.None);
@@ -4884,7 +4884,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGateRetrySurvivorConst.cs", edited),
                 CancellationToken.None);
@@ -4930,7 +4930,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             Assert.That(edited, Does.Not.Contain("ToDelete"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeDeleted.cs", edited),
                 CancellationToken.None);
@@ -4963,7 +4963,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = ResolveSignatureChangeSameFileFixturePath();
             string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeReapply1.cs", edited),
                 CancellationToken.None);
@@ -4974,7 +4974,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(first.ActivePatchTotal, Is.EqualTo(2));
             Assert.That(firstRegistryCount, Is.EqualTo(1));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeReapply2.cs", edited),
                 CancellationToken.None);
@@ -5182,7 +5182,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeUnchangedCaller.cs", edited),
                 CancellationToken.None);
@@ -5232,7 +5232,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeTwoUnchangedCallers.cs", edited),
                 CancellationToken.None);
@@ -5269,7 +5269,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(callerEdited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeAlreadyPatchedCaller1.cs", callerEdited),
                 CancellationToken.None);
@@ -5283,7 +5283,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(signatureEdited, Is.Not.EqualTo(callerEdited));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeAlreadyPatchedCaller2.cs", signatureEdited),
                 CancellationToken.None);
@@ -5334,7 +5334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(callerEdited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGatedSwept1.cs", callerEdited),
                 CancellationToken.None);
@@ -5353,7 +5353,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(mixed, Is.Not.EqualTo(callerEdited));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGatedSwept2.cs", mixed),
                 CancellationToken.None);
@@ -5392,7 +5392,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(callersEdited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeTwoPatchedCallers1.cs", callersEdited),
                 CancellationToken.None);
@@ -5407,7 +5407,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(signatureEdited, Is.Not.EqualTo(callersEdited));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeTwoPatchedCallers2.cs", signatureEdited),
                 CancellationToken.None);
@@ -5515,7 +5515,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Does.Contain("HotReloadSignatureChangeSameNameDeletedHost"));
             Assert.That(edited, Does.Not.Contain("return value;\n        }"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeSameNameDeleted.cs", edited),
                 CancellationToken.None);
@@ -5556,7 +5556,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGenericCaller.cs", edited),
                 CancellationToken.None);
@@ -5604,7 +5604,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(patchedSource, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("GenericCallerPatchThenPreserve1.cs", patchedSource),
                 CancellationToken.None);
@@ -5629,7 +5629,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(uncompilableSource, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult failed = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult failed = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("GenericCallerPatchThenPreserve2.cs", uncompilableSource),
                 CancellationToken.None);
@@ -5677,7 +5677,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             Assert.That(edited, Does.Not.Contain("public int Helper"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeHelperDelete.cs", edited),
                 CancellationToken.None);
@@ -5714,7 +5714,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeCallerCompileFailure.cs", edited),
                 CancellationToken.None);
@@ -5748,7 +5748,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             VibeLogger.ClearMemoryLogs();
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGateRetryFailure.cs", edited),
                 CancellationToken.None);
@@ -5811,7 +5811,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeMultiReplacement.cs", edited),
                 CancellationToken.None);
@@ -5855,7 +5855,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             Assert.That(edited, Does.Contain("ToDelete(int value, int extra)"));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeParamChange.cs", edited),
                 CancellationToken.None);
@@ -5912,7 +5912,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
                 + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
-            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedMethodApplyThenOnDisk1.cs", withAdded),
                 CancellationToken.None);
@@ -5920,7 +5920,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadAddedMethodApplyFixture host = new HotReloadAddedMethodApplyFixture();
             Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: null,
                 CancellationToken.None);
@@ -5955,7 +5955,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
                 + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("AddedMethodPausePoint.cs", edited),
                 CancellationToken.None);
@@ -6026,7 +6026,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("LambdaConditionalAccessPrivateArg.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -6064,7 +6064,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("LambdaInstancePrivateCall.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -6102,7 +6102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("LambdaInstancePrivatePropertyGetter.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -6138,7 +6138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(patchedSource, Is.Not.EqualTo(onDisk));
             string patchedPath = WriteEditedSource("StaleOutcomeFirstPass.cs", patchedSource);
 
-            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult firstRun = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 patchedPath,
                 CancellationToken.None);
@@ -6158,7 +6158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(removedSource, Is.Not.EqualTo(onDisk));
             string removedPath = WriteEditedSource("StaleOutcomeSecondPass.cs", removedSource);
 
-            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult secondRun = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 removedPath,
                 CancellationToken.None);
@@ -6192,7 +6192,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // Restoring the compiled baseline makes the deleted method unchanged again, so the
             // stale patch is reverted with the rest. This is the third way out of a stale patch,
             // alongside 'uloop compile' and '--revert-all'.
-            HotReloadOrchestratorResult restoreRun = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult restoreRun = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 WriteEditedSource("StaleOutcomeRestorePass.cs", onDisk),
                 CancellationToken.None);
@@ -6230,7 +6230,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("RemovedMethodWarning.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -6278,7 +6278,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("AddedMethodBodyFailure.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -6338,7 +6338,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("IsolationRetryTransitiveCaller.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -6378,7 +6378,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("IsolationRetryTwoHopIndirectCallers.cs", edited);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 editedPath,
                 CancellationToken.None);
@@ -6424,7 +6424,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGateTransitiveCaller.cs", edited),
                 CancellationToken.None);
@@ -6455,7 +6455,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }"));
             VibeLogger.ClearMemoryLogs();
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
@@ -6478,13 +6478,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("VibeLogEmptyEntries1.cs", WithWorkingAddedPing(onDisk)),
                 CancellationToken.None);
             VibeLogger.ClearMemoryLogs();
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("VibeLogEmptyEntries2.cs", WithVirtualAddedPing(onDisk)),
                 CancellationToken.None);
@@ -6510,7 +6510,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }");
             VibeLogger.ClearMemoryLogs();
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("VibeLogIsolation.cs", editedSource),
                 CancellationToken.None);

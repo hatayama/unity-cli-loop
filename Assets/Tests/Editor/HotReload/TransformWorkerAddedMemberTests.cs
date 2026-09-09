@@ -2053,7 +2053,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 excludedAddedMethodKeys = excludedAddedMethodKeys ?? Array.Empty<string>()
             };
 
-            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         private static string[] BuildAbsoluteReferencePaths(string[] allReferences, string targetDllPath)

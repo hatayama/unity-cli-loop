@@ -13,18 +13,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadHarmony harmony,
             HotReloadPatcher patcher,
             HotReloadFileEntryApplier fileEntryApplier,
-            HotReloadEntryApplier entryApplier)
+            HotReloadEntryApplier entryApplier,
+            TransformWorkerClient transformWorkerClient,
+            HotReloadGroupCommitStage groupCommitStage,
+            HotReloadGroupProcessor groupProcessor,
+            IHotReloadOrchestrator orchestrator,
+            HotReloadStatusExecutor statusExecutor,
+            IHotReloadPackageRootCapture packageRootCapture,
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
+            IHotReloadChangeDetector changeDetector)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(harmony != null, "harmony must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
             Debug.Assert(fileEntryApplier != null, "fileEntryApplier must not be null.");
             Debug.Assert(entryApplier != null, "entryApplier must not be null.");
+            Debug.Assert(transformWorkerClient != null, "transformWorkerClient must not be null.");
+            Debug.Assert(groupCommitStage != null, "groupCommitStage must not be null.");
+            Debug.Assert(groupProcessor != null, "groupProcessor must not be null.");
+            Debug.Assert(orchestrator != null, "orchestrator must not be null.");
+            Debug.Assert(statusExecutor != null, "statusExecutor must not be null.");
+            Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
+            Debug.Assert(
+                editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
+            Debug.Assert(changeDetector != null, "changeDetector must not be null.");
             Domain = domain;
             Harmony = harmony;
             Patcher = patcher;
             FileEntryApplier = fileEntryApplier;
             EntryApplier = entryApplier;
+            TransformWorkerClient = transformWorkerClient;
+            GroupCommitStage = groupCommitStage;
+            GroupProcessor = groupProcessor;
+            Orchestrator = orchestrator;
+            StatusExecutor = statusExecutor;
+            PackageRootCapture = packageRootCapture;
+            EditorStateSnapshotCapture = editorStateSnapshotCapture;
+            ChangeDetector = changeDetector;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -36,5 +61,66 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadFileEntryApplier FileEntryApplier { get; }
 
         internal HotReloadEntryApplier EntryApplier { get; }
+
+        internal TransformWorkerClient TransformWorkerClient { get; }
+
+        internal HotReloadGroupCommitStage GroupCommitStage { get; }
+
+        internal HotReloadGroupProcessor GroupProcessor { get; }
+
+        internal IHotReloadOrchestrator Orchestrator { get; }
+
+        internal HotReloadStatusExecutor StatusExecutor { get; }
+
+        internal IHotReloadPackageRootCapture PackageRootCapture { get; }
+
+        internal IHotReloadEditorStateSnapshotCapture EditorStateSnapshotCapture { get; }
+
+        internal IHotReloadChangeDetector ChangeDetector { get; }
+
+        /// <summary>
+        /// A copy that runs <paramref name="orchestrator"/> instead of this one, sharing every
+        /// other collaborator — including the domain, so installing the copy neither takes the
+        /// resolver over nor disposes anything when it is put back.
+        /// </summary>
+        internal HotReloadServices WithOrchestrator(IHotReloadOrchestrator orchestrator)
+        {
+            return new HotReloadServices(
+                Domain,
+                Harmony,
+                Patcher,
+                FileEntryApplier,
+                EntryApplier,
+                TransformWorkerClient,
+                GroupCommitStage,
+                GroupProcessor,
+                orchestrator,
+                StatusExecutor,
+                PackageRootCapture,
+                EditorStateSnapshotCapture,
+                ChangeDetector);
+        }
+
+        /// <summary>
+        /// A copy that selects omitted files through <paramref name="changeDetector"/>, sharing
+        /// every other collaborator.
+        /// </summary>
+        internal HotReloadServices WithChangeDetector(IHotReloadChangeDetector changeDetector)
+        {
+            return new HotReloadServices(
+                Domain,
+                Harmony,
+                Patcher,
+                FileEntryApplier,
+                EntryApplier,
+                TransformWorkerClient,
+                GroupCommitStage,
+                GroupProcessor,
+                Orchestrator,
+                StatusExecutor,
+                PackageRootCapture,
+                EditorStateSnapshotCapture,
+                changeDetector);
+        }
     }
 }

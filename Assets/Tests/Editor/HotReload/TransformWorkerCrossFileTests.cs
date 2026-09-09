@@ -576,7 +576,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 excludedAddedMethodKeys = excludedAddedMethodKeys
             };
 
-            run.Result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            run.Result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
             return run;
         }
 

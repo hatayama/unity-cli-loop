@@ -79,8 +79,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (isNewSource)
             {
-                string notReadyReason = HotReloadEditorStateSnapshotProvider.GetNotReadyReason(
-                    HotReloadEditorStateSnapshotProvider.CaptureCurrent());
+                string notReadyReason =
+                    HotReloadCompositionRoot.Services.EditorStateSnapshotCapture.CaptureCurrent()
+                        .GetNotReadyReason();
                 if (notReadyReason != null)
                 {
                     outcomes.Add(HotReloadMethodOutcome.Failed("(file)", notReadyReason, assemblyResolvePath));
@@ -241,7 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadScriptPathNormalizer.ToProjectRelative(
                 fullPath,
                 projectRoot,
-                HotReloadPackageRootProvider.Current,
+                HotReloadCompositionRoot.Services.PackageRootCapture.Current,
                 comparison);
         }
     }

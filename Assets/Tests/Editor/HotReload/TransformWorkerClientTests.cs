@@ -604,7 +604,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 int batchLength = Math.Min(SelfSnapshotBatchSize, sources.Count - start);
                 List<SelfSnapshotSource> batch = sources.GetRange(start, batchLength);
-                TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                     BuildInputForSelfSnapshotSources(batch),
                     CancellationToken.None);
                 failures.AddRange(DescribeSelfSnapshotBatchFailures(batch, result));
@@ -2565,7 +2565,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 secondSourcePath,
                 secondProjectRelativePath,
                 operation);
-            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         /// <summary>
@@ -3407,7 +3407,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerInputDto input = CreateArtifactValidationInput();
             input.introducedTypeArtifacts[0].types[0].ownerProjectRelativePath = string.Empty;
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -3430,7 +3430,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateArtifactValidationInput().introducedTypeArtifacts[0]
             };
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -3449,7 +3449,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerIntroducedTypeArtifactDto artifact = input.introducedTypeArtifacts[0];
             artifact.types = new[] { artifact.types[0], artifact.types[0] };
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -3467,7 +3467,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerInputDto input = CreateArtifactValidationInput();
             input.targetAssemblyMvid = string.Empty;
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 

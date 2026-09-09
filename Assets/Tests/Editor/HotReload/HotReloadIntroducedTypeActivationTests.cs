@@ -19,15 +19,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadIntroducedTypeActivationTests
     {
-        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
 
         [SetUp]
         public void SetUp()
         {
             // The production run captures these at its entry point; a direct call to the path
             // normalizer in a test has to do the same.
-            HotReloadPackageRootProvider.CaptureCurrent();
-            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
@@ -38,7 +36,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
@@ -171,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     HotReloadGroupProcessorDependencies.Create(
                         HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
                         async (files, input, ct) =>
@@ -185,15 +182,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         async (input, ct) =>
                         {
                             transformInput = input;
-                            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, ct);
+                            TransformWorkerClientResult result = await transformWorkerClient.RunAsync(input, ct);
                             transformOutput = result.Output;
                             return result;
                         },
                         HotReloadGroupProcessor.GateAndCompileAsync,
                         HotReloadGroupEntryPreparation.PrepareGroup,
-                        HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
+                        entryApplier.ApplyPreparedEntries)))
                 {
-                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -242,20 +239,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "0000000000000000000000000000000000000000");
                 HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(staleArtifact);
                 HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(staleArtifact);
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     HotReloadGroupProcessorDependencies.Create(
                         HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
                         HotReloadIntroducedTypePreparation.PrepareAsync,
                         (input, ct) =>
                         {
                             transformInput = input;
-                            return TransformWorkerClient.RunAsync(input, ct);
+                            return transformWorkerClient.RunAsync(input, ct);
                         },
                         HotReloadGroupProcessor.GateAndCompileAsync,
                         HotReloadGroupEntryPreparation.PrepareGroup,
-                        HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
+                        entryApplier.ApplyPreparedEntries)))
                 {
-                    await HotReloadOrchestrator.RunAsync(
+                    await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { callerPath },
                         HotReloadTestSourceWriter.WriteEditedSource(
                             "IntroducedTypeStaleGenerationCaller.cs",
@@ -288,10 +285,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateArtifactCapturingDependencies(artifact => preparedArtifact = artifact)))
                 {
-                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -335,7 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreatePreparationCountingDependencies(
                         preparedDescriptorCounts,
                         artifact =>
@@ -346,7 +343,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             }
                         })))
                 {
-                    HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -355,7 +352,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     AssertCallerIsPatched(first);
                     Assert.That(firstArtifact, Is.Not.Null, "The first run had to prepare the introduced type.");
 
-                    HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -416,7 +413,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateArtifactCapturingDependencies(artifact =>
                     {
                         if (artifact != null)
@@ -425,7 +422,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         }
                     })))
                 {
-                    HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -434,7 +431,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     AssertCallerIsPatched(first);
                     Assert.That(firstArtifact, Is.Not.Null, "The first run had to prepare the introduced type.");
 
-                    HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -485,10 +482,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateDependenciesWithFailedResolutionFor(Path.GetFileName(callerPath))))
                 {
-                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -513,10 +510,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateArtifactCapturingDependencies(artifact => preparedArtifact = artifact)))
                 {
-                    result = await HotReloadOrchestrator.RunAsync(
+                    result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath },
                         HotReloadTestSourceWriter.WriteEditedSource(
                             "IntroducedTypeOnlyHost.cs",
@@ -556,7 +553,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                result = await HotReloadOrchestrator.RunAsync(
+                result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { hostPath },
                     HotReloadTestSourceWriter.WriteEditedSource(
                         "IntroducedTypeCompileFailureHost.cs",
@@ -601,7 +598,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadOrchestratorResult baseRun = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult baseRun = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { hostPath },
                     WriteBaseTypeSource(hostPath),
                     CancellationToken.None);
@@ -615,7 +612,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(1),
                     "Precondition: the base type had to become active.");
 
-                HotReloadOrchestratorResult derivedRun = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult derivedRun = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { callerPath },
                     WriteDerivedTypeSource(callerPath),
                     CancellationToken.None);
@@ -649,7 +646,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { hostPath, callerPath },
                     contentPathOverride: null,
                     CancellationToken.None,
@@ -688,7 +685,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { hostPath, callerPath, holderPath },
                     contentPathOverride: null,
                     CancellationToken.None,
@@ -718,7 +715,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { hostPath, callerPath },
                     contentPathOverride: null,
                     CancellationToken.None,
@@ -753,12 +750,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
-                    CreateDependenciesWithAfterGateAction(
-                        () => HotReloadEditorStateSnapshotProvider.CaptureForTesting =
-                            () => new HotReloadEditorStateSnapshot(true, false, false))))
+                HotReloadStubEditorStateSnapshotCapture editorState =
+                    new HotReloadStubEditorStateSnapshotCapture(
+                        () => new HotReloadEditorStateSnapshot(false, false, false));
+                using (HotReloadServicesTestScope.BeginWith(
+                    editorState,
+                    TransformWorkerHost.Shared,
+                    (transformWorkerClient, entryApplier) =>
+                        CreateDependenciesWithAfterGateAction(
+                            () => editorState.Capture =
+                                () => new HotReloadEditorStateSnapshot(true, false, false))))
                 {
-                    result = await HotReloadOrchestrator.RunAsync(
+                    result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -782,10 +785,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateDependenciesWithRebuiltTargetAfterWorker()))
                 {
-                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -811,10 +814,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateDependenciesWithBeforeWorkerAction(() => AppendMarkerComment(edits[hostPath]))))
                 {
-                    result = await HotReloadOrchestrator.RunAsync(
+                    result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -838,10 +841,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateDependenciesWithUnverifiableOwner()))
                 {
-                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -865,10 +868,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateDependenciesWithBlankedHashFor(Path.GetFileName(callerPath))))
                 {
-                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -893,10 +896,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateDependenciesWithAfterGateAction(() => AppendMarkerComment(edits[callerPath]))))
                 {
-                    result = await HotReloadOrchestrator.RunAsync(
+                    result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -1028,7 +1031,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                     return preparation;
                 },
-                TransformWorkerClient.RunAsync,
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
                 HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
@@ -1046,7 +1049,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     captureArtifact(preparation.Prepared?.Artifact);
                     return preparation;
                 },
-                TransformWorkerClient.RunAsync,
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
                 HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
@@ -1063,7 +1066,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 (input, ct) =>
                 {
                     beforeWorker();
-                    return TransformWorkerClient.RunAsync(input, ct);
+                    return HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, ct);
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
@@ -1078,7 +1081,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadGroupProcessorDependencies.Create(
                 HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
                 HotReloadIntroducedTypePreparation.PrepareAsync,
-                TransformWorkerClient.RunAsync,
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
                 async (context, ct) =>
                 {
                     HotReloadGroupGateAndCompileResult gateAndCompile =
@@ -1103,7 +1106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadGroupProcessorDependencies.Create(
                 HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
                 HotReloadIntroducedTypePreparation.PrepareAsync,
-                TransformWorkerClient.RunAsync,
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 (context, compileResult, entriesToPatch) =>
                 {
@@ -1168,7 +1171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 async (input, ct) =>
                 {
                     TransformWorkerClientResult workerResult =
-                        await TransformWorkerClient.RunAsync(input, ct);
+                        await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, ct);
                     input.targetAssemblyMvid = Guid.NewGuid().ToString("N");
                     return workerResult;
                 },
@@ -1197,7 +1200,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             preparation.Prepared.Artifact,
                             RekeyOwnerHashesToUnreportedPaths(preparation.Prepared.OwnerSourceHashes)));
                 },
-                TransformWorkerClient.RunAsync,
+                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
                 HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
@@ -1226,7 +1229,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 async (input, ct) =>
                 {
                     TransformWorkerClientResult workerResult =
-                        await TransformWorkerClient.RunAsync(input, ct);
+                        await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, ct);
                     BlankSourceHashOf(workerResult.Output, fileName);
                     return workerResult;
                 },
@@ -1291,10 +1294,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateRecordingDependencies(stages)))
                 {
-                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -1338,10 +1341,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateFailingMembershipDependencies(stages)))
                 {
-                    await HotReloadOrchestrator.RunAsync(
+                    await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -1378,10 +1381,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     CreateFailingPreparationDependencies(stages)))
                 {
-                    await HotReloadOrchestrator.RunAsync(
+                    await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -1442,7 +1445,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 (input, ct) =>
                 {
                     stages.Add(WorkerStage);
-                    return TransformWorkerClient.RunAsync(input, ct);
+                    return HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, ct);
                 },
                 (context, ct) =>
                 {
@@ -1484,7 +1487,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 (input, ct) =>
                 {
                     stages.Add(WorkerStage);
-                    return TransformWorkerClient.RunAsync(input, ct);
+                    return HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, ct);
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
@@ -1519,7 +1522,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 (input, ct) =>
                 {
                     stages.Add(WorkerStage);
-                    return TransformWorkerClient.RunAsync(input, ct);
+                    return HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, ct);
                 },
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,

@@ -13,17 +13,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// End-to-end hot-reload pipeline: resolve every file's assembly, group the files of one
     /// assembly, run each group, and merge the per-file results in input order.
     /// </summary>
-    internal static class HotReloadOrchestrator
+    internal sealed class HotReloadOrchestrator : IHotReloadOrchestrator
     {
-        // Why static holders: these collaborators carry no state, and the orchestrator is itself
-        // static in this stage, so there is nothing to inject them into yet. PR-6 turns the
-        // orchestrator into an instance and takes all three through its constructor.
-        private static readonly HotReloadInputFileResolver InputFileResolver =
-            new HotReloadInputFileResolver();
-        private static readonly HotReloadDeferredInputClassifier DeferredInputClassifier =
-            new HotReloadDeferredInputClassifier();
-        private static readonly HotReloadSiblingRebindReporter SiblingRebindReporter =
-            new HotReloadSiblingRebindReporter();
+        private readonly HotReloadGroupProcessor _groupProcessor;
+        private readonly HotReloadInputFileResolver _inputFileResolver;
+        private readonly HotReloadDeferredInputClassifier _deferredInputClassifier;
+        private readonly HotReloadSiblingRebindReporter _siblingRebindReporter;
+        private readonly IHotReloadPackageRootCapture _packageRootCapture;
+
+        internal HotReloadOrchestrator(
+            HotReloadGroupProcessor groupProcessor,
+            HotReloadInputFileResolver inputFileResolver,
+            HotReloadDeferredInputClassifier deferredInputClassifier,
+            HotReloadSiblingRebindReporter siblingRebindReporter,
+            IHotReloadPackageRootCapture packageRootCapture)
+        {
+            Debug.Assert(groupProcessor != null, "groupProcessor must not be null.");
+            Debug.Assert(inputFileResolver != null, "inputFileResolver must not be null.");
+            Debug.Assert(deferredInputClassifier != null, "deferredInputClassifier must not be null.");
+            Debug.Assert(siblingRebindReporter != null, "siblingRebindReporter must not be null.");
+            Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
+            _groupProcessor = groupProcessor;
+            _inputFileResolver = inputFileResolver;
+            _deferredInputClassifier = deferredInputClassifier;
+            _siblingRebindReporter = siblingRebindReporter;
+            _packageRootCapture = packageRootCapture;
+        }
 
         /// <summary>
         /// Runs hot reload for each path in <paramref name="files"/>.
@@ -33,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <paramref name="contentPathOverrideByFile"/> is the per-file form of that hook, keyed by
         /// the entry in <paramref name="files"/>; it wins over the single override.
         /// </summary>
-        public static async Task<HotReloadOrchestratorResult> RunAsync(
+        public async Task<HotReloadOrchestratorResult> RunAsync(
             IReadOnlyList<string> files,
             string contentPathOverride,
             CancellationToken ct,
@@ -49,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
             // Why after the switch: PackageInfo is main-thread only, and script paths are
             // normalized against these roots later on the background threads this run switches to.
-            HotReloadPackageRootProvider.CaptureCurrent();
+            _packageRootCapture.CaptureCurrent();
             // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
             // SessionState, which is a main-thread API.
             HotReloadRunAccumulator run =
@@ -65,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < files.Count; index++)
             {
                 ct.ThrowIfCancellationRequested();
-                InputFileResolver.ResolveInputFile(
+                _inputFileResolver.ResolveInputFile(
                     files[index],
                     index,
                     contentPathOverride,
@@ -88,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             IReadOnlyList<HotReloadDeferredInputPlan> classifiedPlans =
-                DeferredInputClassifier.ClassifyAllDeferredPlans(plans, slots);
+                _deferredInputClassifier.ClassifyAllDeferredPlans(plans, slots);
 
             List<(string Path, HotReloadFileProcessResult Result)> extraResults =
                 new List<(string Path, HotReloadFileProcessResult Result)>();
@@ -101,14 +116,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                bool isLastChangedGroup = SiblingRebindReporter.IsLastChangedPlanForAssembly(
+                bool isLastChangedGroup = _siblingRebindReporter.IsLastChangedPlanForAssembly(
                     plans,
                     classifiedPlans,
                     planIndex);
                 List<int> inputIndexes = new List<int>(plan.InputIndexes);
                 if (isLastChangedGroup)
                 {
-                    DeferredInputClassifier.AppendUniqueDeferredInputIndexes(
+                    _deferredInputClassifier.AppendUniqueDeferredInputIndexes(
                         plans,
                         classifiedPlans,
                         planIndex,
@@ -135,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (classifiedPlans[planIndex].IsAllDeferred)
                 {
-                    DeferredInputClassifier.ApplyDeferredAlreadyActive(plans[planIndex], slots);
+                    _deferredInputClassifier.ApplyDeferredAlreadyActive(plans[planIndex], slots);
                 }
             }
 
@@ -159,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return run.BuildResult(correlationId);
         }
 
-        private static async Task ProcessPlannedGroupAsync(
+        private async Task ProcessPlannedGroupAsync(
             IReadOnlyList<int> inputIndexes,
             HotReloadInputResolutionSlot[] slots,
             string correlationId,
@@ -180,12 +195,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int inputCount = inputIndexes.Count;
             if (isLastGroupOfAssembly)
             {
-                SiblingRebindReporter.AppendActiveSiblingsToGroup(
+                _siblingRebindReporter.AppendActiveSiblingsToGroup(
                     filesOfGroup,
                     pathsInRun,
                     contentPathOverrideByFile,
                     run,
-                    InputFileResolver);
+                    _inputFileResolver);
             }
 
             // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
@@ -194,7 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // ProcessGroupAsync switches back via MainThreadSwitcher (EditorApplication.update
             // queue) before any main-thread-only editor API or Harmony patch.
             IReadOnlyList<HotReloadFileProcessResult> groupResults =
-                await HotReloadGroupProcessor.ProcessGroupAsync(filesOfGroup, correlationId, ct)
+                await _groupProcessor.ProcessGroupAsync(filesOfGroup, correlationId, ct)
                     .ConfigureAwait(false);
             Debug.Assert(
                 groupResults.Count == filesOfGroup.Count,
@@ -211,7 +226,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (isLastGroupOfAssembly)
             {
-                SiblingRebindReporter.AddSiblingRebindResultWarnings(
+                _siblingRebindReporter.AddSiblingRebindResultWarnings(
                     filesOfGroup,
                     inputCount,
                     groupResults);

@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             mismatched.assemblyFullName =
                 HotReloadRetainedArtifactFixture.ReadAssemblyFullName(fixture.TargetAssemblyPath);
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 fixture.BuildGroupTransformInput(new[] { mismatched }),
                 CancellationToken.None);
 
@@ -185,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 fixture.CreateRecordedArtifact(fixture.RetainedFingerprint);
             ownerless.types[0].ownerProjectRelativePath = string.Empty;
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunWorkerAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunWorkerAsync(
                 fixture.BuildTransformInput(new[] { ownerless }),
                 CancellationToken.None);
 
@@ -207,7 +207,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 fixture.CreateRecordedArtifact(fixture.RetainedFingerprint);
             typeless.types = Array.Empty<TransformWorkerIntroducedTypeArtifactTypeDto>();
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunWorkerAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunWorkerAsync(
                 fixture.BuildTransformInput(new[] { typeless }),
                 CancellationToken.None);
 
@@ -230,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             input.targetAssemblyName = string.Empty;
             input.targetAssemblyMvid = string.Empty;
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunWorkerAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunWorkerAsync(
                 input,
                 CancellationToken.None);
 
@@ -261,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRetainedArtifactFixture fixture,
             TransformWorkerIntroducedTypeArtifactDto[] artifacts)
         {
-            return await TransformWorkerClient.RunAsync(
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 fixture.BuildTransformInput(artifacts),
                 CancellationToken.None);
         }
