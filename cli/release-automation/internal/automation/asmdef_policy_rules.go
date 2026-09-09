@@ -202,25 +202,29 @@ func asmdefLayerMayReference(from string, to string, toCategory asmdefCategory) 
 }
 
 // asmdefToolReferenceViolation names the rule for a tool reference outside the
-// Tool permit: another tool is a tool-isolation violation unless it is the
-// tool's own parent; any other target is a layer-direction violation.
+// Tool permit: another tool is a tool-isolation violation unless both belong to
+// the same tool; any other target is a layer-direction violation.
 func asmdefToolReferenceViolation(from string, to string, toCategory asmdefCategory) string {
 	if toCategory != asmdefCategoryTool {
 		return asmdefRuleLayerDirection
 	}
-	if asmdefIsParentTool(from, to) {
+	if asmdefIsSameToolFamily(from, to) {
 		return ""
 	}
 	return asmdefRuleToolIsolation
 }
 
-// asmdefIsParentTool reports whether to is an ancestor tool of from, e.g.
-// RunTests is the parent of RunTests.TestFramework. Sub-assemblies of a tool
-// may reference the tool they belong to.
-func asmdefIsParentTool(from string, to string) bool {
-	fromTool := asmdefToolName(from)
-	toTool := asmdefToolName(to)
-	return strings.HasPrefix(fromTool, toTool+".")
+// asmdefIsSameToolFamily reports whether both assemblies belong to one tool,
+// e.g. RunTests and RunTests.TestFramework, or HotReload.Shared and
+// HotReload.Patching. Tool isolation is about what one tool may know of
+// another, so the sub-assemblies a tool is split into may reference each other
+// in any direction.
+func asmdefIsSameToolFamily(from string, to string) bool {
+	return asmdefToolFamily(from) == asmdefToolFamily(to)
+}
+
+func asmdefToolFamily(name string) string {
+	return strings.SplitN(asmdefToolName(name), ".", 2)[0]
 }
 
 func asmdefToolName(name string) string {

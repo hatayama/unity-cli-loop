@@ -110,6 +110,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(secondContentChangedKey, Is.Not.EqualTo(originalKey));
         }
 
+        /// <summary>
+        /// What: every source the worker compiles resolves to a file that exists in the package,
+        /// so moving a shared source (for example into another assembly folder) without updating
+        /// the package-relative path constant fails here instead of at worker bootstrap time.
+        /// </summary>
+        [Test]
+        public void CollectWorkerSourcePaths_ResolvesEverySourceToAnExistingFile()
+        {
+            string workerSourceDirectory = TransformWorkerBootstrap.ResolveWorkerSourceDirectory();
+
+            string[] sourcePaths = TransformWorkerBootstrap.CollectWorkerSourcePaths(workerSourceDirectory);
+
+            Assert.That(sourcePaths.Length, Is.GreaterThan(0));
+            foreach (string sourcePath in sourcePaths)
+            {
+                Assert.That(File.Exists(sourcePath), Is.True, "Worker source missing: " + sourcePath);
+            }
+        }
+
         private static string CreateWorkDirectory()
         {
             string projectRootPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
