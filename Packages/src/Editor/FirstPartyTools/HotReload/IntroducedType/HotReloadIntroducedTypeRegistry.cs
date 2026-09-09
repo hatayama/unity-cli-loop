@@ -275,6 +275,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
+        /// <summary>
+        /// Finds the active artifact whose assembly carries <paramref name="assemblySimpleName"/>.
+        /// Why by simple name: a patch target names its assembly the way Unity does, without the
+        /// version and public-key parts the full name a bind request carries would have.
+        /// </summary>
+        public bool TryFindActiveArtifactByAssemblyName(
+            string assemblySimpleName,
+            out HotReloadIntroducedTypeArtifact artifact)
+        {
+            lock (gate)
+            {
+                foreach (HotReloadIntroducedTypeArtifact active in activeByAssemblyIdentity.Values)
+                {
+                    if (!string.Equals(
+                            active.Assembly.GetName().Name,
+                            assemblySimpleName,
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    artifact = active;
+                    return true;
+                }
+            }
+
+            artifact = null;
+            return false;
+        }
+
         public bool TryResolveActiveAssembly(string requestedAssemblyFullName, out HotReloadIntroducedTypeArtifact artifact)
         {
             lock (gate)

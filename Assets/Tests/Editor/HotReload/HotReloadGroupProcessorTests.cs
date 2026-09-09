@@ -802,7 +802,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             return new HotReloadApplyContext(
                 projectRoot, AssemblyName, "coverage-test", compilationAssembly,
-                callerFile.TargetDllPath, compilationAssembly.defines ?? Array.Empty<string>(),
+                callerFile.Home, compilationAssembly.defines ?? Array.Empty<string>(),
                 new TransformWorkerInputDto
                 {
                     sources = new[]
@@ -834,7 +834,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 context.AssemblyName,
                 context.CorrelationId,
                 context.CompilationAssembly,
-                context.TargetDllPath,
+                context.Home,
                 context.Defines,
                 context.WorkerInput,
                 emptyWorkerOutput,
@@ -870,7 +870,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "// " + path + "\n");
             HotReloadGroupFile file = new HotReloadGroupFile(
                 path, workerSourcePath, path, AssemblyName, compilationAssembly,
-                Path.Combine(projectRoot, "Library", "ScriptAssemblies", AssemblyName + ".dll"),
+                HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, AssemblyName),
                 projectRoot, new HotReloadFileSinks(new List<string>(), null), newSourceMembershipEvidence);
             file.FileOutput = new TransformWorkerFileOutputDto
             {

@@ -172,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 file.RevertedUnchangedCount = RevertUnchangedPatches(
-                    HotReloadTypeHome.ScriptAssemblies(file.AssemblyName, file.TargetDllPath),
+                    file.Home,
                     unchangedMethods,
                     file.Sinks.Outcomes,
                     file.AssemblyResolvePath);
