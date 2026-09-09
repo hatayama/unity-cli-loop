@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             // Goes through the same entry point the worker process path uses, so removing the
             // check from that path fails here instead of only failing a helper nothing calls.
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/One.cs\"}]}");
 
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            bool valid = CreateOutputInterpreter().TryValidateOutput(input, output, out string errorMessage);
 
             Assert.That(valid, Is.False);
             Assert.That(errorMessage, Does.Contain("source order"));
@@ -2877,7 +2877,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Null,
                 "Omitted calledAddedMethodKeys must deserialize as null.");
 
-            TransformWorkerClient.CoalesceOutput(omitted);
+            CreateOutputInterpreter().CoalesceOutput(omitted);
             Assert.That(omitted.files[0].removedMembers, Is.Not.Null);
             Assert.That(omitted.files[0].removedMembers, Is.Empty);
             Assert.That(omitted.files[0].removedMethodSignatures, Is.Not.Null);
@@ -2892,7 +2892,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerOutputDto nullNames =
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(nullNamesJson);
             Assert.That(nullNames.files[0].addedFieldNames, Is.Null);
-            TransformWorkerClient.CoalesceOutput(nullNames);
+            CreateOutputInterpreter().CoalesceOutput(nullNames);
             Assert.That(nullNames.files[0].addedFieldNames, Is.Not.Null);
             Assert.That(nullNames.files[0].addedFieldNames, Is.Empty);
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Not.Null);
@@ -2955,14 +2955,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerOutputDto withoutFiles =
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>("{\"shimSource\":\"\"}");
             Assert.That(withoutFiles.files, Is.Null, "Omitted files must deserialize as null.");
-            TransformWorkerClient.CoalesceOutput(withoutFiles);
+            CreateOutputInterpreter().CoalesceOutput(withoutFiles);
             Assert.That(withoutFiles.files, Is.Not.Null);
             Assert.That(withoutFiles.files, Is.Empty);
 
             TransformWorkerOutputDto withBareFile = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(
                 "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\"}]}");
             Assert.That(withBareFile.files[0].sourceContentSha256, Is.Null);
-            TransformWorkerClient.CoalesceOutput(withBareFile);
+            CreateOutputInterpreter().CoalesceOutput(withBareFile);
             TransformWorkerFileOutputDto coalesced = withBareFile.files[0];
             Assert.That(coalesced.projectRelativePath, Is.EqualTo("Assets/Edited.cs"));
             Assert.That(coalesced.sourceContentSha256, Is.EqualTo(string.Empty));
@@ -3012,7 +3012,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             // The omission has to be judged before coalescing turns it into an empty array, so
             // the payload enters as JSON through the same entry point the process path uses.
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\"}]}");
 
@@ -3030,7 +3030,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerInputDto input = CreatePreparationValidationInput();
             input.targetAssemblyName = string.Empty;
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 CreateMatchingPreparationOutputJson(string.Empty, "mvid"));
 
@@ -3048,7 +3048,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerInputDto input = CreatePreparationValidationInput();
             input.targetAssemblyMvid = string.Empty;
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 CreateMatchingPreparationOutputJson("Assembly", string.Empty));
 
@@ -3097,7 +3097,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(input, output);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("owner"));
@@ -3116,7 +3116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "mvid",
                 "Assets/Edited.cs");
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(input, output);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("assembly identity"));
@@ -3135,7 +3135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "other-mvid",
                 "Assets/Edited.cs");
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(input, output);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("assembly identity"));
@@ -3154,7 +3154,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "mvid",
                 "Assets/Edited.cs");
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(input, output);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
         }
@@ -3168,7 +3168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerInputDto input = CreatePreparationValidationInput();
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 "{\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\",\"introducedTypes\":[null],\"introducedTypeDiagnostics\":[]}]}");
 
@@ -3186,7 +3186,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerInputDto input = CreatePreparationValidationInput();
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\","
                 + "\"introducedTypes\":[],\"introducedTypeDiagnostics\":[]}]}");
@@ -3204,7 +3204,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerInputDto input = CreatePreparationValidationInput();
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 "{\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\",\"introducedTypes\":[],"
                 + "\"introducedTypeDiagnostics\":[],\"introducedTypeReuses\":[null]}]}");
@@ -3235,7 +3235,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 JsonConvert.SerializeObject(output));
 
@@ -3265,7 +3265,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 JsonConvert.SerializeObject(output));
 
@@ -3295,7 +3295,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 JsonConvert.SerializeObject(output));
 
@@ -3321,7 +3321,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateRetainedTypeReuse()
             };
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 JsonConvert.SerializeObject(output));
 
@@ -3343,7 +3343,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assets/Edited.cs");
             output.files[0].introducedTypeReuses = new[] { CreateRetainedTypeReuse() };
 
-            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
                 input,
                 JsonConvert.SerializeObject(output));
 
@@ -3383,6 +3383,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
             return input;
+        }
+
+        private static TransformWorkerOutputInterpreter CreateOutputInterpreter()
+        {
+            return new TransformWorkerOutputInterpreter(new TransformWorkerOutputValidator());
         }
 
         private static string CreateMatchingPreparationOutputJson(string assemblyName, string assemblyMvid)

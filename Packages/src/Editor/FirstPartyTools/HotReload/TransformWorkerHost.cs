@@ -1,11 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Newtonsoft.Json;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -33,8 +30,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class TransformWorkerHost
     {
         private const int MaxConversationAttempts = 2;
-        private const int GracefulQuitWaitMilliseconds = 500;
-        private const int KillWaitMilliseconds = 2000;
 
         public static readonly TransformWorkerHost Shared = new TransformWorkerHost(
             TransformWorkerLaunchTargetResolution.ResolveAsync,
@@ -44,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly TransformWorkerLaunchTargetResolver _resolveLaunchTarget;
         private readonly TransformWorkerChannelFactory _channelFactory;
         private readonly int _responseTimeoutMilliseconds;
+        private readonly TransformWorkerChannelTermination _channelTermination = new TransformWorkerChannelTermination();
         private readonly SemaphoreSlim _conversationGate = new SemaphoreSlim(1, 1);
         private readonly object _stateLock = new object();
 
@@ -158,10 +154,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            // Why read the id first: the channel is disposed by TerminateChannel and a disposed
+            // Why read the id first: the channel is disposed when it is terminated and a disposed
             // process no longer exposes its id.
             int processId = channel.Id;
-            TerminateChannel(channel);
+            _channelTermination.Terminate(channel);
             VibeLogger.LogInfo(
                 HotReloadConstants.VibeLogWorkerHostShutdown,
                 "Resident transform worker stopped.",
@@ -175,13 +171,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Stopwatch deadline,
             CancellationToken ct)
         {
-            string tempDirectory = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(tempDirectory);
-            string inputJsonPath = Path.Combine(tempDirectory, "input.json");
-            string outputJsonPath = Path.Combine(tempDirectory, "output.json");
-            try
+            using (TransformWorkerRequestFiles requestFiles = new TransformWorkerRequestFiles())
             {
-                File.WriteAllText(inputJsonPath, JsonConvert.SerializeObject(input), new UTF8Encoding(false));
+                string inputJsonPath = requestFiles.WriteInputJson(input);
+                string outputJsonPath = requestFiles.OutputJsonPath;
                 string requestLine = TransformWorkerServeProtocol.EncodeRequestLine(inputJsonPath, outputJsonPath);
 
                 string lastBrokenReason = string.Empty;
@@ -202,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             + " ms before attempt " + attempt + " could start.");
                     }
 
-                    ConversationOutcome outcome = await RunOneConversationAsync(
+                    TransformWorkerConversationOutcome outcome = await RunOneConversationAsync(
                         target, requestLine, outputJsonPath, input.sources.Length, generation, deadline, ct).ConfigureAwait(false);
                     if (outcome.Result != null)
                     {
@@ -226,47 +219,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Resident transform worker conversation broke " + MaxConversationAttempts
                     + " times in a row. Last reason: " + lastBrokenReason);
             }
-            finally
-            {
-                DeleteTempDirectory(tempDirectory);
-            }
-        }
-
-        // Why swallow only these two: a worker killed on the timeout path can still hold the
-        // request files open (Windows most of all), and losing a decided result to a cleanup
-        // error would be worse than leaving a temp directory behind for the OS to reap.
-        private static void DeleteTempDirectory(string tempDirectory)
-        {
-            if (!Directory.Exists(tempDirectory))
-            {
-                return;
-            }
-
-            try
-            {
-                Directory.Delete(tempDirectory, recursive: true);
-            }
-            catch (IOException ex)
-            {
-                LogTempCleanupFailure(tempDirectory, ex.Message);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                LogTempCleanupFailure(tempDirectory, ex.Message);
-            }
-        }
-
-        private static void LogTempCleanupFailure(string tempDirectory, string reason)
-        {
-            VibeLogger.LogWarning(
-                HotReloadConstants.VibeLogWorkerHostTempCleanupFailed,
-                "Resident transform worker request files could not be deleted.",
-                new { path = tempDirectory, reason });
         }
 
         // One exchange with one process. Returns a final result, or a broken-conversation reason
         // after the process has been discarded so the caller may try once more.
-        private async Task<ConversationOutcome> RunOneConversationAsync(
+        private async Task<TransformWorkerConversationOutcome> RunOneConversationAsync(
             TransformWorkerLaunchTarget target,
             string requestLine,
             string outputJsonPath,
@@ -279,8 +236,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (channel == null)
             {
                 return lifecycleClosed
-                    ? ConversationOutcome.Final(LifecycleClosed("while starting the worker"))
-                    : ConversationOutcome.Broken(startFailure);
+                    ? TransformWorkerConversationOutcome.Final(LifecycleClosed("while starting the worker"))
+                    : TransformWorkerConversationOutcome.Broken(startFailure);
             }
 
             if (IsGenerationClosed(generation))
@@ -289,7 +246,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the registered channel and may have taken it, but a channel registered after it
                 // read the state would otherwise stay alive with nobody owning it.
                 DiscardChannel(channel);
-                return ConversationOutcome.Final(LifecycleClosed("before sending the request"));
+                return TransformWorkerConversationOutcome.Final(LifecycleClosed("before sending the request"));
             }
 
             try
@@ -306,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!TransformWorkerServeProtocol.TryParseResponseHeader(header, out int exitCode, out int diagnosticByteCount))
                 {
                     DiscardChannel(channel);
-                    return ConversationOutcome.Broken("unrecognized response header: " + header);
+                    return TransformWorkerConversationOutcome.Broken("unrecognized response header: " + header);
                 }
 
                 string diagnosticsLine = await ReadWithinDeadlineAsync(channel, deadline, ct).ConfigureAwait(false);
@@ -318,14 +275,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!TransformWorkerServeProtocol.TryDecodeDiagnostics(diagnosticsLine, diagnosticByteCount, out string diagnostics))
                 {
                     DiscardChannel(channel);
-                    return ConversationOutcome.Broken("diagnostics payload did not match its declared length");
+                    return TransformWorkerConversationOutcome.Broken("diagnostics payload did not match its declared length");
                 }
 
                 // Why check here and not again later: from this point on nothing touches the
                 // process, so a shutdown that lands after this line cannot corrupt the result.
                 if (IsGenerationClosed(generation))
                 {
-                    return ConversationOutcome.Final(LifecycleClosed("after receiving the response"));
+                    return TransformWorkerConversationOutcome.Final(LifecycleClosed("after receiving the response"));
                 }
 
                 return InterpretResponse(channel, exitCode, diagnostics, outputJsonPath, expectedFileCount);
@@ -333,12 +290,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             catch (IOException ex)
             {
                 DiscardChannel(channel);
-                return ConversationOutcome.Broken("pipe failure: " + ex.Message);
+                return TransformWorkerConversationOutcome.Broken("pipe failure: " + ex.Message);
             }
             catch (ObjectDisposedException ex)
             {
                 DiscardChannel(channel);
-                return ConversationOutcome.Broken("pipe closed: " + ex.Message);
+                return TransformWorkerConversationOutcome.Broken("pipe closed: " + ex.Message);
             }
             catch (OperationCanceledException)
             {
@@ -349,7 +306,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private ConversationOutcome InterpretResponse(
+        private TransformWorkerConversationOutcome InterpretResponse(
             ITransformWorkerChannel channel,
             int exitCode,
             string diagnostics,
@@ -359,7 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (exitCode != 0)
             {
                 // The request itself failed; the process is healthy and stays for the next one.
-                return ConversationOutcome.Final(TransformWorkerHostResult.Failure(
+                return TransformWorkerConversationOutcome.Final(TransformWorkerHostResult.Failure(
                     TransformWorkerHostResultKind.WorkerFailed,
                     "Transform worker exited with code " + exitCode
                     + ".\nstdout:\n" + diagnostics
@@ -372,12 +329,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why broken and not WorkerFailed: exit 0 without a usable output file means the
                 // frame and the file system disagree, which only a fresh process can rule out.
                 DiscardChannel(channel);
-                return ConversationOutcome.Broken(readError);
+                return TransformWorkerConversationOutcome.Broken(readError);
             }
 
             if (HasRunLevelParseErrors(output))
             {
-                return ConversationOutcome.Final(TransformWorkerHostResult.Failure(
+                return TransformWorkerConversationOutcome.Final(TransformWorkerHostResult.Failure(
                     TransformWorkerHostResultKind.WorkerFailed,
                     string.Join("\n", output.parseErrors)));
             }
@@ -391,11 +348,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (fileRowCount != expectedFileCount)
             {
                 DiscardChannel(channel);
-                return ConversationOutcome.Broken(
+                return TransformWorkerConversationOutcome.Broken(
                     "worker output carried " + fileRowCount + " file rows for " + expectedFileCount + " sources");
             }
 
-            return ConversationOutcome.Final(TransformWorkerHostResult.Completed(output));
+            return TransformWorkerConversationOutcome.Final(TransformWorkerHostResult.Completed(output));
         }
 
         // The output is still as the worker wrote it, so an omitted array reads as null here.
@@ -404,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return output.parseErrors != null && output.parseErrors.Length > 0;
         }
 
-        private async Task<ConversationOutcome> HandleMissingLineAsync(
+        private async Task<TransformWorkerConversationOutcome> HandleMissingLineAsync(
             ITransformWorkerChannel channel,
             Stopwatch deadline,
             string expectedLine)
@@ -412,14 +369,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (deadline.ElapsedMilliseconds < _responseTimeoutMilliseconds)
             {
                 DiscardChannel(channel);
-                return ConversationOutcome.Broken("worker closed its output before the " + expectedLine);
+                return TransformWorkerConversationOutcome.Broken("worker closed its output before the " + expectedLine);
             }
 
             // Why no retry: a hang is a property of this request as much as of the process, and a
             // second 120 s wait would double the worst case for callers.
             int processId = channel.Id;
             await Task.Run(() => DiscardChannel(channel)).ConfigureAwait(false);
-            return ConversationOutcome.Final(TransformWorkerHostResult.Failure(
+            return TransformWorkerConversationOutcome.Final(TransformWorkerHostResult.Failure(
                 TransformWorkerHostResultKind.TimedOut,
                 "Transform worker did not answer within " + _responseTimeoutMilliseconds
                 + " ms (waiting for the " + expectedLine + "); process " + processId + " was killed."));
@@ -464,7 +421,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool restarted = stale != null;
             if (stale != null)
             {
-                TerminateChannel(stale);
+                _channelTermination.Terminate(stale);
             }
 
             ITransformWorkerChannel started = _channelFactory(target.WorkerDirectory, target.DotnetHostPath);
@@ -495,7 +452,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (lifecycleClosed)
             {
-                TerminateChannel(started);
+                _channelTermination.Terminate(started);
                 return null;
             }
 
@@ -521,58 +478,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _channelWorkerDirectory = null;
             }
 
-            TerminateChannel(channel);
-        }
-
-        private static void TerminateChannel(ITransformWorkerChannel channel)
-        {
-            try
-            {
-                if (!channel.TryQuitGracefully(GracefulQuitWaitMilliseconds))
-                {
-                    KillQuietly(channel);
-                }
-            }
-            catch (IOException)
-            {
-                // The pipe is already gone; the process is exiting or exited.
-                KillQuietly(channel);
-            }
-            catch (InvalidOperationException)
-            {
-                // The process exited between the liveness check and the write.
-            }
-            finally
-            {
-                channel.Dispose();
-            }
-        }
-
-        // Why swallow: the process can exit between the liveness check and the kill, and a race
-        // the host lost still leaves it with the outcome it asked for - a dead worker.
-        private static void KillQuietly(ITransformWorkerChannel channel)
-        {
-            try
-            {
-                channel.Kill(KillWaitMilliseconds);
-            }
-            catch (InvalidOperationException)
-            {
-                // The race was lost to the exit itself, which is the outcome the host wanted.
-                // A live process that still refused the kill is a real problem.
-                if (!channel.HasExited)
-                {
-                    throw;
-                }
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                // Same race, reported by the OS instead of the runtime.
-                if (!channel.HasExited)
-                {
-                    throw;
-                }
-            }
+            _channelTermination.Terminate(channel);
         }
 
         private int ReadGeneration()
@@ -597,28 +503,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return TransformWorkerHostResult.Failure(
                 TransformWorkerHostResultKind.LifecycleClosed,
                 "The resident transform worker was shut down " + when + ".");
-        }
-
-        private readonly struct ConversationOutcome
-        {
-            public TransformWorkerHostResult Result { get; }
-            public string BrokenReason { get; }
-
-            private ConversationOutcome(TransformWorkerHostResult result, string brokenReason)
-            {
-                Result = result;
-                BrokenReason = brokenReason;
-            }
-
-            public static ConversationOutcome Final(TransformWorkerHostResult result)
-            {
-                return new ConversationOutcome(result, null);
-            }
-
-            public static ConversationOutcome Broken(string reason)
-            {
-                return new ConversationOutcome(null, reason);
-            }
         }
     }
 }
