@@ -1,6 +1,7 @@
 package compilecheck
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -16,6 +17,8 @@ const (
 	libraryDirectoryName         = "Library"
 	packageCacheDirectoryName    = "PackageCache"
 	assemblyDefinitionExtension  = ".asmdef"
+	assemblyDefinitionMetaSuffix = ".meta"
+	assemblyDefinitionGUIDKey    = "guid:"
 	assemblyReferenceExtension   = ".asmref"
 	cSharpSourceExtension        = ".cs"
 	unityIgnoredDirectorySuffix  = "~"
@@ -23,11 +26,15 @@ const (
 	assemblyDefinitionIndexError = "failed to index assembly definitions under %s: %w"
 )
 
+// utf8ByteOrderMark is the prefix editors on Windows put in front of UTF-8 text.
+var utf8ByteOrderMark = []byte{0xEF, 0xBB, 0xBF}
+
 // AssemblyDefinition is one .asmdef file, keyed by the assembly name it declares.
 type AssemblyDefinition struct {
 	Name      string
 	Path      string // absolute path of the .asmdef file
 	Directory string // absolute path of the directory that owns the assembly
+	GUID      string // the GUID in the sibling .meta, empty when Unity has not written one yet
 }
 
 // IndexAssemblyDefinitions maps every assembly name in the project to the .asmdef that declares it.
@@ -38,6 +45,7 @@ func IndexAssemblyDefinitions(projectRoot string) (map[string]AssemblyDefinition
 		filepath.Join(projectRoot, packagesDirectoryName),
 		filepath.Join(projectRoot, libraryDirectoryName, packageCacheDirectoryName),
 	}
+	roots = append(roots, localPackageRoots(projectRoot)...)
 	for _, root := range roots {
 		if !directoryExists(root) {
 			continue
@@ -73,24 +81,36 @@ func indexAssemblyDefinitionsUnder(root string, index map[string]AssemblyDefinit
 		// Why the first wins: Unity itself rejects duplicate assembly names, so a second one means a
 		// stale copy, and taking it would point the rebuild at the wrong directory.
 		if _, exists := index[name]; !exists {
-			index[name] = AssemblyDefinition{Name: name, Path: path, Directory: filepath.Dir(path)}
+			index[name] = AssemblyDefinition{
+				Name:      name,
+				Path:      path,
+				Directory: filepath.Dir(path),
+				GUID:      readAssemblyDefinitionGUID(path),
+			}
 		}
 
 		return nil
 	})
 }
 
-// readAssemblyDefinitionName reads the assembly name an .asmdef declares.
-func readAssemblyDefinitionName(path string) (string, error) {
+// readUnityJSONFile reads one of Unity's JSON files into target.
+// Why the byte order mark is stripped: editors on Windows write UTF-8 with a BOM by default, and
+// encoding/json rejects it, which would turn one such .asmdef into a failure of the whole command.
+func readUnityJSONFile(path string, target any) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return err
 	}
 
+	return json.Unmarshal(bytes.TrimPrefix(content, utf8ByteOrderMark), target)
+}
+
+// readAssemblyDefinitionName reads the assembly name an .asmdef declares.
+func readAssemblyDefinitionName(path string) (string, error) {
 	var definition struct {
 		Name string `json:"name"`
 	}
-	if err := json.Unmarshal(content, &definition); err != nil {
+	if err := readUnityJSONFile(path, &definition); err != nil {
 		return "", fmt.Errorf("failed to read %s: %w", path, err)
 	}
 	if definition.Name == "" {
@@ -100,11 +120,32 @@ func readAssemblyDefinitionName(path string) (string, error) {
 	return definition.Name, nil
 }
 
+// readAssemblyDefinitionGUID reads the GUID Unity assigned an .asmdef, which is how other assembly
+// definitions spell a reference to it. An unreadable .meta yields an empty GUID rather than an
+// error: the GUID only refines a check that already tolerates references it cannot resolve.
+func readAssemblyDefinitionGUID(assemblyDefinitionPath string) string {
+	content, err := os.ReadFile(assemblyDefinitionPath + assemblyDefinitionMetaSuffix)
+	if err != nil {
+		return ""
+	}
+
+	for _, rawLine := range strings.Split(string(content), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if !strings.HasPrefix(line, assemblyDefinitionGUIDKey) {
+			continue
+		}
+
+		return strings.TrimSpace(strings.TrimPrefix(line, assemblyDefinitionGUIDKey))
+	}
+
+	return ""
+}
+
 // RebuildSources lists the sources to compile now, reflecting .cs files added or deleted since Bee ran.
 func RebuildSources(projectRoot string, rsp ResponseFile, asmdef *AssemblyDefinition) ([]string, error) {
 	existing := make([]string, 0, len(rsp.Sources))
 	for _, source := range rsp.Sources {
-		if fileExists(filepath.Join(projectRoot, source)) {
+		if fileExists(sourcePath(projectRoot, source)) {
 			existing = append(existing, source)
 		}
 	}
@@ -126,7 +167,7 @@ func RebuildSources(projectRoot string, rsp ResponseFile, asmdef *AssemblyDefini
 	// assembly, and only the response file records where they came from.
 	result := globbed
 	for _, source := range existing {
-		if !isUnderDirectory(filepath.Join(projectRoot, source), asmdef.Directory) {
+		if !isUnderDirectory(sourcePath(projectRoot, source), asmdef.Directory) {
 			result = append(result, source)
 		}
 	}
@@ -155,11 +196,7 @@ func globAssemblySources(projectRoot string, assemblyDirectory string) ([]string
 		if filepath.Ext(path) != cSharpSourceExtension {
 			return nil
 		}
-		relativePath, relErr := filepath.Rel(projectRoot, path)
-		if relErr != nil {
-			return relErr
-		}
-		sources = append(sources, relativePath)
+		sources = append(sources, recordSourcePath(projectRoot, path))
 
 		return nil
 	})

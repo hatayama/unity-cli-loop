@@ -19,6 +19,12 @@ var nativeCommandOptions = map[string][]string{
 		"--quit",
 		"--restart",
 	},
+	clicore.CompileCheckCommandName: {
+		"--" + tooldocs.ProjectPathFlagName,
+		"--all",
+		"--editor-version",
+		"--max-depth",
+	},
 	clicore.InstallCommandName: {"--" + installDirFlagName},
 	clicore.UpdateCommandName:  {"--" + updateToVersionFlagName},
 	clicore.VersionCommandName: {"--json"},
