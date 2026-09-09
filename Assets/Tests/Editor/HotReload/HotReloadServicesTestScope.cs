@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -33,6 +36,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 capture,
                 HotReloadCompositionRoot.Services.TransformWorkerClient.Host,
                 HotReloadGroupProcessorDependencies.CreateProduction);
+        }
+
+        /// <summary>Replaces the run the tool applies through.</summary>
+        internal static IDisposable BeginWithOrchestrator(IHotReloadOrchestrator orchestrator)
+        {
+            return HotReloadCompositionRoot.BeginReplacement(
+                HotReloadCompositionRoot.Services.WithOrchestrator(orchestrator));
+        }
+
+        /// <summary>Replaces the changed-file report the tool selects omitted files from.</summary>
+        internal static IDisposable BeginWithChangeDetector(IHotReloadChangeDetector changeDetector)
+        {
+            return HotReloadCompositionRoot.BeginReplacement(
+                HotReloadCompositionRoot.Services.WithChangeDetector(changeDetector));
         }
 
         /// <summary>Replaces the transform worker host the client routes through.</summary>
@@ -88,6 +105,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public HotReloadEditorStateSnapshot CaptureCurrent()
         {
             return Capture();
+        }
+    }
+    /// <summary>
+    /// A changed-file report a test decides, so the omitted-files selection can be driven without
+    /// a compile snapshot.
+    /// </summary>
+    internal sealed class HotReloadStubChangeDetector : IHotReloadChangeDetector
+    {
+        private readonly Func<HotReloadChangedFileAggregationResult> _detect;
+
+        internal HotReloadStubChangeDetector(Func<HotReloadChangedFileAggregationResult> detect)
+        {
+            _detect = detect;
+        }
+
+        public HotReloadChangedFileAggregationResult Detect()
+        {
+            return _detect();
+        }
+    }
+
+    /// <summary>
+    /// A run a test decides the result of, so the tool's selection, response and recovery steps
+    /// can be exercised without applying anything.
+    /// </summary>
+    internal sealed class HotReloadStubOrchestrator : IHotReloadOrchestrator
+    {
+        private readonly Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>> _run;
+
+        internal HotReloadStubOrchestrator(
+            Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>> run)
+        {
+            _run = run;
+        }
+
+        public Task<HotReloadOrchestratorResult> RunAsync(
+            IReadOnlyList<string> files,
+            string contentPathOverride,
+            CancellationToken ct,
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null)
+        {
+            return _run(files, ct);
         }
     }
 }

@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// End-to-end hot-reload pipeline: resolve every file's assembly, group the files of one
     /// assembly, run each group, and merge the per-file results in input order.
     /// </summary>
-    internal sealed class HotReloadOrchestrator
+    internal sealed class HotReloadOrchestrator : IHotReloadOrchestrator
     {
         private readonly HotReloadGroupProcessor _groupProcessor;
         private readonly HotReloadInputFileResolver _inputFileResolver;

@@ -126,7 +126,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     packageRootCapture),
                 new HotReloadStatusExecutor(domain, patcher),
                 packageRootCapture,
-                editorStateSnapshotCapture);
+                editorStateSnapshotCapture,
+                new HotReloadChangeDetector());
         }
 
         /// <summary>

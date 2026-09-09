@@ -17,37 +17,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadDefaultFilesTests
     {
-        private Func<HotReloadChangedFileAggregationResult> _previousDetector;
-        private Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>> _previousApply;
-
-        [SetUp]
-        public void SetUp()
-        {
-            _previousDetector = HotReloadTool.DetectChangedFilesForTesting;
-            _previousApply = HotReloadTool.RunApplyAsyncForTesting;
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            HotReloadTool.DetectChangedFilesForTesting = _previousDetector;
-            HotReloadTool.RunApplyAsyncForTesting = _previousApply;
-        }
-
         /// <summary>
-        /// What: production seam defaults remain wired to the real detector and private apply method.
+        /// What: the installed services select and apply through the production collaborators.
         /// </summary>
         [Test]
-        public void StaticSeams_UseProductionDefaults()
+        public void InstalledServices_UseProductionCollaborators()
         {
             Assert.That(
-                HotReloadTool.DetectChangedFilesForTesting,
-                Is.EqualTo(
-                    (Func<HotReloadChangedFileAggregationResult>)HotReloadChangedFileAggregator.Detect));
-            Assert.That(HotReloadTool.RunApplyAsyncForTesting.Method.Name, Is.EqualTo("RunApplyAsync"));
+                HotReloadCompositionRoot.Services.ChangeDetector,
+                Is.TypeOf<HotReloadChangeDetector>());
             Assert.That(
-                HotReloadTool.RunApplyAsyncForTesting.Method.DeclaringType,
-                Is.EqualTo(typeof(HotReloadTool)));
+                HotReloadCompositionRoot.Services.Orchestrator,
+                Is.TypeOf<HotReloadOrchestrator>());
         }
 
         /// <summary>
@@ -57,25 +38,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_WhenFilesAreOmittedAndChangesExist_AppliesSelectedFilesAndPrefixesMessage()
         {
-            HotReloadTool.DetectChangedFilesForTesting = () =>
-                new HotReloadChangedFileAggregationResult(
-                    hasBaseline: true,
-                    changedProjectRelativePaths: new List<string> { "Assets/Selected.cs" },
-                    scanLimitWarnings: new List<string> { "scan limit warning" });
+            using IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(() =>
+                    new HotReloadChangedFileAggregationResult(
+                        hasBaseline: true,
+                        changedProjectRelativePaths: new List<string> { "Assets/Selected.cs" },
+                        scanLimitWarnings: new List<string> { "scan limit warning" })));
             List<string> appliedFiles = null;
-            HotReloadTool.RunApplyAsyncForTesting = (files, ignoredCt) =>
-            {
-                appliedFiles = new List<string>(files);
-                return Task.FromResult(
-                    new HotReloadOrchestratorResult(
-                        new List<HotReloadMethodOutcome>
-                        {
-                            HotReloadMethodOutcome.Patched("Host.Selected()", "Assets/Selected.cs")
-                        },
-                        new List<string> { "orchestrator warning" },
-                        patchedTotal: 1,
-                        activePatchTotal: 1));
-            };
+            using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                new HotReloadStubOrchestrator((files, ignoredCt) =>
+                {
+                    appliedFiles = new List<string>(files);
+                    return Task.FromResult(
+                        new HotReloadOrchestratorResult(
+                            new List<HotReloadMethodOutcome>
+                            {
+                                HotReloadMethodOutcome.Patched("Host.Selected()", "Assets/Selected.cs")
+                            },
+                            new List<string> { "orchestrator warning" },
+                            patchedTotal: 1,
+                            activePatchTotal: 1));
+                }));
 
             HotReloadResponse response = await ExecuteAsync(new JObject());
 
@@ -98,12 +81,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_WhenFilesAreOmittedAndNoChangesExist_ReturnsNoChangedFilesFailure()
         {
-            HotReloadTool.DetectChangedFilesForTesting = () =>
-                new HotReloadChangedFileAggregationResult(
-                    hasBaseline: true,
-                    changedProjectRelativePaths: new List<string>(),
-                    scanLimitWarnings: new List<string>());
-            HotReloadTool.RunApplyAsyncForTesting = FailIfApplyRuns;
+            using IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(() =>
+                    new HotReloadChangedFileAggregationResult(
+                        hasBaseline: true,
+                        changedProjectRelativePaths: new List<string>(),
+                        scanLimitWarnings: new List<string>())));
+            using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                new HotReloadStubOrchestrator(FailIfApplyRuns));
 
             HotReloadResponse response = await ExecuteAsync(new JObject());
 
@@ -132,14 +117,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task ExecuteAsync_WhenStatusOrRevertAll_IsSet_DoesNotDetectChangedFiles()
         {
             int detectorCallCount = 0;
-            HotReloadTool.DetectChangedFilesForTesting = () =>
-            {
-                detectorCallCount++;
-                return new HotReloadChangedFileAggregationResult(
-                    hasBaseline: false,
-                    changedProjectRelativePaths: new List<string>(),
-                    scanLimitWarnings: new List<string>());
-            };
+            using IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(() =>
+                {
+                    detectorCallCount++;
+                    return new HotReloadChangedFileAggregationResult(
+                        hasBaseline: false,
+                        changedProjectRelativePaths: new List<string>(),
+                        scanLimitWarnings: new List<string>());
+                }));
 
             HotReloadResponse statusResponse = await ExecuteAsync(new JObject { ["Status"] = true });
             HotReloadResponse revertResponse = await ExecuteAsync(new JObject { ["RevertAll"] = true });

@@ -56,15 +56,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_WithoutFilesAndWithoutBaseline_ReturnsValidationFailure()
         {
-            Func<HotReloadChangedFileAggregationResult> previousDetector =
-                HotReloadTool.DetectChangedFilesForTesting;
-            try
-            {
-                HotReloadTool.DetectChangedFilesForTesting = () =>
+            IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(() =>
                     new HotReloadChangedFileAggregationResult(
                         hasBaseline: false,
                         changedProjectRelativePaths: new List<string>(),
-                        scanLimitWarnings: new List<string>());
+                        scanLimitWarnings: new List<string>())));
+            try
+            {
 
                 HotReloadTool tool = new HotReloadTool();
                 UnityCliLoopToolResponse baseResponse =
@@ -92,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                detectorScope.Dispose();
             }
         }
 
@@ -104,15 +103,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task ExecuteAsync_NoChangedFiles_WhenActivePatchExists_ReportsActiveCountAndRecovery()
         {
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
-            Func<HotReloadChangedFileAggregationResult> previousDetector =
-                HotReloadTool.DetectChangedFilesForTesting;
+            IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(CreateNoChangedFilesDetector()));
             try
             {
                 ApplyCoreFixtureTransplant(
                     nameof(HotReloadCoreFixture.ReplaceableCompute),
                     BindingFlags.Instance | BindingFlags.Public,
                     nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
-                HotReloadTool.DetectChangedFilesForTesting = CreateNoChangedFilesDetector();
 
                 HotReloadTool tool = new HotReloadTool();
                 UnityCliLoopToolResponse baseResponse =
@@ -136,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                detectorScope.Dispose();
                 HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
@@ -149,11 +147,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task ExecuteAsync_NoChangedFiles_WhenNoActivePatches_KeepsOriginalMessageAndNextActions()
         {
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
-            Func<HotReloadChangedFileAggregationResult> previousDetector =
-                HotReloadTool.DetectChangedFilesForTesting;
+            IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(CreateNoChangedFilesDetector()));
             try
             {
-                HotReloadTool.DetectChangedFilesForTesting = CreateNoChangedFilesDetector();
 
                 HotReloadTool tool = new HotReloadTool();
                 UnityCliLoopToolResponse baseResponse =
@@ -182,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
             finally
             {
-                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                detectorScope.Dispose();
                 HotReloadCompositionRoot.Services.Patcher.RevertAll();
             }
         }
