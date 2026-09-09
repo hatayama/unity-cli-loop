@@ -181,36 +181,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadOrchestratorResult result = await RunPatchingABodyAndIntroducingATypeAsync();
+                try
+                {
+                    HotReloadOrchestratorResult result = await RunPatchingABodyAndIntroducingATypeAsync();
 
-                Assert.That(
-                    result.ActivePatchTotal,
-                    Is.EqualTo(1),
-                    "Precondition: the run must have patched exactly one method.");
-                Assert.That(
-                    result.IntroducedTypes.Count,
-                    Is.EqualTo(1),
-                    "Precondition: the run must have introduced exactly one type.");
-                HotReloadIntroducedTypeOutcome introduced = result.IntroducedTypes[0];
+                    Assert.That(
+                        result.ActivePatchTotal,
+                        Is.EqualTo(1),
+                        "Precondition: the run must have patched exactly one method.");
+                    Assert.That(
+                        result.IntroducedTypes.Count,
+                        Is.EqualTo(1),
+                        "Precondition: the run must have introduced exactly one type.");
+                    HotReloadIntroducedTypeOutcome introduced = result.IntroducedTypes[0];
 
-                List<string> identities =
-                    new List<string>(HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities());
+                    List<string> identities =
+                        new List<string>(HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities());
 
-                Assert.That(
-                    identities.Count,
-                    Is.EqualTo(2),
-                    "One patch and one type are two changes the reload would discard.");
-                Assert.That(
-                    identities,
-                    Does.Contain(
-                        HotReloadPlayModeEntryDropIdentity.ForType(
-                            introduced.OriginalAssemblyName,
-                            introduced.MetadataName)),
-                    "The type must be recorded in the shape a later apply can recover.");
-                Assert.That(
-                    identities.FindAll(identity => identity.Contains("Scaled")).Count,
-                    Is.EqualTo(1),
-                    "The patched method must still be collected next to the type.");
+                    Assert.That(
+                        identities.Count,
+                        Is.EqualTo(2),
+                        "One patch and one type are two changes the reload would discard.");
+                    Assert.That(
+                        identities,
+                        Does.Contain(
+                            HotReloadPlayModeEntryDropIdentity.ForType(
+                                introduced.OriginalAssemblyName,
+                                introduced.MetadataName)),
+                        "The type must be recorded in the shape a later apply can recover.");
+                    Assert.That(
+                        identities.FindAll(identity => identity.Contains("Scaled")).Count,
+                        Is.EqualTo(1),
+                        "The patched method must still be collected next to the type.");
+                }
+                finally
+                {
+                    // The patch belongs to the replacement domain, and the TearDown revert runs
+                    // after the scope has already put the outer domain back, which knows nothing
+                    // about it and would leave it live in Harmony.
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
             }
         }
 
