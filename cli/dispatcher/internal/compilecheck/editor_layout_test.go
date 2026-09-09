@@ -83,6 +83,9 @@ func TestResolveEditorCompilerPathsKeepsNetCoreRuntimeWhenMajorIsSatisfied(t *te
 		roslynDirectoryName, bincoreDirectoryName)
 	writeCompilerFiles(t, compilerDirectoryPath, runtimeConfigWithVersion("8.0.21"))
 	writeSharedRuntime(t, filepath.Join(scriptingRootPath, netCoreRuntimeDirectoryName), "8.0.21")
+	// Both runtimes satisfy the required major here, so only a resolver that prefers NetCoreRuntime
+	// passes this test; without the second runtime the fallback would produce the same answer.
+	writeSharedRuntime(t, filepath.Join(scriptingRootPath, dotNetSdkDirectoryName), "8.0.21")
 
 	paths, err := ResolveEditorCompilerPaths(filepath.Join(contentsPath, "MacOS", "Unity"))
 	if err != nil {
@@ -92,6 +95,11 @@ func TestResolveEditorCompilerPathsKeepsNetCoreRuntimeWhenMajorIsSatisfied(t *te
 	wantHost := filepath.Join(scriptingRootPath, netCoreRuntimeDirectoryName, hostFileName())
 	if paths.DotnetHostPath != wantHost {
 		t.Errorf("host path = %s, want %s", paths.DotnetHostPath, wantHost)
+	}
+	wantShared := filepath.Join(
+		scriptingRootPath, netCoreRuntimeDirectoryName, sharedDirectoryName, sharedFrameworkName, "8.0.21")
+	if paths.SharedFrameworkPath != wantShared {
+		t.Errorf("shared framework path = %s, want %s", paths.SharedFrameworkPath, wantShared)
 	}
 	if paths.CompilerDirectory != compilerDirectoryPath {
 		t.Errorf("compiler directory = %s, want %s", paths.CompilerDirectory, compilerDirectoryPath)
