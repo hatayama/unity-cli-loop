@@ -199,3 +199,35 @@ func TestRebuildSourcesDoesNotTreatIgnoredAssemblyDefinitionsAsABoundary(t *test
 		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
 	})
 }
+
+// Verifies an .asmref folder nested inside a child assembly's directory keeps its recorded sources.
+func TestRebuildSourcesKeepsSourcesOfAnAsmrefNestedInsideAChildAssembly(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "P.asmdef"), `{"name":"P"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "A.cs"), "")
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "Core", "Core.asmdef"), `{"name":"Core"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "Core", "Child.cs"), "")
+	writeFileAt(t,
+		filepath.Join(projectRoot, "Assets", "P", "Core", "Dialog", "P.Ref.asmref"),
+		`{"reference":"P"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "Core", "Dialog", "Dialog.cs"), "")
+	rsp := ResponseFile{Sources: []string{
+		filepath.Join("Assets", "P", "A.cs"),
+		filepath.Join("Assets", "P", "Core", "Dialog", "Dialog.cs"),
+	}}
+	asmdef := AssemblyDefinition{
+		Name:      "P",
+		Path:      filepath.Join(projectRoot, "Assets", "P", "P.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "P"),
+	}
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef)
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "P", "A.cs"),
+		filepath.Join("Assets", "P", "Core", "Dialog", "Dialog.cs"),
+	})
+}

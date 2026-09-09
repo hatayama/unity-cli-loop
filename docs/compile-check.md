@@ -25,7 +25,11 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    `dotnet` host bundled beside it. Nothing is downloaded, and no system-wide .NET SDK is used.
 3. **Decide what to compile.** By default the run compiles the assemblies whose sources changed
    since the last Unity build, plus every assembly that references one of them. `--all` compiles
-   every assembly in the build. Assemblies left out are counted in `SkippedAssemblies`.
+   every assembly in the build. Assemblies left out are counted in `SkippedAssemblies`. An
+   assembly's sources are re-globbed from its own directory, stopping at nested assembly
+   boundaries; the files an `.asmref` attaches to it are taken from the last build's response file
+   instead, wherever that folder sits — including inside a nested assembly's directory, which the
+   glob never reaches.
 4. **Check that the response files still describe the project.** An assembly definition that was
    added, removed, or that stopped building for the Editor, and a reference or a precompiled
    reference that was added to one, invalidate the recorded build. The run then stops with

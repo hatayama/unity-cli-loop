@@ -166,11 +166,20 @@ func RebuildSources(projectRoot string, rsp ResponseFile, asmdef *AssemblyDefini
 		return nil, err
 	}
 
-	// Why sources outside the directory survive: an .asmref pulls files from elsewhere into this
-	// assembly, and only the response file records where they came from.
+	// Why every recorded source the glob missed survives: an .asmref attaches files to this assembly
+	// from a folder the glob never reaches, and only the response file records where they came from.
+	// The folder is not always outside the assembly directory - an .asmref nested inside a child
+	// assembly's directory sits under it, yet the glob stops at the child's boundary - so the test is
+	// what the glob produced, not where the file lives. Sources deleted since the build are already
+	// gone from existing, and a file that moved into a newly added .asmdef is caught by the added
+	// assembly definition staleness check, so the union cannot resurrect a stale source.
 	result := globbed
+	globbedSet := map[string]bool{}
+	for _, source := range globbed {
+		globbedSet[filepath.ToSlash(source)] = true
+	}
 	for _, source := range existing {
-		if !isUnderDirectory(sourcePath(projectRoot, source), asmdef.Directory) {
+		if !globbedSet[filepath.ToSlash(source)] {
 			result = append(result, source)
 		}
 	}
