@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 using HarmonyLib;
 
+using UnityEngine;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -45,7 +47,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadHarmonyGateway harmony =
                 new HotReloadHarmonyGateway(new Harmony(HotReloadConstants.HarmonyId));
-            return CreateServices(CreateProductionDomain(), harmony);
+            return CreateServices(
+                CreateProductionDomain(),
+                harmony,
+                new HotReloadPackageRootCapture(),
+                new HotReloadEditorStateSnapshotCapture(),
+                TransformWorkerHost.Shared,
+                HotReloadGroupProcessorDependencies.CreateProduction);
         }
 
         /// <summary>
@@ -67,16 +75,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Builds the services around <paramref name="domain"/> and <paramref name="harmony"/>,
         /// without installing them. A test replaces the patch engine through this.
         /// </summary>
-        internal static HotReloadServices CreateServices(HotReloadDomain domain, IHotReloadHarmony harmony)
+        internal static HotReloadServices CreateServices(
+            HotReloadDomain domain,
+            IHotReloadHarmony harmony,
+            IHotReloadPackageRootCapture packageRootCapture,
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
+            TransformWorkerHost transformWorkerHost,
+            Func<TransformWorkerClient, HotReloadEntryApplier, HotReloadGroupProcessorDependencies>
+                buildDependencies)
         {
+            // Built in dependency order, and every collaborator takes what it needs here: nothing
+            // below may read the installed services, or a replacement scope would leave it bound
+            // to the domain that happened to be installed when it was built.
             HotReloadPatcher patcher = new HotReloadPatcher(domain, harmony);
             HotReloadFileEntryApplier fileEntryApplier = new HotReloadFileEntryApplier(domain, patcher);
+            HotReloadEntryApplier entryApplier =
+                new HotReloadEntryApplier(domain, patcher, fileEntryApplier);
+            TransformWorkerClient transformWorkerClient = new TransformWorkerClient(transformWorkerHost);
+            // A factory, not a built value: the stages are bound to the collaborators built here,
+            // and a caller that built them from the installed services would bind a replacement's
+            // group run back to the domain that was installed when it called.
+            HotReloadGroupProcessorDependencies dependencies =
+                buildDependencies(transformWorkerClient, entryApplier);
+            Debug.Assert(dependencies != null, "buildDependencies must not return null.");
+            HotReloadGroupCommitStage groupCommitStage =
+                new HotReloadGroupCommitStage(domain, dependencies, fileEntryApplier, entryApplier);
+            HotReloadGroupProcessor groupProcessor = new HotReloadGroupProcessor(
+                dependencies,
+                domain,
+                fileEntryApplier,
+                entryApplier,
+                groupCommitStage);
             return new HotReloadServices(
                 domain,
                 harmony,
                 patcher,
                 fileEntryApplier,
-                new HotReloadEntryApplier(domain, patcher, fileEntryApplier));
+                entryApplier,
+                transformWorkerClient,
+                groupCommitStage,
+                groupProcessor,
+                new HotReloadOrchestrator(
+                    groupProcessor,
+                    new HotReloadInputFileResolver(),
+                    new HotReloadDeferredInputClassifier(),
+                    new HotReloadSiblingRebindReporter(),
+                    packageRootCapture),
+                new HotReloadStatusExecutor(domain, patcher),
+                packageRootCapture,
+                editorStateSnapshotCapture);
         }
 
         /// <summary>
@@ -85,12 +132,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static IDisposable BeginReplacement(HotReloadServices replacement)
         {
+            Debug.Assert(replacement != null, "replacement must not be null.");
             HotReloadServices previous = _services;
-            // The taken-over resolver is detached before the replacement is attached, or both
-            // stay subscribed and one bind reaches two domains' artifacts.
-            previous?.Domain.IntroducedTypeResolver.Suspend();
+            // A replacement that only substitutes a stage keeps the installed domain, so it
+            // neither takes the resolver over nor owns it: suspending and disposing the one
+            // domain both scopes run on would leave the restored services unable to answer binds.
+            bool sharesDomain = previous != null && ReferenceEquals(previous.Domain, replacement.Domain);
+            if (!sharesDomain)
+            {
+                // The taken-over resolver is detached before the replacement is attached, or both
+                // stay subscribed and one bind reaches two domains' artifacts.
+                previous?.Domain.IntroducedTypeResolver.Suspend();
+            }
+
             Install(replacement);
-            return new ReplacementScope(previous, replacement);
+            return new ReplacementScope(previous, replacement, sharesDomain);
         }
 
         private static void Install(HotReloadServices services)
@@ -168,12 +224,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             private readonly HotReloadServices _previous;
             private readonly HotReloadServices _installed;
+            private readonly bool _sharesDomain;
             private bool _restored;
 
-            internal ReplacementScope(HotReloadServices previous, HotReloadServices installed)
+            internal ReplacementScope(
+                HotReloadServices previous,
+                HotReloadServices installed,
+                bool sharesDomain)
             {
                 _previous = previous;
                 _installed = installed;
+                _sharesDomain = sharesDomain;
             }
 
             public void Dispose()
@@ -184,6 +245,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 _restored = true;
+                if (_sharesDomain)
+                {
+                    // Only the stages are put back: the domain the two services share stays alive
+                    // and stays attached, so the wiring never points at nothing in between.
+                    Install(_previous);
+                    return;
+                }
+
                 Uninstall(_installed);
                 // Install reattaches the resolver that came back, so the replacement's has to be
                 // gone by now: Uninstall disposed it, which leaves it detached for good.

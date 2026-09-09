@@ -999,7 +999,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedPath = Path.Combine(directory, fileName);
             File.WriteAllText(editedPath, editedSource);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);

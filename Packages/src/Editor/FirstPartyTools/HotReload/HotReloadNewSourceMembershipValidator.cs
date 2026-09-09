@@ -100,8 +100,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             out HotReloadNewSourceMembershipEvidence evidence)
         {
             evidence = null;
-            string notReadyReason = HotReloadEditorStateSnapshotProvider.GetNotReadyReason(
-                HotReloadEditorStateSnapshotProvider.CaptureCurrent());
+            string notReadyReason =
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture.CaptureCurrent()
+                    .GetNotReadyReason();
             if (notReadyReason != null)
             {
                 return notReadyReason;
@@ -142,8 +143,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string TryRevalidate(HotReloadNewSourceMembershipEvidence evidence)
         {
             Debug.Assert(evidence != null, "evidence must not be null.");
-            string notReadyReason = HotReloadEditorStateSnapshotProvider.GetNotReadyReason(
-                HotReloadEditorStateSnapshotProvider.CaptureCurrent());
+            string notReadyReason =
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture.CaptureCurrent()
+                    .GetNotReadyReason();
             if (notReadyReason != null)
             {
                 return notReadyReason;

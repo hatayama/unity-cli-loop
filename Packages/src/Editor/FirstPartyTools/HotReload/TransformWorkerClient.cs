@@ -13,17 +13,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Runs transform requests through the resident worker host, falling back to a single one-shot
     /// worker process when the resident conversation cannot be held.
     /// </summary>
-    internal static class TransformWorkerClient
+    internal sealed class TransformWorkerClient
     {
-        // Why a test seam on a static class: the client has no instance to inject into, and the
-        // resident host must be replaceable so routing tests do not depend on the real worker.
-        internal static TransformWorkerHost HostOverrideForTests;
+        private readonly TransformWorkerHost _host;
+
+        internal TransformWorkerClient(TransformWorkerHost host)
+        {
+            Debug.Assert(host != null, "host must not be null.");
+            _host = host;
+        }
+
+        /// <summary>
+        /// The host this client routes through, so a replacement that substitutes another
+        /// collaborator can keep the routing the installed services already have.
+        /// </summary>
+        internal TransformWorkerHost Host => _host;
 
         /// <summary>
         /// Transforms <paramref name="input"/> through the resident worker, and only when two fresh
         /// resident processes broke the conversation, once more through a one-shot worker process.
         /// </summary>
-        public static async Task<TransformWorkerClientResult> RunAsync(
+        public async Task<TransformWorkerClientResult> RunAsync(
             TransformWorkerInputDto input,
             CancellationToken ct)
         {
@@ -51,12 +61,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // own and has to refuse a record it cannot act on even when the request did not come from
         // this client. Its guard can only be shown by handing it a request this client would have
         // refused first.
-        internal static async Task<TransformWorkerClientResult> RunWorkerAsync(
+        internal async Task<TransformWorkerClientResult> RunWorkerAsync(
             TransformWorkerInputDto input,
             CancellationToken ct)
         {
-            TransformWorkerHost host = HostOverrideForTests ?? TransformWorkerHost.Shared;
-            TransformWorkerHostResult hostResult = await host.RunAsync(input, ct).ConfigureAwait(false);
+            TransformWorkerHostResult hostResult = await _host.RunAsync(input, ct).ConfigureAwait(false);
             if (hostResult.Kind == TransformWorkerHostResultKind.Completed)
             {
                 // Why the resident output is interpreted here and not inside the host: the host
@@ -87,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Bootstraps the worker if needed, writes <paramref name="input"/> to a temp JSON file, runs
         /// <c>dotnet worker.dll &lt;in&gt; &lt;out&gt;</c> once, and deserializes the output.
         /// </summary>
-        private static async Task<TransformWorkerClientResult> RunOneShotAsync(
+        private async Task<TransformWorkerClientResult> RunOneShotAsync(
             TransformWorkerInputDto input,
             CancellationToken ct)
         {

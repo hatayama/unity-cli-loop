@@ -209,12 +209,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             }));
                 }
 
-                return HotReloadStatusExecutor.ExecuteStatus();
+                return HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus();
             }
 
             if (parameters.RevertAll)
             {
-                return HotReloadStatusExecutor.ExecuteRevertAll();
+                return HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
             }
 
             HotReloadValidationFailure validationFailure = ValidateApplyParameters(parameters);
@@ -285,7 +285,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> files,
             CancellationToken ct)
         {
-            return HotReloadOrchestrator.RunAsync(files, contentPathOverride: null, ct);
+            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(files, contentPathOverride: null, ct);
         }
 
         private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)

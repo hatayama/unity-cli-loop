@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             // The production run captures these at its entry point; a direct call to the path
             // normalizer in a test has to do the same.
-            HotReloadPackageRootProvider.CaptureCurrent();
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
@@ -143,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string callerPath = FixturePath(CallerFileName);
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { callerPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "CrossFileCallerOnly.cs",
@@ -286,7 +286,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string crossAssemblyPath = CrossAssemblyFixturePath();
             string crossAssemblyOnDisk = File.ReadAllText(crossAssemblyPath);
 
-            HotReloadOrchestratorResult applied = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult applied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, crossAssemblyPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -307,7 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
 
-            HotReloadOrchestratorResult isolated = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult isolated = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, crossAssemblyPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -351,7 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string hostPath = FixturePath(HostFileName);
             string callerPath = FixturePath(CallerFileName);
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -390,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "RebindT2Caller.cs",
                 firstCallerSource);
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -405,7 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -448,7 +448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "RebindDupCaller.cs",
                 firstCallerSource);
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -463,7 +463,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, hostPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -507,7 +507,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostPath = FixturePath(HostFileName);
             string callerPath = FixturePath(CallerFileName);
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -524,7 +524,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -574,7 +574,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "RebindLastProcessedOther.cs",
                 otherEdited);
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -589,7 +589,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
 
-            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult activateOther = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { otherPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -599,7 +599,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
             AssertNoFailure(activateOther);
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { otherPath, hostPath, otherPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -661,7 +661,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "RebindRepeatedOther.cs",
                 otherEdited);
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -676,7 +676,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
 
-            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult activateOther = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { otherPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -686,7 +686,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
             AssertNoFailure(activateOther);
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, otherPath, otherPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -742,7 +742,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "RebindEarlierDeferredOther.cs",
                 otherEdited);
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -757,7 +757,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
 
-            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult activateOther = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { otherPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -767,7 +767,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
             AssertNoFailure(activateOther);
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { otherPath, callerPath, otherPath, hostPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -816,7 +816,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "RebindFailedSiblingCaller.cs",
                 firstCallerSource);
 
-            await HotReloadOrchestrator.RunAsync(
+            await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -831,7 +831,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
 
-            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 contentPathOverride: null,
                 CancellationToken.None,
@@ -892,7 +892,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 try
                 {
-                    HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { callerPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -909,7 +909,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "RefusedTypeSiblingHost.cs",
                         ReadFixture(HostFileName) + IntroducedTypeDeclaration);
                     ActivateStaleIntroducedTypeFor(hostPath);
-                    HotReloadOrchestratorResult refused = await HotReloadOrchestrator.RunAsync(
+                    HotReloadOrchestratorResult refused = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath },
                         contentPathOverride: null,
                         CancellationToken.None,
@@ -1056,7 +1056,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string hostPath = FixturePath(HostFileName);
             string callerPath = FixturePath(CallerFileName);
-            return await HotReloadOrchestrator.RunAsync(
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath, callerPath },
                 contentPathOverride: null,
                 CancellationToken.None,

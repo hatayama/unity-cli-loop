@@ -11,9 +11,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// The commit point of a group run: the last refusal a run can still take without having
     /// changed the domain, and everything the run does once it is past that point.
     /// </summary>
-    internal static class HotReloadGroupCommitStage
+    internal sealed class HotReloadGroupCommitStage
     {
-        internal static bool HoldsUnresolvedFile(IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
+        private readonly HotReloadDomain _domain;
+        private readonly HotReloadGroupProcessorDependencies _dependencies;
+        private readonly HotReloadFileEntryApplier _fileEntryApplier;
+        private readonly HotReloadEntryApplier _entryApplier;
+
+        internal HotReloadGroupCommitStage(
+            HotReloadDomain domain,
+            HotReloadGroupProcessorDependencies dependencies,
+            HotReloadFileEntryApplier fileEntryApplier,
+            HotReloadEntryApplier entryApplier)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(dependencies != null, "dependencies must not be null.");
+            Debug.Assert(fileEntryApplier != null, "fileEntryApplier must not be null.");
+            Debug.Assert(entryApplier != null, "entryApplier must not be null.");
+            _domain = domain;
+            _dependencies = dependencies;
+            _fileEntryApplier = fileEntryApplier;
+            _entryApplier = entryApplier;
+        }
+
+        internal bool HoldsUnresolvedFile(IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
         {
             foreach (HotReloadPreparedGroupFile prepared in preparedFiles)
             {
@@ -29,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The group result of a run the preflight refused: the file that failed reports the same
         // resolution failure the apply step would have reported for it, and every sibling is left
         // unapplied because the group is atomic on this side of the commit point.
-        internal static List<HotReloadFileProcessResult> BuildResolutionFailedResults(
+        internal List<HotReloadFileProcessResult> BuildResolutionFailedResults(
             HotReloadApplyContext context,
             IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
         {
@@ -39,12 +60,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (prepared.Kind == HotReloadGroupFilePreparationKind.ResolutionFailed)
                 {
-                    results.Add(HotReloadCompositionRoot.Services.FileEntryApplier.BuildResolutionFailedResult(
+                    results.Add(_fileEntryApplier.BuildResolutionFailedResult(
                         context, prepared.File, prepared.Resolution));
                     continue;
                 }
 
-                results.Add(HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedResult(prepared.File));
+                results.Add(_fileEntryApplier.BuildUnappliedResult(prepared.File));
             }
 
             return results;
@@ -55,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// become active, the patches this run supersedes are peeled, and the resolved entries are
         /// applied. A failure after the commit point leaves the types active and fails methods.
         /// </summary>
-        internal static IReadOnlyList<HotReloadFileProcessResult> Commit(
+        internal IReadOnlyList<HotReloadFileProcessResult> Commit(
             HotReloadApplyContext context,
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
             HotReloadGroupCompileResult compile,
@@ -65,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPreparedIntroducedTypes prepared = context.PreparedIntroducedTypes;
             if (prepared != null)
             {
-                HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(prepared.Artifact);
+                _domain.IntroducedTypes.Activate(prepared.Artifact);
                 // Why after the activation and not at preparation: only a type the boundary
                 // published is introduced, so a run that never reached here must report none.
                 HotReloadIntroducedTypeOutcomeSink.Append(files, BuildIntroducedRows(prepared.Artifact));
@@ -74,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool commitsIntroducedTypes = CommitsIntroducedTypes(prepared, files[0].AssemblyName);
             if (commitsIntroducedTypes)
             {
-                HotReloadCompositionRoot.Services.EntryApplier.RevertUnchangedPatchesPerFile(
+                _entryApplier.RevertUnchangedPatchesPerFile(
                     files,
                     HotReloadWorkerRowsByFile.Build(context.WorkerOutput, context.ProjectRelativePaths));
             }
@@ -89,11 +110,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ClearEmptyFileGenerations(context);
                 }
 
-                return HotReloadCompositionRoot.Services.FileEntryApplier.BuildUnappliedGroupResults(files);
+                return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
-            HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
-            IReadOnlyList<HotReloadFileProcessResult> results = dependencies.ApplyPreparedEntries(
+            IReadOnlyList<HotReloadFileProcessResult> results = _dependencies.ApplyPreparedEntries(
                 context,
                 compile.CompileResult,
                 preparedFiles);
@@ -101,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return results;
         }
 
-        private static List<HotReloadIntroducedTypeOutcome> BuildIntroducedRows(
+        private List<HotReloadIntroducedTypeOutcome> BuildIntroducedRows(
             HotReloadIntroducedTypeArtifact artifact)
         {
             List<HotReloadIntroducedTypeOutcome> rows =
@@ -121,18 +141,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // A run whose introduced types become active at the commit boundary: the reload either
         // introduces a type itself, or the assembly it targets already owns one this domain
         // introduced, in which case its patches resolve through the artifact assemblies too.
-        internal static bool CommitsIntroducedTypes(
+        internal bool CommitsIntroducedTypes(
             HotReloadPreparedIntroducedTypes prepared,
             string targetAssemblyName)
         {
             return prepared != null
-                || HotReloadCompositionRoot.Services.Domain.IntroducedTypes.HasActiveTypesForOriginalAssembly(targetAssemblyName);
+                || _domain.IntroducedTypes.HasActiveTypesForOriginalAssembly(targetAssemblyName);
         }
 
         // Deleting an added method and restoring its callers yields empty entries, so the
         // post-shim-compile BeginFileGeneration never runs and the previous run's generation would
         // otherwise stay live.
-        internal static void ClearEmptyFileGenerations(HotReloadApplyContext context)
+        internal void ClearEmptyFileGenerations(HotReloadApplyContext context)
         {
             foreach (HotReloadGroupFile file in context.Files)
             {
@@ -144,14 +164,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                HotReloadCompositionRoot.Services.FileEntryApplier.ClearFileGeneration(context, file);
+                _fileEntryApplier.ClearFileGeneration(context, file);
             }
         }
 
         // Why per file: a group applies file by file, so only the rows that actually reached
         // Harmony may claim their removed signatures were superseded. A partly applied file
         // patches some rows and leaves the rest failed or file-atomically skipped.
-        private static void RecordSupersededSignaturesAfterApply(
+        private void RecordSupersededSignaturesAfterApply(
             HotReloadApplyContext context,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {

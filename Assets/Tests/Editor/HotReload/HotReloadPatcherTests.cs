@@ -71,9 +71,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static IDisposable BeginReplacementWith(IHotReloadHarmony harmony)
         {
+            HotReloadPackageRootCapture packageRootCapture = new HotReloadPackageRootCapture();
+            packageRootCapture.CaptureCurrent();
             return HotReloadCompositionRoot.BeginReplacement(
                 HotReloadCompositionRoot.CreateServices(
-                    HotReloadCompositionRoot.CreateProductionDomain(), harmony));
+                    HotReloadCompositionRoot.CreateProductionDomain(),
+                    harmony,
+                    packageRootCapture,
+                    new HotReloadEditorStateSnapshotCapture(),
+                    TransformWorkerHost.Shared,
+                    HotReloadGroupProcessorDependencies.CreateProduction));
         }
 
         /// <summary>

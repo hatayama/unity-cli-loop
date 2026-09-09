@@ -30,18 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ParseErrorText =
             "BrokenNoticeSource.cs(3,1): error CS1022: Type or namespace definition, or end-of-file expected";
 
-        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
-
-        [SetUp]
-        public void SetUp()
-        {
-            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
-        }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
             // Added members and fields live for the whole domain, so a committed name would
             // outlive this class.
             new HotReloadDomainTestAccess().ClearAddedMembersAndFields();
@@ -190,8 +182,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task CompleteApplyAfterCoverageAsync_WhenEditorBecomesUnsafe_DoesNotApply()
         {
             HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(true, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(true, false, false)));
             HotReloadApplyContext context = CreateContext(evidence);
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
@@ -244,11 +236,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
             ApplyRecorder applyRecorder = new ApplyRecorder();
             using CancellationTokenSource cancellation = new CancellationTokenSource();
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-            {
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => {
                 cancellation.Cancel();
                 return new HotReloadEditorStateSnapshot(false, false, false);
-            };
+            }));
 
             Assert.ThrowsAsync<TaskCanceledException>(async () =>
                 await CompleteApplyWithRecorder(applyRecorder,
@@ -267,12 +259,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task RevalidateBeforeRevertAsync_WhenEditorBecomesUnsafe_DoesNotInvokeRevert()
         {
             HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, true, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, true, false)));
             HotReloadApplyContext context = CreateContext(evidence);
             int revertCalls = 0;
 
-            bool didRevert = await HotReloadGroupProcessor.RevalidateBeforeRevertAsync(
+            bool didRevert = await HotReloadCompositionRoot.Services.GroupProcessor.RevalidateBeforeRevertAsync(
                 context.Files,
                 CancellationToken.None,
                 () => revertCalls++);
@@ -292,14 +284,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadApplyContext context = CreateContext(evidence);
             int revertCalls = 0;
             using CancellationTokenSource cancellation = new CancellationTokenSource();
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-            {
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => {
                 cancellation.Cancel();
                 return new HotReloadEditorStateSnapshot(false, false, false);
-            };
+            }));
 
             Assert.ThrowsAsync<TaskCanceledException>(async () =>
-                await HotReloadGroupProcessor.RevalidateBeforeRevertAsync(
+                await HotReloadCompositionRoot.Services.GroupProcessor.RevalidateBeforeRevertAsync(
                     context.Files,
                     cancellation.Token,
                     () => revertCalls++));
@@ -313,6 +305,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ResolveInputFile_WhenNewSourceIsPlanned_PreservesEvidenceForPreRevertRevalidation()
         {
+            // The resolver normalizes a package path, which the run entry point captures for.
+            // This test calls the resolver directly, so it captures here instead.
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
             HotReloadRunAccumulator run = new HotReloadRunAccumulator(autoRefreshHeldAtStart: false);
             HotReloadInputResolutionSlot slot = new HotReloadInputResolutionSlot();
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
@@ -333,10 +328,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slot.GroupFile.NewSourceMembershipEvidence, Is.Not.Null);
             Assert.That(plannerInput, Has.Count.EqualTo(1));
 
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, true, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, true, false)));
             int revertCalls = 0;
-            bool didRevert = await HotReloadGroupProcessor.RevalidateBeforeRevertAsync(
+            bool didRevert = await HotReloadCompositionRoot.Services.GroupProcessor.RevalidateBeforeRevertAsync(
                 new[] { slot.GroupFile },
                 CancellationToken.None,
                 () => revertCalls++);
@@ -355,8 +350,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadApplyContext context = CreateEmptyEntriesContext(evidence);
             HotReloadGroupFile file = context.Files[0];
             SeedActiveAddedMember(file.ProjectRelativePath);
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, true);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, true)));
 
             HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
                 context,
@@ -421,7 +416,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 output,
                 new List<string> { BrokenSourcePath, HealthySourcePath });
 
-            HotReloadGroupProcessor.AppendPerFileWorkerNotices(
+            HotReloadGroupNotices.AppendPerFileWorkerNotices(
                 new List<HotReloadGroupFile> { brokenFile, healthyFile },
                 rows);
 
@@ -546,7 +541,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             file.FileOutput = null;
 
             IReadOnlyList<HotReloadFileProcessResult> results;
-            using (HotReloadGroupProcessorDependencies.BeginReplacement(
+            using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                 HotReloadGroupProcessorDependencies.Create(
                     files => true,
                     (files, input, ct) => Task.FromResult(
@@ -555,9 +550,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         TransformWorkerClientResult.Failure("transform worker failed")),
                     HotReloadGroupProcessor.GateAndCompileAsync,
                     HotReloadGroupEntryPreparation.PrepareGroup,
-                    HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries)))
+                    entryApplier.ApplyPreparedEntries)))
             {
-                results = await HotReloadGroupProcessor.ProcessGroupAsync(
+                results = await HotReloadCompositionRoot.Services.GroupProcessor.ProcessGroupAsync(
                     new[] { file },
                     "worker-failure-test",
                     CancellationToken.None);
@@ -671,7 +666,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (recorder.Install())
             {
-                return await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                return await HotReloadCompositionRoot.Services.GroupProcessor.CompleteApplyAfterCoverageAsync(
                     context,
                     gateResult,
                     compile,
@@ -691,11 +686,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             internal IDisposable Install()
             {
-                return HotReloadGroupProcessorDependencies.BeginReplacement(
+                return HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
                     HotReloadGroupProcessorDependencies.Create(
                         HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
                         HotReloadIntroducedTypePreparation.PrepareAsync,
-                        TransformWorkerClient.RunAsync,
+                        transformWorkerClient.RunAsync,
                         HotReloadGroupProcessor.GateAndCompileAsync,
                         (context, compileResult, entriesToPatch) =>
                             Array.Empty<HotReloadPreparedGroupFile>(),
@@ -883,8 +878,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static HotReloadNewSourceMembershipEvidence CaptureCurrentMembershipEvidence()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             Assembly compilationAssembly = FindCompilationAssembly();
             string targetDllPath = Path.Combine(

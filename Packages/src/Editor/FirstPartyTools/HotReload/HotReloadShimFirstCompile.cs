@@ -54,11 +54,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why a run that commits types skips it: clearing a generation here would mutate
                 // the domain before the commit boundary, which a failed recheck could then no
                 // longer undo, so such a run clears at the boundary instead.
-                if (!HotReloadGroupCommitStage.CommitsIntroducedTypes(
+                if (!HotReloadCompositionRoot.Services.GroupCommitStage.CommitsIntroducedTypes(
                         context.PreparedIntroducedTypes,
                         context.AssemblyName))
                 {
-                    HotReloadGroupCommitStage.ClearEmptyFileGenerations(context);
+                    HotReloadCompositionRoot.Services.GroupCommitStage.ClearEmptyFileGenerations(context);
                 }
 
                 return HotReloadGroupCompileResult.ReadyWithoutMethods();

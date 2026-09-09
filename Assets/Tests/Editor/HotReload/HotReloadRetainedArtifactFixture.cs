@@ -252,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private async Task<string> ReadPlannedFingerprintAsync()
         {
             TransformWorkerClientResult prepared =
-                await TransformWorkerClient.RunAsync(BuildPrepareInput(), CancellationToken.None);
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(BuildPrepareInput(), CancellationToken.None);
             Assert.That(prepared.Success, Is.True, prepared.ErrorMessage);
             foreach (TransformWorkerIntroducedTypeDto introducedType in prepared.Output.files[0].introducedTypes)
             {

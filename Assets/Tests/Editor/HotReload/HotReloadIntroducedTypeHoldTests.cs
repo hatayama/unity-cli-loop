@@ -66,13 +66,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.True,
                     "The periodic reconcile must not release a hold the introduced type still needs.");
 
-                HotReloadStatusExecutor.ExecuteStatus();
+                HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus();
                 Assert.That(
                     HotReloadAutoRefreshHold.IsHeld,
                     Is.True,
                     "A status query must not release the hold.");
 
-                HotReloadResponse revert = HotReloadStatusExecutor.ExecuteRevertAll();
+                HotReloadResponse revert = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
                 Assert.That(
                     HotReloadAutoRefreshHold.IsHeld,
                     Is.True,
@@ -207,7 +207,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 Assert.That(HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount, Is.EqualTo(1));
                 Assert.That(
-                    HotReloadStatusExecutor.ExecuteStatus().ActivePatchTotal,
+                    HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus().ActivePatchTotal,
                     Is.EqualTo(0),
                     "A type must not be reported as a patched method.");
             }
@@ -293,7 +293,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadOrchestratorResult> RunIntroducingOnlyATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeHoldHost.cs",
@@ -314,7 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadOrchestratorResult> RunPatchingABodyAndIntroducingATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            return await HotReloadOrchestrator.RunAsync(
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeHoldAndPatchHost.cs",

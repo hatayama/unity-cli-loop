@@ -22,8 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string DescribeStaleReason(HotReloadApplyContext context)
         {
             // The Editor may have started compiling or importing while the run awaited its worker.
-            string notReadyReason = HotReloadEditorStateSnapshotProvider.GetNotReadyReason(
-                HotReloadEditorStateSnapshotProvider.CaptureCurrent());
+            string notReadyReason =
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture.CaptureCurrent()
+                    .GetNotReadyReason();
             if (notReadyReason != null)
             {
                 return "The Editor became busy before the reload could be applied: " + notReadyReason;
@@ -56,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </remarks>
         private static string DescribeTargetAssemblyDrift(HotReloadApplyContext context)
         {
-            if (!HotReloadGroupCommitStage.CommitsIntroducedTypes(
+            if (!HotReloadCompositionRoot.Services.GroupCommitStage.CommitsIntroducedTypes(
                     context.PreparedIntroducedTypes,
                     context.AssemblyName))
             {

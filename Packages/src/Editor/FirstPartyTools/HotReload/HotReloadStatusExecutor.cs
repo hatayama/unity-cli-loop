@@ -9,12 +9,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Builds --status and --revert-all responses from the live hot-reload ledgers.
     /// </summary>
-    internal static class HotReloadStatusExecutor
+    internal sealed class HotReloadStatusExecutor
     {
-        public static HotReloadResponse ExecuteRevertAll()
+        private readonly HotReloadDomain _domain;
+        private readonly HotReloadPatcher _patcher;
+
+        internal HotReloadStatusExecutor(HotReloadDomain domain, HotReloadPatcher patcher)
         {
-            int clearedCount = HotReloadCompositionRoot.Services.Patcher.ActiveChangeCount;
-            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(patcher != null, "patcher must not be null.");
+            _domain = domain;
+            _patcher = patcher;
+        }
+
+        public HotReloadResponse ExecuteRevertAll()
+        {
+            int clearedCount = _patcher.ActiveChangeCount;
+            _patcher.RevertAll();
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
@@ -27,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hold.SceneRefreshWarning);
             // Why one snapshot: the total and the sentence that names it must agree, and a second
             // read could answer after another reload activated a type.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadCompositionRoot.Services.Domain.CountActiveChanges();
+            HotReloadActiveChangeSnapshot snapshot = _domain.CountActiveChanges();
             return new HotReloadResponse
             {
                 Success = true,
@@ -48,11 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        public static HotReloadResponse ExecuteStatus()
+        public HotReloadResponse ExecuteStatus()
         {
-            IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches();
+            IReadOnlyList<HotReloadActivePatchInfo> active = _patcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
-                HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers();
+                _domain.DescribeAddedMembers();
             List<HotReloadMethodResult> methods =
                 new List<HotReloadMethodResult>(active.Count + addedMembers.Count);
             int neverInvokedCount = 0;
@@ -94,12 +105,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int count = methods.Count;
             IReadOnlyList<HotReloadAddedFieldDescription> addedFields =
-                HotReloadCompositionRoot.Services.Domain.DescribeAddedFields();
+                _domain.DescribeAddedFields();
             AppendAddedFieldStatusRows(methods, addedFields);
             // Why one snapshot for the heading, the drop decision, and the reported total: a
             // domain still holding an introduced type has not lost it, and a caller told three
             // different numbers for "what is active" cannot tell which one answers the question.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadCompositionRoot.Services.Domain.CountActiveChanges();
+            HotReloadActiveChangeSnapshot snapshot = _domain.CountActiveChanges();
             string message = $"{snapshot.RuntimeChangeTotal} change(s) currently active.";
             if (neverInvokedCount > 0)
             {
@@ -141,9 +152,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static string ResolveActiveStatusReason(string methodKey, long invocationCount)
+        private string ResolveActiveStatusReason(string methodKey, long invocationCount)
         {
-            if (HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
+            if (_domain.TryGetSupersededReplacement(
                     methodKey,
                     out string replacementDisplayName))
             {
@@ -160,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return string.Empty;
         }
 
-        private static void AppendAddedFieldStatusRows(
+        private void AppendAddedFieldStatusRows(
             List<HotReloadMethodResult> methods,
             IReadOnlyList<HotReloadAddedFieldDescription> addedFields)
         {

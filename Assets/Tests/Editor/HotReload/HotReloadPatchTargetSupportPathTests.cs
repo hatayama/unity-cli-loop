@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             // The production run captures these at its entry point; a direct call to the path
             // normalizer in a test has to do the same.
-            HotReloadPackageRootProvider.CaptureCurrent();
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
         }
 
         [Test]

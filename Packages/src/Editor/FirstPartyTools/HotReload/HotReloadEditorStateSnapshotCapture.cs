@@ -1,5 +1,3 @@
-using System;
-
 using UnityEditor;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -21,43 +19,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool IsUpdating { get; }
 
         internal bool ScriptCompilationFailed { get; }
-    }
 
-    /// <summary>
-    /// Separates Editor-state collection from the pure readiness decision used by new-source admission.
-    /// </summary>
-    internal static class HotReloadEditorStateSnapshotProvider
-    {
-        // Why a replaceable seam: the real Editor flags are process state, while tests must prove
-        // that each unsafe state reaches the production resolver without starting a group.
-        internal static Func<HotReloadEditorStateSnapshot> CaptureForTesting = Capture;
-
-        internal static HotReloadEditorStateSnapshot CaptureCurrent()
+        /// <summary>The reason new-source membership cannot be trusted, or null when it can.</summary>
+        internal string GetNotReadyReason()
         {
-            return CaptureForTesting();
-        }
-
-        internal static string GetNotReadyReason(HotReloadEditorStateSnapshot snapshot)
-        {
-            if (snapshot.IsCompiling)
+            if (IsCompiling)
             {
                 return "The Editor is compiling, so new source membership is not ready. Compile the project first and retry hot reload.";
             }
 
-            if (snapshot.IsUpdating)
+            if (IsUpdating)
             {
                 return "The Editor is importing assets, so new source membership is not ready. Wait for import to finish, then retry hot reload.";
             }
 
-            if (snapshot.ScriptCompilationFailed)
+            if (ScriptCompilationFailed)
             {
                 return "The last script compilation failed, so new source membership cannot be verified. Fix the compile errors, compile the project, and retry hot reload.";
             }
 
             return null;
         }
+    }
 
-        private static HotReloadEditorStateSnapshot Capture()
+    /// <summary>
+    /// Separates Editor-state collection from the pure readiness decision used by new-source
+    /// admission, so a test can decide what state the admission path sees.
+    /// </summary>
+    internal interface IHotReloadEditorStateSnapshotCapture
+    {
+        HotReloadEditorStateSnapshot CaptureCurrent();
+    }
+
+    /// <summary>
+    /// The production capture: reads the Editor's own compile and import flags.
+    /// </summary>
+    internal sealed class HotReloadEditorStateSnapshotCapture : IHotReloadEditorStateSnapshotCapture
+    {
+        public HotReloadEditorStateSnapshot CaptureCurrent()
         {
             return new HotReloadEditorStateSnapshot(
                 EditorApplication.isCompiling,

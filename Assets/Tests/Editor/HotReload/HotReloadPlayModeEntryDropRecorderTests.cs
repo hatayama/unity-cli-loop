@@ -289,7 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // Why the substitution: only the tool entry route is under test, and the run needs the
             // edited copy as its content source, which the production apply cannot be told about.
             HotReloadTool.RunApplyAsyncForTesting = (files, ct) =>
-                HotReloadOrchestrator.RunAsync(files, editedPath, ct);
+                HotReloadCompositionRoot.Services.Orchestrator.RunAsync(files, editedPath, ct);
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
@@ -331,7 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadOrchestratorResult> RunPatchingABodyAndIntroducingATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
-            return await HotReloadOrchestrator.RunAsync(
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { hostPath },
                 HotReloadTestSourceWriter.WriteEditedSource(
                     "PlayModeEntryDropIdentityHost.cs",

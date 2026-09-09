@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example.Introduced { internal class Hidden { } public class Generic<T> { } internal class Outer { public class Nested { } } }");
 
             TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -96,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class OuterIntroduced { public class NestedProbe { } } }");
             File.WriteAllText(compiledOuterPath, CompiledOuterWithNestedSource);
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(introducedOuterPath, compiledOuterPath),
                 CancellationToken.None);
 
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class OuterIntroduced { public class NestedProbe { } } }");
             File.WriteAllText(compiledOuterPath, CompiledOuterWithNestedSource);
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(introducedOuterPath, compiledOuterPath),
                 CancellationToken.None);
 
@@ -155,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(validSourcePath, "namespace Example { public class ValidIntroduced { } }");
             File.WriteAllText(invalidSourcePath, "namespace Example { public class BrokenIntroduced { ");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(validSourcePath, invalidSourcePath),
                 CancellationToken.None);
 
@@ -181,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
 
             TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -211,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "using System; using Alias = System.ICloneable; public class GlobalSecond { public Alias Create() { return null; } }");
 
             TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
-            TransformWorkerClientResult workerResult = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -259,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace GlobalAliasFixture { public class Second { public Alias Create() { return null; } } }");
 
             TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
-            TransformWorkerClientResult workerResult = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -309,7 +309,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(secondSourcePath, "namespace ScopeFixture { public class Other { } }");
 
             TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
-            TransformWorkerClientResult workerResult = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -348,7 +348,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "namespace Example { internal class Hidden { } public class Generic<T> { } public partial class Partial { } public ref struct RefLike { } public unsafe class UnsafeType { public int* Value; } public class ObjectType : UnityEngine.Object { } [System.Serializable] public class SerializableType { } public static class InitializerType { [System.Runtime.CompilerServices.ModuleInitializer] public static void Initialize() { } } public delegate void AddedDelegate(); public class Outer { public class Nested { } } }");
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
@@ -383,7 +383,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
 
             TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
-            TransformWorkerClientResult workerResult = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
@@ -426,35 +426,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } } namespace Unrelated { using Other = System.Text; class Ignore { } }");
             File.WriteAllText(secondSourcePath, "namespace Unrelated { using Other = System.String; public class OtherType { } }");
-            TransformWorkerClientResult first = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult first = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } public class LaterIntroduced { } } namespace Unrelated { using Other = System.Text; class Ignore { } }");
-            TransformWorkerClientResult laterType = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult laterType = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } } namespace Unrelated { using Other = System.IO; class Ignore { } }");
-            TransformWorkerClientResult unrelatedUsing = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult unrelatedUsing = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { /* trivia */ public class Fingerprint { public Alias Create() { return null; } } } namespace Unrelated { using Other = System.IO; class Ignore { } }");
-            TransformWorkerClientResult trivia = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult trivia = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.ICloneable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } }");
-            TransformWorkerClientResult aliasChanged = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult aliasChanged = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
@@ -463,7 +463,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } }");
             TransformWorkerInputDto definesChangedInput = CreateInput(firstSourcePath, secondSourcePath);
             definesChangedInput.defines = new[] { "CHANGED_DEFINE" };
-            TransformWorkerClientResult definesChanged = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult definesChanged = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 definesChangedInput,
                 CancellationToken.None);
 
@@ -507,10 +507,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "namespace Example { public class Retained { public int Compute(Caller caller) { return caller.Read(); } } }",
                     "namespace Example { public class Caller { public int Read() { return 0; } } }");
 
-            TransformWorkerClientResult alone = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult alone = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 fixture.BuildPrepareInput(),
                 CancellationToken.None);
-            TransformWorkerClientResult grouped = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult grouped = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 fixture.BuildPrepareGroupInput(),
                 CancellationToken.None);
 
@@ -560,14 +560,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 firstSourcePath,
                 "using Left = System.Int32; using Right = System.String; namespace Example { public class Sample { public Left A; public Right B; } }");
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
-            TransformWorkerClientResult before = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult before = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Left = System.String; using Right = System.Int32; namespace Example { public class Sample { public Left A; public Right B; } }");
-            TransformWorkerClientResult after = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult after = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
@@ -593,7 +593,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourcePath,
                 "namespace Example { public class Existing { public const int Value = 2; } public class Introduced { public int Get() { return Existing.Value; } } public class Safe { } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
                 CancellationToken.None);
 
@@ -623,7 +623,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 siblingPath,
                 "namespace Example { public class Existing { public const int Value = 2; } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInputWithSiblings(
                     sourcePath,
                     targetAssemblyPath,
@@ -656,7 +656,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 siblingPath,
                 "namespace Example { public class Existing { public const int Value = 2; } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInputWithSiblings(
                     sourcePath,
                     targetAssemblyPath,
@@ -690,7 +690,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 siblingPath,
                 "namespace Example { public class Existing { public const int Value = ; } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInputWithSiblings(
                     sourcePath,
                     targetAssemblyPath,
@@ -717,7 +717,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourcePath,
                 "namespace Example { public class Existing { public const int Value = 2; } public class Introduced { public int Get() { return 3; } } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
                 CancellationToken.None);
 
@@ -741,7 +741,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourcePath,
                 "namespace Example { public class Existing { public const int Value = 1; } public class Introduced { public int Get() { return Existing.Value; } } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
                 CancellationToken.None);
 
@@ -765,14 +765,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 firstSourcePath,
                 "namespace Example { public class TokenBoundary { private int a; private int b; public int Value() { return a + ++b; } } }");
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
-            TransformWorkerClientResult before = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult before = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "namespace Example { public class TokenBoundary { private int a; private int b; public int Value() { return a++ + b; } } }");
-            TransformWorkerClientResult after = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult after = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
@@ -804,7 +804,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(targetAssemblyPath, "this is not an assembly");
             File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
                 CancellationToken.None);
 
@@ -831,7 +831,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(brokenReferencePath, "this is not an assembly");
             File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreatePreparationInput(
                     sourcePath,
                     targetAssemblyPath,
@@ -862,7 +862,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
             File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
                 CancellationToken.None);
 
@@ -893,7 +893,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             CreateAssemblyWithType(otherAssemblyPath, "SameNameOther", "Example", "Shared");
             File.WriteAllText(sourcePath, "namespace Example { public class Shared { } }");
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 CreatePreparationInput(
                     sourcePath,
                     targetAssemblyPath,

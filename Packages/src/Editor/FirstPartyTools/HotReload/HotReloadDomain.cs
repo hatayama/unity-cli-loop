@@ -435,7 +435,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// fixed until the next Domain Reload, so a revert cannot drop it
         /// (docs/hot-reload-introduced-types.md).
         /// Why HotReloadPlayModeEntryDropLedger is not emptied: it lives on SessionState, and
-        /// HotReloadStatusExecutor.ExecuteRevertAll clears it through NotifyRevertAll.
+        /// HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll clears it through NotifyRevertAll.
         /// </remarks>
         internal IReadOnlyList<MethodBase> RevertAll()
         {

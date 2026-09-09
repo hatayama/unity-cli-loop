@@ -11,8 +11,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadGroupProcessorDependencies
     {
-        private static HotReloadGroupProcessorDependencies current = CreateProduction();
-
         private HotReloadGroupProcessorDependencies(
             Func<IReadOnlyList<HotReloadGroupFile>, bool> validateNewSourceMembership,
             Func<IReadOnlyList<HotReloadGroupFile>, TransformWorkerInputDto, CancellationToken,
@@ -35,8 +33,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ApplyPreparedEntries = applyPreparedEntries
                 ?? throw new ArgumentNullException(nameof(applyPreparedEntries));
         }
-
-        internal static HotReloadGroupProcessorDependencies Current => current;
 
         /// <summary>
         /// Confirms the group's files still belong to the assembly they were resolved against.
@@ -72,20 +68,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal Func<HotReloadApplyContext, HotReloadShimCompileResult, IReadOnlyList<HotReloadPreparedGroupFile>,
             IReadOnlyList<HotReloadFileProcessResult>> ApplyPreparedEntries { get; }
 
-        internal static HotReloadGroupProcessorDependencies CreateProduction()
+        /// <summary>
+        /// The production stages, bound to the services of one domain.
+        /// </summary>
+        internal static HotReloadGroupProcessorDependencies CreateProduction(
+            TransformWorkerClient transformWorkerClient,
+            HotReloadEntryApplier entryApplier)
         {
             return new HotReloadGroupProcessorDependencies(
                 HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
                 HotReloadIntroducedTypePreparation.PrepareAsync,
-                TransformWorkerClient.RunAsync,
+                transformWorkerClient.RunAsync,
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
-                // A lambda, not a method group: the static field below is built once per domain
-                // reload, and a captured instance would keep applying into the domain that was
-                // installed then, while the transpilers read whichever domain is installed now.
-                (context, compileResult, preparedFiles) =>
-                    HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries(
-                        context, compileResult, preparedFiles));
+                entryApplier.ApplyPreparedEntries);
         }
 
         internal static HotReloadGroupProcessorDependencies Create(
@@ -108,42 +104,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 applyPreparedEntries);
         }
 
-        /// <summary>
-        /// Installs a replacement for the duration of the returned scope and puts the previous
-        /// one back when it closes.
-        /// </summary>
-        internal static IDisposable BeginReplacement(HotReloadGroupProcessorDependencies replacement)
-        {
-            if (replacement == null)
-            {
-                throw new ArgumentNullException(nameof(replacement));
-            }
-
-            HotReloadGroupProcessorDependencies previous = current;
-            current = replacement;
-            return new ReplacementScope(previous);
-        }
-
-        private sealed class ReplacementScope : IDisposable
-        {
-            private readonly HotReloadGroupProcessorDependencies previous;
-            private bool restored;
-
-            public ReplacementScope(HotReloadGroupProcessorDependencies previous)
-            {
-                this.previous = previous;
-            }
-
-            public void Dispose()
-            {
-                if (restored)
-                {
-                    return;
-                }
-
-                restored = true;
-                current = previous;
-            }
-        }
     }
 }

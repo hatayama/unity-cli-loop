@@ -129,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             TransformWorkerClientResult retryWorkerResult =
-                await TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
             if (!retryWorkerResult.Success)
             {
                 HotReloadOrchestratorLog.LogHotReloadIsolationRetry(

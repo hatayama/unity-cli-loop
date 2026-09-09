@@ -20,18 +20,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ExistingScriptPath =
             "Assets/Tests/Editor/HotReload/HotReloadNewSourceMembershipTests.cs";
 
-        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
 
         [SetUp]
         public void SetUp()
         {
-            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
         }
 
         /// <summary>
@@ -45,8 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             bool isUpdating,
             bool scriptCompilationFailed)
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(isCompiling, isUpdating, scriptCompilationFailed);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(isCompiling, isUpdating, scriptCompilationFailed)));
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
@@ -77,8 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ResolvePatchTarget_WhenEditorStateIsReady_ReturnsMembershipEvidence()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
@@ -147,8 +144,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static void ResolveExistingScript(string correlationId)
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             HotReloadPatchTargetSupport.ResolvePatchTarget(
                 ExistingScriptPath,
                 ExistingScriptPath,
@@ -206,8 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ResolvePatchTarget_WhenNewPredefinedSourceIsReady_ReturnsMembershipEvidence()
         {
-            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
-                new HotReloadEditorStateSnapshot(false, false, false);
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
