@@ -30,6 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static void Initialize()
         {
+            // Uninstalling first because a second Initialize would otherwise leave the previous
+            // domain's resolver attached to AppDomain.AssemblyResolve with nothing owning it.
+            Uninstall(_services);
             Install(CreateProductionServices());
         }
 
@@ -39,9 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static HotReloadServices CreateProductionServices()
         {
             HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
-            // Why the resolver is built here rather than lazily: it subscribes to
-            // AppDomain.AssemblyResolve in its constructor, and a lazily built one would only
-            // subscribe on the first bind that already needs the subscription to succeed.
+            // The resolver comes back detached and answers no bind until Install attaches it, so
+            // building services here can never race the resolver that is still installed.
             HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
             return new HotReloadServices(new HotReloadDomain(registry, resolver));
@@ -54,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static IDisposable BeginReplacement(HotReloadServices replacement)
         {
             HotReloadServices previous = _services;
-            // The taken-over resolver is detached before the replacement is installed, or both
+            // The taken-over resolver is detached before the replacement is attached, or both
             // stay subscribed and one bind reaches two domains' artifacts.
             previous?.Domain.IntroducedTypeResolver.Suspend();
             Install(replacement);
@@ -87,6 +89,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 method => domain.FindGenerationForMethod(method)?.FindTransplantLocals(method);
             HotReloadPausePointCoordination.GetTransplantPreambleLength =
                 method => domain.FindGenerationForMethod(method)?.FindTransplantPreambleLength(method) ?? 0;
+            // Attaching last keeps the invariant across the gap: the resolver only starts
+            // answering binds once every gateway already points at the domain behind it.
+            domain.IntroducedTypeResolver.Resume();
         }
 
         // Why the gateways are emptied rather than left pointing at a disposed domain: emitted IL
@@ -150,11 +155,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 _restored = true;
                 Uninstall(_installed);
+                // Install reattaches the resolver that came back, so the replacement's has to be
+                // gone by now: Uninstall disposed it, which leaves it detached for good.
                 Install(_previous);
-                // Resuming after Install rather than before keeps the invariant across the gap: a
-                // bind arriving mid-restore must not find the replacement's resolver still
-                // subscribed alongside the one coming back.
-                _previous?.Domain.IntroducedTypeResolver.Resume();
             }
         }
     }

@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // type may never do, and the tools that warn about a domain reload would then read a
             // null delegate as "nothing to lose".
             HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount =
-                () => HotReloadTranspilerDomainGateway.Current.CountActiveChanges().RuntimeChangeTotal;
+                () => HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();

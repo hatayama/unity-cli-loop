@@ -203,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             IReadOnlyList<HotReloadActivePatchInfo> patches = HotReloadPatcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
-                HotReloadTranspilerDomainGateway.Current.DescribeAddedMembers();
+                HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers();
             List<string> identities = new List<string>(patches.Count + addedMembers.Count);
             for (int index = 0; index < patches.Count; index++)
             {

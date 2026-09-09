@@ -41,12 +41,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string probeHash = new HotReloadSourceContentHasher().ComputeContentHash(probeBytes);
             HashSet<string> activeLabels = CollectActiveLabelsForFile(projectRelativePath);
             (string Hash, bool IsFullyApplied)? recorded =
-                HotReloadTranspilerDomainGateway.Current.TryGetAppliedSource(projectRelativePath);
+                HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(projectRelativePath);
             if (recorded == null
                 || !string.Equals(probeHash, recorded.Value.Hash, StringComparison.Ordinal)
                 || (recorded.Value.IsFullyApplied && activeLabels.Count == 0))
             {
-                HotReloadTranspilerDomainGateway.Current.ClearAppliedSource(projectRelativePath);
+                HotReloadCompositionRoot.Services.Domain.ClearAppliedSource(projectRelativePath);
                 return HotReloadUnchangedSourceDecision.NotUnchanged;
             }
 
@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 for (int index = 0; index < sortedLabels.Count; index++)
                 {
                     string label = sortedLabels[index];
-                    string reason = HotReloadTranspilerDomainGateway.Current.IsActiveMember(
+                    string reason = HotReloadCompositionRoot.Services.Domain.IsActiveMember(
                         projectRelativePath,
                         label)
                         ? HotReloadConstants.AlreadyActiveAddedMemberReason
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadUnchangedSourceDecision.ShortCircuited;
             }
 
-            HotReloadTranspilerDomainGateway.Current.ClearAppliedSource(projectRelativePath);
+            HotReloadCompositionRoot.Services.Domain.ClearAppliedSource(projectRelativePath);
             return HotReloadUnchangedSourceDecision.ReapplyNonBaseline;
         }
 
@@ -149,14 +149,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
             IReadOnlyList<string> addedKeys =
-                HotReloadTranspilerDomainGateway.Current.ListActiveAddedMethodKeys(projectRelativePath);
+                HotReloadCompositionRoot.Services.Domain.ListActiveAddedMethodKeys(projectRelativePath);
             for (int index = 0; index < addedKeys.Count; index++)
             {
                 labels.Add(addedKeys[index]);
             }
 
             IReadOnlyList<string> patchedKeys =
-                HotReloadTranspilerDomainGateway.Current.ListActiveMethodKeys(projectRelativePath);
+                HotReloadCompositionRoot.Services.Domain.ListActiveMethodKeys(projectRelativePath);
             for (int index = 0; index < patchedKeys.Count; index++)
             {
                 labels.Add(patchedKeys[index]);

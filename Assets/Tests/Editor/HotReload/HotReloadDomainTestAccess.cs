@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Any non-empty byte array satisfies a shim generation that no test loads bytes from.
         private static readonly byte[] PlaceholderAssemblyBytes = { 0x4D, 0x5A };
 
-        internal HotReloadDomain Domain => HotReloadTranspilerDomainGateway.Current;
+        internal HotReloadDomain Domain => HotReloadCompositionRoot.Services.Domain;
 
         /// <summary>Applies a patch after registering its shim, as the file entry applier does.</summary>
         internal HotReloadPatchResult ApplyPatch(

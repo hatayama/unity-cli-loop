@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </remarks>
         internal static HotReloadAutoRefreshHoldSyncResult SyncToActiveChanges()
         {
-            return Sync(HotReloadTranspilerDomainGateway.Current.CountActiveChanges().RuntimeChangeTotal);
+            return Sync(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal);
         }
 
         internal static HotReloadAutoRefreshHoldSyncResult FlushDeferredRefresh()

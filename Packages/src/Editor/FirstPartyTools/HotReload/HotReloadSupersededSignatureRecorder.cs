@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why the file's own generation: the signature a patch superseded belongs to the file
             // whose apply superseded it, and is discarded with that file's generation.
             HotReloadFileGeneration generation =
-                HotReloadTranspilerDomainGateway.Current.FindGeneration(projectRelativePath);
+                HotReloadCompositionRoot.Services.Domain.FindGeneration(projectRelativePath);
             if (generation == null)
             {
                 return;

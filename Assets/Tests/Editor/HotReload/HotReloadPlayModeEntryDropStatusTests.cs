@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     ActivateArtifactWithOneType();
 
                     Assert.That(
-                        HotReloadTranspilerDomainGateway.Current.IntroducedTypeCount,
+                        HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                         Is.EqualTo(1),
                         "Arrange: the domain must hold exactly one introduced type.");
 

@@ -118,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
 
                 Assert.That(
-                    HotReloadTranspilerDomainGateway.Current.IntroducedTypeCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                     Is.EqualTo(0),
                     "Arrange: the reloaded domain must hold no introduced type.");
 
@@ -205,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 ActivateArtifactWithOneType();
 
-                Assert.That(HotReloadTranspilerDomainGateway.Current.IntroducedTypeCount, Is.EqualTo(1));
+                Assert.That(HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount, Is.EqualTo(1));
                 Assert.That(
                     HotReloadStatusExecutor.ExecuteStatus().ActivePatchTotal,
                     Is.EqualTo(0),
@@ -223,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
 
-                Assert.That(HotReloadTranspilerDomainGateway.Current.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(0));
+                Assert.That(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(0));
 
                 HotReloadAutoRefreshHold.ReconcileForTesting();
 
@@ -277,14 +277,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(1),
                     "Precondition: the run must have patched exactly one method.");
                 Assert.That(
-                    HotReloadTranspilerDomainGateway.Current.IntroducedTypeCount,
+                    HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                     Is.EqualTo(1),
                     "Precondition: the run must have introduced exactly one type.");
                 Assert.That(
                     HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount(),
                     Is.EqualTo(2),
                     "One patch and one type are two changes to lose, not one.");
-                Assert.That(HotReloadTranspilerDomainGateway.Current.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(2));
+                Assert.That(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal, Is.EqualTo(2));
             }
         }
 
@@ -305,7 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(0),
                 "Precondition: this run must patch no method, so only the type can hold refresh.");
             Assert.That(
-                HotReloadTranspilerDomainGateway.Current.IntroducedTypeCount,
+                HotReloadCompositionRoot.Services.Domain.IntroducedTypeCount,
                 Is.EqualTo(1),
                 "Precondition: the run must have activated its introduced type.");
             return result;

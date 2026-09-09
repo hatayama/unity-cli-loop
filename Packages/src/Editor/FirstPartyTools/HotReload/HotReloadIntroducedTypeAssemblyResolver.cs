@@ -8,6 +8,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Resolves active and scoped prepared artifact assemblies by exact full identity only.
     /// </summary>
+    /// <remarks>
+    /// Constructed detached: it answers no bind until the composition root attaches it through
+    /// <see cref="Resume"/>. Subscribing in the constructor would put a second resolver on
+    /// AppDomain.AssemblyResolve for as long as it takes the caller to suspend the one already
+    /// installed, and a bind arriving in that window could be answered from two domains.
+    /// </remarks>
     internal sealed class HotReloadIntroducedTypeAssemblyResolver : IDisposable
     {
         private readonly HotReloadIntroducedTypeRegistry registry;
@@ -16,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             new Dictionary<string, Assembly>(StringComparer.Ordinal);
         private int resolutionCount;
         private bool disposed;
-        private bool suspended;
+        private bool suspended = true;
 
         internal int ResolutionCount => Volatile.Read(ref resolutionCount);
 
@@ -26,7 +32,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // The prepared map and the registry's mappings are read together inside one resolve, so
             // they share the registry's gate rather than taking two locks in an unspecified order.
             gate = registry.Gate;
-            AppDomain.CurrentDomain.AssemblyResolve += Resolve;
         }
 
         public IDisposable RegisterPrepared(HotReloadIntroducedTypeArtifact artifact)
@@ -52,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Detaches this resolver from AppDomain.AssemblyResolve without ending its life, so a
-        /// replacement resolver can be the only one answering binds while it is installed.
+        /// Detaches this resolver from AppDomain.AssemblyResolve without ending its life, so the
+        /// resolver installed after it can be the only one answering binds.
         /// </summary>
         /// <remarks>
         /// Why not Dispose: the suspended resolver is put back when the replacement scope closes,
@@ -81,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Reattaches a suspended resolver to AppDomain.AssemblyResolve.
+        /// Attaches this resolver to AppDomain.AssemblyResolve. A newly constructed resolver is
+        /// detached, so this is what puts it in the bind path in the first place.
         /// </summary>
         public void Resume()
         {

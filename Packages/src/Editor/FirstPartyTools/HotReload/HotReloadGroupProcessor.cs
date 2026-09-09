@@ -441,7 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.SnapshotLabels =
                     HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(file.ProjectRelativePath);
                 file.SnapshotAddedLabels = new HashSet<string>(
-                    HotReloadTranspilerDomainGateway.Current.ListActiveAddedMethodKeys(file.ProjectRelativePath),
+                    HotReloadCompositionRoot.Services.Domain.ListActiveAddedMethodKeys(file.ProjectRelativePath),
                     StringComparer.Ordinal);
                 // Why projectRelativePath (not workerSourcePath): contentPathOverride E2E copies
                 // live under Library/UloopHotReload/TestSources/ and are absent from the PDB

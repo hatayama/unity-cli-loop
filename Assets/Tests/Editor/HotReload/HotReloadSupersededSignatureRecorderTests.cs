@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { CreateRemovedSignature() },
                 Array.Empty<string>());
 
-            bool found = HotReloadTranspilerDomainGateway.Current.TryGetSupersededReplacement(
+            bool found = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 RemovedMethodLabel,
                 out string replacementDisplayName);
 
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { CreateRemovedSignature() },
                 Array.Empty<string>());
 
-            bool found = HotReloadTranspilerDomainGateway.Current.TryGetSupersededReplacement(
+            bool found = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 RemovedMethodLabel,
                 out string _);
 
@@ -92,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { CreateRemovedSignature() },
                 new[] { HotReloadMethodKeys.BuildMethodKey(entry) });
 
-            bool found = HotReloadTranspilerDomainGateway.Current.TryGetSupersededReplacement(
+            bool found = HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                 RemovedMethodLabel,
                 out string _);
 

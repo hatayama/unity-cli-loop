@@ -15,6 +15,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadIntroducedTypeAssemblyResolverTests
     {
         /// <summary>
+        /// Verifies that a newly constructed resolver answers no bind until it is attached, so a
+        /// composition root can build one while another is still installed.
+        /// </summary>
+        [Test]
+        public void ConstructedResolver_DoesNotSeeBindsBeforeResume()
+        {
+            HotReloadIntroducedTypeAssemblyResolver resolver =
+                new HotReloadIntroducedTypeAssemblyResolver(new HotReloadIntroducedTypeRegistry());
+            try
+            {
+                int before = resolver.ResolutionCount;
+
+                RequestUnknownAssembly();
+
+                Assert.That(
+                    resolver.ResolutionCount,
+                    Is.EqualTo(before),
+                    "A resolver must stay out of the bind path until the composition root attaches it.");
+            }
+            finally
+            {
+                resolver.Dispose();
+            }
+        }
+
+        /// <summary>
         /// Verifies that a suspended resolver stops being asked to answer binds.
         /// </summary>
         [Test]
@@ -88,9 +114,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.Throws<ObjectDisposedException>(() => resolver.Suspend());
         }
 
+        // A resolver is constructed detached, so a test that needs it in the bind path attaches it.
         private static HotReloadIntroducedTypeAssemblyResolver CreateResolver()
         {
-            return new HotReloadIntroducedTypeAssemblyResolver(new HotReloadIntroducedTypeRegistry());
+            HotReloadIntroducedTypeAssemblyResolver resolver =
+                new HotReloadIntroducedTypeAssemblyResolver(new HotReloadIntroducedTypeRegistry());
+            resolver.Resume();
+            return resolver;
         }
 
         private static void RequestUnknownAssembly()

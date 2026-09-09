@@ -278,7 +278,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // this gate, so the previous apply's added members are still listed here.
                 // Why the entry's own file: a group run gates the replacements of several files,
                 // and a member is active per file.
-                if (HotReloadTranspilerDomainGateway.Current.IsActiveMember(
+                if (HotReloadCompositionRoot.Services.Domain.IsActiveMember(
                         entry.sourceProjectRelativePath,
                         methodLabel))
                 {

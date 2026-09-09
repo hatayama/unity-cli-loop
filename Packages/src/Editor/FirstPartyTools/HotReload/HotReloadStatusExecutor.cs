@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hold.SceneRefreshWarning);
             // Why one snapshot: the total and the sentence that names it must agree, and a second
             // read could answer after another reload activated a type.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadTranspilerDomainGateway.Current.CountActiveChanges();
+            HotReloadActiveChangeSnapshot snapshot = HotReloadCompositionRoot.Services.Domain.CountActiveChanges();
             return new HotReloadResponse
             {
                 Success = true,
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadPatcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
-                HotReloadTranspilerDomainGateway.Current.DescribeAddedMembers();
+                HotReloadCompositionRoot.Services.Domain.DescribeAddedMembers();
             List<HotReloadMethodResult> methods =
                 new List<HotReloadMethodResult>(active.Count + addedMembers.Count);
             int neverInvokedCount = 0;
@@ -94,12 +94,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int count = methods.Count;
             IReadOnlyList<HotReloadAddedFieldDescription> addedFields =
-                HotReloadTranspilerDomainGateway.Current.DescribeAddedFields();
+                HotReloadCompositionRoot.Services.Domain.DescribeAddedFields();
             AppendAddedFieldStatusRows(methods, addedFields);
             // Why one snapshot for the heading, the drop decision, and the reported total: a
             // domain still holding an introduced type has not lost it, and a caller told three
             // different numbers for "what is active" cannot tell which one answers the question.
-            HotReloadActiveChangeSnapshot snapshot = HotReloadTranspilerDomainGateway.Current.CountActiveChanges();
+            HotReloadActiveChangeSnapshot snapshot = HotReloadCompositionRoot.Services.Domain.CountActiveChanges();
             string message = $"{snapshot.RuntimeChangeTotal} change(s) currently active.";
             if (neverInvokedCount > 0)
             {
@@ -143,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string ResolveActiveStatusReason(string methodKey, long invocationCount)
         {
-            if (HotReloadTranspilerDomainGateway.Current.TryGetSupersededReplacement(
+            if (HotReloadCompositionRoot.Services.Domain.TryGetSupersededReplacement(
                     methodKey,
                     out string replacementDisplayName))
             {

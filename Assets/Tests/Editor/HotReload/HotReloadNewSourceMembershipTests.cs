@@ -113,13 +113,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // whole replacement domain, and the applied source ledger is part of that domain.
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadTranspilerDomainGateway.Current.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
                 ActivateIntroducedTypeFor(existingScriptPath);
 
                 ResolveExistingScript("introduced-type-active");
 
                 Assert.That(
-                    HotReloadTranspilerDomainGateway.Current.TryGetAppliedSource(existingScriptPath),
+                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
                     Is.Not.Null);
             }
         }
@@ -135,12 +135,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadTranspilerDomainGateway.Current.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
                 ResolveExistingScript("introduced-type-absent");
 
                 Assert.That(
-                    HotReloadTranspilerDomainGateway.Current.TryGetAppliedSource(existingScriptPath),
+                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
                     Is.Null);
             }
         }

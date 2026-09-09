@@ -97,10 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(HostProjectRelativePath()), Is.True);
             Assert.That(new HotReloadDomainTestAccess().HasShimGeneration(CallerProjectRelativePath()), Is.True);
             Assert.That(
-                HotReloadTranspilerDomainGateway.Current.IsActiveMember(HostProjectRelativePath(), HostAddedMethodLabel),
+                HotReloadCompositionRoot.Services.Domain.IsActiveMember(HostProjectRelativePath(), HostAddedMethodLabel),
                 Is.True);
             Assert.That(
-                HotReloadTranspilerDomainGateway.Current.IsActiveMember(CallerProjectRelativePath(), HostAddedMethodLabel),
+                HotReloadCompositionRoot.Services.Domain.IsActiveMember(CallerProjectRelativePath(), HostAddedMethodLabel),
                 Is.False);
         }
 
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller.Call(host), Is.EqualTo(41));
             Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
-                HotReloadTranspilerDomainGateway.Current.GetAddedFieldsForType(
+                HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(
                     typeof(HotReloadCrossFileAddedMemberHost).FullName),
                 Is.EqualTo(new[] { "Counter" }));
             Assert.That(result.AddedFields, Has.Length.EqualTo(1));
@@ -181,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller.Call(host), Is.EqualTo(41));
             Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
-                HotReloadTranspilerDomainGateway.Current.GetAddedFieldsForType(
+                HotReloadCompositionRoot.Services.Domain.GetAddedFieldsForType(
                     typeof(HotReloadCrossFileAddedMemberHost).FullName),
                 Is.EqualTo(new[] { "Count" }));
             Assert.That(result.AddedFields, Has.Length.EqualTo(1));
