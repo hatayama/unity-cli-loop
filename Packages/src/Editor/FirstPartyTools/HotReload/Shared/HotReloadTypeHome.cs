@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 
 using UnityEngine;
@@ -66,6 +67,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyName,
                 dllPath,
                 null);
+        }
+
+        /// <summary>
+        /// A Unity project assembly, named by the project root it is compiled under.
+        /// </summary>
+        public static HotReloadTypeHome ScriptAssembliesUnderProject(string projectRoot, string assemblyName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+
+            string dllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            return ScriptAssemblies(assemblyName, dllPath);
         }
 
         /// <summary>

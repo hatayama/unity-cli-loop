@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -2039,12 +2040,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "fingerprint",
                 "public class Introduced { }");
             HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
-                typeof(HotReloadOrchestratorTests).Assembly,
+                CreateIntroducedTypeAssembly(),
                 "artifact.dll",
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
             HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);
             HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
+        }
+
+        // Why a generated name rather than this test assembly: an artifact assembly is compiled
+        // under a name of its own, and reusing a project assembly's name would make the artifact
+        // answer for that project assembly's types.
+        private static System.Reflection.Assembly CreateIntroducedTypeAssembly()
+        {
+            AssemblyName assemblyName = new AssemblyName("UloopIntroducedTypes_" + Guid.NewGuid().ToString("N"));
+            return System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
+                assemblyName,
+                AssemblyBuilderAccess.Run);
         }
 
         /// <summary>
@@ -3180,10 +3192,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] addedFieldNames)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + ".dll");
             UnityEditor.Compilation.Assembly compilationAssembly = null;
             foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
             {
@@ -3206,7 +3214,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 projectRelativePath,
                 assemblyName,
                 compilationAssembly,
-                targetDllPath,
+                HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, assemblyName),
                 projectRoot,
                 new HotReloadFileSinks(new List<string>(), null))
             {
@@ -3221,7 +3229,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 assemblyName,
                 "direct-apply",
                 compilationAssembly,
-                targetDllPath,
+                HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, assemblyName),
                 compilationAssembly.defines ?? Array.Empty<string>(),
                 new TransformWorkerInputDto
                 {
