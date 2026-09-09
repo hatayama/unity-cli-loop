@@ -48,6 +48,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -80,6 +83,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -147,6 +153,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
                 new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
             HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 ExistingScriptPath,
                 ExistingScriptPath,
                 new List<HotReloadMethodOutcome>(),
@@ -209,6 +218,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingPredefinedScriptPath,
                 MissingPredefinedScriptPath,
                 outcomes,

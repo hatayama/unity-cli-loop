@@ -944,7 +944,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // can produce, so the reload reports the host's declaration as changed and stops.
         private static void ActivateStaleIntroducedTypeFor(string hostPath)
         {
-            string projectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(hostPath);
+            string projectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                hostPath);
             string assemblyName = Path.GetFileNameWithoutExtension(
                 UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath));
             string artifactPath = WriteIntroducedTypeArtifact();

@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         /// <summary>Replaces the group-run stages, leaving every other collaborator production.</summary>
         internal static IDisposable BeginWithDependencies(
-            Func<TransformWorkerClient, HotReloadEntryApplier, HotReloadGroupProcessorDependencies>
+            Func<HotReloadGroupStageCollaborators, HotReloadGroupProcessorDependencies>
                 buildDependencies)
         {
             HotReloadServices installed = HotReloadCompositionRoot.Services;
@@ -72,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         internal static IDisposable BeginWith(
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             TransformWorkerHost transformWorkerHost,
-            Func<TransformWorkerClient, HotReloadEntryApplier, HotReloadGroupProcessorDependencies>
+            Func<HotReloadGroupStageCollaborators, HotReloadGroupProcessorDependencies>
                 buildDependencies)
         {
             HotReloadServices installed = HotReloadCompositionRoot.Services;

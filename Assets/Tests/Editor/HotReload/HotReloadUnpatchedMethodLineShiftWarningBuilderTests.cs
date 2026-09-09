@@ -128,6 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -162,6 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -193,6 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
                     ? "line1\nline2"
                     : "same\ncount",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -224,6 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
                     ? "line1\nline2"
                     : "a\nb",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(2));
@@ -256,6 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -287,6 +292,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(2));
@@ -321,6 +327,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 new[] { "Assets/Scripts/Enemy.cs" });
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -352,6 +359,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 new[] { "Assets/Scripts/Enemy.cs" });
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -383,6 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methods,
                 file => "line1\nline2\nline3",
                 file => "line1\nline2",
+                ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
@@ -489,6 +498,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     File.Delete(absolutePath);
                 }
             }
+        }
+
+        // The path spelling the production response builder passes, so these tests key their
+        // warnings on the same file names a real run does.
+        private static string ToProjectRelativeScriptPath(string path)
+        {
+            return HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                path);
         }
     }
 }

@@ -314,12 +314,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // The resolver normalizes a package path, which the run entry point captures for.
             // This test calls the resolver directly, so it captures here instead.
             HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
-            HotReloadRunAccumulator run = new HotReloadRunAccumulator(autoRefreshHeldAtStart: false);
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                autoRefreshHeldAtStart: false);
             HotReloadInputResolutionSlot slot = new HotReloadInputResolutionSlot();
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
                 new List<(int InputIndex, string AssemblyName, string ProjectRelativePath)>();
 
-            new HotReloadInputFileResolver().ResolveInputFile(
+            new HotReloadInputFileResolver(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture).ResolveInputFile(
                 MissingNewSourcePath,
                 0,
                 null,
@@ -360,6 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, true)));
 
             HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                HotReloadCompositionRoot.Services.GroupStageCollaborators,
                 context,
                 CreateEmptyGateResult(),
                 CancellationToken.None);
@@ -382,6 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             SeedActiveAddedMember(file.ProjectRelativePath);
 
             HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                HotReloadCompositionRoot.Services.GroupStageCollaborators,
                 context,
                 CreateEmptyGateResult(),
                 CancellationToken.None);
@@ -501,6 +509,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             file.AddedFieldNames = null;
 
             HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                HotReloadCompositionRoot.Services.GroupStageCollaborators,
                 context,
                 CreateEmptyGateResult(),
                 CancellationToken.None);
@@ -523,6 +532,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             file.AddedFieldNames = new[] { "Sample.Host.retryField" };
 
             HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                HotReloadCompositionRoot.Services.GroupStageCollaborators,
                 context,
                 CreateEmptyGateResult(),
                 CancellationToken.None);
@@ -547,16 +557,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             file.FileOutput = null;
 
             IReadOnlyList<HotReloadFileProcessResult> results;
-            using (HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
+            using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                 HotReloadGroupProcessorDependencies.Create(
                     files => true,
                     (files, input, ct) => Task.FromResult(
                         HotReloadIntroducedTypePreparationResult.NoIntroducedTypes()),
                     (input, ct) => Task.FromResult(
                         TransformWorkerClientResult.Failure("transform worker failed")),
-                    HotReloadGroupProcessor.GateAndCompileAsync,
-                    HotReloadGroupEntryPreparation.PrepareGroup,
-                    entryApplier.ApplyPreparedEntries)))
+                    (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                    (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
+                        collaborators, context, compileResult, entriesToPatch),
+                    collaborators.EntryApplier.ApplyPreparedEntries)))
             {
                 results = await HotReloadCompositionRoot.Services.GroupProcessor.ProcessGroupAsync(
                     new[] { file },
@@ -620,6 +631,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             file.SkipApply = true;
 
             HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                HotReloadCompositionRoot.Services.GroupStageCollaborators,
                 context,
                 CreateEmptyGateResult(),
                 CancellationToken.None);
@@ -692,12 +704,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             internal IDisposable Install()
             {
-                return HotReloadServicesTestScope.BeginWithDependencies((transformWorkerClient, entryApplier) =>
+                return HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                     HotReloadGroupProcessorDependencies.Create(
-                        HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
-                        HotReloadIntroducedTypePreparation.PrepareAsync,
-                        transformWorkerClient.RunAsync,
-                        HotReloadGroupProcessor.GateAndCompileAsync,
+                        files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
+                        (files, input, ct) =>
+                            HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct),
+                        collaborators.TransformWorkerClient.RunAsync,
+                        (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
                         (context, compileResult, entriesToPatch) =>
                             Array.Empty<HotReloadPreparedGroupFile>(),
                         (context, compileResult, preparedFiles) =>
@@ -894,6 +907,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ScriptAssemblies",
                 AssemblyName + ".dll");
             string failure = HotReloadNewSourceMembershipValidator.TryCapture(
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 projectRoot,
                 MissingNewSourcePath,
                 AssemblyName,

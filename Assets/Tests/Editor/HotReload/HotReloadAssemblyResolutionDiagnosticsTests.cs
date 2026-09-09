@@ -180,6 +180,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> warnings = new List<string>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
