@@ -23,7 +23,7 @@ internal static class AddedPropertyClassifier
     internal static void ClassifyAddedProperties(
         TypeEmitState typeState,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         WorkerInput input,
         BaselineSnapshotState baseline,
         CompilationUnitSyntax root,
@@ -35,9 +35,7 @@ internal static class AddedPropertyClassifier
         List<WorkerSkipped> skipped,
         ShimNameAllocator shimNames)
     {
-        INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(
-            typeState.TypeSymbol,
-            targetTypesAssemblySymbol);
+        INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol);
         if (compiledType == null)
         {
             return;
@@ -52,7 +50,7 @@ internal static class AddedPropertyClassifier
                 typeState,
                 compiledType,
                 semanticModel,
-                targetTypesAssemblySymbol,
+                home,
                 input,
                 baseline,
                 root,
@@ -71,7 +69,7 @@ internal static class AddedPropertyClassifier
         TypeEmitState typeState,
         INamedTypeSymbol compiledType,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         WorkerInput input,
         BaselineSnapshotState baseline,
         CompilationUnitSyntax root,
@@ -88,7 +86,7 @@ internal static class AddedPropertyClassifier
             typeState,
             compiledType,
             semanticModel,
-            targetTypesAssemblySymbol,
+            home,
             baseline,
             addedMethodCatalog);
         if (candidate == null)
@@ -147,7 +145,7 @@ internal static class AddedPropertyClassifier
         TypeEmitState typeState,
         INamedTypeSymbol compiledType,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         BaselineSnapshotState baseline,
         AddedMethodCatalog addedMethodCatalog)
     {
@@ -188,7 +186,7 @@ internal static class AddedPropertyClassifier
                 symbol,
                 typeState.TypeSymbol,
                 semanticModel,
-                targetTypesAssemblySymbol,
+                home,
                 typeState.SourceUnit.ArtifactMap);
         }
 
@@ -359,13 +357,13 @@ internal static class AddedPropertyClassifier
         IPropertySymbol symbol,
         INamedTypeSymbol hostType,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         IntroducedTypeArtifactMap artifactMap)
     {
         AddedFieldStoreAvailability availability = AddedFieldClassifier.EvaluateStoreAvailability(
             hostType,
             semanticModel,
-            targetTypesAssemblySymbol,
+            home,
             symbol.Type,
             declaration.Initializer?.Value,
             artifactMap,

@@ -36,11 +36,11 @@ internal static class CompiledMemberKindChangeWarnings
     internal static SyntaxKeys AppendCompiledPropertyOrEventKindChangeWarnings(
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         List<string> warnings)
     {
         SyntaxKeys syntaxKeys = new SyntaxKeys();
-        if (targetTypesAssemblySymbol == null)
+        if (home.AssemblySymbol == null)
         {
             return syntaxKeys;
         }
@@ -71,7 +71,7 @@ internal static class CompiledMemberKindChangeWarnings
                 continue;
             }
 
-            INamedTypeSymbol compiledType = targetTypesAssemblySymbol.GetTypeByMetadataName(
+            INamedTypeSymbol compiledType = home.FindCompiledTypeByMetadataName(
                 typeMetadataName);
             if (compiledType == null)
             {
