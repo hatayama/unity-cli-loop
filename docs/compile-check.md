@@ -43,7 +43,12 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    reference that was added to one, invalidate the recorded build. The run then stops with
    `COMPILE_CHECK_UNITY_BUILD_REQUIRED` rather than reporting diagnostics for a configuration the
    project no longer has.
-5. **Compile in dependency order** and parse the compiler's diagnostics into JSON.
+5. **Compile in dependency order** and parse the compiler's diagnostics into JSON. An assembly starts
+   as soon as every assembly it references that this run also compiles has finished, so independent
+   assemblies compile at the same time. `--jobs <n>` caps how many run at once; the default is half
+   the machine's CPUs, because one `csc` process already keeps two to three cores busy on its own.
+   The reported order does not depend on the job count: results are collected in dependency order
+   whatever finishes first.
 
 Files and directories Unity ignores — any name starting with a dot or ending with a tilde, which
 covers the `._*` AppleDouble siblings macOS writes on non-native volumes — are skipped everywhere
@@ -58,6 +63,9 @@ definitions were deleted.
 
 The compiled DLLs land in `Library/uloop/compile-check/<dag>/` and are never handed to Unity. The
 directory is disposable; deleting it only costs the next run some time.
+
+`--jobs <n>` bounds how many assemblies compile at the same time; the default is half the machine's
+CPUs, and `--jobs 1` compiles them one after another.
 
 The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, `Errors`,
 `Warnings` (each diagnostic carrying `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`),
