@@ -32,8 +32,16 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    stays up for a while after the run, exactly as it does after a build Unity ran itself; leave it
    alone. When it cannot be reached, csc compiles in its own process and the result is the same.
 3. **Decide what to compile.** By default the run compiles the assemblies whose sources changed
-   since the last Unity build, plus every assembly that references one of them. `--all` compiles
-   every assembly in the build. Assemblies left out are counted in `SkippedAssemblies`. An
+   since the last Unity build, plus every assembly that references one of them. An assembly pulled
+   in only through a reference is dropped again once everything it references has been compiled and
+   every one of those reference assemblies (`.ref.dll`, which holds the public surface alone) came
+   out byte-identical to the last Unity build's. That is the decision Unity itself makes through
+   Bee: a change that does not reach the public surface — a method body, say — cannot change what a
+   dependent compiles to. The comparison is always against Unity's own artifact, never against the
+   previous `compile-check` output, which would only say that nothing moved since that run and would
+   hide an error a dependent has been carrying all along. `--all` compiles
+   every assembly in the build and skips nothing. Assemblies left out are counted in
+   `SkippedAssemblies`. An
    assembly's sources are re-globbed from its own directory, stopping at nested assembly
    boundaries; the files an `.asmref` attaches to it are taken from the last build's response file
    instead, wherever that folder sits — including inside a nested assembly's directory, which the
@@ -79,7 +87,9 @@ CPUs and never less than one, and `--jobs 1` compiles them one after another.
 The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, `Errors`,
 `Warnings` (each diagnostic carrying `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`),
 `CompiledAssemblies`, `SkippedAssemblies`, `ResponseFileSet`, `ProjectRoot` and a one-line
-`Message`. The process exits 1 when `ErrorCount` is greater than zero.
+`Message`. `SkippedAssemblies` counts both the assemblies nothing changed for and the ones left
+out because every assembly they reference kept the same public surface. The process exits 1 when
+`ErrorCount` is greater than zero.
 
 ## Limitations
 

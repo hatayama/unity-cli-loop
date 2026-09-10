@@ -34,10 +34,9 @@ type Options struct {
 
 // Result is everything one compile-check run produced.
 type Result struct {
-	DagDir       string
-	Units        []UnitResult
-	Skipped      int
-	ChangedCount int
+	DagDir  string
+	Units   []UnitResult
+	Skipped int
 }
 
 // Run compiles the assemblies that need checking and collects their diagnostics.
@@ -69,16 +68,18 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		jobs = DefaultJobs()
 	}
 
-	units, err := compileUnits(ctx, compiler, plan, jobs)
+	units, referenceSkips, err := compileUnits(ctx, compiler, plan, jobs)
 	if err != nil {
 		return Result{}, err
 	}
 
 	return Result{
-		DagDir:       dagDir,
-		Units:        units,
-		Skipped:      plan.Skipped,
-		ChangedCount: len(plan.Units),
+		DagDir: dagDir,
+		Units:  units,
+		// Why the two counts are added: both name an assembly the run did not compile - one because
+		// nothing it compiles from changed, the other because everything it references kept the
+		// public surface the last Unity build recorded.
+		Skipped: plan.Skipped + referenceSkips,
 	}, nil
 }
 

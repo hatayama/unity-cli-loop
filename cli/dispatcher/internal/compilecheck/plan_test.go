@@ -277,3 +277,67 @@ func TestBuildCompilePlanRejectsARemovedAssemblyDefinition(t *testing.T) {
 		t.Fatal("expected a removed assembly definition to be refused")
 	}
 }
+
+// selectedAsDependentByName maps every unit of a plan to whether it was selected only through a reference.
+func selectedAsDependentByName(plan BuildPlan) map[string]bool {
+	flags := map[string]bool{}
+	for _, unit := range plan.Units {
+		flags[unit.Assembly.AssemblyName] = unit.SelectedAsDependent
+	}
+
+	return flags
+}
+
+// assertSelectedAsDependent checks the dependent-only mark of every unit the plan compiles.
+func assertSelectedAsDependent(t *testing.T, plan BuildPlan, want map[string]bool) {
+	t.Helper()
+	got := selectedAsDependentByName(plan)
+	if len(got) != len(want) {
+		t.Fatalf("plan compiles %v, want the assemblies %v", unitNames(plan), want)
+	}
+	for name, expected := range want {
+		if got[name] != expected {
+			t.Errorf("%s selected as dependent = %t, want %t", name, got[name], expected)
+		}
+	}
+}
+
+// Verifies an assembly whose own sources changed is never marked as selected through a reference,
+// even when it also references another assembly this run compiles.
+func TestBuildCompilePlanMarksAChangedDependentAsChanged(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	touchSource(t, projectRoot, "A")
+	touchSource(t, projectRoot, "B")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, false)
+	if err != nil {
+		t.Fatalf("expected a plan, got error: %v", err)
+	}
+
+	assertSelectedAsDependent(t, plan, map[string]bool{"A": false, "B": false, "C": true})
+}
+
+// Verifies the assemblies pulled in only because they reference a changed one are marked as such.
+func TestBuildCompilePlanMarksTheAssembliesSelectedThroughAReference(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	touchSource(t, projectRoot, "A")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, false)
+	if err != nil {
+		t.Fatalf("expected a plan, got error: %v", err)
+	}
+
+	assertSelectedAsDependent(t, plan, map[string]bool{"A": false, "B": true, "C": true})
+}
+
+// Verifies --all marks nothing as dependent-only, so no unit of such a run can ever be skipped.
+func TestBuildCompilePlanMarksNothingAsDependentWhenCompilingEverything(t *testing.T) {
+	projectRoot := newPlanProject(t)
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected a plan, got error: %v", err)
+	}
+
+	assertSelectedAsDependent(t, plan, map[string]bool{"A": false, "B": false, "C": false})
+}
