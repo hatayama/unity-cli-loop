@@ -47,6 +47,14 @@ func stubRunner(stdout string, exitCode int, captured *exec.Cmd) CommandRunner {
 	}
 }
 
+// makeOutputDirectory creates the directory the run's outputs land in, the way one run does once.
+func makeOutputDirectory(t *testing.T, projectRoot string, plan BuildPlan) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(projectRoot, plan.OutputDir), outputDirPermissions); err != nil {
+		t.Fatalf("failed to create the output directory: %v", err)
+	}
+}
+
 // compileSecondUnit runs the plan's referencing unit through a stubbed compiler.
 func compileSecondUnit(t *testing.T, stdout string, exitCode int) (string, UnitResult) {
 	t.Helper()
@@ -154,6 +162,8 @@ func TestCompileUnitFallsBackWhenTheRebuiltReferenceIsMissing(t *testing.T) {
 		Timeout:     time.Minute,
 		Run:         stubRunner("", 0, &captured),
 	}
+	// The output directory is created once per run, before any unit compiles.
+	makeOutputDirectory(t, projectRoot, plan)
 
 	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[1]); err != nil {
 		t.Fatalf("expected the unit to compile, got error: %v", err)
@@ -257,6 +267,8 @@ func TestCompileUnitOmitsRefOutWhenTheAssemblyHasNone(t *testing.T) {
 		Timeout:     time.Minute,
 		Run:         stubRunner("", 0, &captured),
 	}
+	// The output directory is created once per run, before any unit compiles.
+	makeOutputDirectory(t, projectRoot, plan)
 
 	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[0]); err != nil {
 		t.Fatalf("expected the unit to compile, got error: %v", err)
