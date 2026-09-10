@@ -17,9 +17,14 @@ const (
 	severityError   = "error"
 	severityWarning = "warning"
 
-	compilerExecArgument      = "exec"
-	compilerNoStdLibFlag      = "/nostdlib"
-	compilerNoConfigFlag      = "/noconfig"
+	compilerExecArgument = "exec"
+	compilerNoStdLibFlag = "/nostdlib"
+	compilerNoConfigFlag = "/noconfig"
+	// compilerSharedFlag connects csc to the Roslyn compiler server, which is how Unity's Bee starts
+	// it too. Compiling several assemblies in a row then reuses the server's JIT-compiled code and its
+	// cached reference metadata instead of paying for both once per assembly. When csc cannot reach
+	// the server it compiles in its own process, so this changes speed and nothing else.
+	compilerSharedFlag        = "/shared"
 	compilerLibraryTargetFlag = "-target:library"
 	multiLevelLookupSetting   = "DOTNET_MULTILEVEL_LOOKUP=0"
 
@@ -66,6 +71,8 @@ type Compiler struct {
 // mutable state, and every file this touches - the outputs it removes and the response file it
 // writes - is named after the assembly, so no two units address the same path. The output directory
 // itself is created once by the caller, before any unit starts.
+// A VBCSCompiler process may outlive the run: the compiler server stays up for a while so the next
+// invocation can reuse it, exactly as it does after a build Unity runs itself.
 func (c Compiler) CompileUnit(
 	ctx context.Context, plan BuildPlan, unit CompileUnit,
 ) (UnitResult, error) {
@@ -87,7 +94,7 @@ func (c Compiler) CompileUnit(
 
 	command := exec.CommandContext(invocationContext,
 		c.Paths.DotnetHostPath, compilerExecArgument, c.Paths.CompilerDllPath,
-		compilerNoStdLibFlag, compilerNoConfigFlag, "@"+responseFilePath)
+		compilerNoStdLibFlag, compilerNoConfigFlag, compilerSharedFlag, "@"+responseFilePath)
 	command.Dir = c.ProjectRoot
 	command.Env = append(os.Environ(), multiLevelLookupSetting)
 

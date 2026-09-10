@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -280,5 +281,32 @@ func TestCompileUnitOmitsRefOutWhenTheAssemblyHasNone(t *testing.T) {
 	}
 	if strings.Contains(string(written), referenceOutputFlagPref) {
 		t.Errorf("expected no -refout line, got:\n%s", written)
+	}
+}
+
+// Verifies csc is invoked with the whole argument list Unity's Bee uses, the compiler server flag
+// among them and in its place, since csc reads these positionally before the response file.
+func TestCompileUnitInvokesCscThroughTheCompilerServer(t *testing.T) {
+	projectRoot := t.TempDir()
+	plan := newCompilerPlan()
+	captured := exec.Cmd{}
+	compiler := Compiler{
+		Paths:       EditorCompilerPaths{DotnetHostPath: "/dotnet", CompilerDllPath: "/csc.dll"},
+		ProjectRoot: projectRoot,
+		Timeout:     time.Minute,
+		Run:         stubRunner("", 0, &captured),
+	}
+	makeOutputDirectory(t, projectRoot, plan)
+
+	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[0]); err != nil {
+		t.Fatalf("expected the unit to compile, got error: %v", err)
+	}
+
+	expected := []string{
+		"/dotnet", "exec", "/csc.dll", "/nostdlib", "/noconfig", "/shared",
+		"@" + filepath.Join(projectRoot, plan.OutputDir, "A.rsp"),
+	}
+	if !slices.Equal(captured.Args, expected) {
+		t.Errorf("csc arguments = %v, want %v", captured.Args, expected)
 	}
 }
