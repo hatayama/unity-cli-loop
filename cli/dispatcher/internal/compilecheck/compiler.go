@@ -252,6 +252,13 @@ func writeRewrittenResponseFile(
 	if rsp.AdditionalFile != "" {
 		lines = append(lines, quoteFlag(additionalFileFlagPrefix, rsp.AdditionalFile))
 	}
+	// Why Bee's second response file is replayed here: it carries flags that decide what the compiled
+	// assembly contains - a /pathmap that maps the project root away, so a source path an attribute
+	// bakes into metadata comes out relative - and Bee writes it per assembly, with nothing in it for
+	// some of them. Passing back exactly what it wrote is what makes this check's output match Unity's
+	// own; synthesizing the flag instead would be wrong for every assembly Bee left it out of. The
+	// diagnostics are untouched: csc prints the paths the response file lists, already project-relative.
+	lines = append(lines, rsp.CompanionFlags...)
 
 	path := filepath.Join(projectRoot, plan.OutputDir, rsp.AssemblyName+responseFileExtension)
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), responseFilePermissions); err != nil {
