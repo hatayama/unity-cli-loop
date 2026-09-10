@@ -18,6 +18,10 @@ type CompileUnit struct {
 	Assembly ResponseFile
 	Sources  []string
 	Reason   string // empty when the unit was selected by --all rather than by a change
+	// SelectedAsDependent marks a unit picked up only because an assembly it references changed:
+	// nothing it compiles from was edited. It is false for a unit whose own sources changed and for
+	// every unit of an --all run.
+	SelectedAsDependent bool
 	// PlanReferences names the assemblies this one references that this run compiles too. It is
 	// what the scheduler waits for: a reference left out of the plan was not rebuilt, so its
 	// reference assembly from the last Unity build is already on disk and nothing has to wait.
@@ -62,10 +66,11 @@ func BuildCompilePlan(projectRoot string, dagDir string, all bool) (BuildPlan, e
 	units := make([]CompileUnit, 0, len(order))
 	for _, name := range order {
 		units = append(units, CompileUnit{
-			Assembly:       graph.byName[name],
-			Sources:        graph.sources[name],
-			Reason:         reasons[name],
-			PlanReferences: selectedReferences(graph, reasons, name),
+			Assembly:            graph.byName[name],
+			Sources:             graph.sources[name],
+			Reason:              reasons[name],
+			SelectedAsDependent: strings.HasPrefix(reasons[name], dependencyReasonPrefix),
+			PlanReferences:      selectedReferences(graph, reasons, name),
 		})
 	}
 

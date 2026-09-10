@@ -55,7 +55,7 @@ A JSON payload:
 - `ErrorCount`, `WarningCount`: totals across every compiled assembly
 - `Errors`, `Warnings`: each with `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`
 - `CompiledAssemblies`: the assemblies this run compiled, in dependency order
-- `SkippedAssemblies`: how many assemblies were left out because nothing they compile from changed
+- `SkippedAssemblies`: how many assemblies were left out: nothing they compile from changed, or every assembly they reference kept the same public surface
 - `ResponseFileSet`: the Bee build the run replayed
 - `ProjectRoot`: resolved project root
 - `Message`: one-line summary
