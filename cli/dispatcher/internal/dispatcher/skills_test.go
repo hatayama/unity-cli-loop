@@ -766,6 +766,56 @@ func TestRunSkillsListDefaultsToFlatLayout(t *testing.T) {
 	}
 }
 
+// Tests that the list command reports a skill whose tool is disabled as disabled rather than as a missing install.
+func TestRunSkillsListReportsSkillOfDisabledToolAsDisabled(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeToolSettings(t, projectRoot, `{"disabledTools":["disabled-skill"]}`)
+	skill := skillDefinition{
+		name:     "uloop-disabled-skill",
+		toolName: "disabled-skill",
+		content:  []byte("---\nname: uloop-disabled-skill\n---\n"),
+	}
+	options := skillCommandOptions{
+		targets: []skillTarget{targetConfigs["claude"]},
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsList(projectRoot, []skillDefinition{skill}, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("list should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "uloop-disabled-skill (disabled)") {
+		t.Fatalf("skill of a disabled tool should be reported as disabled: %s", stdout.String())
+	}
+}
+
+// Tests that the list command still reports an enabled tool's uninstalled skill as not installed.
+func TestRunSkillsListReportsSkillOfEnabledToolAsNotInstalled(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeToolSettings(t, projectRoot, `{"disabledTools":["other-skill"]}`)
+	skill := skillDefinition{
+		name:     "uloop-enabled-skill",
+		toolName: "enabled-skill",
+		content:  []byte("---\nname: uloop-enabled-skill\n---\n"),
+	}
+	options := skillCommandOptions{
+		targets: []skillTarget{targetConfigs["claude"]},
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsList(projectRoot, []skillDefinition{skill}, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("list should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "uloop-enabled-skill (not installed)") {
+		t.Fatalf("skill of an enabled tool should stay not installed: %s", stdout.String())
+	}
+}
+
 // Tests that the public uninstall command removes only the flat layout by default.
 func TestRunSkillsUninstallDefaultsToFlatLayout(t *testing.T) {
 	projectRoot := t.TempDir()

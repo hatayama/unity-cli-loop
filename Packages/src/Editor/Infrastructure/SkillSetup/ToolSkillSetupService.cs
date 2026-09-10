@@ -40,7 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             List<ToolSkillSynchronizer.SkillTargetInfo> targets =
                 ToolSkillSynchronizer.DetectTargetsForLayoutAtProjectRoot(
                     projectRoot,
-                    groupSkillsUnderUnityCliLoop);
+                    groupSkillsUnderUnityCliLoop,
+                    _toolSettingsPort.GetDisabledTools());
             return targets.Select(ToDomainInfo).ToList();
         }
 

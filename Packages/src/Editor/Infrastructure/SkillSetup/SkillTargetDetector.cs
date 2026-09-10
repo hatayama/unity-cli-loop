@@ -41,9 +41,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string projectRoot,
             bool requireSkillsDirectory,
             bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
+            bool includeFreshnessCheck,
+            IReadOnlyCollection<string> disabledTools)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = new();
 
@@ -66,7 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     targetRoot,
                     hasSkillsDirectory,
                     groupSkillsUnderUnityCliLoop,
-                    includeFreshnessCheck);
+                    includeFreshnessCheck,
+                    disabledTools);
                 bool hasULoopSkills = installState == SkillInstallState.Installed
                     || installState == SkillInstallState.Checking
                     || installState == SkillInstallState.Outdated;
@@ -118,7 +121,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string targetRoot,
             bool hasSkillsDirectory,
             bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
+            bool includeFreshnessCheck,
+            IReadOnlyCollection<string> disabledTools)
         {
             if (!hasSkillsDirectory)
             {
@@ -132,7 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     : SkillInstallState.Missing;
             }
 
-            return SkillInstallLayout.GetInstalledState(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
+            return SkillInstallLayout.GetInstalledState(
+                projectRoot,
+                targetRoot,
+                groupSkillsUnderUnityCliLoop,
+                disabledTools);
         }
     }
 }

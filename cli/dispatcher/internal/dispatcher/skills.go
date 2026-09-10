@@ -224,6 +224,8 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 		location = "Global"
 	}
 
+	disabledTools := loadDisabledToolsForSkills(projectRoot, options.global)
+
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "uloop Skills Status:")
 	clicore.WriteLine(stdout, "")
@@ -237,7 +239,11 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 		clicore.WriteFormat(stdout, "Location: %s\n", baseDir)
 		clicore.WriteLine(stdout, strings.Repeat("=", 50))
 		for _, skill := range skills {
-			status, err := getSkillStatus(baseDir, skill, groupManagedSkillsForOptions(options))
+			status, err := getSkillStatusForList(
+				baseDir,
+				skill,
+				disabledTools,
+				groupManagedSkillsForOptions(options))
 			if err != nil {
 				clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 				return 1
@@ -379,7 +385,7 @@ func installSkillsForTarget(projectRoot string, target skillTarget, skills []ski
 		}
 	}
 
-	disabledTools := loadDisabledToolsForSkillInstall(projectRoot, global)
+	disabledTools := loadDisabledToolsForSkills(projectRoot, global)
 	for _, skill := range skills {
 		if err := installSkillForTarget(baseDir, skill, disabledTools, grouped, &result); err != nil {
 			return skillInstallResult{}, err
@@ -393,11 +399,26 @@ func installSkillsForTarget(projectRoot string, target skillTarget, skills []ski
 	return result, nil
 }
 
-func loadDisabledToolsForSkillInstall(projectRoot string, global bool) []string {
+// Tool settings live in the project, so a global install or listing has none to honor.
+func loadDisabledToolsForSkills(projectRoot string, global bool) []string {
 	if global {
 		return []string{}
 	}
 	return clicore.LoadDisabledTools(projectRoot)
+}
+
+// A disabled tool's skill is removed on install by design, so reporting it as a missing
+// install would read as a broken install the user cannot repair.
+func getSkillStatusForList(
+	baseDir string,
+	skill skillDefinition,
+	disabledTools []string,
+	grouped bool,
+) (string, error) {
+	if isSkillDisabledByToolSettings(skill, disabledTools) {
+		return "disabled", nil
+	}
+	return getSkillStatus(baseDir, skill, grouped)
 }
 
 func installSkillForTarget(

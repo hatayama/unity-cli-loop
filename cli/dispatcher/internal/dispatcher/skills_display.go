@@ -53,6 +53,8 @@ func statusIcon(status string) string {
 		return "^"
 	case "conflict":
 		return "!"
+	case "disabled":
+		return "o"
 	default:
 		return "-"
 	}
@@ -66,6 +68,8 @@ func statusText(status string) string {
 		return "outdated"
 	case "conflict":
 		return "conflict"
+	case "disabled":
+		return "disabled"
 	default:
 		return "not installed"
 	}
