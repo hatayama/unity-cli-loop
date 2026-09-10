@@ -151,3 +151,55 @@ func TestParseResponseFileRequiresSources(t *testing.T) {
 		t.Fatal("expected a response file without sources to fail the parse")
 	}
 }
+
+// writeCompanionResponseFile writes the .rsp2 Bee places beside the given response file.
+func writeCompanionResponseFile(t *testing.T, responseFilePath string, content string) {
+	t.Helper()
+	path := strings.TrimSuffix(responseFilePath, ".rsp") + ".rsp2"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write the companion response file: %v", err)
+	}
+}
+
+// Verifies the flags Bee wrote in the second response file are carried over verbatim, including a
+// file that ends without a newline, which is how Bee writes it.
+func TestParseResponseFileReadsTheCompanionFlags(t *testing.T) {
+	path := writeResponseFile(t, sampleResponseFileLines(), "\n")
+	companionLine := `/pathmap:"/projects/Sample"=.`
+	writeCompanionResponseFile(t, path, companionLine)
+
+	parsed, err := ParseResponseFile(path)
+	if err != nil {
+		t.Fatalf("expected the sample to parse, got error: %v", err)
+	}
+
+	assertStrings(t, "companion flags", parsed.CompanionFlags, []string{companionLine})
+}
+
+// Verifies an empty second response file leaves no flags behind, since Bee writes an empty one for
+// every assembly it builds without the extra flags.
+func TestParseResponseFileAcceptsAnEmptyCompanionFile(t *testing.T) {
+	path := writeResponseFile(t, sampleResponseFileLines(), "\n")
+	writeCompanionResponseFile(t, path, "")
+
+	parsed, err := ParseResponseFile(path)
+	if err != nil {
+		t.Fatalf("expected the sample to parse, got error: %v", err)
+	}
+
+	if parsed.CompanionFlags != nil {
+		t.Errorf("companion flags = %v, want none", parsed.CompanionFlags)
+	}
+}
+
+// Verifies a missing second response file is not an error: an older build may not have written one.
+func TestParseResponseFileAcceptsAMissingCompanionFile(t *testing.T) {
+	parsed, err := ParseResponseFile(writeResponseFile(t, sampleResponseFileLines(), "\n"))
+	if err != nil {
+		t.Fatalf("expected the sample to parse, got error: %v", err)
+	}
+
+	if parsed.CompanionFlags != nil {
+		t.Errorf("companion flags = %v, want none", parsed.CompanionFlags)
+	}
+}

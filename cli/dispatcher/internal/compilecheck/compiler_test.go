@@ -310,3 +310,56 @@ func TestCompileUnitInvokesCscThroughTheCompilerServer(t *testing.T) {
 		t.Errorf("csc arguments = %v, want %v", captured.Args, expected)
 	}
 }
+
+// compileUnitForCompanionFlags compiles the first unit with the given second-response-file flags and
+// returns the lines of the response file the compiler wrote for it.
+func compileUnitForCompanionFlags(t *testing.T, companionFlags []string) []string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	plan := newCompilerPlan()
+	plan.Units[0].Assembly.CompanionFlags = companionFlags
+	captured := exec.Cmd{}
+	compiler := Compiler{
+		Paths:       EditorCompilerPaths{DotnetHostPath: "/dotnet", CompilerDllPath: "/csc.dll"},
+		ProjectRoot: projectRoot,
+		Timeout:     time.Minute,
+		Run:         stubRunner("", 0, &captured),
+	}
+	makeOutputDirectory(t, projectRoot, plan)
+
+	if _, err := compiler.CompileUnit(context.Background(), plan, plan.Units[0]); err != nil {
+		t.Fatalf("expected the unit to compile, got error: %v", err)
+	}
+
+	written, err := os.ReadFile(filepath.Join(projectRoot, plan.OutputDir, "A.rsp"))
+	if err != nil {
+		t.Fatalf("failed to read the rewritten response file: %v", err)
+	}
+
+	return strings.Split(string(written), "\n")
+}
+
+// Verifies a flag Bee wrote in the second response file is replayed as a whole line, so an assembly
+// whose attributes bake source paths into metadata produces what Unity's own build produces. The
+// whole line is compared: a mapping csc reads differently is not the same mapping.
+func TestCompileUnitReplaysTheCompanionFlags(t *testing.T) {
+	companionLine := `/pathmap:"/projects/Sample"=.`
+
+	lines := compileUnitForCompanionFlags(t, []string{companionLine})
+
+	if !slices.Contains(lines, companionLine) {
+		t.Errorf("the rewritten response file is missing the line %q\ngot:\n%s", companionLine, strings.Join(lines, "\n"))
+	}
+}
+
+// Verifies nothing is added when Bee wrote no second-response-file flags: Unity builds those
+// assemblies without a mapping, and adding one would make the output differ from Unity's.
+func TestCompileUnitAddsNoFlagsWhenThereAreNoCompanionFlags(t *testing.T) {
+	lines := compileUnitForCompanionFlags(t, nil)
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "/pathmap:") {
+			t.Errorf("the rewritten response file should carry no mapping, got the line %q", line)
+		}
+	}
+}

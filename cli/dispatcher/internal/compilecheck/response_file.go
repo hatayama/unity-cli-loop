@@ -9,6 +9,7 @@ import (
 
 const (
 	responseFileExtension      = ".rsp"
+	companionFileExtension     = ".rsp2"
 	referenceAssemblyExtension = ".ref.dll"
 
 	outputFlagPrefix         = "-out:"
@@ -31,6 +32,9 @@ type ResponseFile struct {
 	Sources        []string // unquoted, relative to the project root
 	AdditionalFile string   // /additionalfile value
 	OtherFlags     []string // every other flag line, verbatim
+	// CompanionFlags are the lines of the second response file Bee hands csc beside this one, kept
+	// verbatim and nil when that file is missing or empty.
+	CompanionFlags []string
 }
 
 // ParseResponseFile reads one Bee response file into its parts.
@@ -61,7 +65,41 @@ func ParseResponseFile(path string) (ResponseFile, error) {
 		return ResponseFile{}, fmt.Errorf("response file %s lists no source files", path)
 	}
 
+	companionFlags, err := readCompanionFlags(path)
+	if err != nil {
+		return ResponseFile{}, err
+	}
+	parsed.CompanionFlags = companionFlags
+
 	return parsed, nil
+}
+
+// readCompanionFlags reads the flags of the second response file Bee writes beside a response file.
+// Why they are copied rather than interpreted: Bee decides per assembly what goes in there - a
+// /pathmap that maps the project root away for some, nothing at all for others - and replaying
+// exactly what it wrote is what makes a source path an attribute bakes into metadata, which is what
+// [CallerFilePath] does, come out the way Unity's own build wrote it. A build that wrote no such
+// file is not an error: there is simply nothing extra to pass.
+func readCompanionFlags(responseFilePath string) ([]string, error) {
+	path := strings.TrimSuffix(responseFilePath, responseFileExtension) + companionFileExtension
+	content, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response file %s: %w", path, err)
+	}
+
+	var flags []string
+	for _, rawLine := range strings.Split(string(content), "\n") {
+		line := strings.TrimSpace(strings.TrimRight(rawLine, "\r"))
+		if line == "" {
+			continue
+		}
+		flags = append(flags, line)
+	}
+
+	return flags, nil
 }
 
 // appendLine sorts one response file line into the field it belongs to.
