@@ -18,6 +18,10 @@ type CompileUnit struct {
 	Assembly ResponseFile
 	Sources  []string
 	Reason   string // empty when the unit was selected by --all rather than by a change
+	// PlanReferences names the assemblies this one references that this run compiles too. It is
+	// what the scheduler waits for: a reference left out of the plan was not rebuilt, so its
+	// reference assembly from the last Unity build is already on disk and nothing has to wait.
+	PlanReferences []string
 }
 
 // BuildPlan is the ordered set of assemblies to compile for one run.
@@ -58,9 +62,10 @@ func BuildCompilePlan(projectRoot string, dagDir string, all bool) (BuildPlan, e
 	units := make([]CompileUnit, 0, len(order))
 	for _, name := range order {
 		units = append(units, CompileUnit{
-			Assembly: graph.byName[name],
-			Sources:  graph.sources[name],
-			Reason:   reasons[name],
+			Assembly:       graph.byName[name],
+			Sources:        graph.sources[name],
+			Reason:         reasons[name],
+			PlanReferences: selectedReferences(graph, reasons, name),
 		})
 	}
 
@@ -70,6 +75,20 @@ func BuildCompilePlan(projectRoot string, dagDir string, all bool) (BuildPlan, e
 		Units:     units,
 		Skipped:   len(graph.names) - len(units),
 	}, nil
+}
+
+// selectedReferences lists the assemblies one unit references that this run compiles as well.
+func selectedReferences(
+	graph assemblyGraph, reasons map[string]string, name string,
+) []string {
+	selected := []string{}
+	for _, reference := range graph.references[name] {
+		if _, compiled := reasons[reference]; compiled {
+			selected = append(selected, reference)
+		}
+	}
+
+	return selected
 }
 
 // loadAssemblyGraph parses every response file in the dag and links the assemblies to each other.

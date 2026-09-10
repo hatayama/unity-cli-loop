@@ -29,6 +29,7 @@ type Options struct {
 	ProjectRoot          string
 	EditorExecutablePath string
 	All                  bool
+	Jobs                 int // how many assemblies compile at once; 0 asks for the default
 }
 
 // Result is everything one compile-check run produced.
@@ -63,16 +64,14 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		Run:         defaultRun,
 	}
 
-	units := make([]UnitResult, 0, len(plan.Units))
-	for _, unit := range plan.Units {
-		// Why the run continues after a failure: an assembly that failed leaves its dependents
-		// reading Unity's older reference assembly, which can add follow-on errors, but reporting
-		// every assembly's diagnostics in one pass is the point of the command.
-		result, compileErr := compiler.CompileUnit(ctx, plan, unit)
-		if compileErr != nil {
-			return Result{}, compileErr
-		}
-		units = append(units, result)
+	jobs := options.Jobs
+	if jobs < 1 {
+		jobs = DefaultJobs()
+	}
+
+	units, err := compileUnits(ctx, compiler, plan, jobs)
+	if err != nil {
+		return Result{}, err
 	}
 
 	return Result{

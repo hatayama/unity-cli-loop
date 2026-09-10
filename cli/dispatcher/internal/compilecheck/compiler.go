@@ -62,14 +62,14 @@ type Compiler struct {
 }
 
 // CompileUnit compiles one assembly and reports the diagnostics csc produced for it.
+// Why a Compiler value is safe to share between the units running at the same time: it holds no
+// mutable state, and every file this touches - the outputs it removes and the response file it
+// writes - is named after the assembly, so no two units address the same path. The output directory
+// itself is created once by the caller, before any unit starts.
 func (c Compiler) CompileUnit(
 	ctx context.Context, plan BuildPlan, unit CompileUnit,
 ) (UnitResult, error) {
 	outputDirectoryPath := filepath.Join(c.ProjectRoot, plan.OutputDir)
-	if err := os.MkdirAll(outputDirectoryPath, outputDirPermissions); err != nil {
-		return UnitResult{}, fmt.Errorf("failed to create %s: %w", outputDirectoryPath, err)
-	}
-
 	// Why the previous run's outputs go first: csc writes nothing when it fails, so a leftover
 	// reference assembly from an earlier run would keep describing an assembly that no longer
 	// compiles, and every dependent would be checked against an API that is gone.
