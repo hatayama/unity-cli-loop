@@ -1,7 +1,9 @@
 package compilecheck
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +21,28 @@ func newAssemblyProject(t *testing.T) string {
 	return projectRoot
 }
 
+// newOwnerIndexForProject indexes the .asmdef and .asmref files of a project the way one run does,
+// treating every assembly the project declares as one the last build produced - an .asmref naming
+// an assembly that was never built owns nothing, which the unbuilt-target test covers on its own.
+func newOwnerIndexForProject(t *testing.T, projectRoot string) assemblyOwnerIndex {
+	t.Helper()
+	definitions, err := IndexAssemblyDefinitions(projectRoot)
+	if err != nil {
+		t.Fatalf("failed to index the assembly definitions: %v", err)
+	}
+	references, referenceErr := IndexAssemblyReferences(projectRoot)
+	if referenceErr != nil {
+		t.Fatalf("failed to index the assembly references: %v", referenceErr)
+	}
+
+	graph := assemblyGraph{byName: map[string]ResponseFile{}}
+	for name := range definitions {
+		graph.byName[name] = ResponseFile{AssemblyName: name}
+	}
+
+	return newAssemblyOwnerIndex(definitions, references, NewAssemblyContext(graph, definitions))
+}
+
 // Verifies deleted sources drop out, new sources appear, and nested or ignored folders stay excluded.
 func TestRebuildSourcesReflectsFilesAddedAndDeletedSinceTheLastBuild(t *testing.T) {
 	projectRoot := newAssemblyProject(t)
@@ -32,7 +56,7 @@ func TestRebuildSourcesReflectsFilesAddedAndDeletedSinceTheLastBuild(t *testing.
 		Directory: filepath.Join(projectRoot, "Assets", "Foo"),
 	}
 
-	sources, err := RebuildSources(projectRoot, rsp, &asmdef)
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
 	if err != nil {
 		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
 	}
@@ -43,10 +67,12 @@ func TestRebuildSourcesReflectsFilesAddedAndDeletedSinceTheLastBuild(t *testing.
 	})
 }
 
-// Verifies a source pulled in from outside the assembly directory survives the re-glob.
+// Verifies a source an .asmref attaches from outside the assembly directory survives the re-glob.
 func TestRebuildSourcesKeepsSourcesOutsideTheAssemblyDirectory(t *testing.T) {
 	projectRoot := newAssemblyProject(t)
 	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Shared", "E.cs"), "")
+	writeFileAt(t,
+		filepath.Join(projectRoot, "Assets", "Shared", "Foo.Ref.asmref"), `{"reference":"Foo"}`)
 	rsp := ResponseFile{Sources: []string{
 		filepath.Join("Assets", "Foo", "A.cs"),
 		filepath.Join("Assets", "Shared", "E.cs"),
@@ -57,7 +83,7 @@ func TestRebuildSourcesKeepsSourcesOutsideTheAssemblyDirectory(t *testing.T) {
 		Directory: filepath.Join(projectRoot, "Assets", "Foo"),
 	}
 
-	sources, err := RebuildSources(projectRoot, rsp, &asmdef)
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
 	if err != nil {
 		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
 	}
@@ -77,7 +103,7 @@ func TestRebuildSourcesWithoutAssemblyDefinitionKeepsExistingSourcesOnly(t *test
 		filepath.Join("Assets", "Foo", "Deleted.cs"),
 	}}
 
-	sources, err := RebuildSources(projectRoot, rsp, nil)
+	sources, err := RebuildSources(projectRoot, rsp, nil, assemblyOwnerIndex{})
 	if err != nil {
 		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
 	}
@@ -101,7 +127,7 @@ func TestRebuildSourcesSkipsGlobbingForPackageCacheAssemblies(t *testing.T) {
 		Directory: packageDirectory,
 	}
 
-	sources, err := RebuildSources(projectRoot, rsp, &asmdef)
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
 	if err != nil {
 		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
 	}
@@ -166,7 +192,7 @@ func TestRebuildSourcesSkipsSourceFilesUnityIgnores(t *testing.T) {
 		Directory: filepath.Join(projectRoot, "Assets", "Foo"),
 	}
 
-	sources, err := RebuildSources(projectRoot, ResponseFile{}, &asmdef)
+	sources, err := RebuildSources(projectRoot, ResponseFile{}, &asmdef, newOwnerIndexForProject(t, projectRoot))
 	if err != nil {
 		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
 	}
@@ -189,7 +215,7 @@ func TestRebuildSourcesDoesNotTreatIgnoredAssemblyDefinitionsAsABoundary(t *test
 		Directory: filepath.Join(projectRoot, "Assets", "Foo"),
 	}
 
-	sources, err := RebuildSources(projectRoot, ResponseFile{}, &asmdef)
+	sources, err := RebuildSources(projectRoot, ResponseFile{}, &asmdef, newOwnerIndexForProject(t, projectRoot))
 	if err != nil {
 		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
 	}
@@ -197,5 +223,226 @@ func TestRebuildSourcesDoesNotTreatIgnoredAssemblyDefinitionsAsABoundary(t *test
 	assertStrings(t, "sources", sources, []string{
 		filepath.Join("Assets", "Foo", "A.cs"),
 		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
+	})
+}
+
+// newNestedAsmrefProject lays out a parent assembly, a child assembly inside it, and an .asmref
+// folder nested inside the child that attaches its sources back to the parent.
+func newNestedAsmrefProject(t *testing.T) (string, ResponseFile, AssemblyDefinition) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "P.asmdef"), `{"name":"P"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "A.cs"), "")
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "Core", "Core.asmdef"), `{"name":"Core"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "Core", "Child.cs"), "")
+	writeFileAt(t,
+		filepath.Join(projectRoot, "Assets", "P", "Core", "Dialog", "P.Ref.asmref"),
+		`{"reference":"P"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "Core", "Dialog", "Dialog.cs"), "")
+	rsp := ResponseFile{
+		AssemblyName: "P",
+		Sources: []string{
+			filepath.Join("Assets", "P", "A.cs"),
+			filepath.Join("Assets", "P", "Core", "Dialog", "Dialog.cs"),
+		},
+	}
+	asmdef := AssemblyDefinition{
+		Name:      "P",
+		Path:      filepath.Join(projectRoot, "Assets", "P", "P.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "P"),
+	}
+
+	return projectRoot, rsp, asmdef
+}
+
+// Verifies an .asmref folder nested inside a child assembly's directory keeps its recorded sources.
+func TestRebuildSourcesKeepsSourcesOfAnAsmrefNestedInsideAChildAssembly(t *testing.T) {
+	projectRoot, rsp, asmdef := newNestedAsmrefProject(t)
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "P", "A.cs"),
+		filepath.Join("Assets", "P", "Core", "Dialog", "Dialog.cs"),
+	})
+}
+
+// Verifies removing an .asmref after the last build stops the run instead of keeping its sources in
+// the assembly that no longer owns them, which would compile them into two assemblies at once.
+func TestRebuildSourcesRejectsARecordedSourceNoAsmrefAttachesAnyMore(t *testing.T) {
+	projectRoot, rsp, asmdef := newNestedAsmrefProject(t)
+	if err := os.Remove(
+		filepath.Join(projectRoot, "Assets", "P", "Core", "Dialog", "P.Ref.asmref")); err != nil {
+		t.Fatalf("failed to remove the assembly reference: %v", err)
+	}
+
+	_, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err == nil {
+		t.Fatal("expected a source no assembly reference attaches any more to be rejected")
+	}
+	if !strings.Contains(err.Error(), "uloop compile") {
+		t.Errorf("the error should tell the user how to recover, got: %v", err)
+	}
+}
+
+// Verifies an .asmref moved with os.Rename, which carries its modification time along, still stops
+// the run, so the detection does not depend on the timestamp of the file.
+func TestRebuildSourcesRejectsAnAsmrefMovedWithoutChangingItsTimestamp(t *testing.T) {
+	projectRoot, rsp, asmdef := newNestedAsmrefProject(t)
+	referencePath := filepath.Join(projectRoot, "Assets", "P", "Core", "Dialog", "P.Ref.asmref")
+	movedPath := filepath.Join(projectRoot, "Assets", "P", "Core", "Other", "P.Ref.asmref")
+	if err := os.MkdirAll(filepath.Dir(movedPath), 0o755); err != nil {
+		t.Fatalf("failed to create the destination folder: %v", err)
+	}
+	if err := os.Rename(referencePath, movedPath); err != nil {
+		t.Fatalf("failed to move the assembly reference: %v", err)
+	}
+
+	_, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err == nil {
+		t.Fatal("expected a moved assembly reference to be rejected")
+	}
+}
+
+// Verifies an .asmdef moved with os.Rename into another assembly's folder stops the run even though
+// the move left its modification time untouched.
+func TestRebuildSourcesRejectsAnAssemblyDefinitionMovedWithoutChangingItsTimestamp(t *testing.T) {
+	projectRoot := newAssemblyProject(t)
+	movedPath := filepath.Join(projectRoot, "Assets", "Elsewhere", "Foo.asmdef")
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Elsewhere", "E.cs"), "")
+	if err := os.Rename(
+		filepath.Join(projectRoot, "Assets", "Foo", "Foo.asmdef"), movedPath); err != nil {
+		t.Fatalf("failed to move the assembly definition: %v", err)
+	}
+	rsp := ResponseFile{
+		AssemblyName: "Foo",
+		Sources:      []string{filepath.Join("Assets", "Foo", "A.cs")},
+	}
+	asmdef := AssemblyDefinition{Name: "Foo", Path: movedPath, Directory: filepath.Dir(movedPath)}
+
+	_, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err == nil {
+		t.Fatal("expected a moved assembly definition to be rejected")
+	}
+	if !strings.Contains(err.Error(), "uloop compile") {
+		t.Errorf("the error should tell the user how to recover, got: %v", err)
+	}
+}
+
+// Verifies an assembly definition whose own folder holds no C# source passes the moved check, since
+// an assembly can own all of its sources through .asmref folders elsewhere.
+func TestRebuildSourcesAcceptsAnAssemblyDefinitionWithoutSourcesOfItsOwn(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "P.asmdef"), `{"name":"P"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Shared", "P.Ref.asmref"), `{"reference":"P"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Shared", "D.cs"), "")
+	rsp := ResponseFile{
+		AssemblyName: "P",
+		Sources:      []string{filepath.Join("Assets", "Shared", "D.cs")},
+	}
+	asmdef := AssemblyDefinition{
+		Name:      "P",
+		Path:      filepath.Join(projectRoot, "Assets", "P", "P.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "P"),
+	}
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected an assembly without sources of its own to pass, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{filepath.Join("Assets", "Shared", "D.cs")})
+}
+
+// Verifies an assembly definition sitting over sources its own response file never recorded stops
+// the run even when nothing is left to rescue, which is the shape a moved .asmdef leaves behind once
+// the sources of its old location are gone.
+func TestRebuildSourcesRejectsAnAssemblyDefinitionThatLeftItsRecordedSources(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Other", "Foo.asmdef"), `{"name":"Foo"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Other", "C.cs"), "")
+	rsp := ResponseFile{
+		AssemblyName: "Foo",
+		Sources:      []string{filepath.Join("Assets", "Foo", "A.cs")},
+	}
+	asmdef := AssemblyDefinition{
+		Name:      "Foo",
+		Path:      filepath.Join(projectRoot, "Assets", "Other", "Foo.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "Other"),
+	}
+
+	_, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err == nil {
+		t.Fatal("expected an assembly definition that left its recorded sources to be rejected")
+	}
+	if !strings.Contains(err.Error(), "uloop compile") {
+		t.Errorf("the error should tell the user how to recover, got: %v", err)
+	}
+}
+
+// newInertAsmrefProject lays out an assembly whose folder holds a sample .asmref naming an assembly
+// this build never produced, which is what a package shipping an optional render pipeline sample
+// looks like when that pipeline is not installed.
+func newInertAsmrefProject(t *testing.T) (string, AssemblyDefinition) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Pkg", "Pkg.asmdef"), `{"name":"Pkg"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Pkg", "A.cs"), "")
+	writeFileAt(t,
+		filepath.Join(projectRoot, "Assets", "Pkg", "Samples", "Optional", "Optional.Ref.asmref"),
+		`{"reference":"GUID:0000000000000000"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Pkg", "Samples", "Optional", "Helper.cs"), "")
+	asmdef := AssemblyDefinition{
+		Name:      "Pkg",
+		Path:      filepath.Join(projectRoot, "Assets", "Pkg", "Pkg.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "Pkg"),
+	}
+
+	return projectRoot, asmdef
+}
+
+// Verifies a source recorded under an .asmref naming an assembly this build never produced stays in
+// the enclosing assembly instead of stopping the run, since the .asmref attaches it nowhere.
+func TestRebuildSourcesKeepsSourcesUnderAnAsmrefOfAnUnbuiltAssembly(t *testing.T) {
+	projectRoot, asmdef := newInertAsmrefProject(t)
+	rsp := ResponseFile{
+		AssemblyName: "Pkg",
+		Sources: []string{
+			filepath.Join("Assets", "Pkg", "A.cs"),
+			filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+		},
+	}
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected an .asmref attaching nothing to leave the sources alone, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "Pkg", "A.cs"),
+		filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+	})
+}
+
+// Verifies the re-glob itself reaches into such a folder, so a source added there after the build
+// is compiled with the enclosing assembly rather than waiting for Unity.
+func TestRebuildSourcesGlobsIntoAnAsmrefFolderOfAnUnbuiltAssembly(t *testing.T) {
+	projectRoot, asmdef := newInertAsmrefProject(t)
+	rsp := ResponseFile{
+		AssemblyName: "Pkg",
+		Sources:      []string{filepath.Join("Assets", "Pkg", "A.cs")},
+	}
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "Pkg", "A.cs"),
+		filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
 	})
 }

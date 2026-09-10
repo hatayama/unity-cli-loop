@@ -92,7 +92,7 @@ func TestRebuildSourcesKeepsAbsolutePathsOfALocalPackage(t *testing.T) {
 	definition := assemblyDefinitions[localPackageAssemblyName]
 	rsp := graph.byName[localPackageAssemblyName]
 
-	sources, err := RebuildSources(projectRoot, rsp, &definition)
+	sources, err := RebuildSources(projectRoot, rsp, &definition, newOwnerIndexForProject(t, projectRoot))
 	if err != nil {
 		t.Fatalf("failed to rebuild the sources: %v", err)
 	}

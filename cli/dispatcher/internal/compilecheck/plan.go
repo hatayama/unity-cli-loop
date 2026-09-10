@@ -144,7 +144,20 @@ func selectChangedAssemblies(
 		return nil, setErr
 	}
 
+	// Why the .asmref files are indexed here: both the reference check and every source rebuild need
+	// them, and walking the project once per assembly would repeat the same walk for each of them.
+	references, referenceIndexErr := IndexAssemblyReferences(projectRoot)
+	if referenceIndexErr != nil {
+		return nil, referenceIndexErr
+	}
+
 	context := NewAssemblyContext(graph, assemblyDefinitions)
+	owners := newAssemblyOwnerIndex(assemblyDefinitions, references, context)
+	if referenceErr := DetectAssemblyReferenceChange(
+		projectRoot, graph, context, references, owners); referenceErr != nil {
+		return nil, referenceErr
+	}
+
 	reasons := map[string]string{}
 	for _, name := range graph.names {
 		rsp := graph.byName[name]
@@ -154,7 +167,7 @@ func selectChangedAssemblies(
 			return nil, structuralErr
 		}
 
-		sources, sourceErr := RebuildSources(projectRoot, rsp, asmdef)
+		sources, sourceErr := RebuildSources(projectRoot, rsp, asmdef, owners)
 		if sourceErr != nil {
 			return nil, sourceErr
 		}
