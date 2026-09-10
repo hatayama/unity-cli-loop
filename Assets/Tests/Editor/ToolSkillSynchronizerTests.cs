@@ -89,7 +89,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     _projectRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: false,
-                    includeFreshnessCheck: false);
+                    includeFreshnessCheck: false,
+                    disabledTools: Array.Empty<string>());
             await ToolSkillSynchronizer.InstallSkillFiles(
                 targets,
                 groupSkillsUnderUnityCliLoop: false,
@@ -732,7 +733,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: false,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .Select(target => target.DirName)
                 .ToArray();
 
@@ -757,7 +759,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: false,
                     groupSkillsUnderUnityCliLoop: false,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
@@ -787,7 +790,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: false,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             // Assert
@@ -856,7 +860,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
@@ -881,7 +886,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
@@ -904,7 +910,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -933,7 +940,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: false,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
@@ -961,7 +969,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: false,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
@@ -992,7 +1001,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
@@ -1019,7 +1029,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: false,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
@@ -1065,7 +1076,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1097,7 +1109,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1124,7 +1137,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1158,7 +1172,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1191,7 +1206,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1224,7 +1240,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1256,7 +1273,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1289,7 +1307,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1321,7 +1340,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1425,7 +1445,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1559,7 +1580,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1587,7 +1609,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
-                    includeFreshnessCheck: true)
+                    includeFreshnessCheck: true,
+                    disabledTools: Array.Empty<string>())
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));

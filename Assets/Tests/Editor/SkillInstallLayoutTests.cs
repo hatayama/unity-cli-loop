@@ -381,6 +381,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(registeredToolNames, Does.Contain("public-tool"));
         }
 
+        // Tests that a skill whose tool is disabled is left out of the freshness check, because installing
+        // deletes it on purpose and it would otherwise keep the target reported as outdated forever.
+        [Test]
+        public void GetInstalledState_WhenExpectedSkillToolIsDisabled_IgnoresThatSkill()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
+            CreateFakeSourceSkill(temporaryRoot, "uloop-replay-input", "ReplayInputTool", "reference.md", "reference");
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            InstallFakeSkill(targetRoot, "uloop-compile", "reference.md", "reference");
+
+            SkillInstallState stateWithDisabledTool = SkillInstallLayout.GetInstalledState(
+                temporaryRoot,
+                targetRoot,
+                groupSkillsUnderUnityCliLoop: false,
+                new[] { "replay-input" });
+            SkillInstallState stateWithoutDisabledTool = SkillInstallLayout.GetInstalledState(
+                temporaryRoot,
+                targetRoot,
+                groupSkillsUnderUnityCliLoop: false,
+                Array.Empty<string>());
+
+            Assert.That(stateWithDisabledTool, Is.EqualTo(SkillInstallState.Installed),
+                "A disabled tool's uninstalled skill must not make the target outdated");
+            Assert.That(stateWithoutDisabledTool, Is.EqualTo(SkillInstallState.Outdated),
+                "An enabled tool's uninstalled skill must still make the target outdated");
+        }
+
         // Tests that skill setup file scans share the same generated-file exclusion behavior.
         [Test]
         public void IsExcludedSkillFile_WhenGeneratedSkillFileNameIsPassed_ReturnsTrue()
@@ -429,6 +457,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Path.Combine(skillDir, SkillInstallLayout.SkillFileName),
                 $"---\nname: {skillName}\n{internalLine}---\n");
             File.WriteAllText(Path.Combine(skillDir, additionalFileRelativePath), additionalFileContent);
+        }
+
+        private static void InstallFakeSkill(
+            string targetRoot,
+            string skillName,
+            string additionalFileRelativePath,
+            string additionalFileContent)
+        {
+            string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
+                targetRoot,
+                skillName,
+                groupSkillsUnderUnityCliLoop: false);
+            Directory.CreateDirectory(installedSkillDirectory);
+            File.WriteAllText(
+                Path.Combine(installedSkillDirectory, SkillInstallLayout.SkillFileName),
+                $"---\nname: {skillName}\n---\n");
+            File.WriteAllText(
+                Path.Combine(installedSkillDirectory, additionalFileRelativePath),
+                additionalFileContent);
         }
 
         private static void WriteSourceSkill(

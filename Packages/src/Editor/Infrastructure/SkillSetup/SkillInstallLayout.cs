@@ -109,12 +109,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Directory.Exists(GetInstalledSkillDirectoryPath(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop)));
         }
 
+        // Skills of disabled tools are deleted on every install, so counting them as expected would
+        // report the target as outdated forever, with no install able to settle it.
         internal static SkillInstallState GetInstalledState(
             string projectRoot,
             string targetRoot,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            IReadOnlyCollection<string> disabledTools)
         {
-            List<SkillSourceInfo> expectedSkills = SkillSourceRootEnumerator.GetSkillSourceInfos(projectRoot);
+            Debug.Assert(disabledTools != null, "disabledTools must not be null");
+
+            List<SkillSourceInfo> expectedSkills = SkillSourceRootEnumerator.GetSkillSourceInfos(projectRoot)
+                .Where(skill => !SkillDisabledToolFilter.IsSkillDisabledByToolSettings(skill, disabledTools))
+                .ToList();
             bool hasLayoutSkills = HasInstalledSkillsForLayout(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
             if (expectedSkills.Count == 0)
             {
