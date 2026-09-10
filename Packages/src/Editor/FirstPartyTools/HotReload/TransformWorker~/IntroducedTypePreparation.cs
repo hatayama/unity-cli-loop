@@ -78,6 +78,7 @@ internal static class IntroducedTypePreparation
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         AppendUnreadableReferenceErrors(compilation, references, referenceParseErrors);
         IAssemblySymbol targetAssembly = WorkerGroupPipeline.ResolveTargetTypesAssemblySymbol(compilation, targetTypesReference);
+        WorkerTypeHome home = new WorkerTypeHome(input.TargetAssemblyName, targetAssembly);
         List<CompilationUnitSyntax> analyzableRoots = new List<CompilationUnitSyntax>(analyzableUnits.Count);
         foreach (WorkerSourceUnit analyzableUnit in analyzableUnits)
         {
@@ -119,8 +120,7 @@ internal static class IntroducedTypePreparation
                         ignoreAccessibility: false);
                     IntroducedTypePlanner.Plan(
                         unit,
-                        targetAssembly,
-                        input.TargetAssemblyName,
+                        home,
                         input.TargetAssemblyMvid,
                         artifactMap,
                         input.Defines,

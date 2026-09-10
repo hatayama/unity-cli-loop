@@ -22,7 +22,7 @@ internal static class RemovedMemberCollector
         CompilationUnitSyntax plainRoot,
         List<TypeEmitState> typeEmitStates,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         List<WorkerRemovedMember> removedMembers,
@@ -41,7 +41,7 @@ internal static class RemovedMemberCollector
         CollectRemovedMethodSignaturesForDeletedNames(
             typeEmitStates,
             semanticModel,
-            targetTypesAssemblySymbol,
+            home,
             removedMembers,
             removedMethodSignatures);
         Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
@@ -98,7 +98,7 @@ internal static class RemovedMemberCollector
     internal static void CollectRemovedMethodSignaturesForDeletedNames(
         List<TypeEmitState> typeEmitStates,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         List<WorkerRemovedMember> removedMembers,
         List<WorkerRemovedMethodSignature> removedMethodSignatures)
     {
@@ -125,7 +125,7 @@ internal static class RemovedMemberCollector
                 continue;
             }
 
-            INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
+            INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol);
             if (compiledType == null)
             {
                 continue;

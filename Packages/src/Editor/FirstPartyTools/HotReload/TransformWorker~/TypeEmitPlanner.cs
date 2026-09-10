@@ -19,7 +19,7 @@ internal static class TypeEmitPlanner
 {
     internal static List<TypeEmitState> QueueAllTypeEmitStates(
             WorkerSourceUnit sourceUnit,
-            IAssemblySymbol targetTypesAssemblySymbol,
+            WorkerTypeHome home,
             WorkerInput input,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             List<ShimTypeBuilder> shimTypes,
@@ -57,7 +57,7 @@ internal static class TypeEmitPlanner
             AddedPropertyClassifier.ClassifyAddedProperties(
                 typeState,
                 semanticModel,
-                targetTypesAssemblySymbol,
+                home,
                 input,
                 baseline,
                 root,
@@ -111,7 +111,7 @@ internal static class TypeEmitPlanner
             QueueTypeMethods(
                 typeState,
                 semanticModel,
-                targetTypesAssemblySymbol,
+                home,
                 input,
                 baseline.HasBaseline,
                 baseline.SnapshotMethodMap,
@@ -136,7 +136,7 @@ internal static class TypeEmitPlanner
     internal static void QueueTypeMethods(
         TypeEmitState typeState,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         WorkerInput input,
         bool hasBaseline,
         Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
@@ -153,7 +153,7 @@ internal static class TypeEmitPlanner
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
         ShimNameAllocator shimNames)
     {
-        INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
+        INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol);
         if (compiledType == null)
         {
             OrdinaryMethodQueue.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
@@ -166,7 +166,7 @@ internal static class TypeEmitPlanner
             typeState,
             semanticModel,
             compiledType,
-            targetTypesAssemblySymbol,
+            home,
             addedFieldCatalog,
             declarationDriftWarnings);
 
