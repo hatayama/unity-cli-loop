@@ -18,7 +18,11 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    opened; that is the authoritative answer. When the log is unreadable and the project has exactly
    one dag directory, that one is used. When there are two (a debug and a release dag) the choice
    falls back to `m_ScriptDebugInfoEnabled` in `Library/EditorOnlyScriptingSettings.json`. If none of
-   these can decide, the run stops with `COMPILE_CHECK_UNITY_BUILD_REQUIRED`.
+   these can decide, the run stops with `COMPILE_CHECK_UNITY_BUILD_REQUIRED`. Beside each `.rsp` Bee
+   writes a second response file, `.rsp2`, carrying a `/pathmap` that maps the project root to `.` —
+   empty for the assemblies that compile sources from `Assets`. The check replays whatever it finds
+   there, verbatim, so an assembly whose attributes bake source paths into metadata produces the same
+   output here as it does in Unity's own build.
 2. **Find the compiler.** The Editor version comes from `ProjectVersion.txt` (or `--editor-version`),
    and the Editor install is located the same way `uloop launch` locates it. The compiler is the one
    bundled with that install: `csc.dll` under the Editor's Roslyn directory, run through the
