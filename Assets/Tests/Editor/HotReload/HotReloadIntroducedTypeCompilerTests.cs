@@ -250,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateReferencePaths(),
                     Array.Empty<string>());
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadIntroducedTypeCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment());
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 request,
@@ -586,7 +586,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateReferencePaths(),
                     new[] { "INTRODUCED_DEFINE" });
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadIntroducedTypeCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment());
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 request,
@@ -635,7 +635,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateReferencePaths(),
                     Array.Empty<string>());
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadIntroducedTypeCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment());
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 request,
@@ -669,7 +669,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIntroducedTypeArtifactPaths withReferencePaths =
                 new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "compiler-continuation-with").Create();
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadIntroducedTypeCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment());
 
             try
             {
@@ -861,7 +861,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public class Introduced { }");
         }
 
-        private sealed class FakeEnvironment : IHotReloadIntroducedTypeCompilerEnvironment
+        private sealed class FakeEnvironment : IHotReloadRoslynCompilerEnvironment
         {
             public bool PathsAvailable { get; set; } = true;
 
@@ -909,7 +909,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             public Task<DynamicCompilationBackendResult> CompileAsync(
-                HotReloadIntroducedTypeCompilationRequest request,
+                HotReloadRoslynCompileRequest request,
                 ExternalCompilerPaths paths,
                 CancellationToken ct)
             {

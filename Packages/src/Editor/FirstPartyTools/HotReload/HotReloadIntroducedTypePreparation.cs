@@ -72,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadIntroducedTypeArtifactPaths paths =
                 new HotReloadIntroducedTypeArtifactPathFactory(files[0].ProjectRoot, SessionId).Create();
             HotReloadIntroducedTypeCompilerResult compileResult =
-                await new HotReloadIntroducedTypeCompiler(new HotReloadIntroducedTypeCompilerEnvironment())
+                await new HotReloadIntroducedTypeCompiler(new HotReloadRoslynCompilerEnvironment())
                     .CompileAsync(
                         HotReloadIntroducedTypeCompilationRequest.CreateBatch(
                             paths,

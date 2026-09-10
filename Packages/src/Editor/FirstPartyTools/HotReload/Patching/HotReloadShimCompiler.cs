@@ -38,15 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(defineSymbols != null, "defineSymbols must not be null.");
             Debug.Assert(projectRelativePaths != null, "projectRelativePaths must not be null.");
 
-            // Resolver and Application.dataPath (CreateWorkDirectory) need the Unity main thread.
+            // Application.dataPath (CreateWorkDirectory) needs the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-
-            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
-            if (externalCompilerPaths == null)
-            {
-                return HotReloadShimCompileResult.Failure(
-                    "External compiler paths could not be resolved for this Unity installation.");
-            }
 
             string workDirectory = CreateWorkDirectory();
             try
@@ -54,32 +47,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string sourcePath = Path.Combine(workDirectory, "HotReloadShim.cs");
                 string dllPath = Path.Combine(workDirectory, "HotReloadShim.dll");
                 string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
-                File.WriteAllText(sourcePath, shimSource);
 
-                List<string> references = new List<string>(referencePaths.Count);
-                foreach (string referencePath in referencePaths)
+                // Why the AssemblyBuilder fallback is allowed here: the shim assembly is loaded
+                // from bytes for this reload only, so an in-memory build serves it as well as a
+                // Roslyn one. The retained introduced-type artifact refuses the same fallback.
+                HotReloadRoslynCompileRequest request = new HotReloadRoslynCompileRequest(
+                    new[] { new HotReloadRoslynCompileSource(sourcePath, shimSource) },
+                    dllPath,
+                    referencePaths,
+                    defineSymbols,
+                    allowAssemblyBuilderFallback: true);
+                // Why constructed here rather than injected: this class is still static, so it has
+                // no constructor to receive them. Move both to constructor injection when it
+                // becomes an instance.
+                HotReloadRoslynCompileOutcome outcome = await new HotReloadRoslynCompiler(
+                    new HotReloadRoslynCompilerEnvironment()).CompileAsync(request, ct)
+                    .ConfigureAwait(false);
+                if (!outcome.PathsResolved)
                 {
-                    references.Add(referencePath);
+                    return HotReloadShimCompileResult.Failure(
+                        HotReloadConstants.CompilerPathsUnresolvedMessage);
                 }
 
-                // Why emitDebugCode: Release optimization drops interface-typed locals from PDB
-                // scopes, so pause-point CapturedVariables miss them after a hot-reload patch.
-                RoslynCompilerOptions compilerOptions = new RoslynCompilerOptions(
-                    defineSymbols,
-                    allowUnsafeCode: false,
-                    emitDebugCode: true);
-                DynamicCompilationBackendResult backendResult = await RoslynCompilerBackend.CompileAsync(
-                    sourcePath,
-                    dllPath,
-                    references,
-                    externalCompilerPaths,
-                    compilerOptions,
-                    ct,
-                    markBuildStarted: static () => { },
-                    markBuildFinished: static () => { },
-                    incrementBuildCount: static () => { }).ConfigureAwait(false);
-
-                List<HotReloadShimCompileError> errors = CollectErrors(backendResult.CompilerMessages);
+                List<HotReloadShimCompileError> errors = CollectErrors(outcome.BackendResult.CompilerMessages);
                 if (errors.Count > 0)
                 {
                     List<string> errorMessages = new List<string>(errors.Count);
