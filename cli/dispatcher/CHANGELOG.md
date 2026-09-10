@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.5.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.5.0...dispatcher-v3.5.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* installed skills no longer stay Outdated when a tool is turned off ([#2757](https://github.com/hatayama/unity-cli-loop/issues/2757)) ([f24fe70](https://github.com/hatayama/unity-cli-loop/commit/f24fe70b180c7647e2ac80e92af777b98c4ce362))
+
 ## [3.5.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.4.0...dispatcher-v3.5.0) (2026-09-08)
 
 
