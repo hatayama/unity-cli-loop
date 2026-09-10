@@ -31,7 +31,11 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    instead, wherever that folder sits — including inside a nested assembly's directory, which the
    glob never reaches. Such a file is kept only while an `.asmref` still attaches its folder to this
    assembly: the walk up from the file to the first folder holding an `.asmref` or an `.asmdef` says
-   which assembly owns it today. Membership is compared without looking at any timestamp, because
+   which assembly owns it today. An `.asmref` naming an assembly the build never produced — an
+   unresolvable reference, or one excluded by platform or package settings — attaches nothing, so
+   its folder is treated as an ordinary part of the assembly around it, which is what Unity compiles
+   it as. A package shipping a sample for a render pipeline the project does not install is the
+   ordinary case. Membership is compared without looking at any timestamp, because
    moving a file carries its modification time along, and either an `.asmdef` or an `.asmref` can
    hand a folder's sources to a different assembly without editing a single `.cs` file.
 4. **Check that the response files still describe the project.** An assembly definition that was

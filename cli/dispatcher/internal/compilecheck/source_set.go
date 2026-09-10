@@ -168,7 +168,7 @@ func RebuildSources(
 		return existing, nil
 	}
 
-	globbed, err := globAssemblySources(projectRoot, asmdef.Directory)
+	globbed, err := globAssemblySources(projectRoot, asmdef.Directory, owners)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,9 @@ func rescueRecordedSources(
 }
 
 // globAssemblySources lists the .cs files an assembly owns, stopping at nested assembly boundaries.
-func globAssemblySources(projectRoot string, assemblyDirectory string) ([]string, error) {
+func globAssemblySources(
+	projectRoot string, assemblyDirectory string, owners assemblyOwnerIndex,
+) ([]string, error) {
 	sources := []string{}
 	err := filepath.WalkDir(assemblyDirectory, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -243,7 +245,7 @@ func globAssemblySources(projectRoot string, assemblyDirectory string) ([]string
 			if path == assemblyDirectory {
 				return nil
 			}
-			if isUnityIgnoredName(entry.Name()) || directoryOwnsOwnAssembly(path) {
+			if isUnityIgnoredName(entry.Name()) || owners.startsAnotherAssembly(path) {
 				return filepath.SkipDir
 			}
 
@@ -266,8 +268,8 @@ func globAssemblySources(projectRoot string, assemblyDirectory string) ([]string
 	return sources, nil
 }
 
-// directoryOwnsOwnAssembly reports whether a directory starts a different assembly.
-func directoryOwnsOwnAssembly(path string) bool {
+// directoryHoldsAssemblyDefinition reports whether a directory declares an assembly of its own.
+func directoryHoldsAssemblyDefinition(path string) bool {
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return false
@@ -276,8 +278,7 @@ func directoryOwnsOwnAssembly(path string) bool {
 		if entry.IsDir() || isUnityIgnoredName(entry.Name()) {
 			continue
 		}
-		extension := filepath.Ext(entry.Name())
-		if extension == assemblyDefinitionExtension || extension == assemblyReferenceExtension {
+		if filepath.Ext(entry.Name()) == assemblyDefinitionExtension {
 			return true
 		}
 	}

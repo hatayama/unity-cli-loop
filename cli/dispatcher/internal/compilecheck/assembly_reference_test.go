@@ -45,15 +45,23 @@ func newAssemblyReferenceProject(t *testing.T) (string, assemblyGraph, AssemblyC
 	return projectRoot, graph, context, buildTime
 }
 
-// indexReferences lists the .asmref files of a project the way one run does, once.
-func indexReferences(t *testing.T, projectRoot string) []AssemblyReference {
+// detectReferenceChange runs the reference check the way one run does: the .asmref files and the
+// owner index are built once and shared.
+func detectReferenceChange(
+	t *testing.T, projectRoot string, graph assemblyGraph, context AssemblyContext,
+) error {
 	t.Helper()
 	references, err := IndexAssemblyReferences(projectRoot)
 	if err != nil {
 		t.Fatalf("failed to index the assembly references: %v", err)
 	}
+	definitions, definitionErr := IndexAssemblyDefinitions(projectRoot)
+	if definitionErr != nil {
+		t.Fatalf("failed to index the assembly definitions: %v", definitionErr)
+	}
+	owners := newAssemblyOwnerIndex(definitions, references, context)
 
-	return references
+	return DetectAssemblyReferenceChange(projectRoot, graph, context, references, owners)
 }
 
 // Verifies an .asmref added after the last build, over sources another assembly still records,
@@ -64,7 +72,7 @@ func TestDetectAssemblyReferenceChangeRejectsAnAsmrefAddedAfterTheLastBuild(t *t
 	writeFileAt(t, referencePath, `{"reference":"GUID:qqqq"}`)
 	setModificationTime(t, referencePath, buildTime.Add(time.Hour))
 
-	err := DetectAssemblyReferenceChange(projectRoot, graph, context, indexReferences(t, projectRoot))
+	err := detectReferenceChange(t, projectRoot, graph, context)
 	if err == nil {
 		t.Fatal("expected an assembly reference added after the last build to be rejected")
 	}
@@ -88,8 +96,7 @@ func TestDetectAssemblyReferenceChangeAcceptsAnAsmrefTheResponseFileAlreadyAgree
 		},
 	}
 
-	if err := DetectAssemblyReferenceChange(
-		projectRoot, graph, context, indexReferences(t, projectRoot)); err != nil {
+	if err := detectReferenceChange(t, projectRoot, graph, context); err != nil {
 		t.Fatalf("expected the consistent assembly reference to pass, got error: %v", err)
 	}
 }
@@ -102,8 +109,7 @@ func TestDetectAssemblyReferenceChangeAcceptsAnAsmrefFolderWithoutSources(t *tes
 	writeFileAt(t, referencePath, `{"reference":"GUID:qqqq"}`)
 	setModificationTime(t, referencePath, buildTime.Add(time.Hour))
 
-	if err := DetectAssemblyReferenceChange(
-		projectRoot, graph, context, indexReferences(t, projectRoot)); err != nil {
+	if err := detectReferenceChange(t, projectRoot, graph, context); err != nil {
 		t.Fatalf("expected an .asmref folder without sources to pass, got error: %v", err)
 	}
 }
@@ -116,8 +122,7 @@ func TestDetectAssemblyReferenceChangeIgnoresAnAsmrefTargetingAnUnbuiltAssembly(
 	writeFileAt(t, referencePath, `{"reference":"Other"}`)
 	setModificationTime(t, referencePath, buildTime.Add(time.Hour))
 
-	if err := DetectAssemblyReferenceChange(
-		projectRoot, graph, context, indexReferences(t, projectRoot)); err != nil {
+	if err := detectReferenceChange(t, projectRoot, graph, context); err != nil {
 		t.Fatalf("expected an .asmref of an unbuilt assembly to pass, got error: %v", err)
 	}
 }

@@ -21,7 +21,9 @@ func newAssemblyProject(t *testing.T) string {
 	return projectRoot
 }
 
-// newOwnerIndexForProject indexes the .asmdef and .asmref files of a project the way one run does.
+// newOwnerIndexForProject indexes the .asmdef and .asmref files of a project the way one run does,
+// treating every assembly the project declares as one the last build produced - an .asmref naming
+// an assembly that was never built owns nothing, which the unbuilt-target test covers on its own.
 func newOwnerIndexForProject(t *testing.T, projectRoot string) assemblyOwnerIndex {
 	t.Helper()
 	definitions, err := IndexAssemblyDefinitions(projectRoot)
@@ -33,8 +35,12 @@ func newOwnerIndexForProject(t *testing.T, projectRoot string) assemblyOwnerInde
 		t.Fatalf("failed to index the assembly references: %v", referenceErr)
 	}
 
-	return newAssemblyOwnerIndex(
-		definitions, references, NewAssemblyContext(assemblyGraph{}, definitions))
+	graph := assemblyGraph{byName: map[string]ResponseFile{}}
+	for name := range definitions {
+		graph.byName[name] = ResponseFile{AssemblyName: name}
+	}
+
+	return newAssemblyOwnerIndex(definitions, references, NewAssemblyContext(graph, definitions))
 }
 
 // Verifies deleted sources drop out, new sources appear, and nested or ignored folders stay excluded.
@@ -375,4 +381,68 @@ func TestRebuildSourcesRejectsAnAssemblyDefinitionThatLeftItsRecordedSources(t *
 	if !strings.Contains(err.Error(), "uloop compile") {
 		t.Errorf("the error should tell the user how to recover, got: %v", err)
 	}
+}
+
+// newInertAsmrefProject lays out an assembly whose folder holds a sample .asmref naming an assembly
+// this build never produced, which is what a package shipping an optional render pipeline sample
+// looks like when that pipeline is not installed.
+func newInertAsmrefProject(t *testing.T) (string, AssemblyDefinition) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Pkg", "Pkg.asmdef"), `{"name":"Pkg"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Pkg", "A.cs"), "")
+	writeFileAt(t,
+		filepath.Join(projectRoot, "Assets", "Pkg", "Samples", "Optional", "Optional.Ref.asmref"),
+		`{"reference":"GUID:0000000000000000"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Pkg", "Samples", "Optional", "Helper.cs"), "")
+	asmdef := AssemblyDefinition{
+		Name:      "Pkg",
+		Path:      filepath.Join(projectRoot, "Assets", "Pkg", "Pkg.asmdef"),
+		Directory: filepath.Join(projectRoot, "Assets", "Pkg"),
+	}
+
+	return projectRoot, asmdef
+}
+
+// Verifies a source recorded under an .asmref naming an assembly this build never produced stays in
+// the enclosing assembly instead of stopping the run, since the .asmref attaches it nowhere.
+func TestRebuildSourcesKeepsSourcesUnderAnAsmrefOfAnUnbuiltAssembly(t *testing.T) {
+	projectRoot, asmdef := newInertAsmrefProject(t)
+	rsp := ResponseFile{
+		AssemblyName: "Pkg",
+		Sources: []string{
+			filepath.Join("Assets", "Pkg", "A.cs"),
+			filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+		},
+	}
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected an .asmref attaching nothing to leave the sources alone, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "Pkg", "A.cs"),
+		filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+	})
+}
+
+// Verifies the re-glob itself reaches into such a folder, so a source added there after the build
+// is compiled with the enclosing assembly rather than waiting for Unity.
+func TestRebuildSourcesGlobsIntoAnAsmrefFolderOfAnUnbuiltAssembly(t *testing.T) {
+	projectRoot, asmdef := newInertAsmrefProject(t)
+	rsp := ResponseFile{
+		AssemblyName: "Pkg",
+		Sources:      []string{filepath.Join("Assets", "Pkg", "A.cs")},
+	}
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		filepath.Join("Assets", "Pkg", "A.cs"),
+		filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+	})
 }

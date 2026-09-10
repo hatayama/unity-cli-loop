@@ -152,11 +152,12 @@ func selectChangedAssemblies(
 	}
 
 	context := NewAssemblyContext(graph, assemblyDefinitions)
-	if referenceErr := DetectAssemblyReferenceChange(projectRoot, graph, context, references); referenceErr != nil {
+	owners := newAssemblyOwnerIndex(assemblyDefinitions, references, context)
+	if referenceErr := DetectAssemblyReferenceChange(
+		projectRoot, graph, context, references, owners); referenceErr != nil {
 		return nil, referenceErr
 	}
 
-	owners := newAssemblyOwnerIndex(assemblyDefinitions, references, context)
 	reasons := map[string]string{}
 	for _, name := range graph.names {
 		rsp := graph.byName[name]

@@ -91,10 +91,11 @@ func readAssemblyReference(path string) (AssemblyReference, error) {
 // assemblies with the membership the project no longer has and report diagnostics for neither.
 func DetectAssemblyReferenceChange(
 	projectRoot string, graph assemblyGraph, context AssemblyContext, references []AssemblyReference,
+	owners assemblyOwnerIndex,
 ) error {
 	for _, reference := range references {
 		if changeErr := detectOneAssemblyReferenceChange(
-			projectRoot, graph, context, reference); changeErr != nil {
+			projectRoot, graph, context, reference, owners); changeErr != nil {
 			return changeErr
 		}
 	}
@@ -112,6 +113,7 @@ func DetectAssemblyReferenceChange(
 // changing what it attaches still passes.
 func detectOneAssemblyReferenceChange(
 	projectRoot string, graph assemblyGraph, context AssemblyContext, reference AssemblyReference,
+	owners assemblyOwnerIndex,
 ) error {
 	name, resolved := resolveReferenceName(reference.Reference, context)
 	if !resolved {
@@ -124,7 +126,7 @@ func detectOneAssemblyReferenceChange(
 		return nil
 	}
 
-	attached, globErr := globAssemblySources(projectRoot, reference.Directory)
+	attached, globErr := globAssemblySources(projectRoot, reference.Directory, owners)
 	if globErr != nil {
 		return globErr
 	}

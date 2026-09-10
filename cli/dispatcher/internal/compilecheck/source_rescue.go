@@ -7,7 +7,7 @@ import (
 // directoryOwner is the .asmdef or .asmref that decides which assembly a directory's C# files
 // belong to.
 type directoryOwner struct {
-	AssemblyName string // the assembly the owner names; empty when the .asmref cannot be resolved
+	AssemblyName string // the assembly the owner names; empty when an .asmdef owns the directory
 	IsReference  bool   // an .asmref owns the directory, rather than an .asmdef
 }
 
@@ -21,6 +21,11 @@ type assemblyOwnerIndex struct {
 }
 
 // newAssemblyOwnerIndex maps every directory that starts an assembly to what it starts.
+// Why an .asmref naming an assembly this build never produced is left out: Unity has nothing to
+// attach the folder to, so it compiles the folder's sources into the enclosing assembly instead.
+// A package shipping a sample .asmref for an optional render pipeline is the ordinary case - the
+// pipeline is not installed, the GUID resolves to nothing, and the sample compiles into the package's
+// own editor assembly.
 func newAssemblyOwnerIndex(
 	assemblyDefinitions map[string]AssemblyDefinition, references []AssemblyReference,
 	context AssemblyContext,
@@ -32,9 +37,10 @@ func newAssemblyOwnerIndex(
 
 	referencesByDirectory := make(map[string]string, len(references))
 	for _, reference := range references {
-		// An unresolvable reference is kept as an empty name rather than dropped: the directory is
-		// still owned by an .asmref, and only the assembly it names is unknown.
-		name, _ := resolveReferenceName(reference.Reference, context)
+		name, resolved := resolveReferenceName(reference.Reference, context)
+		if !resolved || !context.BuiltAssemblies[name] {
+			continue
+		}
 		referencesByDirectory[filepath.Clean(reference.Directory)] = name
 	}
 
@@ -74,5 +80,21 @@ func (index assemblyOwnerIndex) attachesTo(directory string, assemblyName string
 		return false
 	}
 
-	return owner.AssemblyName == "" || owner.AssemblyName == assemblyName
+	return owner.AssemblyName == assemblyName
+}
+
+// startsAnotherAssembly reports whether a directory hands its sources to an assembly of its own, and
+// so ends the source glob of the assembly above it. It is the same question ownerOf answers, asked
+// of one directory rather than of a whole branch, so the glob and the rescue agree on where an
+// assembly ends - a disagreement between them would compile a file into two assemblies or into none.
+func (index assemblyOwnerIndex) startsAnotherAssembly(directory string) bool {
+	current := filepath.Clean(directory)
+	if _, isReference := index.referencesByDirectory[current]; isReference {
+		return true
+	}
+
+	// Why the .asmdef is still looked for on disk rather than in the index: the index keeps one
+	// directory per assembly name, so a stale duplicate .asmdef is absent from it while Unity still
+	// stops there.
+	return directoryHoldsAssemblyDefinition(current)
 }
