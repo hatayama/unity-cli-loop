@@ -150,7 +150,9 @@ func readAssemblyDefinitionGUID(assemblyDefinitionPath string) string {
 }
 
 // RebuildSources lists the sources to compile now, reflecting .cs files added or deleted since Bee ran.
-func RebuildSources(projectRoot string, rsp ResponseFile, asmdef *AssemblyDefinition) ([]string, error) {
+func RebuildSources(
+	projectRoot string, rsp ResponseFile, asmdef *AssemblyDefinition, owners assemblyOwnerIndex,
+) ([]string, error) {
 	existing := make([]string, 0, len(rsp.Sources))
 	for _, source := range rsp.Sources {
 		if fileExists(sourcePath(projectRoot, source)) {
@@ -171,22 +173,59 @@ func RebuildSources(projectRoot string, rsp ResponseFile, asmdef *AssemblyDefini
 		return nil, err
 	}
 
-	// Why every recorded source the glob missed survives: an .asmref attaches files to this assembly
-	// from a folder the glob never reaches, and only the response file records where they came from.
-	// The folder is not always outside the assembly directory - an .asmref nested inside a child
-	// assembly's directory sits under it, yet the glob stops at the child's boundary - so the test is
-	// what the glob produced, not where the file lives. Sources deleted since the build are already
-	// gone from existing, and a file that moved into a newly added .asmdef is caught by the added
-	// assembly definition staleness check, so the union cannot resurrect a stale source.
+	if movedErr := detectMovedAssemblyDefinition(*asmdef, rsp, globbed); movedErr != nil {
+		return nil, movedErr
+	}
+
+	return rescueRecordedSources(projectRoot, *asmdef, globbed, existing, owners)
+}
+
+// detectMovedAssemblyDefinition refuses a run whose .asmdef now sits over C# files the response file
+// never recorded for it, which is what moving an .asmdef into another assembly's folder looks like
+// from the outside. It reuses the glob the rebuild already did, and it is not gated on the .asmdef
+// timestamp because moving a file with os.Rename carries its modification time along.
+// A directory holding no source of its own says nothing either way: an assembly can legitimately own
+// every source it compiles through .asmref folders elsewhere. Neither does a response file that
+// recorded no source at all, which is not a build this check can compare against.
+func detectMovedAssemblyDefinition(
+	asmdef AssemblyDefinition, rsp ResponseFile, globbed []string,
+) error {
+	if len(globbed) == 0 || len(rsp.Sources) == 0 || recordsAnySource(rsp, globbed) {
+		return nil
+	}
+
+	return unityBuildRequired(
+		"assembly definition %s no longer owns any source the last build recorded, "+
+			"so it moved after the last Unity build", asmdef.Name)
+}
+
+// rescueRecordedSources adds back the recorded sources the glob did not produce, which are the files
+// an .asmref attaches to this assembly from a folder the glob never reaches - the folder is not
+// always outside the assembly directory, since an .asmref nested inside a child assembly's directory
+// sits under it yet stops the glob at the child's boundary.
+// Why each one is checked against the .asmref that owns its folder rather than simply kept: removing
+// or retargeting an .asmref leaves the .cs file where it is, so the response file still records it
+// while the project has handed it to another assembly, and keeping it would compile the file into
+// two assemblies at once. Sources deleted since the build are already gone from existing.
+func rescueRecordedSources(
+	projectRoot string, asmdef AssemblyDefinition, globbed []string, existing []string,
+	owners assemblyOwnerIndex,
+) ([]string, error) {
 	result := globbed
 	globbedSet := map[string]bool{}
 	for _, source := range globbed {
 		globbedSet[filepath.ToSlash(source)] = true
 	}
 	for _, source := range existing {
-		if !globbedSet[filepath.ToSlash(source)] {
-			result = append(result, source)
+		if globbedSet[filepath.ToSlash(source)] {
+			continue
 		}
+		if !owners.attachesTo(filepath.Dir(sourcePath(projectRoot, source)), asmdef.Name) {
+			return nil, unityBuildRequired(
+				"the last build recorded %s in %s, which no assembly reference attaches to it any more",
+				filepath.Base(source), asmdef.Name)
+		}
+		result = append(result, source)
 	}
 	sort.Strings(result)
 

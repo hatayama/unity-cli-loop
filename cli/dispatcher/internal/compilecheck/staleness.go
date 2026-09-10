@@ -10,9 +10,6 @@ import (
 const (
 	assemblyExtension = ".dll"
 
-	changeReasonAssemblyMoved = "no longer owns any source the last build recorded, " +
-		"so it moved after the last Unity build"
-
 	changeReasonSourceNewer   = "source newer than last build"
 	changeReasonSourceAdded   = "new source file"
 	changeReasonSourceRemoved = "source removed"
@@ -41,7 +38,7 @@ func DetectStructuralChange(
 
 	if asmdef != nil {
 		if changeErr := detectAssemblyDefinitionChange(
-			projectRoot, *asmdef, rsp, dagDir, baseline, context); changeErr != nil {
+			*asmdef, rsp, dagDir, baseline, context); changeErr != nil {
 			return changeErr
 		}
 	}
@@ -59,7 +56,7 @@ func DetectStructuralChange(
 // changing its content, and Unity's incremental build hashes content, so it rebuilds nothing and
 // the timestamp alone would refuse the project forever.
 func detectAssemblyDefinitionChange(
-	projectRoot string, asmdef AssemblyDefinition, rsp ResponseFile, dagDir string,
+	asmdef AssemblyDefinition, rsp ResponseFile, dagDir string,
 	baseline time.Time, context AssemblyContext,
 ) error {
 	asmdefTime, err := modificationTime(asmdef.Path)
@@ -78,33 +75,7 @@ func detectAssemblyDefinitionChange(
 		return unityBuildRequired("assembly definition %s %s", asmdef.Name, reason)
 	}
 
-	moved, movedErr := assemblyDefinitionLeftItsSources(projectRoot, asmdef, rsp)
-	if movedErr != nil {
-		return movedErr
-	}
-	if moved {
-		return unityBuildRequired("assembly definition %s %s", asmdef.Name, changeReasonAssemblyMoved)
-	}
-
 	return nil
-}
-
-// assemblyDefinitionLeftItsSources reports whether an .asmdef now sits over C# files the response
-// file never recorded for it, which is what moving an .asmdef into another assembly's folder looks
-// like from the outside. A folder holding no source of its own says nothing either way: an assembly
-// can legitimately own every source it compiles through .asmref folders elsewhere.
-func assemblyDefinitionLeftItsSources(
-	projectRoot string, asmdef AssemblyDefinition, rsp ResponseFile,
-) (bool, error) {
-	owned, err := globAssemblySources(projectRoot, asmdef.Directory)
-	if err != nil {
-		return false, err
-	}
-	if len(owned) == 0 {
-		return false, nil
-	}
-
-	return !recordsAnySource(rsp, owned), nil
 }
 
 // DetectSourceChange reports whether the assembly's sources changed since Unity last built it.

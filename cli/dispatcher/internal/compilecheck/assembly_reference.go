@@ -90,16 +90,11 @@ func readAssemblyReference(path string) (AssemblyReference, error) {
 // another without touching a single .cs file or .asmdef, so the response files would compile both
 // assemblies with the membership the project no longer has and report diagnostics for neither.
 func DetectAssemblyReferenceChange(
-	projectRoot string, dagDir string, graph assemblyGraph, context AssemblyContext,
+	projectRoot string, graph assemblyGraph, context AssemblyContext, references []AssemblyReference,
 ) error {
-	references, err := IndexAssemblyReferences(projectRoot)
-	if err != nil {
-		return err
-	}
-
 	for _, reference := range references {
 		if changeErr := detectOneAssemblyReferenceChange(
-			projectRoot, dagDir, graph, context, reference); changeErr != nil {
+			projectRoot, graph, context, reference); changeErr != nil {
 			return changeErr
 		}
 	}
@@ -108,12 +103,15 @@ func DetectAssemblyReferenceChange(
 }
 
 // detectOneAssemblyReferenceChange compares one .asmref against the response file of the assembly
-// it names, once its timestamp says it may have appeared or moved.
-// Why the timestamp is only a trigger: switching branches rewrites every .asmref without changing
-// what it attaches, and the timestamp alone would refuse the project forever.
+// it names.
+// Why no timestamp gates this the way it gates the .asmdef contract comparison: moving a file with
+// os.Rename carries its modification time along, so an .asmref that arrived over another assembly's
+// sources can be older than the last build. The comparison is a directory listing rather than a
+// read of the .asmdef content, and a project holds few .asmref files, so running it for all of them
+// costs little. Content stays the decision, so a branch switch that rewrites every .asmref without
+// changing what it attaches still passes.
 func detectOneAssemblyReferenceChange(
-	projectRoot string, dagDir string, graph assemblyGraph, context AssemblyContext,
-	reference AssemblyReference,
+	projectRoot string, graph assemblyGraph, context AssemblyContext, reference AssemblyReference,
 ) error {
 	name, resolved := resolveReferenceName(reference.Reference, context)
 	if !resolved {
@@ -123,18 +121,6 @@ func detectOneAssemblyReferenceChange(
 	// platform or package settings, which the last build legitimately never compiled.
 	rsp, built := graph.byName[name]
 	if !built {
-		return nil
-	}
-
-	baseline, err := lastBuildTime(projectRoot, rsp, dagDir)
-	if err != nil {
-		return err
-	}
-	written, err := modificationTime(reference.Path)
-	if err != nil {
-		return err
-	}
-	if !written.After(baseline) {
 		return nil
 	}
 
