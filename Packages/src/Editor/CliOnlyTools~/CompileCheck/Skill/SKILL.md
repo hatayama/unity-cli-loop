@@ -35,7 +35,7 @@ uloop compile-check --all --project-path /path/to/project
 
 By default it compiles the assemblies whose sources changed since the last Unity build, plus every
 assembly that references one of them. `--all` compiles every assembly in the build. Assemblies that do not depend on each other compile at
-the same time; `--jobs` caps how many run at once.
+the same time; `--jobs` caps how many run at once, and `--jobs 1` compiles them one after another.
 
 ## Parameters
 
@@ -43,7 +43,7 @@ the same time; `--jobs` caps how many run at once.
 |-----------|------|-------------|
 | `--all` | flag | Compile every assembly instead of only the changed ones and their dependents |
 | `--editor-version <version>` | string | Use this Unity Editor version's compiler instead of ProjectVersion.txt |
-| `--jobs <N>` | number | Compile up to N assemblies at once (default: half the CPUs) |
+| `--jobs <N>` | number | Compile up to N assemblies at once (default: half the CPUs, at least 1; `1` compiles sequentially) |
 | `--max-depth <N>` | number | Search depth when locating the project (default: 3, -1 for unlimited) |
 | `--project-path <path>` | string | Target another Unity project instead of the current directory |
 

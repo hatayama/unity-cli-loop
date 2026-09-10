@@ -230,7 +230,7 @@ func printCompileCheckHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "      --all                Compile every assembly instead of only the changed ones")
 	clicore.WriteLine(stdout, "      --editor-version <version>")
 	clicore.WriteLine(stdout, "                           Use this Unity Editor version instead of ProjectVersion.txt")
-	clicore.WriteLine(stdout, "      --jobs <n>           Compile up to n assemblies at once (default: half the CPUs)")
+	clicore.WriteLine(stdout, "      --jobs <n>           Compile up to n assemblies at once, 1 = sequential (default: half the CPUs, at least 1)")
 	clicore.WriteLine(stdout, "      --max-depth <n>      Max directory depth when auto-searching for the project (default: 3, -1 = unlimited)")
 	clicore.WriteLine(stdout, "      --project-path <path>")
 	clicore.WriteLine(stdout, "                           Compile this project instead of searching from the working directory")

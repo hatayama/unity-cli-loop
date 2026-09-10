@@ -46,7 +46,8 @@ references, scripting defines and analyzers. `compile-check` replays those respo
 5. **Compile in dependency order** and parse the compiler's diagnostics into JSON. An assembly starts
    as soon as every assembly it references that this run also compiles has finished, so independent
    assemblies compile at the same time. `--jobs <n>` caps how many run at once; the default is half
-   the machine's CPUs, because one `csc` process already keeps two to three cores busy on its own.
+   the machine's CPUs and never less than one, because one `csc` process already keeps two to three
+   cores busy on its own. `--jobs 1` compiles the assemblies one after another.
    The reported order does not depend on the job count: results are collected in dependency order
    whatever finishes first.
 
@@ -65,7 +66,7 @@ The compiled DLLs land in `Library/uloop/compile-check/<dag>/` and are never han
 directory is disposable; deleting it only costs the next run some time.
 
 `--jobs <n>` bounds how many assemblies compile at the same time; the default is half the machine's
-CPUs, and `--jobs 1` compiles them one after another.
+CPUs and never less than one, and `--jobs 1` compiles them one after another.
 
 The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, `Errors`,
 `Warnings` (each diagnostic carrying `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`),
