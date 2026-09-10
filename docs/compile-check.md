@@ -25,7 +25,19 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    `dotnet` host bundled beside it. Nothing is downloaded, and no system-wide .NET SDK is used.
 3. **Decide what to compile.** By default the run compiles the assemblies whose sources changed
    since the last Unity build, plus every assembly that references one of them. `--all` compiles
-   every assembly in the build. Assemblies left out are counted in `SkippedAssemblies`.
+   every assembly in the build. Assemblies left out are counted in `SkippedAssemblies`. An
+   assembly's sources are re-globbed from its own directory, stopping at nested assembly
+   boundaries; the files an `.asmref` attaches to it are taken from the last build's response file
+   instead, wherever that folder sits — including inside a nested assembly's directory, which the
+   glob never reaches. Such a file is kept only while an `.asmref` still attaches its folder to this
+   assembly: the walk up from the file to the first folder holding an `.asmref` or an `.asmdef` says
+   which assembly owns it today. An `.asmref` naming an assembly the build never produced — an
+   unresolvable reference, or one excluded by platform or package settings — attaches nothing, so
+   its folder is treated as an ordinary part of the assembly around it, which is what Unity compiles
+   it as. A package shipping a sample for a render pipeline the project does not install is the
+   ordinary case. Membership is compared without looking at any timestamp, because
+   moving a file carries its modification time along, and either an `.asmdef` or an `.asmref` can
+   hand a folder's sources to a different assembly without editing a single `.cs` file.
 4. **Check that the response files still describe the project.** An assembly definition that was
    added, removed, or that stopped building for the Editor, and a reference or a precompiled
    reference that was added to one, invalidate the recorded build. The run then stops with
@@ -58,8 +70,13 @@ The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, 
   settings are compared against the response file, because they reach `csc` and can be read without
   evaluating defines or package versions: whether the assembly still builds for the Editor, a
   project reference it gained, `allowUnsafeCode` turning on, and a precompiled reference it gained
-  under `overrideReferences`. A new or deleted `.asmdef` is detected too. Those cases — and only
-  those — stop the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED` and ask for `uloop compile`.
+  under `overrideReferences`. A new or deleted `.asmdef` is detected too, as is every way
+  assembly membership moves without any `.cs` file changing: an `.asmdef` that no longer sits over
+  any source its response file recorded (it was moved into another assembly's folder), an `.asmref`
+  whose folder holds sources the assembly it names does not record (it was added or moved), and a
+  recorded source no `.asmref` attaches to its assembly any more (one was removed or retargeted).
+  Those cases — and only those — stop the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED` and ask for
+  `uloop compile`.
   Every other edit listed below is invisible to the check: the run proceeds and silently reuses
   what the last build recorded.
 - **A removed `.asmdef` reference is not detected.** Unity injects references of its own that no
@@ -71,6 +88,10 @@ The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, 
 - **Changed scripting defines are not detected**; the defines recorded in the last build are reused.
 - **The predefined assemblies** (`Assembly-CSharp` and friends) keep the source list of the last
   build, so a brand-new `.cs` file outside any `.asmdef` is not compiled until Unity imports it.
+- **A new `.cs` file inside an `.asmref` folder is not compiled either.** The sources an `.asmref`
+  attaches come only from the last build's response file, because the glob stops at the folder's
+  assembly boundary, so a file added there waits for Unity to import it just as the predefined
+  assemblies do.
 - **Linux is not supported.** macOS and Windows only.
 
 ## Troubleshooting
@@ -80,9 +101,11 @@ The project has never been built by this Editor, or `Library` was deleted. Open 
 (`uloop launch`) and let it compile, then retry.
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: an assembly definition no longer matches the last build**
-Raised when an `.asmdef` was added or deleted, or when one of the four compared settings changed
-(no longer builds for the Editor, gained a project reference, turned on `allowUnsafeCode`, gained a
-precompiled reference under `overrideReferences`). This is the intended refusal, not a bug. Run
+Raised when an `.asmdef` was added, deleted or moved, when an `.asmref` was added, moved, removed
+or retargeted so that a folder's sources now belong to a different assembly than the one the last
+build compiled them into, or when one of the four compared settings changed (no longer builds for
+the Editor, gained a project reference, turned on `allowUnsafeCode`, gained a precompiled reference
+under `overrideReferences`). This is the intended refusal, not a bug. Run
 `uloop compile` once so Unity rewrites the response files, then `compile-check` works again against
 the new configuration.
 
