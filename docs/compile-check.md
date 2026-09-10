@@ -22,7 +22,11 @@ references, scripting defines and analyzers. `compile-check` replays those respo
 2. **Find the compiler.** The Editor version comes from `ProjectVersion.txt` (or `--editor-version`),
    and the Editor install is located the same way `uloop launch` locates it. The compiler is the one
    bundled with that install: `csc.dll` under the Editor's Roslyn directory, run through the
-   `dotnet` host bundled beside it. Nothing is downloaded, and no system-wide .NET SDK is used.
+   `dotnet` host bundled beside it. Nothing is downloaded, and no system-wide .NET SDK is used. csc is
+   started through the Roslyn compiler server the way Unity's Bee starts it, so several assemblies in
+   a row reuse the server's JIT-compiled code and its cached reference metadata. The server process
+   stays up for a while after the run, exactly as it does after a build Unity ran itself; leave it
+   alone. When it cannot be reached, csc compiles in its own process and the result is the same.
 3. **Decide what to compile.** By default the run compiles the assemblies whose sources changed
    since the last Unity build, plus every assembly that references one of them. `--all` compiles
    every assembly in the build. Assemblies left out are counted in `SkippedAssemblies`. An
