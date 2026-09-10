@@ -57,6 +57,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AsyncStateMachineAttributeTypeName = "AsyncStateMachineAttribute";
         public const string IteratorStateMachineAttributeTypeName = "IteratorStateMachineAttribute";
 
+        // Every hot-reload compile path reports an unresolvable external compiler with this one
+        // sentence, so a user who hits it in a shim compile and in an introduced-type compile is
+        // told the same thing about the same Unity installation.
+        public const string CompilerPathsUnresolvedMessage =
+            "External compiler paths could not be resolved for this Unity installation.";
+
         // Why not "applied": this sentence is the out-of-reload / unsupported-kind hint appended
         // to NewMember compile failures. Added members declared in any file of this reload's
         // assembly group are applied through that group's shim assembly.
