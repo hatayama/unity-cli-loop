@@ -36,6 +36,7 @@ type schedulerRecorder struct {
 	failingUnit  string
 	running      int
 	maxRunning   int
+	started      map[string]bool
 	finished     map[string]bool
 	finishedWhen map[string][]string // unit -> the units already finished when it started
 }
@@ -45,6 +46,7 @@ func newSchedulerRecorder(hold time.Duration) *schedulerRecorder {
 	return &schedulerRecorder{
 		hold:         hold,
 		holdByUnit:   map[string]time.Duration{},
+		started:      map[string]bool{},
 		finished:     map[string]bool{},
 		finishedWhen: map[string][]string{},
 	}
@@ -55,6 +57,7 @@ func (recorder *schedulerRecorder) runner() CommandRunner {
 	return func(_ context.Context, cmd *exec.Cmd) (string, string, int, error) {
 		name := assemblyOfFakeCommand(cmd)
 		recorder.mutex.Lock()
+		recorder.started[name] = true
 		recorder.running++
 		if recorder.running > recorder.maxRunning {
 			recorder.maxRunning = recorder.running
@@ -178,6 +181,11 @@ func TestCompileUnitsStopsTheRunWhenTheCompilerCannotBeStarted(t *testing.T) {
 	}
 	if recorder.finished["C"] {
 		t.Error("a unit depending on the failed one should not have been compiled")
+	}
+	// Why B rather than C alone: C waits for A whatever the scheduler does, so only an independent
+	// unit shows that the failure stopped the run instead of merely blocking what depended on it.
+	if recorder.started["B"] {
+		t.Error("a unit independent of the failed one should not have been started")
 	}
 }
 
