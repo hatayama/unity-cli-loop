@@ -24,12 +24,15 @@ func TestParseCompileCheckOptionsDefaultsToTheChangedScope(t *testing.T) {
 	if options.maxDepth != defaultProjectSearchDepth {
 		t.Fatalf("expected the default search depth, got %d", options.maxDepth)
 	}
+	if options.jobs != 0 {
+		t.Fatalf("expected the compiler default to decide the job count, got %d", options.jobs)
+	}
 }
 
 // Verifies that every supported option is read, in both the spaced and the equals form.
 func TestParseCompileCheckOptionsReadsEverySupportedOption(t *testing.T) {
 	options, err := parseCompileCheckOptions(
-		[]string{"--all", "--editor-version", "6000.0.1f1", "--max-depth=-1"}, "")
+		[]string{"--all", "--editor-version", "6000.0.1f1", "--max-depth=-1", "--jobs", "4"}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,6 +44,28 @@ func TestParseCompileCheckOptionsReadsEverySupportedOption(t *testing.T) {
 	}
 	if options.maxDepth != -1 {
 		t.Fatalf("expected an unlimited search depth, got %d", options.maxDepth)
+	}
+	if options.jobs != 4 {
+		t.Fatalf("expected the requested job count, got %d", options.jobs)
+	}
+}
+
+// Verifies that a job count below one is rejected, since it would compile nothing.
+func TestParseCompileCheckOptionsRejectsAJobCountBelowOne(t *testing.T) {
+	_, err := parseCompileCheckOptions([]string{"--jobs", "0"}, "")
+	if err == nil {
+		t.Fatalf("expected a job count below one to be rejected")
+	}
+	if !strings.Contains(err.Error(), compileCheckJobsFlag) {
+		t.Fatalf("expected the rejected option to be named, got %q", err.Error())
+	}
+}
+
+// Verifies that a job count that is not a number is rejected instead of silently becoming zero.
+func TestParseCompileCheckOptionsRejectsANonNumericJobCount(t *testing.T) {
+	_, err := parseCompileCheckOptions([]string{"--jobs=many"}, "")
+	if err == nil {
+		t.Fatalf("expected a non-numeric job count to be rejected")
 	}
 }
 

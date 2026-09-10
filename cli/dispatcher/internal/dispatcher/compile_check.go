@@ -20,6 +20,7 @@ const (
 	compileCheckAllFlag         = "--all"
 	compileCheckEditorFlag      = "--editor-version"
 	compileCheckMaxDepthFlag    = "--max-depth"
+	compileCheckJobsFlag        = "--jobs"
 )
 
 // compileCheckOptions are the command-line inputs of one compile-check run.
@@ -28,6 +29,7 @@ type compileCheckOptions struct {
 	all           bool
 	editorVersion string
 	maxDepth      int
+	jobs          int // how many assemblies compile at once; 0 leaves the choice to the compiler
 }
 
 // compileCheckIssue is one diagnostic in the response, shaped like the ones `uloop compile` returns.
@@ -109,6 +111,7 @@ func runCompileCheck(
 		ProjectRoot:          projectRoot,
 		EditorExecutablePath: editorPath,
 		All:                  options.all,
+		Jobs:                 options.jobs,
 	})
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -227,6 +230,7 @@ func printCompileCheckHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "      --all                Compile every assembly instead of only the changed ones")
 	clicore.WriteLine(stdout, "      --editor-version <version>")
 	clicore.WriteLine(stdout, "                           Use this Unity Editor version instead of ProjectVersion.txt")
+	clicore.WriteLine(stdout, "      --jobs <n>           Compile up to n assemblies at once, 1 = sequential (default: half the CPUs, at least 1)")
 	clicore.WriteLine(stdout, "      --max-depth <n>      Max directory depth when auto-searching for the project (default: 3, -1 = unlimited)")
 	clicore.WriteLine(stdout, "      --project-path <path>")
 	clicore.WriteLine(stdout, "                           Compile this project instead of searching from the working directory")
@@ -267,6 +271,8 @@ func applyCompileCheckOption(options *compileCheckOptions, args []string, index 
 		return applyCompileCheckEditorVersion(options, args, index)
 	case isCompileCheckKeyedOption(arg, compileCheckMaxDepthFlag):
 		return applyCompileCheckMaxDepth(options, args, index)
+	case isCompileCheckKeyedOption(arg, compileCheckJobsFlag):
+		return applyCompileCheckJobs(options, args, index)
 	default:
 		return index, unknownCompileCheckOptionError(arg)
 	}
@@ -301,6 +307,21 @@ func applyCompileCheckMaxDepth(options *compileCheckOptions, args []string, inde
 		return index, clierrors.InvalidValueArgumentError(compileCheckMaxDepthFlag, value, "integer >= -1")
 	}
 	options.maxDepth = maxDepth
+
+	return nextLaunchOptionIndex(index, consumed), nil
+}
+
+// applyCompileCheckJobs reads how many assemblies may compile at the same time.
+func applyCompileCheckJobs(options *compileCheckOptions, args []string, index int) (int, error) {
+	value, consumed, err := readLaunchOptionValue(args[index], args, index)
+	if err != nil {
+		return index, err
+	}
+	jobs, convertErr := strconv.Atoi(value)
+	if convertErr != nil || jobs < 1 {
+		return index, clierrors.InvalidValueArgumentError(compileCheckJobsFlag, value, "integer >= 1")
+	}
+	options.jobs = jobs
 
 	return nextLaunchOptionIndex(index, consumed), nil
 }
