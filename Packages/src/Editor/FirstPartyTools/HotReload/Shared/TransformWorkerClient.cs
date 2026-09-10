@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (paths == null)
             {
                 return TransformWorkerClientResult.Failure(
-                    "External compiler paths could not be resolved for this Unity installation.");
+                    HotReloadConstants.CompilerPathsUnresolvedMessage);
             }
 
             using (TransformWorkerRequestFiles requestFiles = new TransformWorkerRequestFiles())

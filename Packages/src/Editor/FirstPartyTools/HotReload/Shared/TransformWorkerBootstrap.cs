@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (paths == null)
             {
                 return TransformWorkerBootstrapResult.Failure(
-                    "External compiler paths could not be resolved for this Unity installation.");
+                    HotReloadConstants.CompilerPathsUnresolvedMessage);
             }
 
             string workerSourceDirectory = ResolveWorkerSourceDirectory();
