@@ -68,15 +68,21 @@ func writeCompilerIdentity(digest hash.Hash, paths EditorCompilerPaths) error {
 // defines, its analyzer list and the path mapping its metadata is built with.
 func writeResponseFileIdentity(digest hash.Hash, rsp ResponseFile) error {
 	companionPath := strings.TrimSuffix(rsp.Path, responseFileExtension) + companionFileExtension
-	for _, path := range []string{rsp.Path, companionPath} {
-		content, err := os.ReadFile(path)
-		// Why a missing companion file is no error: Bee writes one only for some assemblies, and the
-		// ones it left out are keyed on its absence, which is what an empty digest records.
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read %s: %w", path, err)
-		}
-		writeContentEntry(digest, "response", filepath.Base(path), content)
+	// Why only the companion file may be absent: Bee writes one for some assemblies and not others,
+	// so the ones it left out are keyed on that absence. It writes the primary response file for
+	// every assembly it builds, so a run that cannot find one is looking at a state this key cannot
+	// describe - and keying on its absence would let two different states hash the same.
+	content, err := os.ReadFile(rsp.Path)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", rsp.Path, err)
 	}
+	writeContentEntry(digest, "response", filepath.Base(rsp.Path), content)
+
+	companionContent, err := os.ReadFile(companionPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read %s: %w", companionPath, err)
+	}
+	writeContentEntry(digest, "response", filepath.Base(companionPath), companionContent)
 
 	return nil
 }
