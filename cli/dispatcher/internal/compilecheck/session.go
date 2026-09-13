@@ -37,6 +37,10 @@ type Result struct {
 	DagDir  string
 	Units   []UnitResult
 	Skipped int
+	// Blocked names the assemblies this run did not compile because one they reference has errors.
+	// They are kept apart from Skipped: a skipped assembly was read and found to have nothing left
+	// to say, and nothing about these was read at all.
+	Blocked []string
 }
 
 // Run compiles the assemblies that need checking and collects their diagnostics.
@@ -80,6 +84,7 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		// nothing it compiles from changed, the other because everything it references kept the
 		// public surface the last Unity build recorded.
 		Skipped: plan.Skipped + outcome.Skipped,
+		Blocked: outcome.Blocked,
 	}, nil
 }
 

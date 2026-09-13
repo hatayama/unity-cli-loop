@@ -29,6 +29,9 @@ type schedule struct {
 	// changedInputs counts, per unit, how many of the references it waited for came out with a
 	// different public surface than the last Unity build recorded.
 	changedInputs []int
+	// blocked marks, per unit, that an assembly it references has errors, so this run must not
+	// compile it.
+	blocked []bool
 }
 
 // compileOutcome is everything one run of the scheduler produced: the results it has, and what it
@@ -38,6 +41,9 @@ type compileOutcome struct {
 	// Skipped counts the units left out because everything they reference kept the public surface
 	// the last Unity build recorded, so compiling them could only repeat what they already say.
 	Skipped int
+	// Blocked names the units left out because an assembly they reference has errors, in the plan's
+	// order. They are kept apart from Skipped: nothing they compile from was read at all.
+	Blocked []string
 }
 
 // DefaultJobs is how many assemblies compile at once when the caller names no number.
@@ -121,7 +127,11 @@ func compileUnits(
 		return compileOutcome{}, failure
 	}
 
-	return compileOutcome{Units: run.compiledResults(), Skipped: run.referenceSkips}, nil
+	return compileOutcome{
+		Units:   run.compiledResults(),
+		Skipped: run.referenceSkips,
+		Blocked: run.blockedNames(),
+	}, nil
 }
 
 // startReadyUnits launches the units whose references are all done, up to the job limit, skipping
@@ -130,6 +140,15 @@ func (run *schedulerRun) startReadyUnits(jobs int) error {
 	for run.running < jobs && len(run.state.ready) > 0 {
 		index := run.state.ready[0]
 		run.state.ready = run.state.ready[1:]
+		// Why the block is read before the skip: a blocked unit has no result to compare against
+		// anything, so asking whether its references kept their surface answers nothing.
+		blocked, err := run.skipBlockedUnit(index)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			continue
+		}
 		skipped, err := run.skipUnchangedDependent(index)
 		if err != nil {
 			return err
@@ -142,6 +161,25 @@ func (run *schedulerRun) startReadyUnits(jobs int) error {
 	}
 
 	return nil
+}
+
+// skipBlockedUnit leaves out a unit an assembly with errors is below, and carries the block on down
+// to what waits on this one, which is where Unity's own build stops as well: the reference assembly
+// this unit compiles against was never produced, so all it could report is the metadata it cannot
+// find rather than anything about itself.
+// Why its earlier outputs are removed, as for a skipped dependent: a reference assembly an earlier
+// run wrote would otherwise be picked up as this run's own output.
+func (run *schedulerRun) skipBlockedUnit(index int) (bool, error) {
+	if !run.state.blocked[index] {
+		return false, nil
+	}
+	if err := removeUnitOutputs(run.outputDirectoryPath, run.plan.Units[index]); err != nil {
+		return false, err
+	}
+	run.state.blockDependents(index)
+	run.state.release(index, false)
+
+	return true, nil
 }
 
 // skipUnchangedDependent leaves out a unit this run picked up only because something it references
@@ -192,6 +230,12 @@ func (run *schedulerRun) collectOneCompletion() error {
 	}
 	run.results[completion.index] = completion.result
 	run.compiled[completion.index] = true
+	// Why a replayed result blocks the same way a compiled one does: it says the assembly has
+	// errors, and whether this run learned that from csc or from what the last run recorded changes
+	// nothing about the reference assembly the units below it would have to read.
+	if !completion.result.Succeeded {
+		run.state.blockDependents(completion.index)
+	}
 	run.state.release(completion.index, completion.changed)
 
 	return nil
@@ -209,6 +253,19 @@ func (run *schedulerRun) compiledResults() []UnitResult {
 	return results
 }
 
+// blockedNames lists the assemblies this run did not compile because one they reference has errors,
+// in the plan's order.
+func (run *schedulerRun) blockedNames() []string {
+	names := make([]string, 0, len(run.plan.Units))
+	for index, blocked := range run.state.blocked {
+		if blocked {
+			names = append(names, run.plan.Units[index].Assembly.AssemblyName)
+		}
+	}
+
+	return names
+}
+
 // newSchedule counts what every unit is waiting for and queues the units waiting for nothing.
 func newSchedule(plan BuildPlan) *schedule {
 	indexByName := make(map[string]int, len(plan.Units))
@@ -221,6 +278,7 @@ func newSchedule(plan BuildPlan) *schedule {
 		dependents:    make([][]int, len(plan.Units)),
 		ready:         []int{},
 		changedInputs: make([]int, len(plan.Units)),
+		blocked:       make([]bool, len(plan.Units)),
 	}
 	for index, unit := range plan.Units {
 		for _, reference := range unit.PlanReferences {
@@ -239,6 +297,15 @@ func newSchedule(plan BuildPlan) *schedule {
 	}
 
 	return state
+}
+
+// blockDependents marks every unit waiting on this one as one this run must not compile.
+// Why marking rather than removing from the queue: a unit is only queued once everything it waits
+// for is done, so the ones marked here have not been queued yet and are read as they come up.
+func (state *schedule) blockDependents(index int) {
+	for _, dependent := range state.dependents[index] {
+		state.blocked[dependent] = true
+	}
 }
 
 // release hands the units that were waiting on a finished one to the ready queue, recording whether

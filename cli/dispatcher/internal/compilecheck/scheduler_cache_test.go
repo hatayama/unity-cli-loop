@@ -252,6 +252,33 @@ func TestCompileUnitsReplaysTheErrorsOfAFailedUnit(t *testing.T) {
 	}
 }
 
+// Verifies a replayed failure blocks just as a fresh one does: the second run starts no compiler at
+// all, and the assembly below the failed one is still left out. A run that decided this from the
+// invocation it had just made would compile the whole tree below a failure as soon as the cache
+// answered for it.
+func TestCompileUnitsBlocksTheDependentsOfAReplayedFailure(t *testing.T) {
+	project := newCachedSchedulerProject(t, map[string][]string{"Beta": {"Alpha"}}, "Alpha", "Beta")
+	failing := newCachedSchedulerRecorder("Alpha", "Beta")
+	failing.output["Alpha"] = failingCompilerOutput("Alpha")
+	project.compileOrFail(t, failing)
+
+	recorder := newCachedSchedulerRecorder("Alpha", "Beta")
+	recorder.output["Alpha"] = failingCompilerOutput("Alpha")
+	outcome, err := project.compile(context.Background(), recorder)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	if len(recorder.runs) != 0 {
+		t.Errorf("the second run should have started no compiler, got %v", recorder.runs)
+	}
+	if !resultOf(t, outcome.Units, "Alpha").Reused {
+		t.Error("the recorded failure should have been reused")
+	}
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"Alpha"})
+	assertStrings(t, "blocked", outcome.Blocked, []string{"Beta"})
+}
+
 // Verifies the order the manifest is written in: while a unit is compiling, the manifest of the
 // compile it replaces is already gone and the new one is not there yet. A run that wrote the
 // manifest before starting the compiler would leave a record of a compile that never finished.
