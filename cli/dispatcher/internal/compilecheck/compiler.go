@@ -33,8 +33,11 @@ const (
 )
 
 // diagnosticPattern matches one csc diagnostic line: "<file>(<line>,<column>): <severity> <code>: <message>".
+// Why the code is any run without spaces or colons: analyzers choose their own diagnostic IDs, such as
+// "Style_ConstName", and an error under an ID the pattern rejects would surface only as a compile that
+// failed without saying where.
 var diagnosticPattern = regexp.MustCompile(
-	`^(?P<file>.+)\((?P<line>\d+),(?P<column>\d+)\): (?P<severity>error|warning) (?P<code>[A-Z]+\d+): (?P<message>.+)$`)
+	`^(?P<file>.+)\((?P<line>\d+),(?P<column>\d+)\): (?P<severity>error|warning) (?P<code>[^\s:]+): (?P<message>.+)$`)
 
 // Diagnostic is one error or warning csc reported at a source position.
 type Diagnostic struct {
@@ -238,13 +241,14 @@ func writeRewrittenResponseFile(
 	rsp := unit.Assembly
 	lines := []string{
 		compilerLibraryTargetFlag,
-		quoteFlag(outputFlagPrefix, filepath.Join(plan.OutputDir, filepath.Base(rsp.OutputPath))),
+		quoteFlag(outputFlagPrefix,
+			filepath.ToSlash(filepath.Join(plan.OutputDir, filepath.Base(rsp.OutputPath)))),
 	}
 	// Why the guard: an assembly built without a reference assembly has no base name to join, and
 	// joining an empty one would point -refout at the output directory itself.
 	if rsp.RefOutputPath != "" {
-		lines = append(lines, quoteFlag(
-			referenceOutputFlagPref, filepath.Join(plan.OutputDir, filepath.Base(rsp.RefOutputPath))))
+		lines = append(lines, quoteFlag(referenceOutputFlagPref,
+			filepath.ToSlash(filepath.Join(plan.OutputDir, filepath.Base(rsp.RefOutputPath)))))
 	}
 	for _, define := range rsp.Defines {
 		lines = append(lines, defineFlagPrefix+define)
@@ -299,7 +303,7 @@ func rewriteReference(projectRoot string, plan BuildPlan, reference string) stri
 		return reference
 	}
 
-	return rewritten
+	return filepath.ToSlash(rewritten)
 }
 
 // planCompiles reports whether a plan rebuilds a given assembly.

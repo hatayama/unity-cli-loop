@@ -47,8 +47,8 @@ func newOwnerIndexForProject(t *testing.T, projectRoot string) assemblyOwnerInde
 func TestRebuildSourcesReflectsFilesAddedAndDeletedSinceTheLastBuild(t *testing.T) {
 	projectRoot := newAssemblyProject(t)
 	rsp := ResponseFile{Sources: []string{
-		filepath.Join("Assets", "Foo", "A.cs"),
-		filepath.Join("Assets", "Foo", "Deleted.cs"),
+		"Assets/Foo/A.cs",
+		"Assets/Foo/Deleted.cs",
 	}}
 	asmdef := AssemblyDefinition{
 		Name:      "Foo",
@@ -62,8 +62,8 @@ func TestRebuildSourcesReflectsFilesAddedAndDeletedSinceTheLastBuild(t *testing.
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Assets", "Foo", "A.cs"),
-		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
+		"Assets/Foo/A.cs",
+		"Assets/Foo/Sub/B.cs",
 	})
 }
 
@@ -74,8 +74,8 @@ func TestRebuildSourcesKeepsSourcesOutsideTheAssemblyDirectory(t *testing.T) {
 	writeFileAt(t,
 		filepath.Join(projectRoot, "Assets", "Shared", "Foo.Ref.asmref"), `{"reference":"Foo"}`)
 	rsp := ResponseFile{Sources: []string{
-		filepath.Join("Assets", "Foo", "A.cs"),
-		filepath.Join("Assets", "Shared", "E.cs"),
+		"Assets/Foo/A.cs",
+		"Assets/Shared/E.cs",
 	}}
 	asmdef := AssemblyDefinition{
 		Name:      "Foo",
@@ -89,9 +89,9 @@ func TestRebuildSourcesKeepsSourcesOutsideTheAssemblyDirectory(t *testing.T) {
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Assets", "Foo", "A.cs"),
-		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
-		filepath.Join("Assets", "Shared", "E.cs"),
+		"Assets/Foo/A.cs",
+		"Assets/Foo/Sub/B.cs",
+		"Assets/Shared/E.cs",
 	})
 }
 
@@ -99,8 +99,8 @@ func TestRebuildSourcesKeepsSourcesOutsideTheAssemblyDirectory(t *testing.T) {
 func TestRebuildSourcesWithoutAssemblyDefinitionKeepsExistingSourcesOnly(t *testing.T) {
 	projectRoot := newAssemblyProject(t)
 	rsp := ResponseFile{Sources: []string{
-		filepath.Join("Assets", "Foo", "A.cs"),
-		filepath.Join("Assets", "Foo", "Deleted.cs"),
+		"Assets/Foo/A.cs",
+		"Assets/Foo/Deleted.cs",
 	}}
 
 	sources, err := RebuildSources(projectRoot, rsp, nil, assemblyOwnerIndex{})
@@ -108,7 +108,7 @@ func TestRebuildSourcesWithoutAssemblyDefinitionKeepsExistingSourcesOnly(t *test
 		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "sources", sources, []string{filepath.Join("Assets", "Foo", "A.cs")})
+	assertStrings(t, "sources", sources, []string{"Assets/Foo/A.cs"})
 }
 
 // Verifies a package-cache assembly is taken from the response file instead of being walked.
@@ -119,7 +119,7 @@ func TestRebuildSourcesSkipsGlobbingForPackageCacheAssemblies(t *testing.T) {
 	writeFileAt(t, filepath.Join(packageDirectory, "A.cs"), "")
 	writeFileAt(t, filepath.Join(packageDirectory, "Untracked.cs"), "")
 	rsp := ResponseFile{Sources: []string{
-		filepath.Join("Library", "PackageCache", "com.example.pkg", "A.cs"),
+		"Library/PackageCache/com.example.pkg/A.cs",
 	}}
 	asmdef := AssemblyDefinition{
 		Name:      "Pkg",
@@ -133,7 +133,7 @@ func TestRebuildSourcesSkipsGlobbingForPackageCacheAssemblies(t *testing.T) {
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Library", "PackageCache", "com.example.pkg", "A.cs"),
+		"Library/PackageCache/com.example.pkg/A.cs",
 	})
 }
 
@@ -198,8 +198,8 @@ func TestRebuildSourcesSkipsSourceFilesUnityIgnores(t *testing.T) {
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Assets", "Foo", "A.cs"),
-		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
+		"Assets/Foo/A.cs",
+		"Assets/Foo/Sub/B.cs",
 	})
 }
 
@@ -221,8 +221,8 @@ func TestRebuildSourcesDoesNotTreatIgnoredAssemblyDefinitionsAsABoundary(t *test
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Assets", "Foo", "A.cs"),
-		filepath.Join("Assets", "Foo", "Sub", "B.cs"),
+		"Assets/Foo/A.cs",
+		"Assets/Foo/Sub/B.cs",
 	})
 }
 
@@ -242,8 +242,8 @@ func newNestedAsmrefProject(t *testing.T) (string, ResponseFile, AssemblyDefinit
 	rsp := ResponseFile{
 		AssemblyName: "P",
 		Sources: []string{
-			filepath.Join("Assets", "P", "A.cs"),
-			filepath.Join("Assets", "P", "Core", "Dialog", "Dialog.cs"),
+			"Assets/P/A.cs",
+			"Assets/P/Core/Dialog/Dialog.cs",
 		},
 	}
 	asmdef := AssemblyDefinition{
@@ -265,8 +265,8 @@ func TestRebuildSourcesKeepsSourcesOfAnAsmrefNestedInsideAChildAssembly(t *testi
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Assets", "P", "A.cs"),
-		filepath.Join("Assets", "P", "Core", "Dialog", "Dialog.cs"),
+		"Assets/P/A.cs",
+		"Assets/P/Core/Dialog/Dialog.cs",
 	})
 }
 
@@ -319,7 +319,7 @@ func TestRebuildSourcesRejectsAnAssemblyDefinitionMovedWithoutChangingItsTimesta
 	}
 	rsp := ResponseFile{
 		AssemblyName: "Foo",
-		Sources:      []string{filepath.Join("Assets", "Foo", "A.cs")},
+		Sources:      []string{"Assets/Foo/A.cs"},
 	}
 	asmdef := AssemblyDefinition{Name: "Foo", Path: movedPath, Directory: filepath.Dir(movedPath)}
 
@@ -341,7 +341,7 @@ func TestRebuildSourcesAcceptsAnAssemblyDefinitionWithoutSourcesOfItsOwn(t *test
 	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Shared", "D.cs"), "")
 	rsp := ResponseFile{
 		AssemblyName: "P",
-		Sources:      []string{filepath.Join("Assets", "Shared", "D.cs")},
+		Sources:      []string{"Assets/Shared/D.cs"},
 	}
 	asmdef := AssemblyDefinition{
 		Name:      "P",
@@ -354,7 +354,7 @@ func TestRebuildSourcesAcceptsAnAssemblyDefinitionWithoutSourcesOfItsOwn(t *test
 		t.Fatalf("expected an assembly without sources of its own to pass, got error: %v", err)
 	}
 
-	assertStrings(t, "sources", sources, []string{filepath.Join("Assets", "Shared", "D.cs")})
+	assertStrings(t, "sources", sources, []string{"Assets/Shared/D.cs"})
 }
 
 // Verifies an assembly definition sitting over sources its own response file never recorded stops
@@ -366,7 +366,7 @@ func TestRebuildSourcesRejectsAnAssemblyDefinitionThatLeftItsRecordedSources(t *
 	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Other", "C.cs"), "")
 	rsp := ResponseFile{
 		AssemblyName: "Foo",
-		Sources:      []string{filepath.Join("Assets", "Foo", "A.cs")},
+		Sources:      []string{"Assets/Foo/A.cs"},
 	}
 	asmdef := AssemblyDefinition{
 		Name:      "Foo",
@@ -411,8 +411,8 @@ func TestRebuildSourcesKeepsSourcesUnderAnAsmrefOfAnUnbuiltAssembly(t *testing.T
 	rsp := ResponseFile{
 		AssemblyName: "Pkg",
 		Sources: []string{
-			filepath.Join("Assets", "Pkg", "A.cs"),
-			filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+			"Assets/Pkg/A.cs",
+			"Assets/Pkg/Samples/Optional/Helper.cs",
 		},
 	}
 
@@ -422,8 +422,8 @@ func TestRebuildSourcesKeepsSourcesUnderAnAsmrefOfAnUnbuiltAssembly(t *testing.T
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Assets", "Pkg", "A.cs"),
-		filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+		"Assets/Pkg/A.cs",
+		"Assets/Pkg/Samples/Optional/Helper.cs",
 	})
 }
 
@@ -433,7 +433,7 @@ func TestRebuildSourcesGlobsIntoAnAsmrefFolderOfAnUnbuiltAssembly(t *testing.T) 
 	projectRoot, asmdef := newInertAsmrefProject(t)
 	rsp := ResponseFile{
 		AssemblyName: "Pkg",
-		Sources:      []string{filepath.Join("Assets", "Pkg", "A.cs")},
+		Sources:      []string{"Assets/Pkg/A.cs"},
 	}
 
 	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
@@ -442,7 +442,7 @@ func TestRebuildSourcesGlobsIntoAnAsmrefFolderOfAnUnbuiltAssembly(t *testing.T) 
 	}
 
 	assertStrings(t, "sources", sources, []string{
-		filepath.Join("Assets", "Pkg", "A.cs"),
-		filepath.Join("Assets", "Pkg", "Samples", "Optional", "Helper.cs"),
+		"Assets/Pkg/A.cs",
+		"Assets/Pkg/Samples/Optional/Helper.cs",
 	})
 }
