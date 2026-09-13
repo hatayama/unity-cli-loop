@@ -74,7 +74,11 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    the machine's CPUs and never less than one, because one `csc` process already keeps two to three
    cores busy on its own. `--jobs 1` compiles the assemblies one after another.
    The reported order does not depend on the job count: results are collected in dependency order
-   whatever finishes first.
+   whatever finishes first. An assembly that fails to compile stops the run at that point of the
+   tree: it wrote no reference assembly, so everything below it has nothing to compile against and
+   could only report the metadata it cannot find. Those assemblies are named in
+   `BlockedAssemblies`, and Unity's own build stops in the same place. Fixing the errors and running
+   again carries the check on past them.
 6. **Reuse the previous run's answer where nothing moved.** Before starting the compiler for an
    assembly, the run digests the closure of inputs that decide what the compiler would say about it:
    the compiler and its host, the response files Bee wrote for it, its sources, its references, its
@@ -117,10 +121,13 @@ CPUs and never less than one, and `--jobs 1` compiles them one after another.
 
 The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, `Errors`,
 `Warnings` (each diagnostic carrying `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`),
-`CompiledAssemblies`, `ReusedAssemblies`, `SkippedAssemblies`, `ResponseFileSet`, `ProjectRoot` and
+`CompiledAssemblies`, `ReusedAssemblies`, `BlockedAssemblies`, `SkippedAssemblies`,
+`ResponseFileSet`, `ProjectRoot` and
 a one-line `Message`. `CompiledAssemblies` names the assemblies this run handed to the compiler and
 `ReusedAssemblies` the ones it reported on without compiling; the diagnostics of both are in
-`Errors` and `Warnings` alike. `SkippedAssemblies` counts both the assemblies nothing changed for
+`Errors` and `Warnings` alike. `BlockedAssemblies` names the assemblies the run stopped short of
+because one they reference has errors — they are not counted in `SkippedAssemblies`, which counts
+the assemblies the check read and found nothing left to say about: the ones nothing changed for,
 and the ones left out because every assembly they reference kept the same public surface. The process exits 1 when
 `ErrorCount` is greater than zero.
 
