@@ -34,7 +34,8 @@ whatever body is live at that moment, exactly as a hand-issued `enable-pause-poi
 ## Reading the result
 
 `uloop pause-point-status` with no target returns `DomainReloadRearmReport`, one line per
-persisted pause point, present only when the last reload re-armed something. A successful line
+persisted pause point, present whenever the last reload processed persisted pause points, including
+failed re-arms. A successful line
 names the pause point and, for a source pause point, the resolved line and its text. A failure
 line starts with `Could not re-arm pause point` and carries the error code and message; it is
 also written to the Console as a warning, so `uloop get-logs` finds it.
