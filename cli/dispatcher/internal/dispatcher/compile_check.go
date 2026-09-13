@@ -53,7 +53,11 @@ type compileCheckResponse struct {
 	// ReusedAssemblies names the assemblies this run reported without compiling, because every
 	// input that decides their diagnostics was still exactly as the previous run read it. They are
 	// kept apart from CompiledAssemblies so that field keeps meaning "this run ran csc for it".
-	ReusedAssemblies  []string `json:"ReusedAssemblies"`
+	ReusedAssemblies []string `json:"ReusedAssemblies"`
+	// BlockedAssemblies names the assemblies this run did not compile because one they reference
+	// has errors, which is where Unity's own build stops as well. Fixing those errors and running
+	// again is what carries the check on past them.
+	BlockedAssemblies []string `json:"BlockedAssemblies"`
 	SkippedAssemblies int      `json:"SkippedAssemblies"`
 	ResponseFileSet   string   `json:"ResponseFileSet"`
 	ProjectRoot       string   `json:"ProjectRoot"`
@@ -172,9 +176,12 @@ func buildCompileCheckResponse(result compilecheck.Result, projectRoot string) c
 		Warnings:           make([]compileCheckIssue, 0),
 		CompiledAssemblies: make([]string, 0, len(result.Units)),
 		ReusedAssemblies:   make([]string, 0, len(result.Units)),
-		SkippedAssemblies:  result.Skipped,
-		ResponseFileSet:    filepath.Base(result.DagDir),
-		ProjectRoot:        projectRoot,
+		// Why the names are copied rather than taken as they are: a run that blocked nothing must
+		// still serialize as an empty list, and the result of such a run carries no list at all.
+		BlockedAssemblies: append(make([]string, 0, len(result.Blocked)), result.Blocked...),
+		SkippedAssemblies: result.Skipped,
+		ResponseFileSet:   filepath.Base(result.DagDir),
+		ProjectRoot:       projectRoot,
 	}
 
 	for _, unit := range result.Units {
@@ -224,9 +231,23 @@ func newCompileCheckIssue(assembly string, diagnostic compilecheck.Diagnostic) c
 }
 
 // compileCheckMessage states what the run did in one line.
+// Why the blocked assemblies are added rather than folded in: without them a run that reports one
+// error and hundreds of assemblies it never got to reads as a run that lost them.
+func compileCheckMessage(response compileCheckResponse) string {
+	message := compileCheckRunSummary(response)
+	if len(response.BlockedAssemblies) == 0 {
+		return message
+	}
+
+	return message + fmt.Sprintf(
+		" %d assemblies were not compiled because an assembly they reference has errors.",
+		len(response.BlockedAssemblies))
+}
+
+// compileCheckRunSummary states what the run compiled and reused.
 // Why three forms rather than always naming both counts: a run that reused nothing reads exactly
 // as it did before reuse existed, and a run that compiled nothing should not open by saying so.
-func compileCheckMessage(response compileCheckResponse) string {
+func compileCheckRunSummary(response compileCheckResponse) string {
 	compiled := len(response.CompiledAssemblies)
 	reused := len(response.ReusedAssemblies)
 	switch {

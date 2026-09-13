@@ -324,3 +324,54 @@ func TestBuildCompileCheckResponseKeepsTheNoChangeSummary(t *testing.T) {
 		t.Fatal("ReusedAssemblies should be an empty list rather than null in the JSON")
 	}
 }
+
+// Verifies that the assemblies a run left out because one they reference has errors are named on
+// their own, rather than counted with the assemblies nothing had changed in.
+func TestBuildCompileCheckResponseNamesBlockedAssembliesApart(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir:  "Library/Bee/artifacts/1234.dag",
+		Units:   []compilecheck.UnitResult{{Assembly: "A"}},
+		Skipped: 2,
+		Blocked: []string{"B", "C"},
+	}, "/projects/sample")
+
+	if strings.Join(response.BlockedAssemblies, ",") != "B,C" {
+		t.Fatalf("expected the blocked assemblies, got %v", response.BlockedAssemblies)
+	}
+	if response.SkippedAssemblies != 2 {
+		t.Fatalf("a blocked assembly must not be counted as skipped, got %d",
+			response.SkippedAssemblies)
+	}
+}
+
+// Verifies that a run which blocked nothing reports an empty list rather than null, so a reader
+// never has to tell the two apart.
+func TestBuildCompileCheckResponseReportsNoBlockedAssembliesAsAnEmptyList(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units:  []compilecheck.UnitResult{{Assembly: "A", Succeeded: true}},
+	}, "/projects/sample")
+
+	if response.BlockedAssemblies == nil {
+		t.Fatal("BlockedAssemblies should be an empty list rather than null in the JSON")
+	}
+}
+
+// Verifies that the summary says why assemblies went uncompiled, so a run reporting one error and
+// hundreds of missing assemblies does not read as a run that lost them.
+func TestBuildCompileCheckResponseSaysWhyBlockedAssembliesWereNotCompiled(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units: []compilecheck.UnitResult{{
+			Assembly:    "A",
+			Diagnostics: []compilecheck.Diagnostic{{Severity: "error", Code: "CS0103", Message: "does not exist"}},
+		}},
+		Blocked: []string{"B", "C"},
+	}, "/projects/sample")
+
+	want := "Compiled 1 assemblies with 1 errors and 0 warnings." +
+		" 2 assemblies were not compiled because an assembly they reference has errors."
+	if response.Message != want {
+		t.Fatalf("unexpected summary, got %q", response.Message)
+	}
+}

@@ -60,6 +60,7 @@ A JSON payload:
 - `Errors`, `Warnings`: each with `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`
 - `CompiledAssemblies`: the assemblies this run compiled, in dependency order
 - `ReusedAssemblies`: the assemblies reported from the previous run's recorded result, without compiling
+- `BlockedAssemblies`: the assemblies not compiled because an assembly they reference has errors, as Unity's own build would stop there; fix those errors and run again
 - `SkippedAssemblies`: how many assemblies were left out: nothing they compile from changed, or every assembly they reference kept the same public surface
 - `ResponseFileSet`: the Bee build the run replayed
 - `ProjectRoot`: resolved project root
