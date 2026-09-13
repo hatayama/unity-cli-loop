@@ -16,6 +16,10 @@ const (
 	// changeReasonUnityBuildFailed is why an assembly is compiled although its artifact is newer
 	// than everything it compiles from: that artifact is not what its current sources produce.
 	changeReasonUnityBuildFailed = "last Unity build failed"
+	// changeReasonUnityArtifactMissing is why an assembly with no artifact at all is compiled rather
+	// than refused: Unity 6's Bee deletes the assembly it failed to compile, and an assembly its
+	// upstream failure kept from ever being compiled never had one.
+	changeReasonUnityArtifactMissing = "no artifact from the last Unity build"
 
 	runCompileFirstAdvice = "run `uloop compile` first"
 )
@@ -34,14 +38,14 @@ func DetectStructuralChange(
 	projectRoot string, rsp ResponseFile, asmdef *AssemblyDefinition, dagDir string,
 	context AssemblyContext,
 ) error {
-	baseline, err := lastBuildTime(projectRoot, rsp, dagDir)
+	baseline, artifactExists, err := unityArtifactTime(projectRoot, rsp, dagDir)
 	if err != nil {
 		return err
 	}
 
 	if asmdef != nil {
 		if changeErr := detectAssemblyDefinitionChange(
-			*asmdef, rsp, dagDir, baseline, context); changeErr != nil {
+			*asmdef, rsp, dagDir, baseline, artifactExists, context); changeErr != nil {
 			return changeErr
 		}
 	}
@@ -55,18 +59,15 @@ func DetectStructuralChange(
 
 // detectAssemblyDefinitionChange compares an assembly definition against the response file once its
 // timestamp says it may have moved.
-// Why the timestamp is only a trigger: switching branches rewrites every .asmdef file without
-// changing its content, and Unity's incremental build hashes content, so it rebuilds nothing and
-// the timestamp alone would refuse the project forever.
 func detectAssemblyDefinitionChange(
 	asmdef AssemblyDefinition, rsp ResponseFile, dagDir string,
-	baseline time.Time, context AssemblyContext,
+	baseline time.Time, artifactExists bool, context AssemblyContext,
 ) error {
-	asmdefTime, err := modificationTime(asmdef.Path)
+	compare, err := contractComparisonNeeded(asmdef, baseline, artifactExists)
 	if err != nil {
 		return err
 	}
-	if !asmdefTime.After(baseline) {
+	if !compare {
 		return nil
 	}
 
@@ -81,13 +82,42 @@ func detectAssemblyDefinitionChange(
 	return nil
 }
 
+// contractComparisonNeeded reports whether the assembly definition has to be read and compared
+// against the response file.
+// Why the timestamp is only a trigger: switching branches rewrites every .asmdef file without
+// changing its content, and Unity's incremental build hashes content, so it rebuilds nothing and
+// the timestamp alone would refuse the project forever.
+// Why a missing artifact always compares: the trigger needs a baseline to be newer than, and with
+// none left the comparison is the only thing that can still refuse a configuration the response
+// file no longer describes.
+func contractComparisonNeeded(
+	asmdef AssemblyDefinition, baseline time.Time, artifactExists bool,
+) (bool, error) {
+	if !artifactExists {
+		return true, nil
+	}
+
+	asmdefTime, err := modificationTime(asmdef.Path)
+	if err != nil {
+		return false, err
+	}
+
+	return asmdefTime.After(baseline), nil
+}
+
 // DetectSourceChange reports whether the assembly's sources changed since Unity last built it.
 func DetectSourceChange(
 	projectRoot string, rsp ResponseFile, sources []string, dagDir string,
 ) (ChangeReport, error) {
-	baseline, err := lastBuildTime(projectRoot, rsp, dagDir)
+	baseline, artifactExists, err := unityArtifactTime(projectRoot, rsp, dagDir)
 	if err != nil {
 		return ChangeReport{}, err
+	}
+	// Why a missing artifact ends the check here: the source set and the timestamps are compared
+	// against what the last build produced, and there is nothing left to compare them against. The
+	// assembly has to be compiled whatever they would have said.
+	if !artifactExists {
+		return ChangeReport{Changed: true, Reason: changeReasonUnityArtifactMissing}, nil
 	}
 
 	if report, changed := compareSourceSets(rsp.Sources, sources); changed {
@@ -132,16 +162,25 @@ func compareSourceSets(recorded []string, current []string) (ChangeReport, bool)
 	return ChangeReport{}, false
 }
 
-// lastBuildTime reads when Unity last wrote this assembly, the baseline every check compares against.
-func lastBuildTime(projectRoot string, rsp ResponseFile, dagDir string) (time.Time, error) {
+// unityArtifactTime reads when Unity last wrote this assembly, the baseline every check compares
+// against, and reports whether that artifact is there at all.
+// Why a missing artifact is not refused here: Unity 6's Bee deletes the assembly whose compiler
+// step failed, and an assembly an upstream failure kept from ever being compiled never had one.
+// Bee writes the response file before the compiler runs, so what this check compiles from survives
+// either case. A dag holding no assembly at all is still refused, in DetectAssemblySetChange.
+func unityArtifactTime(
+	projectRoot string, rsp ResponseFile, dagDir string,
+) (time.Time, bool, error) {
 	assemblyPath := filepath.Join(projectRoot, dagDir, rsp.AssemblyName+assemblyExtension)
 	info, err := os.Stat(assemblyPath)
+	if os.IsNotExist(err) {
+		return time.Time{}, false, nil
+	}
 	if err != nil {
-		return time.Time{}, unityBuildRequired(
-			"the Unity Editor has never built %s", rsp.AssemblyName)
+		return time.Time{}, false, fmt.Errorf("failed to inspect %s: %w", assemblyPath, err)
 	}
 
-	return info.ModTime(), nil
+	return info.ModTime(), true, nil
 }
 
 // modificationTime reads one file's modification time.

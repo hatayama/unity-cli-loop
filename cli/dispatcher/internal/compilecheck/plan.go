@@ -219,7 +219,13 @@ func selectChangedAssemblies(
 		if !report.Changed && failedLastBuild[name] {
 			report = ChangeReport{Changed: true, Reason: changeReasonUnityBuildFailed}
 		}
-		if all || report.Changed {
+		// Why an --all run records no reason: it compiles the assembly whatever this run found, so
+		// what the report says about it explains nothing about why it is in the plan.
+		if all {
+			reasons[name] = ""
+			continue
+		}
+		if report.Changed {
 			reasons[name] = report.Reason
 		}
 	}

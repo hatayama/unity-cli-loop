@@ -18,6 +18,15 @@ func setModificationTime(t *testing.T, path string, when time.Time) {
 	}
 }
 
+// removeUnityArtifact deletes the assembly Unity built, the way Unity 6's Bee does when the
+// compiler step for that assembly fails.
+func removeUnityArtifact(t *testing.T, projectRoot string) {
+	t.Helper()
+	if err := os.Remove(filepath.Join(projectRoot, stalenessDagDirectory, "Foo.dll")); err != nil {
+		t.Fatalf("failed to remove the assembly: %v", err)
+	}
+}
+
 // newStalenessProject builds a project whose assembly was built after its single source was written.
 func newStalenessProject(t *testing.T) (string, ResponseFile, AssemblyDefinition) {
 	t.Helper()
@@ -104,6 +113,21 @@ func TestDetectSourceChangeReportsRemovedSource(t *testing.T) {
 	}
 }
 
+// Verifies an assembly whose artifact the last Unity build did not leave behind is reported as
+// changed whatever its sources' timestamps say.
+func TestDetectSourceChangeReportsAMissingUnityArtifact(t *testing.T) {
+	projectRoot, rsp, _ := newStalenessProject(t)
+	removeUnityArtifact(t, projectRoot)
+
+	report, err := DetectSourceChange(projectRoot, rsp, rsp.Sources, stalenessDagDirectory)
+	if err != nil {
+		t.Fatalf("expected the check to succeed, got error: %v", err)
+	}
+	if !report.Changed || report.Reason != changeReasonUnityArtifactMissing {
+		t.Errorf("report = %+v, want a change with reason %q", report, changeReasonUnityArtifactMissing)
+	}
+}
+
 // Verifies an assembly definition that stopped building for the Editor after the last build stops
 // the run instead of compiling, and says how to recover.
 func TestDetectStructuralChangeRejectsEditedAssemblyDefinition(t *testing.T) {
@@ -133,16 +157,34 @@ func TestDetectStructuralChangeRejectsIncompleteBeeArtifacts(t *testing.T) {
 	}
 }
 
-// Verifies an assembly Unity has never built is rejected, since there is no baseline to compare to.
-func TestDetectStructuralChangeRejectsNeverBuiltAssembly(t *testing.T) {
+// Verifies an assembly the last Unity build left without an artifact passes the structural check
+// instead of stopping the run, so it can be compiled from the response file that is still there.
+func TestDetectStructuralChangeAcceptsAnAssemblyWithoutAnArtifact(t *testing.T) {
 	projectRoot, rsp, asmdef := newStalenessProject(t)
-	if err := os.Remove(filepath.Join(projectRoot, stalenessDagDirectory, "Foo.dll")); err != nil {
-		t.Fatalf("failed to remove the assembly: %v", err)
-	}
+	removeUnityArtifact(t, projectRoot)
 
 	if err := DetectStructuralChange(
-		projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{}); err == nil {
-		t.Fatal("expected a never-built assembly to be rejected")
+		projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{}); err != nil {
+		t.Fatalf("expected an assembly without an artifact to pass, got error: %v", err)
+	}
+}
+
+// Verifies an assembly definition that disagrees with the response file is still rejected when the
+// artifact whose timestamp normally triggers the comparison is gone.
+func TestDetectStructuralChangeRejectsAnEditedAssemblyDefinitionWithoutAnArtifact(t *testing.T) {
+	projectRoot, rsp, asmdef := newStalenessProject(t)
+	writeFileAt(t, asmdef.Path, `{"name":"Foo","includePlatforms":["iOS"]}`)
+	// Why the assembly definition is dated before everything else: without an artifact there is no
+	// baseline its timestamp could be newer than, so only an unconditional comparison catches it.
+	setModificationTime(t, asmdef.Path, time.Now().Add(-time.Hour))
+	removeUnityArtifact(t, projectRoot)
+
+	err := DetectStructuralChange(projectRoot, rsp, &asmdef, stalenessDagDirectory, AssemblyContext{})
+	if err == nil {
+		t.Fatal("expected an edited assembly definition to be rejected without an artifact")
+	}
+	if !strings.Contains(err.Error(), "uloop compile") {
+		t.Errorf("the error should tell the user how to recover, got: %v", err)
 	}
 }
 
