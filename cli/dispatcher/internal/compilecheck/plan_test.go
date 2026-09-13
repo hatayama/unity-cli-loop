@@ -109,6 +109,20 @@ func unitNames(plan BuildPlan) []string {
 	return names
 }
 
+// assertEveryAllRunReasonIsEmpty checks the reason CompileUnit documents as empty for an --all run.
+func assertEveryAllRunReasonIsEmpty(t *testing.T, plan BuildPlan) {
+	t.Helper()
+	if len(plan.Units) == 0 {
+		t.Fatal("expected an --all run to select every assembly")
+	}
+	for _, unit := range plan.Units {
+		if unit.Reason != "" {
+			t.Errorf("%s reason = %q, want an --all run to record none",
+				unit.Assembly.AssemblyName, unit.Reason)
+		}
+	}
+}
+
 // Verifies a change in a referenced assembly pulls its dependents in, in dependency order.
 func TestBuildCompilePlanPropagatesToDependentsInDependencyOrder(t *testing.T) {
 	projectRoot := newPlanProject(t)
@@ -469,4 +483,32 @@ func TestBuildCompilePlanRejectsADagWithoutAnyAssembly(t *testing.T) {
 	if !errors.As(err, &required) {
 		t.Errorf("error = %v, want it to ask for a Unity build", err)
 	}
+}
+
+// Verifies an --all run records no reason for an assembly whose source was edited, since it would
+// have compiled that assembly whether or not anything moved.
+func TestBuildCompilePlanKeepsTheAllRunReasonEmptyForAnEditedSource(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	touchSource(t, projectRoot, "A")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertEveryAllRunReasonIsEmpty(t, plan)
+}
+
+// Verifies an --all run records no reason for an assembly the last Unity build left without an
+// artifact either.
+func TestBuildCompilePlanKeepsTheAllRunReasonEmptyForAMissingArtifact(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	removePlanArtifact(t, projectRoot, "A")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertEveryAllRunReasonIsEmpty(t, plan)
 }
