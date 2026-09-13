@@ -255,7 +255,7 @@ func startUnityAndWaitForReadiness(
 		return 1
 	}
 	if cleanupResult.lockfileRemoved {
-		writeStaleUnityTempCleanupMessage(stdout, projectRoot)
+		writeStaleUnityTempCleanupMessage(stdout, projectRoot, cleanupResult.leftoverError == nil)
 	}
 	if cleanupResult.leftoverError != nil {
 		writeStaleUnityTempLeftoverWarning(stderr, cleanupResult.leftoverError)
@@ -332,10 +332,12 @@ func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {
 // A stale lockfile only proves no Unity process is currently running for this project;
 // it cannot distinguish a crash from a normal shutdown that left cleanup incomplete, so
 // the message must not assert a crash happened.
-func writeStaleUnityTempCleanupMessage(stdout io.Writer, projectRoot string) {
+func writeStaleUnityTempCleanupMessage(stdout io.Writer, projectRoot string, tempDirectoryFullyDeleted bool) {
 	clicore.WriteFormat(stdout, "Stale UnityLockfile found (no active Unity process): %s\n", unityLockfilePath(projectRoot))
 	clicore.WriteLine(stdout, "Cleaning Temp directory and continuing launch.")
-	clicore.WriteLine(stdout, "Deleted Temp directory.")
+	if tempDirectoryFullyDeleted {
+		clicore.WriteLine(stdout, "Deleted Temp directory.")
+	}
 	clicore.WriteLine(stdout, "Deleted UnityLockfile.")
 	clicore.WriteLine(stdout, "")
 }

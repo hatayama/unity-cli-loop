@@ -1342,6 +1342,9 @@ func TestRunLaunchRestartContinuesWhenLeftoverTempFilesStayLocked(t *testing.T) 
 	if !strings.Contains(stdout.String(), "Stale UnityLockfile found (no active Unity process)") {
 		t.Fatalf("stdout should keep the existing cleanup message: %s", stdout.String())
 	}
+	if strings.Contains(stdout.String(), "Deleted Temp directory.") {
+		t.Fatalf("stdout must not claim a full Temp deletion while files were left behind: %s", stdout.String())
+	}
 }
 
 // newRestartLaunchTestDeps returns launch dependencies where every step of a restart succeeds,
@@ -1405,7 +1408,7 @@ func TestWriteStaleUnityTempCleanupMessageDoesNotAssertCrash(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 
-	writeStaleUnityTempCleanupMessage(&stdout, projectRoot)
+	writeStaleUnityTempCleanupMessage(&stdout, projectRoot, true)
 
 	output := stdout.String()
 	if strings.Contains(output, "crash") {
