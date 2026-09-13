@@ -223,3 +223,104 @@ func TestBuildCompileCheckResponseCountsWarningsOnASuccessfulRun(t *testing.T) {
 		t.Fatalf("the summary should report the warning count, got %q", response.Message)
 	}
 }
+
+// Verifies that a unit this run replayed is named as reused rather than compiled, so the two
+// counts in the summary keep their separate meanings.
+func TestBuildCompileCheckResponseNamesReusedAssembliesApart(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units: []compilecheck.UnitResult{
+			{Assembly: "A", Succeeded: true},
+			{Assembly: "B", Succeeded: true, Reused: true},
+		},
+	}, "/projects/sample")
+
+	if strings.Join(response.CompiledAssemblies, ",") != "A" {
+		t.Fatalf("expected only the compiled assembly, got %v", response.CompiledAssemblies)
+	}
+	if strings.Join(response.ReusedAssemblies, ",") != "B" {
+		t.Fatalf("expected only the reused assembly, got %v", response.ReusedAssemblies)
+	}
+}
+
+// Verifies that the diagnostics of a reused unit are reported exactly like a compiled one's, since
+// replaying a result must not turn a broken assembly into a clean one.
+func TestBuildCompileCheckResponseReportsTheDiagnosticsOfAReusedUnit(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units: []compilecheck.UnitResult{{
+			Assembly: "A",
+			Reused:   true,
+			Diagnostics: []compilecheck.Diagnostic{
+				{Severity: "error", Code: "CS0103", Message: "does not exist", File: "Assets/A.cs", Line: 2, Column: 5},
+			},
+		}},
+	}, "/projects/sample")
+
+	if response.Success || response.ErrorCount != 1 {
+		t.Fatalf("expected the replayed error to fail the run, got %+v", response)
+	}
+	if response.Errors[0].Assembly != "A" || response.Errors[0].Code != "CS0103" {
+		t.Fatalf("unexpected replayed error: %+v", response.Errors[0])
+	}
+	if len(response.CompiledAssemblies) != 0 {
+		t.Fatalf("a reused unit must not be listed as compiled, got %v", response.CompiledAssemblies)
+	}
+}
+
+// Verifies that a run which both compiled and reused assemblies reports both counts.
+func TestBuildCompileCheckResponseSummarizesCompiledAndReusedTogether(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units: []compilecheck.UnitResult{
+			{Assembly: "A", Succeeded: true},
+			{Assembly: "B", Succeeded: true, Reused: true},
+			{Assembly: "C", Succeeded: true, Reused: true},
+		},
+	}, "/projects/sample")
+
+	if response.Message != "Compiled 1 assemblies and reused 2 with 0 errors and 0 warnings." {
+		t.Fatalf("unexpected summary, got %q", response.Message)
+	}
+}
+
+// Verifies that a run which reused everything says so rather than claiming it compiled nothing.
+func TestBuildCompileCheckResponseSummarizesARunThatOnlyReused(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units: []compilecheck.UnitResult{
+			{Assembly: "A", Succeeded: true, Reused: true},
+			{Assembly: "B", Succeeded: true, Reused: true},
+		},
+	}, "/projects/sample")
+
+	if response.Message != "Reused 2 assemblies with 0 errors and 0 warnings." {
+		t.Fatalf("unexpected summary, got %q", response.Message)
+	}
+}
+
+// Verifies that a run which reused nothing keeps the summary it had before reuse existed.
+func TestBuildCompileCheckResponseKeepsTheCompiledOnlySummary(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag",
+		Units:  []compilecheck.UnitResult{{Assembly: "A", Succeeded: true}},
+	}, "/projects/sample")
+
+	if response.Message != "Compiled 1 assemblies with 0 errors and 0 warnings." {
+		t.Fatalf("unexpected summary, got %q", response.Message)
+	}
+}
+
+// Verifies that a run with neither a compile nor a reuse still reports the unchanged project.
+func TestBuildCompileCheckResponseKeepsTheNoChangeSummary(t *testing.T) {
+	response := buildCompileCheckResponse(compilecheck.Result{
+		DagDir: "Library/Bee/artifacts/1234.dag", Skipped: 7,
+	}, "/projects/sample")
+
+	if response.Message != compileCheckNoChangeMessage {
+		t.Fatalf("expected the no-change message, got %q", response.Message)
+	}
+	if response.ReusedAssemblies == nil {
+		t.Fatal("ReusedAssemblies should be an empty list rather than null in the JSON")
+	}
+}

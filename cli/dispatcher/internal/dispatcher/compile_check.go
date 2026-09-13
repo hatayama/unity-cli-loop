@@ -50,10 +50,14 @@ type compileCheckResponse struct {
 	Errors             []compileCheckIssue `json:"Errors"`
 	Warnings           []compileCheckIssue `json:"Warnings"`
 	CompiledAssemblies []string            `json:"CompiledAssemblies"`
-	SkippedAssemblies  int                 `json:"SkippedAssemblies"`
-	ResponseFileSet    string              `json:"ResponseFileSet"`
-	ProjectRoot        string              `json:"ProjectRoot"`
-	Message            string              `json:"Message"`
+	// ReusedAssemblies names the assemblies this run reported without compiling, because every
+	// input that decides their diagnostics was still exactly as the previous run read it. They are
+	// kept apart from CompiledAssemblies so that field keeps meaning "this run ran csc for it".
+	ReusedAssemblies  []string `json:"ReusedAssemblies"`
+	SkippedAssemblies int      `json:"SkippedAssemblies"`
+	ResponseFileSet   string   `json:"ResponseFileSet"`
+	ProjectRoot       string   `json:"ProjectRoot"`
+	Message           string   `json:"Message"`
 }
 
 // tryHandleCompileCheckRequest answers `uloop compile-check` inside the dispatcher process, because
@@ -167,13 +171,21 @@ func buildCompileCheckResponse(result compilecheck.Result, projectRoot string) c
 		Errors:             make([]compileCheckIssue, 0),
 		Warnings:           make([]compileCheckIssue, 0),
 		CompiledAssemblies: make([]string, 0, len(result.Units)),
+		ReusedAssemblies:   make([]string, 0, len(result.Units)),
 		SkippedAssemblies:  result.Skipped,
 		ResponseFileSet:    filepath.Base(result.DagDir),
 		ProjectRoot:        projectRoot,
 	}
 
 	for _, unit := range result.Units {
-		response.CompiledAssemblies = append(response.CompiledAssemblies, unit.Assembly)
+		if unit.Reused {
+			response.ReusedAssemblies = append(response.ReusedAssemblies, unit.Assembly)
+		} else {
+			response.CompiledAssemblies = append(response.CompiledAssemblies, unit.Assembly)
+		}
+		// Why a reused unit's diagnostics go in with the rest: the run reports what the assembly
+		// is, not how the answer was arrived at, and dropping them would turn a broken assembly
+		// into a clean one for every run after the one that compiled it.
 		for _, diagnostic := range unit.Diagnostics {
 			issue := newCompileCheckIssue(unit.Assembly, diagnostic)
 			if diagnostic.Severity == "error" {
@@ -212,13 +224,24 @@ func newCompileCheckIssue(assembly string, diagnostic compilecheck.Diagnostic) c
 }
 
 // compileCheckMessage states what the run did in one line.
+// Why three forms rather than always naming both counts: a run that reused nothing reads exactly
+// as it did before reuse existed, and a run that compiled nothing should not open by saying so.
 func compileCheckMessage(response compileCheckResponse) string {
-	count := len(response.CompiledAssemblies)
-	if count == 0 {
+	compiled := len(response.CompiledAssemblies)
+	reused := len(response.ReusedAssemblies)
+	switch {
+	case compiled == 0 && reused == 0:
 		return compileCheckNoChangeMessage
+	case reused == 0:
+		return fmt.Sprintf("Compiled %d assemblies with %d errors and %d warnings.",
+			compiled, response.ErrorCount, response.WarningCount)
+	case compiled == 0:
+		return fmt.Sprintf("Reused %d assemblies with %d errors and %d warnings.",
+			reused, response.ErrorCount, response.WarningCount)
 	}
-	return fmt.Sprintf("Compiled %d assemblies with %d errors and %d warnings.",
-		count, response.ErrorCount, response.WarningCount)
+
+	return fmt.Sprintf("Compiled %d assemblies and reused %d with %d errors and %d warnings.",
+		compiled, reused, response.ErrorCount, response.WarningCount)
 }
 
 // printCompileCheckHelp documents the command and the build it replays.
