@@ -66,6 +66,28 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    cores busy on its own. `--jobs 1` compiles the assemblies one after another.
    The reported order does not depend on the job count: results are collected in dependency order
    whatever finishes first.
+6. **Reuse the previous run's answer where nothing moved.** Before starting the compiler for an
+   assembly, the run digests the closure of inputs that decide what the compiler would say about it:
+   the compiler and its host, the response files Bee wrote for it, its sources, its references, its
+   analyzers, and the files those analyzers read. If that digest matches the one the previous
+   `compile-check` recorded next to its outputs in `<Assembly>.result.json`, and the outputs of that
+   compile are still on disk exactly as it wrote them, the run reports the recorded diagnostics and
+   outcome without starting `csc` at all. Nothing is assumed to have succeeded: an assembly that
+   reported errors reports them again until one of its inputs moves. Because the outputs stay in
+   place, the assemblies below it resolve the same reference assembly and are reused in turn, which
+   is what makes editing a single method body cost one compile rather than one per dependent.
+   References this check produces are compared by content and everything else by timestamp, so a
+   reference assembly rewritten with identical bytes still counts as unmoved. A response file naming
+   a file the digest does not follow — `keyfile`, `resource`, `link`, `addmodule` — gets no digest,
+   and such an assembly always compiles. `--all` looks nothing up, though it still records what it
+   compiled. What `--all` records is keyed slightly differently, and the difference is visible:
+   every assembly is in its plan, so every reference to an assembly Bee builds resolves to this
+   check's own output, while an ordinary run resolves the references of an assembly it does not
+   compile to Unity's artifacts instead. The first ordinary run after an `--all` may therefore
+   compile such an assembly once more before it starts reusing it. This is a separate mechanism from the dependent skip in step 3: that one compares this
+   run's reference assembly against Unity's artifact to decide whether a *dependent* needs compiling
+   at all, while this one compares an assembly's own inputs against what the previous `compile-check`
+   read.
 
 Files and directories Unity ignores — any name starting with a dot or ending with a tilde, which
 covers the `._*` AppleDouble siblings macOS writes on non-native volumes — are skipped everywhere
@@ -86,9 +108,11 @@ CPUs and never less than one, and `--jobs 1` compiles them one after another.
 
 The command prints a JSON payload with `Success`, `ErrorCount`, `WarningCount`, `Errors`,
 `Warnings` (each diagnostic carrying `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`),
-`CompiledAssemblies`, `SkippedAssemblies`, `ResponseFileSet`, `ProjectRoot` and a one-line
-`Message`. `SkippedAssemblies` counts both the assemblies nothing changed for and the ones left
-out because every assembly they reference kept the same public surface. The process exits 1 when
+`CompiledAssemblies`, `ReusedAssemblies`, `SkippedAssemblies`, `ResponseFileSet`, `ProjectRoot` and
+a one-line `Message`. `CompiledAssemblies` names the assemblies this run handed to the compiler and
+`ReusedAssemblies` the ones it reported on without compiling; the diagnostics of both are in
+`Errors` and `Warnings` alike. `SkippedAssemblies` counts both the assemblies nothing changed for
+and the ones left out because every assembly they reference kept the same public surface. The process exits 1 when
 `ErrorCount` is greater than zero.
 
 ## Limitations
@@ -119,6 +143,10 @@ out because every assembly they reference kept the same public surface. The proc
   attaches come only from the last build's response file, because the glob stops at the folder's
   assembly boundary, so a file added there waits for Unity to import it just as the predefined
   assemblies do.
+- **An `.editorconfig` or global analyzer config that is not named by a response file does not
+  invalidate a reused result**, because it is not part of the input digest — the same exposure the
+  dependent skip in step 3 already has. One handed to the compiler as `/analyzerconfig:` is read by
+  content and does invalidate it. `--all` compiles everything again.
 - **Linux is not supported.** macOS and Windows only.
 
 ## Troubleshooting

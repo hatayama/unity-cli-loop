@@ -73,15 +73,19 @@ func manifestPath(outputDirectoryPath string, unit CompileUnit) string {
 	return filepath.Join(outputDirectoryPath, unit.Assembly.AssemblyName+resultManifestExtension)
 }
 
-// writeUnitResultManifest records what a compile ran on and what it reported.
+// writeUnitResultManifest records what a compile ran on and what it reported, and records nothing
+// when that compile claimed success without producing the outputs it was told to produce.
 // Why it is written through a temporary file: a run interrupted while writing would otherwise leave
 // half a manifest behind, and the next run would read it as a description of outputs it never saw.
 func writeUnitResultManifest(
 	outputDirectoryPath string, unit CompileUnit, key string, result UnitResult,
 ) error {
-	outputs, err := hashUnitOutputs(outputDirectoryPath, unit)
+	outputs, complete, err := hashUnitOutputs(outputDirectoryPath, unit, result.Succeeded)
 	if err != nil {
 		return err
+	}
+	if !complete {
+		return nil
 	}
 
 	content, err := json.Marshal(unitResultManifest{
@@ -154,9 +158,14 @@ func outputsStillMatch(outputDirectoryPath string, outputs map[string]string) bo
 	return true
 }
 
-// hashUnitOutputs hashes the files a compile of this unit wrote, leaving out the ones it did not
-// write: a compile that failed writes neither the assembly nor its reference assembly.
-func hashUnitOutputs(outputDirectoryPath string, unit CompileUnit) (map[string]string, error) {
+// hashUnitOutputs hashes the files a compile of this unit wrote.
+// Why a missing output is tolerated only for a failed compile: that is the compile which writes
+// neither the assembly nor its reference assembly. A successful compile that left one of them out
+// is not a compile whose result describes anything - recording it would replay a success backed by
+// files no run ever produced, and the outputs check would pass because it has nothing to check.
+func hashUnitOutputs(
+	outputDirectoryPath string, unit CompileUnit, succeeded bool,
+) (map[string]string, bool, error) {
 	outputs := map[string]string{}
 	for _, outputPath := range []string{unit.Assembly.OutputPath, unit.Assembly.RefOutputPath} {
 		if outputPath == "" {
@@ -165,15 +174,19 @@ func hashUnitOutputs(outputDirectoryPath string, unit CompileUnit) (map[string]s
 		name := filepath.Base(outputPath)
 		hashed, err := hashFile(filepath.Join(outputDirectoryPath, name))
 		if os.IsNotExist(err) {
+			if succeeded {
+				return nil, false, nil
+			}
+
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		outputs[name] = hashed
 	}
 
-	return outputs, nil
+	return outputs, true, nil
 }
 
 // hashFile reports what a file holds, as a hash.
