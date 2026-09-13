@@ -440,3 +440,25 @@ func TestCompileUnitsRecordsNothingForAUnitKilledWhileItWasReportingDiagnostics(
 		t.Errorf("the next run should have compiled the unit, got %d runs", recorder.runs["Alpha"])
 	}
 }
+
+// Verifies a compile that reported success without leaving the outputs it was told to produce
+// records nothing: the manifest describes those files, and one that names none of them would
+// replay a success no compile ever backed.
+func TestCompileUnitsRecordsNothingWhenASuccessfulCompileWroteNoOutput(t *testing.T) {
+	project := newCachedSchedulerProject(t, nil, "Alpha")
+	silent := newCachedSchedulerRecorder("Alpha")
+	delete(silent.assemblies, "Alpha")
+	delete(silent.surfaces, "Alpha")
+
+	project.compileOrFail(t, silent)
+
+	if project.hasManifest("Alpha") {
+		t.Fatal("a compile that produced no output must leave no recorded result")
+	}
+
+	recorder := newCachedSchedulerRecorder("Alpha")
+	project.compileOrFail(t, recorder)
+	if recorder.runs["Alpha"] != 1 {
+		t.Errorf("the next run should have compiled the unit, got %d runs", recorder.runs["Alpha"])
+	}
+}
