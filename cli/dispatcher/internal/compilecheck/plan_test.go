@@ -389,3 +389,24 @@ func TestBuildCompilePlanKeepsTheSourceReasonForAFailedAssemblyThatWasEdited(t *
 		t.Errorf("C reason = %q, want %q", plan.Units[0].Reason, changeReasonSourceNewer)
 	}
 }
+
+// Verifies an --all run still says nothing about why it picked an assembly, even one the last Unity
+// build failed to compile: --all selects everything in its own right.
+func TestBuildCompilePlanKeepsTheAllRunReasonEmptyForAFailedAssembly(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	writeBeeLog(t, projectRoot,
+		beeInitLine("aaaa.dag"),
+		beeNodeResultLine("Csc "+planDagDirectory+"/A.dll", planDagDirectory+"/A.dll", "1"))
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertStrings(t, "units", unitNames(plan), []string{"A", "B", "C"})
+	for _, unit := range plan.Units {
+		if unit.Reason != "" {
+			t.Errorf("%s reason = %q, want empty", unit.Assembly.AssemblyName, unit.Reason)
+		}
+	}
+}
