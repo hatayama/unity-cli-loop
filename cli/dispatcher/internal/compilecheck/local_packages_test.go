@@ -30,7 +30,7 @@ func newLocalPackageProject(t *testing.T) (string, string) {
 		joinLines([]string{
 			`-out:"` + planDagDirectory + `/` + localPackageAssemblyName + `.dll"`,
 			`-refout:"` + planDagDirectory + `/` + localPackageAssemblyName + `.ref.dll"`,
-			`"` + sourcePath + `"`,
+			`"` + filepath.ToSlash(sourcePath) + `"`,
 		}))
 	writeFileAt(t, filepath.Join(projectRoot, planDagDirectory, localPackageAssemblyName+".dll"), "")
 

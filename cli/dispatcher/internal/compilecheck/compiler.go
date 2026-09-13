@@ -238,13 +238,14 @@ func writeRewrittenResponseFile(
 	rsp := unit.Assembly
 	lines := []string{
 		compilerLibraryTargetFlag,
-		quoteFlag(outputFlagPrefix, filepath.Join(plan.OutputDir, filepath.Base(rsp.OutputPath))),
+		quoteFlag(outputFlagPrefix,
+			filepath.ToSlash(filepath.Join(plan.OutputDir, filepath.Base(rsp.OutputPath)))),
 	}
 	// Why the guard: an assembly built without a reference assembly has no base name to join, and
 	// joining an empty one would point -refout at the output directory itself.
 	if rsp.RefOutputPath != "" {
-		lines = append(lines, quoteFlag(
-			referenceOutputFlagPref, filepath.Join(plan.OutputDir, filepath.Base(rsp.RefOutputPath))))
+		lines = append(lines, quoteFlag(referenceOutputFlagPref,
+			filepath.ToSlash(filepath.Join(plan.OutputDir, filepath.Base(rsp.RefOutputPath)))))
 	}
 	for _, define := range rsp.Defines {
 		lines = append(lines, defineFlagPrefix+define)
@@ -299,7 +300,7 @@ func rewriteReference(projectRoot string, plan BuildPlan, reference string) stri
 		return reference
 	}
 
-	return rewritten
+	return filepath.ToSlash(rewritten)
 }
 
 // planCompiles reports whether a plan rebuilds a given assembly.

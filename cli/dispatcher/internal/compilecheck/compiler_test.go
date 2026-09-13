@@ -21,15 +21,15 @@ func newCompilerPlan() BuildPlan {
 			{
 				Assembly: ResponseFile{
 					AssemblyName:   "B",
-					OutputPath:     filepath.Join(planDagDirectory, "B.dll"),
-					RefOutputPath:  filepath.Join(planDagDirectory, "B.ref.dll"),
+					OutputPath:     planDagDirectory + "/B.dll",
+					RefOutputPath:  planDagDirectory + "/B.ref.dll",
 					Defines:        []string{"UNITY_EDITOR"},
-					References:     []string{filepath.Join(planDagDirectory, "A.ref.dll"), filepath.Join(planDagDirectory, "Skipped.ref.dll"), filepath.FromSlash("/Editor/UnityEngine.dll")},
-					Analyzers:      []string{filepath.FromSlash("/Editor/Unity.SourceGenerators.dll")},
-					AdditionalFile: filepath.Join(planDagDirectory, "B.UnityAdditionalFile.txt"),
+					References:     []string{planDagDirectory + "/A.ref.dll", planDagDirectory + "/Skipped.ref.dll", "/Editor/UnityEngine.dll"},
+					Analyzers:      []string{"/Editor/Unity.SourceGenerators.dll"},
+					AdditionalFile: planDagDirectory + "/B.UnityAdditionalFile.txt",
 					OtherFlags:     []string{"-target:library", "-langversion:9.0", "/deterministic"},
 				},
-				Sources: []string{filepath.Join("Assets", "B", "New.cs")},
+				Sources: []string{"Assets/B/New.cs"},
 				Reason:  changeReasonSourceNewer,
 			},
 		},
@@ -128,16 +128,16 @@ func TestCompileUnitRewritesTheResponseFile(t *testing.T) {
 
 	outputDir := filepath.Join("Library", "uloop", "compile-check", "aaaa.dag")
 	expected := []string{
-		`-out:"` + filepath.Join(outputDir, "B.dll") + `"`,
-		`-refout:"` + filepath.Join(outputDir, "B.ref.dll") + `"`,
-		`-r:"` + filepath.Join(outputDir, "A.ref.dll") + `"`,
-		`-r:"` + filepath.Join(planDagDirectory, "Skipped.ref.dll") + `"`,
-		`-r:"` + filepath.FromSlash("/Editor/UnityEngine.dll") + `"`,
+		`-out:"` + filepath.ToSlash(filepath.Join(outputDir, "B.dll")) + `"`,
+		`-refout:"` + filepath.ToSlash(filepath.Join(outputDir, "B.ref.dll")) + `"`,
+		`-r:"` + filepath.ToSlash(filepath.Join(outputDir, "A.ref.dll")) + `"`,
+		`-r:"` + planDagDirectory + `/Skipped.ref.dll"`,
+		`-r:"/Editor/UnityEngine.dll"`,
 		`-define:UNITY_EDITOR`,
-		`"` + filepath.Join("Assets", "B", "New.cs") + `"`,
+		`"Assets/B/New.cs"`,
 		`-langversion:9.0`,
 		`/deterministic`,
-		`/additionalfile:"` + filepath.Join(planDagDirectory, "B.UnityAdditionalFile.txt") + `"`,
+		`/additionalfile:"` + planDagDirectory + `/B.UnityAdditionalFile.txt"`,
 	}
 	for _, line := range expected {
 		if !strings.Contains(written, line+"\n") && !strings.HasSuffix(written, line) {
@@ -147,7 +147,7 @@ func TestCompileUnitRewritesTheResponseFile(t *testing.T) {
 	if strings.Count(written, "-target:library") != 1 {
 		t.Errorf("-target:library should appear once, got:\n%s", written)
 	}
-	if strings.Contains(written, filepath.Join(planDagDirectory, "B.dll")) {
+	if strings.Contains(written, planDagDirectory+"/B.dll") {
 		t.Error("the rewritten response file must not write into the Bee artifacts directory")
 	}
 }
@@ -174,7 +174,7 @@ func TestCompileUnitFallsBackWhenTheRebuiltReferenceIsMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read the rewritten response file: %v", err)
 	}
-	if !strings.Contains(string(written), `-r:"`+filepath.Join(planDagDirectory, "A.ref.dll")+`"`) {
+	if !strings.Contains(string(written), `-r:"`+planDagDirectory+`/A.ref.dll"`) {
 		t.Errorf("expected the reference to fall back to the Bee artifact, got:\n%s", written)
 	}
 }
@@ -252,7 +252,7 @@ func TestCompileUnitDropsAStaleReferenceAssemblyOfAFailedUnit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read the rewritten response file: %v", err)
 	}
-	if !strings.Contains(string(written), `-r:"`+filepath.Join(planDagDirectory, "A.ref.dll")+`"`) {
+	if !strings.Contains(string(written), `-r:"`+planDagDirectory+`/A.ref.dll"`) {
 		t.Errorf("expected the reference to fall back to the Bee artifact, got:\n%s", written)
 	}
 }
