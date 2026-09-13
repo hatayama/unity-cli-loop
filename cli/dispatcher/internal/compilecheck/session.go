@@ -68,18 +68,18 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		jobs = DefaultJobs()
 	}
 
-	units, referenceSkips, err := compileUnits(ctx, compiler, plan, jobs)
+	outcome, err := compileUnits(ctx, compiler, plan, jobs)
 	if err != nil {
 		return Result{}, err
 	}
 
 	return Result{
 		DagDir: dagDir,
-		Units:  units,
+		Units:  outcome.Units,
 		// Why the two counts are added: both name an assembly the run did not compile - one because
 		// nothing it compiles from changed, the other because everything it references kept the
 		// public surface the last Unity build recorded.
-		Skipped: plan.Skipped + referenceSkips,
+		Skipped: plan.Skipped + outcome.Skipped,
 	}, nil
 }
 

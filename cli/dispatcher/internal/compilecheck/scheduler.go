@@ -31,6 +31,15 @@ type schedule struct {
 	changedInputs []int
 }
 
+// compileOutcome is everything one run of the scheduler produced: the results it has, and what it
+// left out.
+type compileOutcome struct {
+	Units []UnitResult
+	// Skipped counts the units left out because everything they reference kept the public surface
+	// the last Unity build recorded, so compiling them could only repeat what they already say.
+	Skipped int
+}
+
 // DefaultJobs is how many assemblies compile at once when the caller names no number.
 // Why half the cores: one csc process already uses two to three cores of its own, so filling the
 // machine with one process per core makes them fight for the same cores instead of finishing sooner.
@@ -66,7 +75,7 @@ type schedulerRun struct {
 // output or against nothing at all.
 func compileUnits(
 	ctx context.Context, compiler Compiler, plan BuildPlan, jobs int,
-) ([]UnitResult, int, error) {
+) (compileOutcome, error) {
 	if jobs < 1 {
 		jobs = 1
 	}
@@ -74,7 +83,7 @@ func compileUnits(
 	// time, and every one of them would otherwise race to create the same directory.
 	outputDirectoryPath := filepath.Join(compiler.ProjectRoot, plan.OutputDir)
 	if err := os.MkdirAll(outputDirectoryPath, outputDirPermissions); err != nil {
-		return nil, 0, fmt.Errorf("failed to create %s: %w", outputDirectoryPath, err)
+		return compileOutcome{}, fmt.Errorf("failed to create %s: %w", outputDirectoryPath, err)
 	}
 
 	runContext, cancel := context.WithCancel(ctx)
@@ -109,10 +118,10 @@ func compileUnits(
 	}
 
 	if failure != nil {
-		return nil, 0, failure
+		return compileOutcome{}, failure
 	}
 
-	return run.compiledResults(), run.referenceSkips, nil
+	return compileOutcome{Units: run.compiledResults(), Skipped: run.referenceSkips}, nil
 }
 
 // startReadyUnits launches the units whose references are all done, up to the job limit, skipping

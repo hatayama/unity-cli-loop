@@ -206,7 +206,7 @@ func TestCompileUnitsStartsAUnitOnlyAfterItsReferencesFinished(t *testing.T) {
 		map[string][]string{"B": {"A"}, "C": {"B"}}, "A", "B", "C")
 	recorder := newSchedulerRecorder(10 * time.Millisecond)
 
-	if _, _, err := compileUnits(
+	if _, err := compileUnits(
 		context.Background(), newSchedulerCompiler(t, recorder), plan, 4); err != nil {
 		t.Fatalf("expected the chain to compile, got error: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestCompileUnitsRunsNoMoreThanTheRequestedNumberAtOnce(t *testing.T) {
 	plan := newSchedulerPlan(nil, "A", "B", "C", "D", "E")
 	recorder := newSchedulerRecorder(20 * time.Millisecond)
 
-	if _, _, err := compileUnits(
+	if _, err := compileUnits(
 		context.Background(), newSchedulerCompiler(t, recorder), plan, 2); err != nil {
 		t.Fatalf("expected the independent units to compile, got error: %v", err)
 	}
@@ -245,14 +245,14 @@ func TestCompileUnitsReturnsResultsInPlanOrder(t *testing.T) {
 		"B": 20 * time.Millisecond,
 	}
 
-	results, _, err := compileUnits(
+	outcome, err := compileUnits(
 		context.Background(), newSchedulerCompiler(t, recorder), plan, 3)
 	if err != nil {
 		t.Fatalf("expected the independent units to compile, got error: %v", err)
 	}
 
 	compiled := []string{}
-	for _, result := range results {
+	for _, result := range outcome.Units {
 		compiled = append(compiled, result.Assembly)
 	}
 	assertStrings(t, "results", compiled, []string{"A", "B", "C"})
@@ -264,7 +264,7 @@ func TestCompileUnitsStopsTheRunWhenTheCompilerCannotBeStarted(t *testing.T) {
 	recorder := newSchedulerRecorder(10 * time.Millisecond)
 	recorder.failingUnit = "A"
 
-	_, _, err := compileUnits(context.Background(), newSchedulerCompiler(t, recorder), plan, 1)
+	_, err := compileUnits(context.Background(), newSchedulerCompiler(t, recorder), plan, 1)
 	if err == nil {
 		t.Fatal("expected the failure to start the compiler to be reported")
 	}
@@ -344,14 +344,14 @@ func TestCompileUnitsSkipsADependentWhoseReferenceKeptItsSurface(t *testing.T) {
 		t.Fatalf("failed to write the stale output: %v", err)
 	}
 
-	results, skipped, err := compileUnits(context.Background(), compiler, plan, 2)
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "results", compiledNames(results), []string{"A"})
-	if skipped != 1 {
-		t.Errorf("reference skips = %d, want 1", skipped)
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A"})
+	if outcome.Skipped != 1 {
+		t.Errorf("reference skips = %d, want 1", outcome.Skipped)
 	}
 	if recorder.started["B"] {
 		t.Error("a dependent whose reference kept its surface should not have been compiled")
@@ -370,14 +370,14 @@ func TestCompileUnitsCompilesADependentWhoseReferenceChangedItsSurface(t *testin
 	compiler := newSchedulerCompiler(t, recorder)
 	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
 
-	results, skipped, err := compileUnits(context.Background(), compiler, plan, 2)
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "results", compiledNames(results), []string{"A", "B"})
-	if skipped != 0 {
-		t.Errorf("reference skips = %d, want 0", skipped)
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "B"})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
 	}
 }
 
@@ -391,14 +391,14 @@ func TestCompileUnitsSkipsTheWholeChainBelowAnUnchangedSurface(t *testing.T) {
 	compiler := newSchedulerCompiler(t, recorder)
 	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
 
-	results, skipped, err := compileUnits(context.Background(), compiler, plan, 3)
+	outcome, err := compileUnits(context.Background(), compiler, plan, 3)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "results", compiledNames(results), []string{"A"})
-	if skipped != 2 {
-		t.Errorf("reference skips = %d, want 2", skipped)
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A"})
+	if outcome.Skipped != 2 {
+		t.Errorf("reference skips = %d, want 2", outcome.Skipped)
 	}
 	if recorder.started["C"] {
 		t.Error("a unit below a skipped one should not have been compiled")
@@ -414,14 +414,14 @@ func TestCompileUnitsNeverSkipsAUnitThatWasNotSelectedThroughAReference(t *testi
 	compiler := newSchedulerCompiler(t, recorder)
 	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
 
-	results, skipped, err := compileUnits(context.Background(), compiler, plan, 2)
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "results", compiledNames(results), []string{"A", "B"})
-	if skipped != 0 {
-		t.Errorf("reference skips = %d, want 0", skipped)
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "B"})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
 	}
 }
 
@@ -437,14 +437,14 @@ func TestCompileUnitsCompilesADependentWhenOnlyOneReferenceChanged(t *testing.T)
 	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
 	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "D", "surface")
 
-	results, skipped, err := compileUnits(context.Background(), compiler, plan, 3)
+	outcome, err := compileUnits(context.Background(), compiler, plan, 3)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "results", compiledNames(results), []string{"A", "D", "B"})
-	if skipped != 0 {
-		t.Errorf("reference skips = %d, want 0", skipped)
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "D", "B"})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
 	}
 }
 
@@ -457,13 +457,13 @@ func TestCompileUnitsCompilesADependentWhoseReferenceProducedNothing(t *testing.
 	compiler := newSchedulerCompiler(t, recorder)
 	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
 
-	results, skipped, err := compileUnits(context.Background(), compiler, plan, 2)
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "results", compiledNames(results), []string{"A", "B"})
-	if skipped != 0 {
-		t.Errorf("reference skips = %d, want 0", skipped)
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "B"})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
 	}
 }

@@ -123,7 +123,7 @@ func (project *cachedSchedulerProject) hasManifest(name string) bool {
 // compile runs the whole plan through the scheduler with a fake compiler.
 func (project *cachedSchedulerProject) compile(
 	ctx context.Context, recorder *schedulerRecorder,
-) ([]UnitResult, int, error) {
+) (compileOutcome, error) {
 	compiler := Compiler{
 		Paths:       project.paths,
 		ProjectRoot: project.root,
@@ -139,12 +139,12 @@ func (project *cachedSchedulerProject) compileOrFail(
 	t *testing.T, recorder *schedulerRecorder,
 ) []UnitResult {
 	t.Helper()
-	results, _, err := project.compile(context.Background(), recorder)
+	outcome, err := project.compile(context.Background(), recorder)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	return results
+	return outcome.Units
 }
 
 // newCachedSchedulerRecorder prepares a fake compiler that writes both outputs of every named unit,
@@ -282,7 +282,7 @@ func TestCompileUnitsRecordsNothingForAUnitThatCouldNotBeStarted(t *testing.T) {
 	project := newCachedSchedulerProject(t, nil, "Alpha")
 	failing := newCachedSchedulerRecorder("Alpha")
 	failing.failingUnit = "Alpha"
-	if _, _, err := project.compile(context.Background(), failing); err == nil {
+	if _, err := project.compile(context.Background(), failing); err == nil {
 		t.Fatal("expected the failure to start the compiler to be reported")
 	}
 	if project.hasManifest("Alpha") {
@@ -303,7 +303,7 @@ func TestCompileUnitsRecordsNothingForACancelledUnit(t *testing.T) {
 	cancelled := newCachedSchedulerRecorder("Alpha")
 	runContext, cancel := context.WithCancel(context.Background())
 	cancelled.during = func(string) { cancel() }
-	if _, _, err := project.compile(runContext, cancelled); err == nil {
+	if _, err := project.compile(runContext, cancelled); err == nil {
 		cancel()
 		t.Fatal("expected the cancelled run to be reported as a failure")
 	}
@@ -394,14 +394,14 @@ func TestCompileUnitsLeavesNoManifestForASkippedDependent(t *testing.T) {
 	recorder := newCachedSchedulerRecorder("Alpha", "Beta")
 	// Why the surface now matches Unity's: that is what makes the dependent skippable at all.
 	recorder.surfaces["Alpha"] = "unity Alpha"
-	results, skipped, err := project.compile(context.Background(), recorder)
+	outcome, err := project.compile(context.Background(), recorder)
 	if err != nil {
 		t.Fatalf("expected the run to succeed, got error: %v", err)
 	}
 
-	assertStrings(t, "results", compiledNames(results), []string{"Alpha"})
-	if skipped != 1 {
-		t.Errorf("reference skips = %d, want 1", skipped)
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"Alpha"})
+	if outcome.Skipped != 1 {
+		t.Errorf("reference skips = %d, want 1", outcome.Skipped)
 	}
 	if recorder.runs["Beta"] != 0 {
 		t.Errorf("the skipped dependent should not have compiled, got %d runs", recorder.runs["Beta"])
@@ -424,7 +424,7 @@ func TestCompileUnitsRecordsNothingForAUnitKilledWhileItWasReportingDiagnostics(
 	runContext, cancel := context.WithCancel(context.Background())
 	killed.during = func(string) { cancel() }
 
-	if _, _, err := project.compile(runContext, killed); err == nil {
+	if _, err := project.compile(runContext, killed); err == nil {
 		cancel()
 		t.Fatal("a killed compile should fail the run rather than report partial diagnostics")
 	}
