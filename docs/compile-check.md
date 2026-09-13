@@ -49,8 +49,9 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    fails, and an assembly an upstream failure kept from ever being compiled never had one. Bee
    writes the response file before the compiler runs, so what this check replays survives either
    case; only a dag holding no assembly at all stops the run. `--all`
-   compiles every assembly in the build and skips nothing. Assemblies left out are counted in
-   `SkippedAssemblies`. An
+   compiles every assembly in the build and skips nothing. Assemblies this step leaves out are
+   counted in `SkippedAssemblies`; an assembly the run later stops short of because one it
+   references has errors is named in `BlockedAssemblies` instead, and counted nowhere. An
    assembly's sources are re-globbed from its own directory, stopping at nested assembly
    boundaries; the files an `.asmref` attaches to it are taken from the last build's response file
    instead, wherever that folder sits — including inside a nested assembly's directory, which the
