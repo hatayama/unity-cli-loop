@@ -37,6 +37,10 @@ By default it compiles the assemblies whose sources changed since the last Unity
 assembly that references one of them. `--all` compiles every assembly in the build. Assemblies that do not depend on each other compile at
 the same time; `--jobs` caps how many run at once, and `--jobs 1` compiles them one after another.
 
+An assembly whose inputs are all exactly as the previous `compile-check` read them is not compiled
+again: the run reports that run's diagnostics as recorded, errors included. `--all` compiles
+everything from scratch, which is the way out if a reused result ever looks wrong.
+
 ## Parameters
 
 | Parameter | Type | Description |
@@ -55,6 +59,7 @@ A JSON payload:
 - `ErrorCount`, `WarningCount`: totals across every compiled assembly
 - `Errors`, `Warnings`: each with `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`
 - `CompiledAssemblies`: the assemblies this run compiled, in dependency order
+- `ReusedAssemblies`: the assemblies reported from the previous run's recorded result, without compiling
 - `SkippedAssemblies`: how many assemblies were left out: nothing they compile from changed, or every assembly they reference kept the same public surface
 - `ResponseFileSet`: the Bee build the run replayed
 - `ProjectRoot`: resolved project root
