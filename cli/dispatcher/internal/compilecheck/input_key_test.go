@@ -321,3 +321,26 @@ func TestComputeInputKeyRefusesAnUnfollowedFlagInTheCompanionResponseFile(t *tes
 		t.Errorf("expected no key, got %q", key)
 	}
 }
+
+// Verifies a missing primary response file refuses a key rather than being keyed on its absence.
+// Bee writes one for every assembly it builds, so a run that cannot find it is looking at a state
+// this check cannot describe - unlike the companion file, which Bee legitimately leaves out.
+func TestComputeInputKeyRefusesAKeyWhenTheResponseFileIsGone(t *testing.T) {
+	project := newInputKeyProject(t)
+	if _, err := computeInputKey(
+		project.root, project.paths, project.plan, project.plan.Units[0]); err != nil {
+		t.Fatalf("the fixture should produce a key, got %v", err)
+	}
+
+	if err := os.Remove(project.plan.Units[0].Assembly.Path); err != nil {
+		t.Fatal(err)
+	}
+
+	key, err := computeInputKey(project.root, project.paths, project.plan, project.plan.Units[0])
+	if err == nil {
+		t.Error("a missing response file should refuse a key")
+	}
+	if key != "" {
+		t.Errorf("expected no key, got %q", key)
+	}
+}
