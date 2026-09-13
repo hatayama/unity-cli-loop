@@ -3,7 +3,6 @@
 package dispatcher
 
 import (
-	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
@@ -17,18 +16,12 @@ func configureDetachedUnityLaunchCommand(command *exec.Cmd) {
 // Editor leaves helpers such as the build backend and the shader compiler running, and those
 // keep holding files under Temp that the next launch has to delete.
 func killUnityProcess(pid int) error {
-	if err := killUnityProcessTree(pid); err == nil {
-		return nil
-	}
-	// taskkill lives in System32, but a PATH that no longer resolves it must not make a
-	// restart impossible: killing the Editor alone is still better than failing outright.
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return err
-	}
-	return process.Kill()
+	return killUnityProcessWithFallback(pid, killUnityProcessTree, killProcessById)
 }
 
+// killUnityProcessTree kills the Editor and everything it spawned. taskkill lives in System32,
+// but a PATH that no longer resolves it must not make a restart impossible, so the caller falls
+// back to killing the Editor alone.
 func killUnityProcessTree(pid int) error {
 	command := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F")
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}

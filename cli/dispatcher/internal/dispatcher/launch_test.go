@@ -1403,6 +1403,56 @@ func TestRunLaunchRestartContinuesWhenLeftoverTempFilesStayLocked(t *testing.T) 
 	}
 }
 
+func TestKillUnityProcessWithFallbackKillsTheProcessAloneWhenTheTreeKillFails(t *testing.T) {
+	// Verifies a tree kill that cannot be carried out still stops the Editor itself, so an
+	// unavailable platform tool does not make a restart impossible.
+	const unityProcessId int = 777
+	treeKillError := errors.New("taskkill is not available")
+	fallbackError := errors.New("process already gone")
+	fallbackPid := 0
+
+	err := killUnityProcessWithFallback(
+		unityProcessId,
+		func(int) error {
+			return treeKillError
+		},
+		func(pid int) error {
+			fallbackPid = pid
+			return fallbackError
+		},
+	)
+
+	if fallbackPid != unityProcessId {
+		t.Fatalf("fallback kill must target the same process, got %d", fallbackPid)
+	}
+	if !errors.Is(err, fallbackError) {
+		t.Fatalf("fallback kill result must be reported, got %v", err)
+	}
+}
+
+func TestKillUnityProcessWithFallbackSkipsTheFallbackWhenTheTreeKillSucceeds(t *testing.T) {
+	// Verifies a successful tree kill is not followed by a second kill, which would otherwise
+	// target a process id the operating system may already have reused.
+	fallbackCalls := 0
+
+	err := killUnityProcessWithFallback(
+		777,
+		func(int) error {
+			return nil
+		},
+		func(int) error {
+			fallbackCalls++
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("a successful tree kill must not report an error: %v", err)
+	}
+	if fallbackCalls != 0 {
+		t.Fatalf("fallback kill must not run after a successful tree kill, got %d calls", fallbackCalls)
+	}
+}
+
 // newRestartLaunchTestDeps returns launch dependencies where every step of a restart succeeds,
 // so a test only has to override the one behavior it exercises.
 func newRestartLaunchTestDeps(t *testing.T) launchDeps {

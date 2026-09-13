@@ -91,4 +91,4 @@ Restart deletes the project's `Temp` directory once the old Editor has exited. O
 - The rest of `Temp` is deleted on a best-effort basis. A failure prints one warning line to stderr and the launch continues.
 - Windows kills the Editor with `taskkill /PID <pid> /T /F` so its helper processes go down with it, instead of leaving them holding files. If `taskkill` cannot be run, restart falls back to killing the Editor process alone.
 
-Unix does not need any of this: `configureDetachedUnityLaunchCommand` puts the Editor in its own session and the helpers exit with it, and an open file can be unlinked regardless.
+Unix does not need any of this: an open file can be unlinked there, so a helper process that outlives the Editor does not block the Temp cleanup.
