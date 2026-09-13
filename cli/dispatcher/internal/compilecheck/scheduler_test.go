@@ -46,6 +46,28 @@ type schedulerRecorder struct {
 	// assembly. A unit missing from it writes none, which is what a failed compile does.
 	surfaces     map[string]string
 	finishedWhen map[string][]string // unit -> the units already finished when it started
+	// assemblies holds, per unit, the bytes the fake compiler writes as that unit's assembly, which
+	// is the other output a real compile leaves in the check's output directory.
+	assemblies map[string]string
+	// output holds, per unit, what the fake compiler prints and the code it exits with, so a test
+	// can make one report diagnostics.
+	output map[string]fakeCompilerOutput
+	// runs counts the invocations per unit, which is what says whether a run compiled an assembly
+	// or replayed what the previous run reported for it.
+	runs map[string]int
+	// during runs inside a fake invocation, while that unit is compiling, so a test can look at the
+	// output directory at a moment no run of the scheduler ever exposes otherwise.
+	during func(name string)
+	// killedUnits names the units whose fake invocation reports the way a real csc does when the
+	// run kills it mid-compile: whatever it had already printed, plus an exit error. Without this a
+	// test can only produce the tidy failure of a process that never ran.
+	killedUnits map[string]bool
+}
+
+// fakeCompilerOutput is what one fake invocation prints and exits with.
+type fakeCompilerOutput struct {
+	stdout   string
+	exitCode int
 }
 
 // newSchedulerRecorder prepares a recorder whose units each take the same time to compile.
@@ -55,6 +77,10 @@ func newSchedulerRecorder(hold time.Duration) *schedulerRecorder {
 		holdByUnit:   map[string]time.Duration{},
 		started:      map[string]bool{},
 		surfaces:     map[string]string{},
+		assemblies:   map[string]string{},
+		output:       map[string]fakeCompilerOutput{},
+		killedUnits:  map[string]bool{},
+		runs:         map[string]int{},
 		finished:     map[string]bool{},
 		finishedWhen: map[string][]string{},
 	}
@@ -62,10 +88,11 @@ func newSchedulerRecorder(hold time.Duration) *schedulerRecorder {
 
 // runner reports the fake compiler invocation, recording concurrency and dependency order.
 func (recorder *schedulerRecorder) runner() CommandRunner {
-	return func(_ context.Context, cmd *exec.Cmd) (string, string, int, error) {
+	return func(ctx context.Context, cmd *exec.Cmd) (string, string, int, error) {
 		name := assemblyOfFakeCommand(cmd)
 		recorder.mutex.Lock()
 		recorder.started[name] = true
+		recorder.runs[name]++
 		recorder.running++
 		if recorder.running > recorder.maxRunning {
 			recorder.maxRunning = recorder.running
@@ -80,11 +107,18 @@ func (recorder *schedulerRecorder) runner() CommandRunner {
 			hold = unitHold
 		}
 		failing := recorder.failingUnit == name
+		during := recorder.during
+		output := recorder.output[name]
+		killed := recorder.killedUnits[name]
 		recorder.mutex.Unlock()
 
+		if during != nil {
+			during(name)
+		}
 		time.Sleep(hold)
 
 		recorder.writeReferenceAssembly(cmd, name)
+		recorder.writeAssembly(cmd, name)
 
 		recorder.mutex.Lock()
 		recorder.running--
@@ -94,9 +128,35 @@ func (recorder *schedulerRecorder) runner() CommandRunner {
 		if failing {
 			return "", "no compiler here", 0, errors.New("failed to start the compiler")
 		}
+		// Why the context is read here: a real invocation dies when the run is cancelled, and the
+		// tests that check what a cancelled run leaves behind need the same failure.
+		if err := ctx.Err(); err != nil {
+			// Why a killed invocation still reports output: csc writes its diagnostics as it goes,
+			// and a process killed partway through has already printed some of them. The exit error
+			// is what the operating system leaves behind, and it is indistinguishable from the one
+			// csc produces when it exits non-zero on its own.
+			if killed {
+				return output.stdout, "", output.exitCode, &exec.ExitError{}
+			}
 
-		return "", "", 0, nil
+			return "", "", 0, err
+		}
+
+		return output.stdout, "", output.exitCode, nil
 	}
+}
+
+// writeAssembly writes the assembly this fake invocation is set up to produce, beside the response
+// file it was given, which is where csc writes it too.
+func (recorder *schedulerRecorder) writeAssembly(cmd *exec.Cmd, name string) {
+	recorder.mutex.Lock()
+	content, produces := recorder.assemblies[name]
+	recorder.mutex.Unlock()
+	if !produces {
+		return
+	}
+
+	writeBesideResponseFile(cmd, name+assemblyExtension, content)
 }
 
 // writeReferenceAssembly writes the reference assembly this fake invocation is set up to produce,
@@ -109,9 +169,14 @@ func (recorder *schedulerRecorder) writeReferenceAssembly(cmd *exec.Cmd, name st
 		return
 	}
 
+	writeBesideResponseFile(cmd, name+referenceAssemblyExtension, surface)
+}
+
+// writeBesideResponseFile writes one output where the invocation's response file sits.
+func writeBesideResponseFile(cmd *exec.Cmd, name string, content string) {
 	last := cmd.Args[len(cmd.Args)-1]
-	path := filepath.Join(filepath.Dir(strings.TrimPrefix(last, "@")), name+referenceAssemblyExtension)
-	if err := os.WriteFile(path, []byte(surface), 0o600); err != nil {
+	path := filepath.Join(filepath.Dir(strings.TrimPrefix(last, "@")), name)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		panic(err)
 	}
 }
