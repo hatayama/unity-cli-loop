@@ -169,7 +169,7 @@ func writeAnalyzerInputIdentity(digest hash.Hash, projectRoot string, rsp Respon
 // writeOutputIdentity records what the compile is named, which is part of what it produces.
 func writeOutputIdentity(digest hash.Hash, rsp ResponseFile) {
 	for _, path := range []string{rsp.OutputPath, rsp.RefOutputPath} {
-		fmt.Fprintf(digest, "output\x00%s\n", filepath.Base(path))
+		_, _ = fmt.Fprintf(digest, "output\x00%s\n", filepath.Base(path))
 	}
 }
 
@@ -224,7 +224,7 @@ func writeStatEntry(digest hash.Hash, kind string, name string, path string) err
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", path, err)
 	}
-	fmt.Fprintf(digest, "%s\x00%s\x00%d\x00%d\n",
+	_, _ = fmt.Fprintf(digest, "%s\x00%s\x00%d\x00%d\n",
 		kind, filepath.ToSlash(name), info.Size(), info.ModTime().UnixNano())
 
 	return nil
@@ -242,7 +242,7 @@ func writeFileContentEntry(digest hash.Hash, kind string, name string, path stri
 	if _, err := io.Copy(content, file); err != nil {
 		return fmt.Errorf("failed to read %s: %w", path, err)
 	}
-	fmt.Fprintf(digest, "%s\x00%s\x00%s\n",
+	_, _ = fmt.Fprintf(digest, "%s\x00%s\x00%s\n",
 		kind, filepath.ToSlash(name), hex.EncodeToString(content.Sum(nil)))
 
 	return nil
@@ -251,7 +251,7 @@ func writeFileContentEntry(digest hash.Hash, kind string, name string, path stri
 // writeContentEntry records bytes already in hand under a name.
 func writeContentEntry(digest hash.Hash, kind string, name string, content []byte) {
 	sum := sha256.Sum256(content)
-	fmt.Fprintf(digest, "%s\x00%s\x00%s\n", kind, filepath.ToSlash(name), hex.EncodeToString(sum[:]))
+	_, _ = fmt.Fprintf(digest, "%s\x00%s\x00%s\n", kind, filepath.ToSlash(name), hex.EncodeToString(sum[:]))
 }
 
 // projectPath resolves a path a response file spells relative to the project root.
