@@ -75,7 +75,7 @@ func recordSourcePath(projectRoot string, path string) string {
 	relativePath, err := filepath.Rel(projectRoot, path)
 	if err != nil || relativePath == localPackagePathRelative ||
 		strings.HasPrefix(relativePath, localPackagePathRelative+string(filepath.Separator)) {
-		return path
+		return filepath.ToSlash(path)
 	}
 
 	return filepath.ToSlash(relativePath)

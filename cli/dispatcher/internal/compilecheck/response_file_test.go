@@ -47,26 +47,26 @@ func assertSampleFields(t *testing.T, parsed ResponseFile) {
 	if parsed.AssemblyName != "Sample" {
 		t.Errorf("assembly name = %s, want Sample", parsed.AssemblyName)
 	}
-	if parsed.OutputPath != filepath.FromSlash(sampleDagDirectory+"/Sample.dll") {
+	if parsed.OutputPath != sampleDagDirectory+"/Sample.dll" {
 		t.Errorf("output path = %s", parsed.OutputPath)
 	}
-	if parsed.RefOutputPath != filepath.FromSlash(sampleDagDirectory+"/Sample.ref.dll") {
+	if parsed.RefOutputPath != sampleDagDirectory+"/Sample.ref.dll" {
 		t.Errorf("ref output path = %s", parsed.RefOutputPath)
 	}
 	assertStrings(t, "defines", parsed.Defines, []string{"UNITY_2022_3_62", "UNITY_EDITOR"})
 	assertStrings(t, "references", parsed.References, []string{
-		filepath.FromSlash("/Applications/Unity/Editor/Data/Managed/UnityEngine.dll"),
-		filepath.FromSlash(sampleDagDirectory + "/Other.ref.dll"),
-		filepath.FromSlash("Library/ScriptAssemblies/External.dll"),
+		"/Applications/Unity/Editor/Data/Managed/UnityEngine.dll",
+		sampleDagDirectory + "/Other.ref.dll",
+		"Library/ScriptAssemblies/External.dll",
 	})
 	assertStrings(t, "analyzers", parsed.Analyzers, []string{
-		filepath.FromSlash("/Applications/Unity/Editor/Data/Tools/Unity.SourceGenerators.dll"),
+		"/Applications/Unity/Editor/Data/Tools/Unity.SourceGenerators.dll",
 	})
 	assertStrings(t, "sources", parsed.Sources, []string{
-		filepath.FromSlash("Assets/Scripts/First.cs"),
-		filepath.FromSlash("Assets/Scripts/Second.cs"),
+		"Assets/Scripts/First.cs",
+		"Assets/Scripts/Second.cs",
 	})
-	if parsed.AdditionalFile != filepath.FromSlash(sampleDagDirectory+"/Sample.UnityAdditionalFile.txt") {
+	if parsed.AdditionalFile != sampleDagDirectory+"/Sample.UnityAdditionalFile.txt" {
 		t.Errorf("additional file = %s", parsed.AdditionalFile)
 	}
 	assertStrings(t, "other flags", parsed.OtherFlags, []string{

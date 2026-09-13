@@ -161,9 +161,10 @@ func projectAssemblyReferenceName(reference string, dagDir string) (string, bool
 	return strings.TrimSuffix(name, referenceAssemblyExtension), true
 }
 
-// unquotePath strips the one pair of quotes Bee writes around a path and adapts its separators.
+// unquotePath strips the one pair of quotes Bee writes around a path.
+// Why the separators stay as Bee wrote them: csc hands every source path to analyzers verbatim, and an
+// analyzer that excludes files by a "/"-separated path prefix only matches the spelling Unity passed.
+// Bee writes "/" on every platform, and the Go file APIs accept it on Windows too.
 func unquotePath(value string) string {
-	unquoted := strings.TrimSuffix(strings.TrimPrefix(value, `"`), `"`)
-
-	return filepath.FromSlash(unquoted)
+	return strings.TrimSuffix(strings.TrimPrefix(value, `"`), `"`)
 }
