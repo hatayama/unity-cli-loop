@@ -39,7 +39,11 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    Bee: a change that does not reach the public surface — a method body, say — cannot change what a
    dependent compiles to. The comparison is always against Unity's own artifact, never against the
    previous `compile-check` output, which would only say that nothing moved since that run and would
-   hide an error a dependent has been carrying all along. `--all` compiles
+   hide an error a dependent has been carrying all along. An assembly whose compiler step failed in
+   the last Unity build is selected whatever its timestamps say: Unity runs Bee with deferred dag
+   verification, so a build can run the stale dag's compiler step, succeed, refresh the assembly's
+   artifact, and only then rebuild the dag and fail on the sources that actually changed. The
+   artifact is then newer than every source that produced nothing. `--all` compiles
    every assembly in the build and skips nothing. Assemblies left out are counted in
    `SkippedAssemblies`. An
    assembly's sources are re-globbed from its own directory, stopping at nested assembly
