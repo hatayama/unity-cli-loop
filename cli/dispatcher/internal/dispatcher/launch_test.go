@@ -1297,7 +1297,7 @@ func TestRunLaunchRestartFailsWhenLockfileStaysLocked(t *testing.T) {
 		t.Fatal("restart must not launch Unity while the stale lockfile is still present")
 	}
 	relativeLockfilePath := filepath.Join(launchTempDirectoryName, unityLockfileName)
-	if !strings.Contains(stderr.String(), relativeLockfilePath) {
+	if !strings.Contains(stderr.String(), jsonEncodedString(t, relativeLockfilePath)) {
 		t.Fatalf("stderr should name the lockfile that could not be removed: %s", stderr.String())
 	}
 }
@@ -1369,6 +1369,19 @@ func newRestartLaunchTestDeps(t *testing.T) launchDeps {
 		return nil
 	}
 	return deps
+}
+
+// jsonEncodedString renders a value the way it appears inside the JSON error payload on stderr.
+// A Windows path separator is escaped there, so comparing the raw filepath.Join result would
+// only match on Unix.
+func jsonEncodedString(t *testing.T, value string) string {
+	t.Helper()
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("failed to encode %q as JSON: %v", value, err)
+	}
+	return strings.Trim(string(encoded), `"`)
 }
 
 // createStaleUnityLockfile writes the Temp directory and lockfile a previous Unity would have
