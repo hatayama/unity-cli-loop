@@ -80,11 +80,11 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    reference assembly rewritten with identical bytes still counts as unmoved. A response file naming
    a file the digest does not follow — `keyfile`, `resource`, `link`, `addmodule` — gets no digest,
    and such an assembly always compiles. `--all` looks nothing up, though it still records what it
-   compiled. What `--all` records is keyed slightly differently, which shows: every assembly is in
-   its plan, so every reference resolves to this check's own output, while an ordinary run resolves
-   the references of an assembly it does not compile to Unity's artifacts instead. The first
-   ordinary run after an `--all` may therefore compile such an assembly once more before it starts
-   reusing it. This is a separate mechanism from the dependent skip in step 3: that one compares this
+   compiled. What `--all` records is keyed slightly differently, and the difference is visible:
+   every assembly is in its plan, so every reference resolves to this check's own output, while an
+   ordinary run resolves the references of an assembly it does not compile to Unity's artifacts
+   instead. The first ordinary run after an `--all` may therefore compile such an assembly once more
+   before it starts reusing it. This is a separate mechanism from the dependent skip in step 3: that one compares this
    run's reference assembly against Unity's artifact to decide whether a *dependent* needs compiling
    at all, while this one compares an assembly's own inputs against what the previous `compile-check`
    read.

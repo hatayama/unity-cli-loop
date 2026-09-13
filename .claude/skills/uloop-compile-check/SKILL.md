@@ -38,7 +38,7 @@ assembly that references one of them. `--all` compiles every assembly in the bui
 the same time; `--jobs` caps how many run at once, and `--jobs 1` compiles them one after another.
 
 An assembly whose inputs are all exactly as the previous `compile-check` read them is not compiled
-again: the run reports that run's diagnostics as recorded, errors included. `--all` compiles
+again: the run reports the diagnostics recorded then, errors included. `--all` compiles
 everything from scratch, which is the way out if a reused result ever looks wrong.
 
 ## Parameters
@@ -56,7 +56,7 @@ everything from scratch, which is the way out if a reused result ever looks wron
 A JSON payload:
 
 - `Success`: whether the compile produced no errors
-- `ErrorCount`, `WarningCount`: totals across every compiled assembly
+- `ErrorCount`, `WarningCount`: totals across every compiled and reused assembly
 - `Errors`, `Warnings`: each with `Message`, `Code`, `File`, `Line`, `Column`, `Assembly`
 - `CompiledAssemblies`: the assemblies this run compiled, in dependency order
 - `ReusedAssemblies`: the assemblies reported from the previous run's recorded result, without compiling
