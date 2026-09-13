@@ -43,8 +43,8 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    the last Unity build is selected whatever its timestamps say: Unity runs Bee with deferred dag
    verification, so a build can run the stale dag's compiler step, succeed, refresh the assembly's
    artifact, and only then rebuild the dag and fail on the sources that actually changed. The
-   artifact is then newer than every source that produced nothing. `--all` compiles
-   every assembly in the build and skips nothing. Assemblies left out are counted in
+   artifact is then newer than every source even though it was not produced from them. `--all`
+   compiles every assembly in the build and skips nothing. Assemblies left out are counted in
    `SkippedAssemblies`. An
    assembly's sources are re-globbed from its own directory, stopping at nested assembly
    boundaries; the files an `.asmref` attaches to it are taken from the last build's response file
