@@ -186,6 +186,14 @@ func selectChangedAssemblies(
 		return nil, referenceErr
 	}
 
+	// Why the Bee log is read once here: it describes the whole of the last build, and reading it per
+	// assembly would reread tens of megabytes for every response file in the dag. An --all run reads
+	// nothing, because it selects every assembly whatever the last build made of it.
+	failedLastBuild := map[string]bool{}
+	if !all {
+		failedLastBuild = ReadFailedUnityCompiles(projectRoot, dagDir)
+	}
+
 	reasons := map[string]string{}
 	for _, name := range graph.names {
 		rsp := graph.byName[name]
@@ -204,6 +212,12 @@ func selectChangedAssemblies(
 		report, changeErr := DetectSourceChange(projectRoot, rsp, sources, dagDir)
 		if changeErr != nil {
 			return nil, changeErr
+		}
+		// Why a failed build only speaks for an assembly nothing else selected: when a source did
+		// move, that is what this run found itself, and it says more about why the assembly needs
+		// compiling than what the previous build made of it.
+		if !report.Changed && failedLastBuild[name] {
+			report = ChangeReport{Changed: true, Reason: changeReasonUnityBuildFailed}
 		}
 		if all || report.Changed {
 			reasons[name] = report.Reason
