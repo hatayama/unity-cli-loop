@@ -43,7 +43,12 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    the last Unity build is selected whatever its timestamps say: Unity runs Bee with deferred dag
    verification, so a build can run the stale dag's compiler step, succeed, refresh the assembly's
    artifact, and only then rebuild the dag and fail on the sources that actually changed. The
-   artifact is then newer than every source even though it was not produced from them. `--all`
+   artifact is then newer than every source even though it was not produced from them. An assembly
+   the last build left no artifact for at all is selected the same way, without looking at any
+   timestamp: Unity 6's Bee deletes the assembly and its reference assembly when their compiler step
+   fails, and an assembly an upstream failure kept from ever being compiled never had one. Bee
+   writes the response file before the compiler runs, so what this check replays survives either
+   case; only a dag holding no assembly at all stops the run. `--all`
    compiles every assembly in the build and skips nothing. Assemblies left out are counted in
    `SkippedAssemblies`. An
    assembly's sources are re-globbed from its own directory, stopping at nested assembly
@@ -156,8 +161,10 @@ and the ones left out because every assembly they reference kept the same public
 ## Troubleshooting
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: no Bee build artifacts found**
-The project has never been built by this Editor, or `Library` was deleted. Open the project once
-(`uloop launch`) and let it compile, then retry.
+The project has never been built by this Editor, or `Library` was deleted. Raised only when the dag
+holds no assembly at all: a build that failed and took some assemblies down with it is replayed
+rather than refused, and the assemblies it left no artifact for are the ones this run compiles. Open
+the project once (`uloop launch`) and let it compile, then retry.
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: an assembly definition no longer matches the last build**
 Raised when an `.asmdef` was added, deleted or moved, when an `.asmref` was added, moved, removed
