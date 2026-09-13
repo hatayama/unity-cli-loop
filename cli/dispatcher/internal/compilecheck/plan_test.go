@@ -341,3 +341,51 @@ func TestBuildCompilePlanMarksNothingAsDependentWhenCompilingEverything(t *testi
 
 	assertSelectedAsDependent(t, plan, map[string]bool{"A": false, "B": false, "C": false})
 }
+
+// Verifies an assembly Unity failed to compile is selected even though nothing about its sources
+// looks newer than the artifact that build left behind.
+func TestBuildCompilePlanSelectsAnAssemblyWhoseLastUnityBuildFailed(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	writeBeeLog(t, projectRoot,
+		beeInitLine("aaaa.dag"),
+		beeNodeResultLine("Csc "+planDagDirectory+"/A.dll", planDagDirectory+"/A.dll", "1"))
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, false)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertStrings(t, "units", unitNames(plan), []string{"A", "B", "C"})
+	if len(plan.Units) == 0 {
+		t.Fatal("expected the failed assembly to be in the plan")
+	}
+	if plan.Units[0].Reason != changeReasonUnityBuildFailed {
+		t.Errorf("A reason = %q, want %q", plan.Units[0].Reason, changeReasonUnityBuildFailed)
+	}
+	if plan.Units[0].SelectedAsDependent {
+		t.Error("A was selected in its own right, so it is not a dependent")
+	}
+}
+
+// Verifies an edited source keeps its own reason when the same assembly also failed to build, so
+// the report says what this run actually found rather than what the last build left behind.
+func TestBuildCompilePlanKeepsTheSourceReasonForAFailedAssemblyThatWasEdited(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	touchSource(t, projectRoot, "C")
+	writeBeeLog(t, projectRoot,
+		beeInitLine("aaaa.dag"),
+		beeNodeResultLine("Csc "+planDagDirectory+"/C.dll", planDagDirectory+"/C.dll", "1"))
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, false)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertStrings(t, "units", unitNames(plan), []string{"C"})
+	if len(plan.Units) == 0 {
+		t.Fatal("expected the edited assembly to be in the plan")
+	}
+	if plan.Units[0].Reason != changeReasonSourceNewer {
+		t.Errorf("C reason = %q, want %q", plan.Units[0].Reason, changeReasonSourceNewer)
+	}
+}

@@ -13,6 +13,9 @@ const (
 	changeReasonSourceNewer   = "source newer than last build"
 	changeReasonSourceAdded   = "new source file"
 	changeReasonSourceRemoved = "source removed"
+	// changeReasonUnityBuildFailed is why an assembly is compiled although its artifact is newer
+	// than everything it compiles from: that artifact is not what its current sources produce.
+	changeReasonUnityBuildFailed = "last Unity build failed"
 
 	runCompileFirstAdvice = "run `uloop compile` first"
 )
