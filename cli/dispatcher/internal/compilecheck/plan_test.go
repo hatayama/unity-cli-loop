@@ -1,6 +1,7 @@
 package compilecheck
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,6 +83,15 @@ func newReversePlanProject(t *testing.T) string {
 	return projectRoot
 }
 
+// removePlanArtifact deletes one assembly's dll, the way Unity 6's Bee does when the compiler step
+// for that assembly fails.
+func removePlanArtifact(t *testing.T, projectRoot string, name string) {
+	t.Helper()
+	if err := os.Remove(filepath.Join(projectRoot, planDagDirectory, name+".dll")); err != nil {
+		t.Fatalf("failed to remove the artifact of %s: %v", name, err)
+	}
+}
+
 // touchSource marks one assembly's source as edited after the last Unity build.
 func touchSource(t *testing.T, projectRoot string, name string) {
 	t.Helper()
@@ -97,6 +107,20 @@ func unitNames(plan BuildPlan) []string {
 	}
 
 	return names
+}
+
+// assertEveryAllRunReasonIsEmpty checks the reason CompileUnit documents as empty for an --all run.
+func assertEveryAllRunReasonIsEmpty(t *testing.T, plan BuildPlan) {
+	t.Helper()
+	if len(plan.Units) == 0 {
+		t.Fatal("expected an --all run to select every assembly")
+	}
+	for _, unit := range plan.Units {
+		if unit.Reason != "" {
+			t.Errorf("%s reason = %q, want an --all run to record none",
+				unit.Assembly.AssemblyName, unit.Reason)
+		}
+	}
 }
 
 // Verifies a change in a referenced assembly pulls its dependents in, in dependency order.
@@ -409,4 +433,82 @@ func TestBuildCompilePlanKeepsTheAllRunReasonEmptyForAFailedAssembly(t *testing.
 			t.Errorf("%s reason = %q, want empty", unit.Assembly.AssemblyName, unit.Reason)
 		}
 	}
+}
+
+// Verifies an assembly whose artifact the last Unity build did not leave behind is compiled, with
+// its dependents, rather than stopping the whole run.
+func TestBuildCompilePlanSelectsAnAssemblyWithoutAUnityArtifact(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	removePlanArtifact(t, projectRoot, "A")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, false)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertStrings(t, "units", unitNames(plan), []string{"A", "B", "C"})
+	if len(plan.Units) == 0 {
+		t.Fatal("expected the assembly without an artifact to be selected")
+	}
+	if plan.Units[0].Reason != changeReasonUnityArtifactMissing {
+		t.Errorf("A reason = %q, want %q", plan.Units[0].Reason, changeReasonUnityArtifactMissing)
+	}
+}
+
+// Verifies an --all run is not stopped by an assembly the last Unity build left without an artifact.
+func TestBuildCompilePlanWithAllAcceptsAnAssemblyWithoutAUnityArtifact(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	removePlanArtifact(t, projectRoot, "A")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertStrings(t, "units", unitNames(plan), []string{"A", "B", "C"})
+}
+
+// Verifies a dag holding no assembly at all is still refused, since nothing there was ever built.
+func TestBuildCompilePlanRejectsADagWithoutAnyAssembly(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	for _, name := range []string{"A", "B", "C"} {
+		removePlanArtifact(t, projectRoot, name)
+	}
+
+	_, err := BuildCompilePlan(projectRoot, planDagDirectory, false)
+	if err == nil {
+		t.Fatal("expected a dag without any assembly to be rejected")
+	}
+	var required UnityBuildRequiredError
+	if !errors.As(err, &required) {
+		t.Errorf("error = %v, want it to ask for a Unity build", err)
+	}
+}
+
+// Verifies an --all run records no reason for an assembly whose source was edited, since it would
+// have compiled that assembly whether or not anything moved.
+func TestBuildCompilePlanKeepsTheAllRunReasonEmptyForAnEditedSource(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	touchSource(t, projectRoot, "A")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertEveryAllRunReasonIsEmpty(t, plan)
+}
+
+// Verifies an --all run records no reason for an assembly the last Unity build left without an
+// artifact either.
+func TestBuildCompilePlanKeepsTheAllRunReasonEmptyForAMissingArtifact(t *testing.T) {
+	projectRoot := newPlanProject(t)
+	removePlanArtifact(t, projectRoot, "A")
+
+	plan, err := BuildCompilePlan(projectRoot, planDagDirectory, true)
+	if err != nil {
+		t.Fatalf("expected the plan to build, got error: %v", err)
+	}
+
+	assertEveryAllRunReasonIsEmpty(t, plan)
 }
