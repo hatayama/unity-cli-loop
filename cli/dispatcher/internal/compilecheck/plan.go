@@ -34,6 +34,9 @@ type BuildPlan struct {
 	OutputDir string        // relative to the project root
 	Units     []CompileUnit // dependency order: an assembly comes after everything it references
 	Skipped   int           // assemblies left out because nothing they compile from changed
+	// All says the caller asked for every assembly to be compiled. Such a run reuses nothing, which
+	// is what makes --all the way out of a reuse that got something wrong.
+	All bool
 }
 
 // assemblyGraph holds every response file in the dag together with the edges between them.
@@ -79,6 +82,7 @@ func BuildCompilePlan(projectRoot string, dagDir string, all bool) (BuildPlan, e
 		OutputDir: filepath.Join(filepath.FromSlash(compileCheckOutputRoot), filepath.Base(dagDir)),
 		Units:     units,
 		Skipped:   len(graph.names) - len(units),
+		All:       all,
 	}, nil
 }
 

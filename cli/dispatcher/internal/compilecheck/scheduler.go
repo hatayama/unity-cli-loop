@@ -155,12 +155,15 @@ func (run *schedulerRun) skipUnchangedDependent(index int) (bool, error) {
 	return true, nil
 }
 
-// compileOneUnit compiles one unit and reports what it produced, including whether its public
-// surface moved. Why the comparison happens here rather than in the loop: it reads two files, and
-// the loop has to stay free to start the next unit.
+// compileOneUnit produces one unit's result - by compiling it, or by replaying the previous run's
+// answer when nothing it reads has moved - and reports whether its public surface changed.
+// Why the comparison happens here rather than in the loop: it reads two files, and the loop has to
+// stay free to start the next unit. Why a replayed unit is compared just the same: it kept the
+// outputs of the previous run, so the reference assembly on disk is still the one to hold against
+// Unity's.
 func (run *schedulerRun) compileOneUnit(index int) {
 	unit := run.plan.Units[index]
-	result, err := run.compiler.CompileUnit(run.runContext, run.plan, unit)
+	result, err := run.compiler.reuseOrCompile(run.runContext, run.plan, unit)
 	changed := true
 	if err == nil {
 		changed = !referenceSurfaceUnchanged(run.compiler.ProjectRoot, run.plan, unit)

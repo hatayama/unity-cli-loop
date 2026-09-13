@@ -1,6 +1,7 @@
 package compilecheck
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -31,6 +32,40 @@ type unitResultManifest struct {
 	// Outputs maps the name of each file the compile wrote in the check's output directory to its
 	// content hash, so a run that finds them changed underneath compiles again.
 	Outputs map[string]string
+}
+
+// reuseOrCompile reports what csc would say about one unit, replaying the previous run's answer when
+// every input that decides it is still exactly as that run read it, and compiling otherwise.
+func (c Compiler) reuseOrCompile(
+	ctx context.Context, plan BuildPlan, unit CompileUnit,
+) (UnitResult, error) {
+	outputDirectoryPath := filepath.Join(c.ProjectRoot, plan.OutputDir)
+	// Why an unreadable input is not an error here: the compile that follows reads the same files and
+	// reports what is wrong with them in its own way. All this loses is the chance to reuse.
+	key, keyErr := computeInputKey(c.ProjectRoot, c.Paths, plan, unit)
+	if keyErr != nil {
+		key = ""
+	}
+	// Why --all only skips the lookup and still records: it is the way out of a reuse that got
+	// something wrong, and the ordinary run after it should still be able to reuse what it compiled.
+	if key != "" && !plan.All {
+		if reused, found := loadReusableResult(outputDirectoryPath, unit, key); found {
+			return reused, nil
+		}
+	}
+
+	// Why nothing is recorded unless csc ran to completion: a compile that was cancelled or never
+	// started says nothing about the inputs, and CompileUnit has already removed the manifest of the
+	// compile this one replaces, so an interrupted run leaves no record at all rather than a stale one.
+	result, err := c.CompileUnit(ctx, plan, unit)
+	if err != nil || key == "" || result.RawOutput != "" {
+		return result, err
+	}
+	if writeErr := writeUnitResultManifest(outputDirectoryPath, unit, key, result); writeErr != nil {
+		return UnitResult{}, writeErr
+	}
+
+	return result, nil
 }
 
 // manifestPath names where one unit's manifest lives.
