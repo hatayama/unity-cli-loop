@@ -410,3 +410,33 @@ func TestCompileUnitsLeavesNoManifestForASkippedDependent(t *testing.T) {
 		t.Error("the skipped dependent's recorded result should have been removed with its outputs")
 	}
 }
+
+// Verifies a compile killed partway through records nothing, even though the diagnostics it had
+// already printed parse cleanly and look exactly like a finished compile's.
+func TestCompileUnitsRecordsNothingForAUnitKilledWhileItWasReportingDiagnostics(t *testing.T) {
+	project := newCachedSchedulerProject(t, nil, "Alpha")
+	killed := newCachedSchedulerRecorder("Alpha")
+	killed.killedUnits["Alpha"] = true
+	killed.output["Alpha"] = fakeCompilerOutput{
+		stdout:   "Assets/Alpha/Alpha.cs(1,1): error CS0001: interrupted",
+		exitCode: -1,
+	}
+	runContext, cancel := context.WithCancel(context.Background())
+	killed.during = func(string) { cancel() }
+
+	if _, _, err := project.compile(runContext, killed); err == nil {
+		cancel()
+		t.Fatal("a killed compile should fail the run rather than report partial diagnostics")
+	}
+	cancel()
+
+	if project.hasManifest("Alpha") {
+		t.Fatal("a killed compile must leave no recorded result to replay")
+	}
+
+	recorder := newCachedSchedulerRecorder("Alpha")
+	project.compileOrFail(t, recorder)
+	if recorder.runs["Alpha"] != 1 {
+		t.Errorf("the next run should have compiled the unit, got %d runs", recorder.runs["Alpha"])
+	}
+}

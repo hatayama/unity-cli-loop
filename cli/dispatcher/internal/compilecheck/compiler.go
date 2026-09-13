@@ -111,6 +111,16 @@ func (c Compiler) CompileUnit(
 			"failed to run the C# compiler for %s: %w: %s",
 			unit.Assembly.AssemblyName, runErr, strings.TrimSpace(stderr))
 	}
+	// Why a stopped invocation is an error rather than its output: killing csc leaves an exit error
+	// that reads exactly like the one it produces on a compile error, and whatever it had already
+	// printed parses into diagnostics that look complete. Reporting those would understate what is
+	// wrong with the assembly, and recording them would replay that understatement on every run
+	// after this one.
+	if err := invocationContext.Err(); err != nil {
+		return UnitResult{}, fmt.Errorf(
+			"the C# compiler for %s was stopped before it finished: %w",
+			unit.Assembly.AssemblyName, err)
+	}
 
 	return buildUnitResult(unit.Assembly.AssemblyName, stdout, stderr, exitCode, duration), nil
 }

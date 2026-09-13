@@ -58,6 +58,10 @@ type schedulerRecorder struct {
 	// during runs inside a fake invocation, while that unit is compiling, so a test can look at the
 	// output directory at a moment no run of the scheduler ever exposes otherwise.
 	during func(name string)
+	// killedUnits names the units whose fake invocation reports the way a real csc does when the
+	// run kills it mid-compile: whatever it had already printed, plus an exit error. Without this a
+	// test can only produce the tidy failure of a process that never ran.
+	killedUnits map[string]bool
 }
 
 // fakeCompilerOutput is what one fake invocation prints and exits with.
@@ -75,6 +79,7 @@ func newSchedulerRecorder(hold time.Duration) *schedulerRecorder {
 		surfaces:     map[string]string{},
 		assemblies:   map[string]string{},
 		output:       map[string]fakeCompilerOutput{},
+		killedUnits:  map[string]bool{},
 		runs:         map[string]int{},
 		finished:     map[string]bool{},
 		finishedWhen: map[string][]string{},
@@ -104,6 +109,7 @@ func (recorder *schedulerRecorder) runner() CommandRunner {
 		failing := recorder.failingUnit == name
 		during := recorder.during
 		output := recorder.output[name]
+		killed := recorder.killedUnits[name]
 		recorder.mutex.Unlock()
 
 		if during != nil {
@@ -125,6 +131,14 @@ func (recorder *schedulerRecorder) runner() CommandRunner {
 		// Why the context is read here: a real invocation dies when the run is cancelled, and the
 		// tests that check what a cancelled run leaves behind need the same failure.
 		if err := ctx.Err(); err != nil {
+			// Why a killed invocation still reports output: csc writes its diagnostics as it goes,
+			// and a process killed partway through has already printed some of them. The exit error
+			// is what the operating system leaves behind, and it is indistinguishable from the one
+			// csc produces when it exits non-zero on its own.
+			if killed {
+				return output.stdout, "", output.exitCode, &exec.ExitError{}
+			}
+
 			return "", "", 0, err
 		}
 
