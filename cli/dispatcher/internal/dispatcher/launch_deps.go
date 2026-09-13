@@ -22,6 +22,7 @@ type launchDeps struct {
 	waitForToolReadiness       func(context.Context, string, time.Duration) error
 	probeProjectIpcFallback    func(context.Context, string) error
 	removePath                 func(string) error
+	statPath                   func(string) (os.FileInfo, error)
 	sleep                      func(time.Duration)
 }
 
@@ -41,6 +42,7 @@ func defaultLaunchDeps() launchDeps {
 		waitForToolReadiness:    clicore.WaitForToolReadinessWithTimeout,
 		probeProjectIpcFallback: clicore.ProbeToolReadinessSequence,
 		removePath:              os.RemoveAll,
+		statPath:                os.Stat,
 		sleep:                   time.Sleep,
 	}
 }

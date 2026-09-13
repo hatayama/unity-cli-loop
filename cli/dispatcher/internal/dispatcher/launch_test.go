@@ -1252,6 +1252,62 @@ func TestRunLaunchRestartRetriesLockfileRemovalWhileItIsHeld(t *testing.T) {
 	}
 }
 
+func TestRunLaunchRestartRetriesLockfileInspectionWhileItIsHeld(t *testing.T) {
+	// Verifies restart retries when it cannot even determine whether the stale lockfile is
+	// there, so a transient inspection failure does not abort the launch.
+	projectRoot := createLaunchTestProject(t)
+	createStaleUnityLockfile(t, projectRoot)
+	lockfilePath := unityLockfilePath(projectRoot)
+
+	deps := newRestartLaunchTestDeps(t)
+	resolverCalled := false
+	fakeUnityPath := fakeUnityExecutablePath(t)
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
+		resolverCalled = true
+		return fakeUnityPath, nil
+	}
+	inspectAttempts := 0
+	deps.statPath = func(path string) (os.FileInfo, error) {
+		if path != lockfilePath {
+			return os.Stat(path)
+		}
+		inspectAttempts++
+		if inspectAttempts < 3 {
+			return nil, errors.New("file is being used by another process")
+		}
+		return os.Stat(path)
+	}
+	sleepCalls := 0
+	deps.sleep = func(time.Duration) {
+		sleepCalls++
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		&stderr,
+		deps,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	if !resolverCalled {
+		t.Fatal("restart must continue launching once the lockfile can finally be inspected")
+	}
+	if inspectAttempts != 3 {
+		t.Fatalf("lockfile inspection attempt count mismatch: %d", inspectAttempts)
+	}
+	if sleepCalls != 2 {
+		t.Fatalf("expected one wait between each inspection retry, got %d", sleepCalls)
+	}
+}
+
 func TestRunLaunchRestartFailsWhenLockfileStaysLocked(t *testing.T) {
 	// Verifies restart stops instead of launching Unity when the stale lockfile can never be
 	// removed, because the next Editor would refuse to open the project.

@@ -14,9 +14,9 @@ import (
 const (
 	// Why a retry: on Windows a helper process Unity spawned (asset import, shader compiler)
 	// or a virus scanner can still hold files under Temp for a moment after Unity.exe itself
-	// has exited, and the removal fails with a sharing violation until it lets go.
-	launchTempLockfileRemoveTimeout = 5 * time.Second
-	launchTempLockfileRemovePoll    = 250 * time.Millisecond
+	// has exited, and an operation on such a file fails until it lets go.
+	launchTempLockfileRetryTimeout = 5 * time.Second
+	launchTempLockfileRetryPoll    = 250 * time.Millisecond
 )
 
 // staleUnityTempCleanupResult reports what the stale-Temp cleanup managed to delete.
@@ -34,15 +34,19 @@ type staleUnityTempCleanupResult struct {
 // because the next Editor would then refuse to open the project as already opened.
 func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDeps) (staleUnityTempCleanupResult, error) {
 	lockfilePath := unityLockfilePath(projectRoot)
-	if _, err := os.Stat(lockfilePath); err != nil {
-		if os.IsNotExist(err) {
-			return staleUnityTempCleanupResult{}, nil
-		}
+	lockfileExists, err := staleUnityLockfileExists(ctx, lockfilePath, deps)
+	if err != nil {
 		return staleUnityTempCleanupResult{}, err
 	}
+	if !lockfileExists {
+		return staleUnityTempCleanupResult{}, nil
+	}
 
-	if err := removeStaleUnityLockfile(ctx, lockfilePath, deps); err != nil {
-		return staleUnityTempCleanupResult{}, err
+	removeLockfile := func() error {
+		return deps.removePath(lockfilePath)
+	}
+	if err := retryWhileTempFileIsHeld(ctx, deps, removeLockfile); err != nil {
+		return staleUnityTempCleanupResult{}, staleUnityLockfileError("delete", err)
 	}
 
 	result := staleUnityTempCleanupResult{lockfileRemoved: true}
@@ -52,32 +56,57 @@ func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDep
 	return result, nil
 }
 
-// removeStaleUnityLockfile deletes the lockfile, retrying while another process still holds it.
-func removeStaleUnityLockfile(ctx context.Context, lockfilePath string, deps launchDeps) error {
-	deadline := deps.now().Add(launchTempLockfileRemoveTimeout)
+// staleUnityLockfileExists reports whether a previous Unity left its lockfile behind. A failure
+// to even inspect the path is retried too: an answer of "not there" and an answer of "cannot
+// tell" must not lead to the same silent continue.
+func staleUnityLockfileExists(ctx context.Context, lockfilePath string, deps launchDeps) (bool, error) {
+	lockfileExists := false
+	inspect := func() error {
+		_, statError := deps.statPath(lockfilePath)
+		if statError == nil {
+			lockfileExists = true
+			return nil
+		}
+		if os.IsNotExist(statError) {
+			lockfileExists = false
+			return nil
+		}
+		return statError
+	}
+	if err := retryWhileTempFileIsHeld(ctx, deps, inspect); err != nil {
+		return false, staleUnityLockfileError("inspect", err)
+	}
+	return lockfileExists, nil
+}
+
+// retryWhileTempFileIsHeld repeats operation until it succeeds or the retry budget runs out,
+// so every Temp operation shares one retry policy.
+func retryWhileTempFileIsHeld(ctx context.Context, deps launchDeps, operation func() error) error {
+	deadline := deps.now().Add(launchTempLockfileRetryTimeout)
 	for {
-		removeError := deps.removePath(lockfilePath)
-		if removeError == nil {
+		operationError := operation()
+		if operationError == nil {
 			return nil
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if !deps.now().Before(deadline) {
-			return staleUnityLockfileRemovalError(removeError)
+			return operationError
 		}
-		deps.sleep(launchTempLockfileRemovePoll)
+		deps.sleep(launchTempLockfileRetryPoll)
 	}
 }
 
-// staleUnityLockfileRemovalError names the lockfile by its project-relative path so the message
-// stays readable without echoing the absolute location of the project.
-func staleUnityLockfileRemovalError(cause error) error {
+// staleUnityLockfileError names the lockfile by its project-relative path so the message stays
+// readable without echoing the absolute location of the project.
+func staleUnityLockfileError(action string, cause error) error {
 	relativeLockfilePath := filepath.Join(launchTempDirectoryName, unityLockfileName)
 	return fmt.Errorf(
-		"could not delete the stale %s within %s; another process is still holding it: %w",
+		"could not %s the stale %s within %s; another process is still holding it: %w",
+		action,
 		relativeLockfilePath,
-		launchTempLockfileRemoveTimeout,
+		launchTempLockfileRetryTimeout,
 		cause,
 	)
 }
