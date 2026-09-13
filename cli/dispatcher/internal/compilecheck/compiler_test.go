@@ -111,6 +111,23 @@ func TestParseDiagnosticsReadsPositionedLinesOnly(t *testing.T) {
 	}
 }
 
+// Verifies a diagnostic under an analyzer-defined ID is read like a compiler one.
+func TestParseDiagnosticsReadsAnalyzerDefinedCodes(t *testing.T) {
+	output := strings.Join([]string{
+		`Assets/Foo/A.cs(5,22): error Style_ConstName: Constant name maxCount violates the naming rule`,
+		`Assets/Foo/A.cs(7,3): info SP0001: Diagnostic 'CS8618' was programmatically suppressed`,
+	}, "\n")
+
+	diagnostics := ParseDiagnostics(output)
+
+	if len(diagnostics) != 1 {
+		t.Fatalf("diagnostics = %+v, want 1", diagnostics)
+	}
+	if diagnostics[0].Code != "Style_ConstName" || diagnostics[0].Line != 5 || diagnostics[0].Column != 22 {
+		t.Errorf("diagnostic = %+v", diagnostics[0])
+	}
+}
+
 // Verifies the same diagnostic printed twice is reported once.
 func TestParseDiagnosticsDropsRepeatedDiagnostics(t *testing.T) {
 	line := `Assets/Foo/A.cs(12,9): error CS0029: Cannot implicitly convert type 'string' to 'int'`

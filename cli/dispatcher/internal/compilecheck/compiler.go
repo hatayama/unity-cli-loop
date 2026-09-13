@@ -33,8 +33,11 @@ const (
 )
 
 // diagnosticPattern matches one csc diagnostic line: "<file>(<line>,<column>): <severity> <code>: <message>".
+// Why the code is any run without spaces or colons: analyzers choose their own diagnostic IDs, such as
+// "Style_ConstName", and an error under an ID the pattern rejects would surface only as a compile that
+// failed without saying where.
 var diagnosticPattern = regexp.MustCompile(
-	`^(?P<file>.+)\((?P<line>\d+),(?P<column>\d+)\): (?P<severity>error|warning) (?P<code>[A-Z]+\d+): (?P<message>.+)$`)
+	`^(?P<file>.+)\((?P<line>\d+),(?P<column>\d+)\): (?P<severity>error|warning) (?P<code>[^\s:]+): (?P<message>.+)$`)
 
 // Diagnostic is one error or warning csc reported at a source position.
 type Diagnostic struct {
