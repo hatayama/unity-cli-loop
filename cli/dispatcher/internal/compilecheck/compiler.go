@@ -53,6 +53,9 @@ type UnitResult struct {
 	Succeeded   bool
 	RawOutput   string // filled only when csc failed without saying why in a diagnostic
 	Duration    time.Duration
+	// Reused marks a result this run replayed from the previous one rather than compiled, because
+	// every input the previous compile read is still exactly as it read it.
+	Reused bool
 }
 
 // CommandRunner runs one compiler invocation, so tests can stand in for the real process.
@@ -117,6 +120,9 @@ func removeUnitOutputs(outputDirectoryPath string, unit CompileUnit) error {
 	names := []string{
 		unit.Assembly.AssemblyName + assemblyExtension,
 		unit.Assembly.AssemblyName + referenceAssemblyExtension,
+		// Why the manifest goes with them: it describes those very files, so leaving it behind would
+		// let a later run replay diagnostics for outputs this one removed.
+		unit.Assembly.AssemblyName + resultManifestExtension,
 	}
 	for _, name := range names {
 		path := filepath.Join(outputDirectoryPath, name)
