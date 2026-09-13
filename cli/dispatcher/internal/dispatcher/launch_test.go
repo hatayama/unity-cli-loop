@@ -1154,24 +1154,234 @@ func TestNewUnityLaunchCommandIsNotContextCancelable(t *testing.T) {
 }
 
 func TestCleanStaleUnityTempDeletesTempWhenLockfileExists(t *testing.T) {
+	// Verifies a stale lockfile makes cleanup delete the whole Temp directory and report it.
 	projectRoot := createLaunchTestProject(t)
+	tempPath := filepath.Join(projectRoot, launchTempDirectoryName)
+	createStaleUnityLockfile(t, projectRoot)
+
+	result, err := cleanStaleUnityTemp(context.Background(), projectRoot, defaultLaunchDeps())
+	if err != nil {
+		t.Fatalf("cleanStaleUnityTemp failed: %v", err)
+	}
+	if !result.lockfileRemoved {
+		t.Fatal("expected stale Temp removal")
+	}
+	if result.leftoverError != nil {
+		t.Fatalf("unexpected leftover error: %v", result.leftoverError)
+	}
+	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+		t.Fatalf("Temp still exists after cleanup: %v", err)
+	}
+}
+
+func TestCleanStaleUnityTempSkipsRemovalWhenLockfileMissing(t *testing.T) {
+	// Verifies cleanup touches nothing when no stale lockfile is left behind.
+	projectRoot := createLaunchTestProject(t)
+	deps := defaultLaunchDeps()
+	removeCalls := 0
+	deps.removePath = func(string) error {
+		removeCalls++
+		return nil
+	}
+
+	result, err := cleanStaleUnityTemp(context.Background(), projectRoot, deps)
+	if err != nil {
+		t.Fatalf("cleanStaleUnityTemp failed: %v", err)
+	}
+	if result.lockfileRemoved || result.leftoverError != nil {
+		t.Fatalf("expected an empty cleanup result, got %#v", result)
+	}
+	if removeCalls != 0 {
+		t.Fatalf("cleanup must not remove anything without a stale lockfile, got %d calls", removeCalls)
+	}
+}
+
+func TestRunLaunchRestartRetriesLockfileRemovalWhileItIsHeld(t *testing.T) {
+	// Verifies restart keeps retrying a lockfile that another process still holds, and
+	// continues the launch once the retry succeeds.
+	projectRoot := createLaunchTestProject(t)
+	createStaleUnityLockfile(t, projectRoot)
+	lockfilePath := unityLockfilePath(projectRoot)
+
+	deps := newRestartLaunchTestDeps(t)
+	resolverCalled := false
+	fakeUnityPath := fakeUnityExecutablePath(t)
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
+		resolverCalled = true
+		return fakeUnityPath, nil
+	}
+	lockfileAttempts := 0
+	deps.removePath = func(path string) error {
+		if path != lockfilePath {
+			return nil
+		}
+		lockfileAttempts++
+		if lockfileAttempts < 3 {
+			return errors.New("file is being used by another process")
+		}
+		return nil
+	}
+	sleepCalls := 0
+	deps.sleep = func(time.Duration) {
+		sleepCalls++
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		&stderr,
+		deps,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	if !resolverCalled {
+		t.Fatal("restart must continue launching once the lockfile is finally removed")
+	}
+	if lockfileAttempts != 3 {
+		t.Fatalf("lockfile removal attempt count mismatch: %d", lockfileAttempts)
+	}
+	if sleepCalls != 2 {
+		t.Fatalf("expected one wait between each lockfile retry, got %d", sleepCalls)
+	}
+}
+
+func TestRunLaunchRestartFailsWhenLockfileStaysLocked(t *testing.T) {
+	// Verifies restart stops instead of launching Unity when the stale lockfile can never be
+	// removed, because the next Editor would refuse to open the project.
+	projectRoot := createLaunchTestProject(t)
+	createStaleUnityLockfile(t, projectRoot)
+	lockfilePath := unityLockfilePath(projectRoot)
+
+	deps := newRestartLaunchTestDeps(t)
+	resolverCalled := false
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
+		resolverCalled = true
+		return fakeUnityExecutablePath(t), nil
+	}
+	deps.removePath = func(path string) error {
+		if path != lockfilePath {
+			return nil
+		}
+		return errors.New("file is being used by another process")
+	}
+	deps.sleep = func(time.Duration) {}
+	currentTime := time.Now()
+	deps.now = func() time.Time {
+		currentTime = currentTime.Add(time.Second)
+		return currentTime
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		&stderr,
+		deps,
+	)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d stdout=%s", code, stdout.String())
+	}
+	if resolverCalled {
+		t.Fatal("restart must not launch Unity while the stale lockfile is still present")
+	}
+	relativeLockfilePath := filepath.Join(launchTempDirectoryName, unityLockfileName)
+	if !strings.Contains(stderr.String(), relativeLockfilePath) {
+		t.Fatalf("stderr should name the lockfile that could not be removed: %s", stderr.String())
+	}
+}
+
+func TestRunLaunchRestartContinuesWhenLeftoverTempFilesStayLocked(t *testing.T) {
+	// Verifies restart only warns and keeps launching when files other than the lockfile are
+	// still held under Temp, since Unity recreates them on startup.
+	projectRoot := createLaunchTestProject(t)
+	createStaleUnityLockfile(t, projectRoot)
+	lockfilePath := unityLockfilePath(projectRoot)
+
+	deps := newRestartLaunchTestDeps(t)
+	fakeUnityPath := fakeUnityExecutablePath(t)
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
+		return fakeUnityPath, nil
+	}
+	deps.removePath = func(path string) error {
+		if path == lockfilePath {
+			return nil
+		}
+		return errors.New("file is being used by another process")
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		&stderr,
+		deps,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "could not be removed") {
+		t.Fatalf("stderr should warn about the leftover Temp files: %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Stale UnityLockfile found (no active Unity process)") {
+		t.Fatalf("stdout should keep the existing cleanup message: %s", stdout.String())
+	}
+}
+
+// newRestartLaunchTestDeps returns launch dependencies where every step of a restart succeeds,
+// so a test only has to override the one behavior it exercises.
+func newRestartLaunchTestDeps(t *testing.T) launchDeps {
+	t.Helper()
+
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 555}, nil
+	}
+	deps.killUnityProcess = func(int) error {
+		return nil
+	}
+	deps.waitForUnityProcessExit = func(context.Context, string, int, time.Duration, time.Duration) error {
+		return nil
+	}
+	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
+		return nil
+	}
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+		return nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) error {
+		return nil
+	}
+	return deps
+}
+
+// createStaleUnityLockfile writes the Temp directory and lockfile a previous Unity would have
+// left behind after an unclean shutdown.
+func createStaleUnityLockfile(t *testing.T, projectRoot string) {
+	t.Helper()
+
 	tempPath := filepath.Join(projectRoot, launchTempDirectoryName)
 	if err := os.MkdirAll(tempPath, 0o755); err != nil {
 		t.Fatalf("failed to create Temp: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(tempPath, unityLockfileName), []byte{}, 0o644); err != nil {
 		t.Fatalf("failed to create UnityLockfile: %v", err)
-	}
-
-	removed, err := cleanStaleUnityTemp(projectRoot)
-	if err != nil {
-		t.Fatalf("cleanStaleUnityTemp failed: %v", err)
-	}
-	if !removed {
-		t.Fatal("expected stale Temp removal")
-	}
-	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
-		t.Fatalf("Temp still exists after cleanup: %v", err)
 	}
 }
 

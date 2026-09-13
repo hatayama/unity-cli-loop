@@ -249,13 +249,16 @@ func startUnityAndWaitForReadiness(
 	stderr io.Writer,
 	deps launchDeps,
 ) int {
-	removedStaleTemp, err := cleanStaleUnityTemp(projectRoot)
+	cleanupResult, err := cleanStaleUnityTemp(ctx, projectRoot, deps)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
-	if removedStaleTemp {
+	if cleanupResult.lockfileRemoved {
 		writeStaleUnityTempCleanupMessage(stdout, projectRoot)
+	}
+	if cleanupResult.leftoverError != nil {
+		writeStaleUnityTempLeftoverWarning(stderr, cleanupResult.leftoverError)
 	}
 
 	unityVersion, err := resolveLaunchEditorVersion(projectRoot, options)
@@ -324,18 +327,6 @@ func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {
 	command.Env = append(os.Environ(), "MSYS_NO_PATHCONV=1")
 	configureDetachedUnityLaunchCommand(command)
 	return command
-}
-
-func cleanStaleUnityTemp(projectRoot string) (bool, error) {
-	lockfilePath := unityLockfilePath(projectRoot)
-	if _, err := os.Stat(lockfilePath); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, os.RemoveAll(filepath.Join(projectRoot, launchTempDirectoryName))
 }
 
 // A stale lockfile only proves no Unity process is currently running for this project;
@@ -459,14 +450,6 @@ func unityExecutableCandidates(version string) []string {
 	default:
 		return []string{}
 	}
-}
-
-func killUnityProcess(pid int) error {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return err
-	}
-	return process.Kill()
 }
 
 func printLaunchHelp(stdout io.Writer) {
