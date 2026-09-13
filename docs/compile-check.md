@@ -143,9 +143,10 @@ and the ones left out because every assembly they reference kept the same public
   attaches come only from the last build's response file, because the glob stops at the folder's
   assembly boundary, so a file added there waits for Unity to import it just as the predefined
   assemblies do.
-- **An `.editorconfig` or global analyzer config change does not invalidate a reused result**,
-  because those files are not named by the response file and so are not part of the input digest —
-  the same exposure the dependent skip in step 3 already has. `--all` compiles everything again.
+- **An `.editorconfig` or global analyzer config that is not named by a response file does not
+  invalidate a reused result**, because it is not part of the input digest — the same exposure the
+  dependent skip in step 3 already has. One handed to the compiler as `/analyzerconfig:` is read by
+  content and does invalidate it. `--all` compiles everything again.
 - **Linux is not supported.** macOS and Windows only.
 
 ## Troubleshooting
