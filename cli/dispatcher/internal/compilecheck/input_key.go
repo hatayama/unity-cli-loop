@@ -144,15 +144,20 @@ func writeAnalyzerInputIdentity(digest hash.Hash, projectRoot string, rsp Respon
 	if rsp.AdditionalFile != "" {
 		inputs = append(inputs, rsp.AdditionalFile)
 	}
-	for _, flag := range rsp.OtherFlags {
-		value, isPathValued := pathValuedFlag(flag)
-		if isPathValued {
-			inputs = append(inputs, value)
+	// Why both flag lists: the companion lines are Bee's second response file, and compiler.go
+	// appends them to the invocation verbatim, so a flag naming a file csc reads decides the
+	// diagnostics no matter which of the two files Bee put it in.
+	for _, flags := range [][]string{rsp.OtherFlags, rsp.CompanionFlags} {
+		for _, flag := range flags {
+			value, isPathValued := pathValuedFlag(flag)
+			if isPathValued {
+				inputs = append(inputs, value)
 
-			continue
-		}
-		if untrackedFileInputFlag(flag) {
-			return fmt.Errorf("response file flag %q names a file the input key does not follow", flag)
+				continue
+			}
+			if untrackedFileInputFlag(flag) {
+				return fmt.Errorf("response file flag %q names a file the input key does not follow", flag)
+			}
 		}
 	}
 

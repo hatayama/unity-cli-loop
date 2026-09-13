@@ -286,3 +286,38 @@ func TestComputeInputKeyRefusesAKeyWhenAnInputIsMissing(t *testing.T) {
 		t.Error("expected a missing reference to refuse a key")
 	}
 }
+
+// Verifies a flag placed in Bee's second response file is read exactly like one in the first: those
+// lines reach csc verbatim, so an analyzer input named there decides the diagnostics just the same.
+func TestComputeInputKeyFollowsAnalyzerInputsNamedInTheCompanionResponseFile(t *testing.T) {
+	ruleset := filepath.Join("Assets", "Companion.ruleset")
+	project := newInputKeyProject(t)
+	writeProjectFile(t, project.root, ruleset, "<RuleSet/>")
+	project.plan.Units[0].Assembly.CompanionFlags = []string{`-ruleset:"Assets/Companion.ruleset"`}
+	original := project.key(t)
+
+	touchProjectFile(t, project.root, ruleset)
+	if touched := project.key(t); touched != original {
+		t.Error("touching a ruleset named in the companion file should leave the key alone")
+	}
+
+	writeProjectFile(t, project.root, ruleset, "<RuleSet Name=\"Other\"/>")
+	if edited := project.key(t); edited == original {
+		t.Error("editing a ruleset named in the companion file should move the key")
+	}
+}
+
+// Verifies a flag naming an unfollowed file refuses a key from the companion response file too,
+// rather than letting the assembly be reused against an input nothing watches.
+func TestComputeInputKeyRefusesAnUnfollowedFlagInTheCompanionResponseFile(t *testing.T) {
+	project := newInputKeyProject(t)
+	project.plan.Units[0].Assembly.CompanionFlags = []string{`/keyfile:"Keys/Sign.snk"`}
+
+	key, err := computeInputKey(project.root, project.paths, project.plan, project.plan.Units[0])
+	if err == nil {
+		t.Error("a keyfile in the companion response file should refuse a key")
+	}
+	if key != "" {
+		t.Errorf("expected no key, got %q", key)
+	}
+}
