@@ -204,7 +204,8 @@ func shouldKeepDispatcherProcessCommand(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.LaunchCommandName, clicore.PackageCommandName:
+	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName,
+		clicore.LaunchCommandName, clicore.CompileCheckCommandName, clicore.PackageCommandName:
 		return true
 	default:
 		return false
@@ -242,6 +243,16 @@ func resolveDispatcherProjectRoot(startPath string, explicitProjectPath string, 
 			return "", err
 		}
 		return resolveLaunchProjectRoot(startPath, options)
+	}
+
+	// Why compile-check resolves like launch: it never opens an IPC connection, so requiring a
+	// running Editor to find the project root would fail the one case the command exists for.
+	if len(args) > 0 && args[0] == clicore.CompileCheckCommandName {
+		options, err := parseCompileCheckOptions(args[1:], explicitProjectPath)
+		if err != nil {
+			return "", err
+		}
+		return resolveCompileCheckProjectRoot(startPath, options)
 	}
 
 	connection, err := project.ResolveConnection(startPath, explicitProjectPath)

@@ -99,6 +99,8 @@ uloop launch
 
 Once Unity is up, the package is installed into the project. The next step reads the skills from the installed package.
 
+Later, once the project has been built at least once, `uloop compile-check` reports compile errors without launching Unity at all. See [docs/compile-check.md](docs/compile-check.md).
+
 ### Step 3: Install the skills
 
 Run the command for your LLM tool in the root of your Unity project:
@@ -170,6 +172,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 | Your Instruction | Skill Used by LLM Tools |
 |---|---|
 | "Launch Unity for this project" | `/uloop-launch` |
+| "Check whether it compiles without launching Unity" | `/uloop-compile-check` |
 | "Fix the compile errors" | `/uloop-compile` |
 | "Apply this fix right now without compiling" | `/uloop-hot-reload` |
 | "Run the tests and tell me why they failed" | `/uloop-run-tests` + `/uloop-get-logs` |
@@ -182,10 +185,11 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 
 
 <details>
-<summary>All 19 Bundled Skills</summary>
+<summary>All 20 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-compile` - Execute compilation
+- `/uloop-compile-check` - Compile without launching Unity
 - `/uloop-get-logs` - Get console logs
 - `/uloop-run-tests` - Run tests
 - `/uloop-hot-reload` - Apply method-body changes to running code instantly, without recompiling
@@ -223,6 +227,9 @@ uloop launch -p Android
 
 # Kill running Unity and restart
 uloop launch -r
+
+# Compile without launching Unity
+uloop compile-check
 
 # Execute compilation
 uloop compile

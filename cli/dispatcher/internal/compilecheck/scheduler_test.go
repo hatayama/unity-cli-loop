@@ -1,0 +1,544 @@
+package compilecheck
+
+import (
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+// newSchedulerPlan builds a plan of named units, each referencing the units named for it.
+func newSchedulerPlan(references map[string][]string, names ...string) BuildPlan {
+	units := make([]CompileUnit, 0, len(names))
+	for _, name := range names {
+		units = append(units, CompileUnit{
+			Assembly: ResponseFile{
+				AssemblyName:  name,
+				RefOutputPath: filepath.Join(planDagDirectory, name+referenceAssemblyExtension),
+			},
+			PlanReferences: references[name],
+		})
+	}
+
+	return BuildPlan{
+		DagDir:    planDagDirectory,
+		OutputDir: filepath.Join("Library", "uloop", "compile-check", "aaaa.dag"),
+		Units:     units,
+	}
+}
+
+// schedulerRecorder stands in for csc: it reports what ran, when, and how much ran at once.
+type schedulerRecorder struct {
+	mutex       sync.Mutex
+	hold        time.Duration
+	holdByUnit  map[string]time.Duration
+	failingUnit string
+	running     int
+	maxRunning  int
+	started     map[string]bool
+	finished    map[string]bool
+	// surfaces holds, per unit, the bytes the fake compiler writes as that unit's reference
+	// assembly. A unit missing from it writes none, which is what a failed compile does.
+	surfaces     map[string]string
+	finishedWhen map[string][]string // unit -> the units already finished when it started
+	// assemblies holds, per unit, the bytes the fake compiler writes as that unit's assembly, which
+	// is the other output a real compile leaves in the check's output directory.
+	assemblies map[string]string
+	// output holds, per unit, what the fake compiler prints and the code it exits with, so a test
+	// can make one report diagnostics.
+	output map[string]fakeCompilerOutput
+	// runs counts the invocations per unit, which is what says whether a run compiled an assembly
+	// or replayed what the previous run reported for it.
+	runs map[string]int
+	// during runs inside a fake invocation, while that unit is compiling, so a test can look at the
+	// output directory at a moment no run of the scheduler ever exposes otherwise.
+	during func(name string)
+	// killedUnits names the units whose fake invocation reports the way a real csc does when the
+	// run kills it mid-compile: whatever it had already printed, plus an exit error. Without this a
+	// test can only produce the tidy failure of a process that never ran.
+	killedUnits map[string]bool
+}
+
+// fakeCompilerOutput is what one fake invocation prints and exits with.
+type fakeCompilerOutput struct {
+	stdout   string
+	exitCode int
+}
+
+// newSchedulerRecorder prepares a recorder whose units each take the same time to compile.
+func newSchedulerRecorder(hold time.Duration) *schedulerRecorder {
+	return &schedulerRecorder{
+		hold:         hold,
+		holdByUnit:   map[string]time.Duration{},
+		started:      map[string]bool{},
+		surfaces:     map[string]string{},
+		assemblies:   map[string]string{},
+		output:       map[string]fakeCompilerOutput{},
+		killedUnits:  map[string]bool{},
+		runs:         map[string]int{},
+		finished:     map[string]bool{},
+		finishedWhen: map[string][]string{},
+	}
+}
+
+// runner reports the fake compiler invocation, recording concurrency and dependency order.
+func (recorder *schedulerRecorder) runner() CommandRunner {
+	return func(ctx context.Context, cmd *exec.Cmd) (string, string, int, error) {
+		name := assemblyOfFakeCommand(cmd)
+		recorder.mutex.Lock()
+		recorder.started[name] = true
+		recorder.runs[name]++
+		recorder.running++
+		if recorder.running > recorder.maxRunning {
+			recorder.maxRunning = recorder.running
+		}
+		already := []string{}
+		for finishedName := range recorder.finished {
+			already = append(already, finishedName)
+		}
+		recorder.finishedWhen[name] = already
+		hold := recorder.hold
+		if unitHold, found := recorder.holdByUnit[name]; found {
+			hold = unitHold
+		}
+		failing := recorder.failingUnit == name
+		during := recorder.during
+		output := recorder.output[name]
+		killed := recorder.killedUnits[name]
+		recorder.mutex.Unlock()
+
+		if during != nil {
+			during(name)
+		}
+		time.Sleep(hold)
+
+		recorder.writeReferenceAssembly(cmd, name)
+		recorder.writeAssembly(cmd, name)
+
+		recorder.mutex.Lock()
+		recorder.running--
+		recorder.finished[name] = true
+		recorder.mutex.Unlock()
+
+		if failing {
+			return "", "no compiler here", 0, errors.New("failed to start the compiler")
+		}
+		// Why the context is read here: a real invocation dies when the run is cancelled, and the
+		// tests that check what a cancelled run leaves behind need the same failure.
+		if err := ctx.Err(); err != nil {
+			// Why a killed invocation still reports output: csc writes its diagnostics as it goes,
+			// and a process killed partway through has already printed some of them. The exit error
+			// is what the operating system leaves behind, and it is indistinguishable from the one
+			// csc produces when it exits non-zero on its own.
+			if killed {
+				return output.stdout, "", output.exitCode, &exec.ExitError{}
+			}
+
+			return "", "", 0, err
+		}
+
+		return output.stdout, "", output.exitCode, nil
+	}
+}
+
+// writeAssembly writes the assembly this fake invocation is set up to produce, beside the response
+// file it was given, which is where csc writes it too.
+func (recorder *schedulerRecorder) writeAssembly(cmd *exec.Cmd, name string) {
+	recorder.mutex.Lock()
+	content, produces := recorder.assemblies[name]
+	recorder.mutex.Unlock()
+	if !produces {
+		return
+	}
+
+	writeBesideResponseFile(cmd, name+assemblyExtension, content)
+}
+
+// writeReferenceAssembly writes the reference assembly this fake invocation is set up to produce,
+// beside the response file it was given, which is where csc writes it too.
+func (recorder *schedulerRecorder) writeReferenceAssembly(cmd *exec.Cmd, name string) {
+	recorder.mutex.Lock()
+	surface, produces := recorder.surfaces[name]
+	recorder.mutex.Unlock()
+	if !produces {
+		return
+	}
+
+	writeBesideResponseFile(cmd, name+referenceAssemblyExtension, surface)
+}
+
+// writeBesideResponseFile writes one output where the invocation's response file sits.
+func writeBesideResponseFile(cmd *exec.Cmd, name string, content string) {
+	last := cmd.Args[len(cmd.Args)-1]
+	path := filepath.Join(filepath.Dir(strings.TrimPrefix(last, "@")), name)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		panic(err)
+	}
+}
+
+// assemblyOfFakeCommand reads the assembly name out of the response file the invocation was given.
+func assemblyOfFakeCommand(cmd *exec.Cmd) string {
+	last := cmd.Args[len(cmd.Args)-1]
+
+	return strings.TrimSuffix(filepath.Base(strings.TrimPrefix(last, "@")), responseFileExtension)
+}
+
+// newSchedulerCompiler wires a compiler that runs the recorder instead of csc.
+func newSchedulerCompiler(t *testing.T, recorder *schedulerRecorder) Compiler {
+	t.Helper()
+
+	return Compiler{
+		Paths:       EditorCompilerPaths{DotnetHostPath: "/dotnet", CompilerDllPath: "/csc.dll"},
+		ProjectRoot: t.TempDir(),
+		Timeout:     time.Minute,
+		Run:         recorder.runner(),
+	}
+}
+
+// Verifies a unit waits for every assembly it references in the plan before it starts.
+func TestCompileUnitsStartsAUnitOnlyAfterItsReferencesFinished(t *testing.T) {
+	plan := newSchedulerPlan(
+		map[string][]string{"B": {"A"}, "C": {"B"}}, "A", "B", "C")
+	recorder := newSchedulerRecorder(10 * time.Millisecond)
+
+	if _, err := compileUnits(
+		context.Background(), newSchedulerCompiler(t, recorder), plan, 4); err != nil {
+		t.Fatalf("expected the chain to compile, got error: %v", err)
+	}
+
+	for _, unit := range []string{"B", "C"} {
+		for _, reference := range plan.Units[indexOfUnit(t, plan, unit)].PlanReferences {
+			if !containsName(recorder.finishedWhen[unit], reference) {
+				t.Errorf("%s started before %s finished", unit, reference)
+			}
+		}
+	}
+}
+
+// Verifies no more than the requested number of assemblies compile at the same time.
+func TestCompileUnitsRunsNoMoreThanTheRequestedNumberAtOnce(t *testing.T) {
+	plan := newSchedulerPlan(nil, "A", "B", "C", "D", "E")
+	recorder := newSchedulerRecorder(20 * time.Millisecond)
+
+	if _, err := compileUnits(
+		context.Background(), newSchedulerCompiler(t, recorder), plan, 2); err != nil {
+		t.Fatalf("expected the independent units to compile, got error: %v", err)
+	}
+
+	if recorder.maxRunning != 2 {
+		t.Errorf("at most 2 units should run at once and 2 should be reached, got %d",
+			recorder.maxRunning)
+	}
+}
+
+// Verifies the results keep the plan's order even when the units finish in another one.
+func TestCompileUnitsReturnsResultsInPlanOrder(t *testing.T) {
+	plan := newSchedulerPlan(nil, "A", "B", "C")
+	recorder := newSchedulerRecorder(0)
+	recorder.holdByUnit = map[string]time.Duration{
+		"A": 40 * time.Millisecond,
+		"B": 20 * time.Millisecond,
+	}
+
+	outcome, err := compileUnits(
+		context.Background(), newSchedulerCompiler(t, recorder), plan, 3)
+	if err != nil {
+		t.Fatalf("expected the independent units to compile, got error: %v", err)
+	}
+
+	compiled := []string{}
+	for _, result := range outcome.Units {
+		compiled = append(compiled, result.Assembly)
+	}
+	assertStrings(t, "results", compiled, []string{"A", "B", "C"})
+}
+
+// Verifies a unit whose compiler cannot be started stops the run and reports that failure.
+func TestCompileUnitsStopsTheRunWhenTheCompilerCannotBeStarted(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"C": {"A"}}, "A", "B", "C")
+	recorder := newSchedulerRecorder(10 * time.Millisecond)
+	recorder.failingUnit = "A"
+
+	_, err := compileUnits(context.Background(), newSchedulerCompiler(t, recorder), plan, 1)
+	if err == nil {
+		t.Fatal("expected the failure to start the compiler to be reported")
+	}
+	if !strings.Contains(err.Error(), "A") {
+		t.Errorf("the error should name the assembly that failed, got: %v", err)
+	}
+	if recorder.finished["C"] {
+		t.Error("a unit depending on the failed one should not have been compiled")
+	}
+	// Why B rather than C alone: C waits for A whatever the scheduler does, so only an independent
+	// unit shows that the failure stopped the run instead of merely blocking what depended on it.
+	if recorder.started["B"] {
+		t.Error("a unit independent of the failed one should not have been started")
+	}
+}
+
+// indexOfUnit finds one named unit in a plan.
+func indexOfUnit(t *testing.T, plan BuildPlan, name string) int {
+	t.Helper()
+	for index, unit := range plan.Units {
+		if unit.Assembly.AssemblyName == name {
+			return index
+		}
+	}
+	t.Fatalf("the plan has no unit named %s", name)
+
+	return -1
+}
+
+// markSelectedAsDependent marks the named units as ones this run picked up only through a reference.
+func markSelectedAsDependent(t *testing.T, plan BuildPlan, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		plan.Units[indexOfUnit(t, plan, name)].SelectedAsDependent = true
+	}
+}
+
+// writeUnityReferenceAssembly writes the reference assembly the last Unity build left for an assembly.
+func writeUnityReferenceAssembly(t *testing.T, projectRoot string, name string, surface string) {
+	t.Helper()
+	directory := filepath.Join(projectRoot, planDagDirectory)
+	if err := os.MkdirAll(directory, outputDirPermissions); err != nil {
+		t.Fatalf("failed to create the dag directory: %v", err)
+	}
+	path := filepath.Join(directory, name+referenceAssemblyExtension)
+	if err := os.WriteFile(path, []byte(surface), 0o600); err != nil {
+		t.Fatalf("failed to write %s: %v", path, err)
+	}
+}
+
+// writeStaleUnitOutput leaves one unit's reference assembly from an earlier run in the output
+// directory, which is what a run that left that unit out has to clear away.
+func writeStaleUnitOutput(t *testing.T, projectRoot string, plan BuildPlan, name string) string {
+	t.Helper()
+	path := filepath.Join(projectRoot, plan.OutputDir, name+referenceAssemblyExtension)
+	if err := os.MkdirAll(filepath.Dir(path), outputDirPermissions); err != nil {
+		t.Fatalf("failed to create the output directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("failed to write the stale output: %v", err)
+	}
+
+	return path
+}
+
+// failingCompilerOutput is what csc prints and exits with for an assembly that does not compile.
+func failingCompilerOutput(name string) fakeCompilerOutput {
+	return fakeCompilerOutput{
+		stdout: "Assets/" + name + "/" + name + ".cs(1,7): error CS0103: The name 'Missing' does " +
+			"not exist in the current context",
+		exitCode: 1,
+	}
+}
+
+// compiledNames lists the assemblies a run reported results for, in the order it returned them.
+func compiledNames(results []UnitResult) []string {
+	names := make([]string, 0, len(results))
+	for _, result := range results {
+		names = append(names, result.Assembly)
+	}
+
+	return names
+}
+
+// Verifies a dependent is left out when the assembly it waited for came out byte-identical to the
+// one the last Unity build produced, and that the stale output of an earlier run is removed with it.
+func TestCompileUnitsSkipsADependentWhoseReferenceKeptItsSurface(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A"}}, "A", "B")
+	markSelectedAsDependent(t, plan, "B")
+	recorder := newSchedulerRecorder(0)
+	recorder.surfaces["A"] = "surface"
+	recorder.surfaces["B"] = "b"
+	compiler := newSchedulerCompiler(t, recorder)
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
+	staleOutput := writeStaleUnitOutput(t, compiler.ProjectRoot, plan, "B")
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A"})
+	if outcome.Skipped != 1 {
+		t.Errorf("reference skips = %d, want 1", outcome.Skipped)
+	}
+	if recorder.started["B"] {
+		t.Error("a dependent whose reference kept its surface should not have been compiled")
+	}
+	if _, statErr := os.Stat(staleOutput); !os.IsNotExist(statErr) {
+		t.Error("the skipped unit's earlier output should have been removed")
+	}
+}
+
+// Verifies a dependent is compiled when its reference produced a different reference assembly.
+func TestCompileUnitsCompilesADependentWhoseReferenceChangedItsSurface(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A"}}, "A", "B")
+	markSelectedAsDependent(t, plan, "B")
+	recorder := newSchedulerRecorder(0)
+	recorder.surfaces["A"] = "changed surface"
+	compiler := newSchedulerCompiler(t, recorder)
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "B"})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
+	}
+}
+
+// Verifies the skip carries down the chain: a dependent left out changes nothing for its own
+// dependents, so they are left out too, which is what Unity's own build does.
+func TestCompileUnitsSkipsTheWholeChainBelowAnUnchangedSurface(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A"}, "C": {"B"}}, "A", "B", "C")
+	markSelectedAsDependent(t, plan, "B", "C")
+	recorder := newSchedulerRecorder(0)
+	recorder.surfaces["A"] = "surface"
+	compiler := newSchedulerCompiler(t, recorder)
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 3)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A"})
+	if outcome.Skipped != 2 {
+		t.Errorf("reference skips = %d, want 2", outcome.Skipped)
+	}
+	if recorder.started["C"] {
+		t.Error("a unit below a skipped one should not have been compiled")
+	}
+}
+
+// Verifies an assembly asked for on its own - by --all, or because its own sources changed - is
+// compiled even when everything it references kept its surface.
+func TestCompileUnitsNeverSkipsAUnitThatWasNotSelectedThroughAReference(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A"}}, "A", "B")
+	recorder := newSchedulerRecorder(0)
+	recorder.surfaces["A"] = "surface"
+	compiler := newSchedulerCompiler(t, recorder)
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "B"})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
+	}
+}
+
+// Verifies one changed reference is enough: a dependent waiting on two assemblies is compiled when
+// either of them changed its surface.
+func TestCompileUnitsCompilesADependentWhenOnlyOneReferenceChanged(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A", "D"}}, "A", "D", "B")
+	markSelectedAsDependent(t, plan, "B")
+	recorder := newSchedulerRecorder(0)
+	recorder.surfaces["A"] = "surface"
+	recorder.surfaces["D"] = "changed surface"
+	compiler := newSchedulerCompiler(t, recorder)
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "D", "surface")
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 3)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "D", "B"})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
+	}
+}
+
+// Verifies the run stops where Unity's own build stops: an assembly that failed to compile leaves
+// every assembly below it uncompiled, so the run reports that assembly's errors instead of the
+// missing-metadata errors each dependent would otherwise report against a reference that is not there.
+func TestCompileUnitsBlocksTheDependentsOfAnAssemblyThatFailedToCompile(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A"}, "C": {"B"}}, "A", "B", "C")
+	recorder := newSchedulerRecorder(0)
+	recorder.surfaces["A"] = "surface"
+	recorder.output["A"] = failingCompilerOutput("A")
+	compiler := newSchedulerCompiler(t, recorder)
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
+	staleOutput := writeStaleUnitOutput(t, compiler.ProjectRoot, plan, "B")
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 3)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A"})
+	assertStrings(t, "blocked", outcome.Blocked, []string{"B", "C"})
+	// Why a blocked unit is not a skip: a skip means the check read what that unit compiles from
+	// and found nothing left to learn, and nothing about these two was read at all.
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
+	}
+	for _, name := range []string{"B", "C"} {
+		if recorder.started[name] {
+			t.Errorf("%s should not have compiled against an assembly that failed", name)
+		}
+	}
+	if _, statErr := os.Stat(staleOutput); !os.IsNotExist(statErr) {
+		t.Error("the blocked unit's earlier output should have been removed")
+	}
+}
+
+// Verifies one failed reference is enough: a dependent waiting on a failed assembly and a
+// successful one is still left out, because the reference assembly it is missing is missing either way.
+func TestCompileUnitsBlocksADependentWhenOnlyOneOfItsReferencesFailed(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A", "D"}}, "A", "D", "B")
+	recorder := newSchedulerRecorder(0)
+	recorder.surfaces["A"] = "surface"
+	recorder.surfaces["D"] = "surface"
+	recorder.output["A"] = failingCompilerOutput("A")
+	compiler := newSchedulerCompiler(t, recorder)
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 3)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "D"})
+	assertStrings(t, "blocked", outcome.Blocked, []string{"B"})
+	if recorder.started["B"] {
+		t.Error("a dependent of a failed assembly should not have compiled")
+	}
+}
+
+// Verifies what decides the block is the failure and not the missing output: a reference that
+// exited cleanly leaves its dependent compiling, even when this run found no reference assembly to
+// compare against and therefore treats its surface as changed.
+func TestCompileUnitsCompilesADependentWhoseSuccessfulReferenceWroteNoReferenceAssembly(t *testing.T) {
+	plan := newSchedulerPlan(map[string][]string{"B": {"A"}}, "A", "B")
+	markSelectedAsDependent(t, plan, "B")
+	recorder := newSchedulerRecorder(0)
+	compiler := newSchedulerCompiler(t, recorder)
+	writeUnityReferenceAssembly(t, compiler.ProjectRoot, "A", "surface")
+
+	outcome, err := compileUnits(context.Background(), compiler, plan, 2)
+	if err != nil {
+		t.Fatalf("expected the run to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "B"})
+	assertStrings(t, "blocked", outcome.Blocked, []string{})
+	if outcome.Skipped != 0 {
+		t.Errorf("reference skips = %d, want 0", outcome.Skipped)
+	}
+}

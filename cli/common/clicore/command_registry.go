@@ -2,6 +2,7 @@ package clicore
 
 const (
 	LaunchCommandName               = "launch"
+	CompileCheckCommandName         = "compile-check"
 	InstallCommandName              = "install"
 	UpdateCommandName               = "update"
 	UninstallCommandName            = "uninstall"
@@ -31,6 +32,7 @@ const (
 
 var NativeCommands = []NativeCommandEntry{
 	{Name: LaunchCommandName, Description: "Open this Unity project with the matching Editor version", Owner: DispatcherOwned},
+	{Name: CompileCheckCommandName, Description: "Compile changed assemblies with the Editor's bundled C# compiler without launching Unity", Owner: DispatcherOwned},
 	{Name: "list", Description: "Show Unity tools currently exposed by the Editor", Owner: RunnerOwned},
 	{Name: "sync", Description: "Refresh .uloop/tools.json from the running Editor", Owner: RunnerOwned},
 	{Name: "focus-window", Description: "Bring the Unity Editor window to the foreground", Owner: RunnerOwned},
