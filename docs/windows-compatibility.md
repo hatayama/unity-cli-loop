@@ -105,10 +105,11 @@ regression that converts response-file paths to the OS separator; a macOS run ca
 
 To verify again, on a Windows machine with a Unity project that has been built at least once:
 
-1. Build the binary for `windows-amd64` — `go build -o uloop.exe ./cmd/dispatcher` from
-   `cli/dispatcher`, or `scripts/build-go-cli.sh` from a shell that can run it, which writes
-   `dist/windows-amd64/uloop.exe`. Then run `.\dist\windows-amd64\uloop.exe compile-check --all`
-   — a bare `uloop.exe` would resolve to an installed release rather than the build under test.
+1. Build the binary for `windows-amd64` and run the file that build wrote: `go build -o uloop.exe
+   ./cmd/dispatcher` from `cli/dispatcher`, then `.\uloop.exe compile-check --all` from there; or
+   `scripts/build-go-cli.sh` from a shell that can run it, which writes
+   `dist/windows-amd64/uloop.exe`, then `.\dist\windows-amd64\uloop.exe compile-check --all`. A bare
+   `uloop.exe` would resolve to an installed release rather than the build under test.
 2. Confirm the Editor was discovered — a run that fails at Editor discovery reports it before any
    compile happens.
 3. Open one `Library\Bee\artifacts\<dag>\*.rsp` and check the separator in its `-out:` line.
