@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.5.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.4.0...uloop-project-runner-v3.5.0) (2026-09-15)
+
+
+### Features
+
+* uloop compile-check compiles C# with the bundled Roslyn without launching Unity ([#2773](https://github.com/hatayama/unity-cli-loop/issues/2773)) ([dc0bb70](https://github.com/hatayama/unity-cli-loop/commit/dc0bb70bfbc318aa2355717643a0100d97545fcb))
+
 ## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.3.0...uloop-project-runner-v3.4.0) (2026-09-08)
 
 
