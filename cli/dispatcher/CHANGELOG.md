@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.6.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.5.1...dispatcher-v3.6.0) (2026-09-15)
+
+
+### Features
+
+* uloop compile-check compiles C# with the bundled Roslyn without launching Unity ([#2773](https://github.com/hatayama/unity-cli-loop/issues/2773)) ([dc0bb70](https://github.com/hatayama/unity-cli-loop/commit/dc0bb70bfbc318aa2355717643a0100d97545fcb))
+
+
+### Bug Fixes
+
+* **cli:** launch --restart tolerates Temp files still held after Unity exits ([#2766](https://github.com/hatayama/unity-cli-loop/issues/2766)) ([4e1fd86](https://github.com/hatayama/unity-cli-loop/commit/4e1fd86bbfa96986df104384c2e0e53a593a206b))
+
 ## [3.5.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.5.0...dispatcher-v3.5.1) (2026-09-10)
 
 
