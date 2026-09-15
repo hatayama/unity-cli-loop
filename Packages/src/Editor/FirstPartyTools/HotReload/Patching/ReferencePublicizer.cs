@@ -51,21 +51,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Returns the path of a cached publicized copy for <paramref name="sourceDllPath"/>,
-        /// writing it on first use. Only <c>Library/ScriptAssemblies/</c> DLLs are accepted —
-        /// engine and system assemblies must not be rewritten.
-        /// <paramref name="resolverSearchDirectories"/> are extra Cecil search dirs derived by
-        /// the caller from compilation references (Unity Editor layout must not be hardcoded).
+        /// Returns the path of a cached publicized copy of <paramref name="home"/>'s image,
+        /// writing it on first use. Only a publicizable home is accepted, and its image must sit
+        /// under <c>Library/ScriptAssemblies/</c> — engine and system assemblies must not be
+        /// rewritten. <paramref name="resolverSearchDirectories"/> are extra Cecil search dirs
+        /// derived by the caller from compilation references (Unity Editor layout must not be
+        /// hardcoded).
         /// </summary>
         public static string GetOrCreatePublicizedCopy(
-            string sourceDllPath,
+            HotReloadTypeHome home,
             IReadOnlyCollection<string> resolverSearchDirectories)
         {
-            Debug.Assert(!string.IsNullOrEmpty(sourceDllPath), "sourceDllPath must not be null or empty.");
+            Debug.Assert(home != null, "home must not be null.");
+            Debug.Assert(home.IsPublicizable, "home must be publicizable.");
             Debug.Assert(resolverSearchDirectories != null, "resolverSearchDirectories must not be null.");
 
-            string fullSourceDllPath = Path.GetFullPath(sourceDllPath);
-            Debug.Assert(File.Exists(fullSourceDllPath), "sourceDllPath must point to an existing DLL.");
+            string fullSourceDllPath = Path.GetFullPath(home.DllPath);
+            Debug.Assert(File.Exists(fullSourceDllPath), "home.DllPath must point to an existing DLL.");
             AssertIsScriptAssemblyPath(fullSourceDllPath);
 
             // InMemory: the source DLL is the currently loaded script assembly; keep no file handle.

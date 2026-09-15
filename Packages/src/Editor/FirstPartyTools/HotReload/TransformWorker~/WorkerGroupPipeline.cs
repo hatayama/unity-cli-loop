@@ -98,9 +98,9 @@ internal static class WorkerGroupPipeline
             unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
         }
 
-        IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
-            compilation,
-            targetTypesReference);
+        WorkerTypeHome home = new WorkerTypeHome(
+            input.TargetAssemblyName,
+            ResolveTargetTypesAssemblySymbol(compilation, targetTypesReference));
         List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(transformUnits.Count);
         foreach (WorkerSourceUnit transformUnit in transformUnits)
         {
@@ -113,7 +113,7 @@ internal static class WorkerGroupPipeline
             input.ChangedSiblingSourcePaths,
             parseOptions,
             references,
-            targetTypesAssemblySymbol);
+            home);
 
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();
@@ -129,7 +129,7 @@ internal static class WorkerGroupPipeline
                 unit,
                 input,
                 parseOptions,
-                targetTypesAssemblySymbol,
+                home,
                 assemblyGlobalUsings,
                 shimTypes,
                 addedMethodCatalog,
@@ -147,7 +147,7 @@ internal static class WorkerGroupPipeline
                 unit.PlainRoot,
                 unit.TypeEmitStates,
                 unit.SemanticModel,
-                targetTypesAssemblySymbol,
+                home,
                 addedMethodCatalog,
                 addedFieldCatalog,
                 unit.RemovedMembers,
@@ -340,7 +340,7 @@ internal static class WorkerGroupPipeline
         WorkerSourceUnit unit,
         WorkerInput input,
         CSharpParseOptions parseOptions,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         List<UsingDirectiveSyntax> assemblyGlobalUsings,
         List<ShimTypeBuilder> shimTypes,
         AddedMethodCatalog addedMethodCatalog,
@@ -354,14 +354,14 @@ internal static class WorkerGroupPipeline
             ConstDriftCollector.CollectConstDriftWarnings(
                 unit.BindingRoot,
                 unit.SemanticModel,
-                targetTypesAssemblySymbol));
+                home));
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
         unit.KindChangeSyntaxKeys =
             CompiledMemberKindChangeWarnings.AppendCompiledPropertyOrEventKindChangeWarnings(
                 unit.BindingRoot,
                 unit.SemanticModel,
-                targetTypesAssemblySymbol,
+                home,
                 unit.DeclarationDriftWarnings);
         unit.Baseline = BaselineSnapshotBuilder.BuildBaselineSnapshotState(
             unit.Input.SnapshotSource,
@@ -370,7 +370,7 @@ internal static class WorkerGroupPipeline
 
         List<TypeEmitState> typeEmitStates = TypeEmitPlanner.QueueAllTypeEmitStates(
             unit,
-            targetTypesAssemblySymbol,
+            home,
             input,
             assemblyGlobalUsings,
             shimTypes,

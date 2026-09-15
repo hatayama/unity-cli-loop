@@ -19,11 +19,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadIntroducedTypeCompiler
     {
-        private readonly IHotReloadIntroducedTypeCompilerEnvironment environment;
+        private readonly IHotReloadRoslynCompilerEnvironment environment;
+        private readonly HotReloadRoslynCompiler compiler;
 
-        public HotReloadIntroducedTypeCompiler(IHotReloadIntroducedTypeCompilerEnvironment environment)
+        public HotReloadIntroducedTypeCompiler(IHotReloadRoslynCompilerEnvironment environment)
         {
             this.environment = environment ?? throw new ArgumentNullException(nameof(environment));
+            compiler = new HotReloadRoslynCompiler(environment);
         }
 
         public async Task<HotReloadIntroducedTypeCompilerResult> CompileAsync(
@@ -35,22 +37,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(request));
             }
 
-            ExternalCompilerPaths paths = await environment.ResolveCompilerPathsOnMainThreadAsync(ct)
+            HotReloadRoslynCompileOutcome outcome = await compiler
+                .CompileAsync(CreateCompileRequest(request), ct)
                 .ConfigureAwait(false);
-            if (paths == null)
+            if (!outcome.PathsResolved)
             {
                 return HotReloadIntroducedTypeCompilerResult.Failure(
-                    "External compiler paths could not be resolved for this Unity installation.");
+                    HotReloadConstants.CompilerPathsUnresolvedMessage);
             }
 
-            foreach (HotReloadIntroducedTypeSource source in request.Sources)
-            {
-                environment.WriteSource(source.Path, source.Text);
-            }
-
-            DynamicCompilationBackendResult backendResult = await environment.CompileAsync(request, paths, ct)
-                .ConfigureAwait(false);
-            HotReloadIntroducedTypeCompilerResult backendFailure = ValidateBackendResult(request, backendResult);
+            HotReloadIntroducedTypeCompilerResult backendFailure =
+                ValidateBackendResult(request, outcome.BackendResult);
             if (backendFailure != null)
             {
                 return backendFailure;
@@ -79,6 +76,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 request.PdbPath,
                 request.Descriptors);
             return HotReloadIntroducedTypeCompilerResult.Prepared(artifact);
+        }
+
+        // Why the fallback is refused: the artifact stays on disk and later compilations reference
+        // it by path, which an AssemblyBuilder-built assembly cannot satisfy.
+        private static HotReloadRoslynCompileRequest CreateCompileRequest(
+            HotReloadIntroducedTypeCompilationRequest request)
+        {
+            List<HotReloadRoslynCompileSource> sources =
+                new List<HotReloadRoslynCompileSource>(request.Sources.Count);
+            foreach (HotReloadIntroducedTypeSource source in request.Sources)
+            {
+                sources.Add(new HotReloadRoslynCompileSource(source.Path, source.Text));
+            }
+
+            return new HotReloadRoslynCompileRequest(
+                sources,
+                request.DllPath,
+                request.ReferencePaths,
+                request.DefineSymbols,
+                allowAssemblyBuilderFallback: false);
         }
 
         private HotReloadIntroducedTypeCompilerResult ValidateBackendResult(
@@ -195,31 +212,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return diagnostics;
         }
-    }
-
-    /// <summary>
-    /// Defines the side-effect boundary of introduced-type compilation for deterministic tests.
-    /// </summary>
-    internal interface IHotReloadIntroducedTypeCompilerEnvironment
-    {
-        Task<ExternalCompilerPaths> ResolveCompilerPathsOnMainThreadAsync(CancellationToken ct);
-
-        Task<DynamicCompilationBackendResult> CompileAsync(
-            HotReloadIntroducedTypeCompilationRequest request,
-            ExternalCompilerPaths paths,
-            CancellationToken ct);
-
-        bool FileExists(string path);
-
-        AssemblyName ReadAssemblyName(string path);
-
-        byte[] ReadAllBytes(string path);
-
-        CompiledAssemblyLoadResult Load(byte[] assemblyBytes, byte[] pdbBytes);
-
-        IReadOnlyCollection<string> ReadDefinedTypeNames(string path);
-
-        void WriteSource(string path, string source);
     }
 
     /// <summary>
@@ -388,94 +380,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : new List<string>(values).AsReadOnly();
         }
     }
-
-    /// <summary>
-    /// Runs introduced-type compilation through the Unity Roslyn backend without fallback.
-    /// </summary>
-    internal sealed class HotReloadIntroducedTypeCompilerEnvironment : IHotReloadIntroducedTypeCompilerEnvironment
-    {
-        public async Task<ExternalCompilerPaths> ResolveCompilerPathsOnMainThreadAsync(CancellationToken ct)
-        {
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            return ExternalCompilerPathResolver.Resolve();
-        }
-
-        public Task<DynamicCompilationBackendResult> CompileAsync(
-            HotReloadIntroducedTypeCompilationRequest request,
-            ExternalCompilerPaths paths,
-            CancellationToken ct)
-        {
-            RoslynCompilerOptions options = new RoslynCompilerOptions(
-                request.DefineSymbols,
-                allowUnsafeCode: false,
-                emitDebugCode: true);
-            List<string> sourcePaths = new List<string>();
-            foreach (HotReloadIntroducedTypeSource source in request.Sources)
-            {
-                sourcePaths.Add(source.Path);
-            }
-
-            return RoslynCompilerBackend.CompileMultipleSourcesAsync(
-                sourcePaths,
-                request.DllPath,
-                new List<string>(request.ReferencePaths),
-                paths,
-                options,
-                ct,
-                markBuildStarted: static () => { },
-                markBuildFinished: static () => { },
-                incrementBuildCount: static () => { });
-        }
-
-        public bool FileExists(string path)
-        {
-            return File.Exists(path);
-        }
-
-        public AssemblyName ReadAssemblyName(string path)
-        {
-            return AssemblyName.GetAssemblyName(path);
-        }
-
-        public byte[] ReadAllBytes(string path)
-        {
-            return File.ReadAllBytes(path);
-        }
-
-        public CompiledAssemblyLoadResult Load(byte[] assemblyBytes, byte[] pdbBytes)
-        {
-            return CompiledAssemblyLoader.Load(assemblyBytes, pdbBytes);
-        }
-
-        public IReadOnlyCollection<string> ReadDefinedTypeNames(string path)
-        {
-            using AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(path);
-            List<string> typeNames = new List<string>();
-            // GetTypes descends into nested types, and Cecil's FullName keeps the '/' metadata
-            // separator, so a descriptor naming a nested type is matched instead of missed.
-            foreach (TypeDefinition type in assembly.MainModule.GetTypes())
-            {
-                if (type.Name != "<Module>")
-                {
-                    typeNames.Add(type.FullName);
-                }
-            }
-
-            return typeNames;
-        }
-
-        public void WriteSource(string path, string source)
-        {
-            string directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllText(path, source);
-        }
-    }
-
     /// <summary>
     /// Reports a prepared artifact or a rejection that left both prepared and active state unchanged.
     /// </summary>

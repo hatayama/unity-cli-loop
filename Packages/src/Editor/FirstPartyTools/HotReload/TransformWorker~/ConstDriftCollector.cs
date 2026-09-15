@@ -33,10 +33,10 @@ internal static class ConstDriftCollector
     internal static List<string> CollectConstDriftWarnings(
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol)
+        WorkerTypeHome home)
     {
         List<string> warnings = new List<string>();
-        if (targetTypesAssemblySymbol == null)
+        if (home.AssemblySymbol == null)
         {
             return warnings;
         }
@@ -59,7 +59,7 @@ internal static class ConstDriftCollector
                 continue;
             }
 
-            INamedTypeSymbol compiledType = targetTypesAssemblySymbol.GetTypeByMetadataName(
+            INamedTypeSymbol compiledType = home.FindCompiledTypeByMetadataName(
                 typeMetadataName);
             if (compiledType == null)
             {

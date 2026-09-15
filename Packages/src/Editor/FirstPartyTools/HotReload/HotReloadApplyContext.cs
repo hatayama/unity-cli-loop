@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName,
             string correlationId,
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome home,
             string[] defines,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be empty.");
-            Debug.Assert(!string.IsNullOrEmpty(targetDllPath), "targetDllPath must not be empty.");
+            Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(compilationAssembly != null, "compilationAssembly must not be null.");
             Debug.Assert(defines != null, "defines must not be null.");
             Debug.Assert(workerInput != null, "workerInput must not be null.");
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AssemblyName = assemblyName;
             CorrelationId = correlationId;
             CompilationAssembly = compilationAssembly;
-            TargetDllPath = targetDllPath;
+            Home = home;
             Defines = defines;
             WorkerInput = workerInput;
             WorkerOutput = workerOutput;
@@ -78,7 +78,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal UnityCompilationAssembly CompilationAssembly { get; }
 
-        internal string TargetDllPath { get; }
+        // Where the group's patch target types live; every file of a group shares one.
+        internal HotReloadTypeHome Home { get; }
+
+        internal string TargetDllPath => Home.DllPath;
 
         /// <summary>
         /// What this run prepared, or null when the run introduced no type. The artifact is

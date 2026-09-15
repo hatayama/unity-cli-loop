@@ -25,7 +25,7 @@ internal static class AddedFieldClassifier
         TypeEmitState typeState,
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         AddedFieldCatalog addedFieldCatalog,
         List<string> declarationDriftWarnings)
     {
@@ -49,7 +49,7 @@ internal static class AddedFieldClassifier
                 ClassifyOneAddedField(
                     typeState,
                     semanticModel,
-                    targetTypesAssemblySymbol,
+                    home,
                     fieldDeclaration,
                     variable,
                     fieldSymbol,
@@ -63,7 +63,7 @@ internal static class AddedFieldClassifier
     internal static void ClassifyOneAddedField(
         TypeEmitState typeState,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         FieldDeclarationSyntax fieldDeclaration,
         VariableDeclaratorSyntax variable,
         IFieldSymbol fieldSymbol,
@@ -117,7 +117,7 @@ internal static class AddedFieldClassifier
         binding.UnavailableReason = EvaluateAddedFieldAvailability(
             typeState.TypeSymbol,
             semanticModel,
-            targetTypesAssemblySymbol,
+            home,
             fieldSymbol,
             binding,
             typeState.SourceUnit.ArtifactMap);
@@ -140,7 +140,7 @@ internal static class AddedFieldClassifier
     internal static string EvaluateAddedFieldAvailability(
         INamedTypeSymbol hostType,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         IFieldSymbol fieldSymbol,
         AddedFieldBinding binding,
         IntroducedTypeArtifactMap artifactMap)
@@ -160,7 +160,7 @@ internal static class AddedFieldClassifier
         AddedFieldStoreAvailability availability = EvaluateStoreAvailability(
             hostType,
             semanticModel,
-            targetTypesAssemblySymbol,
+            home,
             fieldSymbol.Type,
             binding.Initializer,
             artifactMap,
@@ -178,7 +178,7 @@ internal static class AddedFieldClassifier
     internal static AddedFieldStoreAvailability EvaluateStoreAvailability(
         INamedTypeSymbol hostType,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         ITypeSymbol valueType,
         ExpressionSyntax initializer,
         IntroducedTypeArtifactMap artifactMap,
@@ -207,7 +207,7 @@ internal static class AddedFieldClassifier
                 initializer,
                 semanticModel,
                 hostType,
-                targetTypesAssemblySymbol,
+                home,
                 artifactMap))
         {
             return AddedFieldStoreAvailability.InitializerNotEmittable;
@@ -360,7 +360,7 @@ internal static class AddedFieldClassifier
 
     internal static bool IsSameFileAddedMember(
         ISymbol symbol,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         SyntaxTree currentTree)
     {
         if (symbol.ContainingType == null || currentTree == null)
@@ -383,7 +383,7 @@ internal static class AddedFieldClassifier
             return false;
         }
 
-        INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(symbol.ContainingType, targetTypesAssemblySymbol);
+        INamedTypeSymbol compiledType = home.FindCompiledType(symbol.ContainingType);
         if (compiledType == null)
         {
             return true;
@@ -423,7 +423,7 @@ internal static class AddedFieldClassifier
         ExpressionSyntax initializer,
         SemanticModel semanticModel,
         INamedTypeSymbol hostType,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         IntroducedTypeArtifactMap artifactMap)
     {
         foreach (SyntaxNode node in initializer.DescendantNodesAndSelf())
@@ -454,7 +454,7 @@ internal static class AddedFieldClassifier
             if (HasDisallowedInitializerSymbol(
                 semanticModel.GetSymbolInfo(node).Symbol,
                 hostType,
-                targetTypesAssemblySymbol,
+                home,
                 initializer.SyntaxTree))
             {
                 return true;
@@ -515,7 +515,7 @@ internal static class AddedFieldClassifier
     internal static bool HasDisallowedInitializerSymbol(
         ISymbol symbol,
         INamedTypeSymbol hostType,
-        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerTypeHome home,
         SyntaxTree currentTree)
     {
         if (symbol == null
@@ -546,7 +546,7 @@ internal static class AddedFieldClassifier
             return true;
         }
 
-        if (IsSameFileAddedMember(symbol, targetTypesAssemblySymbol, currentTree))
+        if (IsSameFileAddedMember(symbol, home, currentTree))
         {
             return true;
         }

@@ -18,12 +18,12 @@ internal static class SiblingConstDriftCollector
         string[] changedSiblingSourcePaths,
         CSharpParseOptions parseOptions,
         IReadOnlyList<MetadataReference> references,
-        IAssemblySymbol targetTypesAssemblySymbol)
+        WorkerTypeHome home)
     {
         List<string> warnings = new List<string>();
         if (changedSiblingSourcePaths == null
             || changedSiblingSourcePaths.Length == 0
-            || targetTypesAssemblySymbol == null)
+            || home.AssemblySymbol == null)
         {
             return warnings;
         }
@@ -50,7 +50,7 @@ internal static class SiblingConstDriftCollector
                 ConstDriftCollector.CollectConstDriftWarnings(
                     root,
                     semanticModel,
-                    targetTypesAssemblySymbol));
+                    home));
         }
 
         return warnings;

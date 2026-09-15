@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 
 using NUnit.Framework;
+
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -21,6 +24,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FilePath = "Assets/Tests/Editor/HotReload/HotReloadCoreFixtures.cs";
 
         private static Assembly ShimAssembly => typeof(HotReloadHandwrittenShims).Assembly;
+
+        // The test assembly stands in for the patch target, so its ScriptAssemblies image is the
+        // home the preflight resolves existing methods against.
+        private static HotReloadTypeHome TestAssemblyHome
+        {
+            get
+            {
+                string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+                string dllPath =
+                    Path.Combine(projectRoot, "Library/ScriptAssemblies", TestAssemblyName + ".dll");
+                return HotReloadTypeHome.ScriptAssemblies(TestAssemblyName, dllPath);
+            }
+        }
 
         /// <summary>
         /// What: every entry of a file resolving leaves the result all-resolved, with one resolved
@@ -42,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
-                TestAssemblyName,
+                TestAssemblyHome,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -74,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
-                TestAssemblyName,
+                TestAssemblyHome,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -119,7 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
-                TestAssemblyName,
+                TestAssemblyHome,
                 FilePath,
                 ShimAssembly,
                 entries,

@@ -17,7 +17,7 @@ internal static class IntroducedTypeConstDriftDetector
     internal static bool TryFindUnusableReferencedConst(
         BaseTypeDeclarationSyntax declaration,
         SemanticModel semanticModel,
-        IAssemblySymbol targetAssembly,
+        WorkerTypeHome home,
         out string identifier,
         out string reason)
     {
@@ -46,7 +46,7 @@ internal static class IntroducedTypeConstDriftDetector
                 return true;
             }
 
-            if (HasDriftedFromCompiledValue(field, targetAssembly))
+            if (HasDriftedFromCompiledValue(field, home))
             {
                 identifier = CecilTypeNames.ToMetadataName(field.ContainingType) + "." + field.Name;
                 reason = "Changed const requires a compile";
@@ -59,9 +59,9 @@ internal static class IntroducedTypeConstDriftDetector
         return false;
     }
 
-    private static bool HasDriftedFromCompiledValue(IFieldSymbol field, IAssemblySymbol targetAssembly)
+    private static bool HasDriftedFromCompiledValue(IFieldSymbol field, WorkerTypeHome home)
     {
-        INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(field.ContainingType, targetAssembly);
+        INamedTypeSymbol compiledType = home.FindCompiledType(field.ContainingType);
         if (compiledType == null)
         {
             return false;

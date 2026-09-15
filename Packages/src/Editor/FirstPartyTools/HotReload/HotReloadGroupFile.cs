@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             string assemblyName,
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome home,
             string projectRoot,
             HotReloadFileSinks sinks,
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be empty.");
             Debug.Assert(compilationAssembly != null, "compilationAssembly must not be null.");
-            Debug.Assert(!string.IsNullOrEmpty(targetDllPath), "targetDllPath must not be empty.");
+            Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
             Debug.Assert(sinks != null, "sinks must not be null.");
 
@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ProjectRelativePath = projectRelativePath;
             AssemblyName = assemblyName;
             CompilationAssembly = compilationAssembly;
-            TargetDllPath = targetDllPath;
+            Home = home;
             ProjectRoot = projectRoot;
             Sinks = sinks;
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 template.AssemblyName,
                 template.CompilationAssembly,
-                template.TargetDllPath,
+                template.Home,
                 template.ProjectRoot,
                 sinks,
                 null);
@@ -80,7 +80,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal UnityCompilationAssembly CompilationAssembly { get; }
 
-        internal string TargetDllPath { get; }
+        // Where this file's patch target types live.
+        internal HotReloadTypeHome Home { get; }
+
+        internal string TargetDllPath => Home.DllPath;
 
         internal string ProjectRoot { get; }
 

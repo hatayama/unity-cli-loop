@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.ProjectRelativePath,
                 resolution.AssemblyName,
                 resolution.CompilationAssembly,
-                resolution.TargetDllPath,
+                resolution.Home,
                 resolution.ProjectRoot,
                 sinks,
                 resolution.NewSourceMembershipEvidence);

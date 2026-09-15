@@ -23,8 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal static string[] BuildWorkerReferencePaths(
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath)
+            HotReloadTypeHome targetHome)
         {
+            Debug.Assert(targetHome != null, "targetHome must not be null.");
+
             List<string> paths = new List<string>();
             if (compilationAssembly.allReferences != null)
             {
@@ -37,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            string fullTarget = Path.GetFullPath(targetDllPath);
+            string fullTarget = Path.GetFullPath(targetHome.DllPath);
             bool hasTarget = false;
             foreach (string path in paths)
             {
@@ -221,11 +223,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static ShimReferencePathsResult TryBuildShimReferencePaths(
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome targetHome,
             bool includeHarmonyReference,
             bool includeAddedFieldStoreReference,
             TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
         {
+            Debug.Assert(targetHome != null, "targetHome must not be null.");
+
             // Why catch only AssemblyResolutionException: publicize fails when Cecil cannot
             // resolve engine/netstandard types during Write; that is a per-file hot-reload
             // outcome, not an internal tool crash. Other exceptions must still Fail Fast.
@@ -234,7 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new ShimReferencePathsResult(
                     BuildShimReferencePaths(
                         compilationAssembly,
-                        targetDllPath,
+                        targetHome,
                         includeHarmonyReference,
                         includeAddedFieldStoreReference,
                         introducedTypeArtifacts),
@@ -257,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private static List<string> BuildShimReferencePaths(
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome targetHome,
             bool includeHarmonyReference,
             bool includeAddedFieldStoreReference,
             TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
@@ -273,7 +277,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<string> references = new List<string>();
             string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(
-                targetDllPath,
+                targetHome,
                 resolverSearchDirectories);
             references.Add(publicizedTarget);
 
@@ -290,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return references;
             }
 
-            string fullTarget = Path.GetFullPath(targetDllPath);
+            string fullTarget = Path.GetFullPath(targetHome.DllPath);
             foreach (string reference in compilationAssembly.allReferences)
             {
                 if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
@@ -305,22 +309,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string referenceFileName = Path.GetFileNameWithoutExtension(fullReference);
-                if (IsUnderDirectory(fullReference, scriptAssembliesDirectory)
-                    && HotReloadConstants.IsPublicizableProjectAssemblyFileName(referenceFileName))
-                {
-                    references.Add(
-                        ReferencePublicizer.GetOrCreatePublicizedCopy(
-                            fullReference,
-                            resolverSearchDirectories));
-                }
-                else
-                {
-                    references.Add(fullReference);
-                }
+                references.Add(
+                    PublicizeProjectReference(
+                        fullReference,
+                        scriptAssembliesDirectory,
+                        resolverSearchDirectories));
             }
 
             return references;
+        }
+
+        /// <summary>
+        /// Returns the reference a shim compile binds against for one of Unity's compile
+        /// references: a publicized copy when the reference is a project assembly the shim may
+        /// need private members of, and the reference itself otherwise.
+        /// </summary>
+        private static string PublicizeProjectReference(
+            string fullReference,
+            string scriptAssembliesDirectory,
+            IReadOnlyCollection<string> resolverSearchDirectories)
+        {
+            string referenceFileName = Path.GetFileNameWithoutExtension(fullReference);
+            if (!IsUnderDirectory(fullReference, scriptAssembliesDirectory)
+                || !HotReloadConstants.IsPublicizableProjectAssemblyFileName(referenceFileName))
+            {
+                return fullReference;
+            }
+
+            return ReferencePublicizer.GetOrCreatePublicizedCopy(
+                HotReloadTypeHome.ScriptAssemblies(referenceFileName, fullReference),
+                resolverSearchDirectories);
         }
 
         private static bool IsUnderDirectory(string fullPath, string directoryPath)

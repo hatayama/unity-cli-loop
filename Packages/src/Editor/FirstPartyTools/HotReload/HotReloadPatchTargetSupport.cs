@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 
 using Mono.Cecil;
 
@@ -9,7 +8,6 @@ using UnityEditor.Compilation;
 
 using UnityEngine;
 
-using Assembly = System.Reflection.Assembly;
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -99,23 +97,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            HotReloadTypeHome home = domain.ResolveTypeHome(projectRoot, assemblyName);
 
-            if (!File.Exists(targetDllPath))
+            if (!File.Exists(home.DllPath))
             {
                 outcomes.Add(
                     HotReloadMethodOutcome.Failed(
                         "(file)",
-                        "Compiled assembly not found at '" + targetDllPath + "'. Compile the project first.",
+                        "Compiled assembly not found at '" + home.DllPath + "'. Compile the project first.",
                         assemblyResolvePath));
                 return HotReloadPatchTargetResolution.EarlyExit(
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
-            string mvidGuardError = CheckMvidGuard(assemblyName, targetDllPath);
+            string mvidGuardError = CheckMvidGuard(home);
             if (mvidGuardError != null)
             {
                 outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
@@ -132,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     projectRelativePath,
                     assemblyName,
                     compilationAssembly,
-                    targetDllPath,
+                    home.DllPath,
                     out newSourceMembershipEvidence);
                 if (membershipFailure != null)
                 {
@@ -169,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 assemblyName,
                 compilationAssembly,
-                targetDllPath,
+                home,
                 projectRoot,
                 unchangedDecision,
                 newSourceMembershipEvidence);
@@ -211,29 +206,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths;
         }
 
-        internal static string CheckMvidGuard(string assemblyName, string targetDllPath)
+        internal static string CheckMvidGuard(HotReloadTypeHome home)
         {
+            Debug.Assert(home != null, "home must not be null.");
+
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
             using AssemblyDefinition assemblyDefinition =
-                AssemblyDefinition.ReadAssembly(targetDllPath, readerParameters);
+                AssemblyDefinition.ReadAssembly(home.DllPath, readerParameters);
             string compiledMvid = assemblyDefinition.MainModule.Mvid.ToString();
 
-            foreach (Assembly loaded in AppDomain.CurrentDomain.GetAssemblies())
+            HotReloadLoadedAssemblyState state = home.ResolveLoadedAssembly(compiledMvid).State;
+            if (state == HotReloadLoadedAssemblyState.Stale)
             {
-                if (loaded.GetName().Name != assemblyName)
-                {
-                    continue;
-                }
-
-                if (loaded.ManifestModule.ModuleVersionId.ToString() != compiledMvid)
-                {
-                    return HotReloadConstants.StaleAssemblyHint;
-                }
-
-                return null;
+                return HotReloadConstants.StaleAssemblyHint;
             }
 
-            return HotReloadConstants.AssemblyNotLoadedHint;
+            if (state == HotReloadLoadedAssemblyState.NotLoaded)
+            {
+                return HotReloadConstants.AssemblyNotLoadedHint;
+            }
+
+            return null;
         }
 
         internal static string ToProjectRelativeScriptPath(

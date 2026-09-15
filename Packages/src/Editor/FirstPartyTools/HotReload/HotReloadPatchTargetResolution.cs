@@ -14,7 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string ProjectRelativePath { get; }
         public string AssemblyName { get; }
         public UnityCompilationAssembly CompilationAssembly { get; }
-        public string TargetDllPath { get; }
+
+        /// <summary>
+        /// Where the target's types live, or null on an early exit: a file that never reached a
+        /// patch target has no resolved home.
+        /// </summary>
+        public HotReloadTypeHome Home { get; }
+
+        public string TargetDllPath => Home?.DllPath;
+
         public string ProjectRoot { get; }
         public HotReloadUnchangedSourceDecision UnchangedDecision { get; }
         public HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence { get; }
@@ -26,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             string assemblyName,
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome home,
             string projectRoot,
             HotReloadUnchangedSourceDecision unchangedDecision,
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
@@ -35,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ProjectRelativePath = projectRelativePath;
             AssemblyName = assemblyName;
             CompilationAssembly = compilationAssembly;
-            TargetDllPath = targetDllPath;
+            Home = home;
             ProjectRoot = projectRoot;
             UnchangedDecision = unchangedDecision;
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
@@ -61,13 +69,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// A file whose compiled assembly, DLL and project root were all resolved.
+        /// A file whose compiled assembly, type home and project root were all resolved.
         /// </summary>
         internal static HotReloadPatchTargetResolution Resolved(
             string projectRelativePath,
             string assemblyName,
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
+            HotReloadTypeHome home,
             string projectRoot,
             HotReloadUnchangedSourceDecision unchangedDecision,
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
@@ -75,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
             Debug.Assert(compilationAssembly != null, "compilationAssembly must not be null.");
-            Debug.Assert(!string.IsNullOrEmpty(targetDllPath), "targetDllPath must not be null or empty.");
+            Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
 
             return new HotReloadPatchTargetResolution(
@@ -83,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 assemblyName,
                 compilationAssembly,
-                targetDllPath,
+                home,
                 projectRoot,
                 unchangedDecision,
                 newSourceMembershipEvidence);

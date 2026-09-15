@@ -58,6 +58,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadInvocationCounts Invocations { get; } = new HotReloadInvocationCounts();
 
         /// <summary>
+        /// Where the types of <paramref name="assemblyName"/> live for this domain: the artifact
+        /// this domain retains when the name belongs to one, and the project's compiled assembly
+        /// otherwise.
+        /// </summary>
+        /// <remarks>
+        /// Why the domain answers: only it knows which artifact assemblies this domain still
+        /// holds, and an artifact is not discoverable by simple name in the AppDomain. The
+        /// artifact branch is the entry point for patching an introduced type itself; today's
+        /// callers always name a project assembly and take the ScriptAssemblies branch.
+        /// </remarks>
+        internal HotReloadTypeHome ResolveTypeHome(string projectRoot, string assemblyName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+
+            if (IntroducedTypes.TryFindActiveArtifactByAssemblyName(
+                    assemblyName,
+                    out HotReloadIntroducedTypeArtifact artifact))
+            {
+                return HotReloadTypeHome.RetainedArtifact(assemblyName, artifact.DllPath, artifact.Assembly);
+            }
+
+            return HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, assemblyName);
+        }
+
+        /// <summary>
         /// Stops this domain's resolver from answering binds. The generations are not reverted
         /// here: Harmony patches are removed through the patcher, which owns that side.
         /// </summary>

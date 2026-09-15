@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using System.Reflection.Emit;
 
 using HarmonyLib;
 using NUnit.Framework;
+
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -25,6 +29,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostType = "Ns.Host";
         private const string NestedCecilType = "Ns.Outer/Inner";
         private const string NestedReflectionType = "Ns.Outer+Inner";
+
+        // A project assembly name no introduced-type artifact can carry.
+        private const string ProjectAssemblyName = "DomainTypeHomeFixtureAssembly";
+        private const string ArtifactDllPath = "domain-artifact.dll";
 
         private HotReloadDomainTestAccess _access;
 
@@ -403,6 +411,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _access.Domain.RecordAppliedSource(FileOne, "hash", true);
             _access.Domain.RecordAppliedSource(FileTwo, "other-hash", false);
             _access.RecordSupersededSignature(FileOne, SupersededMethodKey, "Superseded(int)");
+        }
+
+        /// <summary>
+        /// What: an assembly name no active artifact carries resolves to the project's compiled
+        /// assembly under Library/ScriptAssemblies.
+        /// </summary>
+        [Test]
+        public void ResolveTypeHome_NoActiveArtifactForTheName_ReturnsTheScriptAssembliesHome()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadTypeHome home = _access.Domain.ResolveTypeHome(projectRoot, ProjectAssemblyName);
+
+            Assert.That(home.Kind, Is.EqualTo(HotReloadTypeHomeKind.ScriptAssemblies));
+            Assert.That(home.AssemblyName, Is.EqualTo(ProjectAssemblyName));
+            Assert.That(
+                home.DllPath,
+                Is.EqualTo(Path.Combine(
+                    projectRoot,
+                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                    ProjectAssemblyName + HotReloadConstants.CompiledAssemblyExtension)));
+        }
+
+        /// <summary>
+        /// What: an assembly name an active artifact carries resolves to that artifact, so the
+        /// dll path is the artifact's image rather than a ScriptAssemblies one.
+        /// </summary>
+        [Test]
+        public void ResolveTypeHome_ActiveArtifactCarriesTheName_ReturnsTheRetainedArtifactHome()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadIntroducedTypeArtifact artifact = ActivateArtifact();
+
+            HotReloadTypeHome home = _access.Domain.ResolveTypeHome(
+                projectRoot,
+                artifact.Assembly.GetName().Name);
+
+            Assert.That(home.Kind, Is.EqualTo(HotReloadTypeHomeKind.RetainedArtifact));
+            Assert.That(home.DllPath, Is.EqualTo(artifact.DllPath));
+        }
+
+        private HotReloadIntroducedTypeArtifact ActivateArtifact()
+        {
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                CreateIntroducedTypeAssembly(),
+                ArtifactDllPath,
+                "domain-artifact.pdb",
+                new List<HotReloadIntroducedTypeDescriptor>
+                {
+                    new HotReloadIntroducedTypeDescriptor(
+                        "OriginalAssembly",
+                        "original-mvid",
+                        "Example.Introduced",
+                        "Assets/DomainIntroduced.cs",
+                        "domain-fingerprint",
+                        "public class Introduced { }")
+                });
+            _access.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            _access.Domain.IntroducedTypes.Activate(artifact);
+            return artifact;
+        }
+
+        // Why a generated name: an artifact assembly is compiled under a name of its own, so a
+        // fixture that reused a project assembly's name would not resolve the way production does.
+        private static Assembly CreateIntroducedTypeAssembly()
+        {
+            AssemblyName assemblyName = new AssemblyName("UloopIntroducedTypes_" + Guid.NewGuid().ToString("N"));
+            return AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
         }
 
         private static void AssertRow(

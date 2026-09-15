@@ -21,8 +21,7 @@ internal static class IntroducedTypePlanner
 {
     internal static void Plan(
         WorkerSourceUnit unit,
-        IAssemblySymbol targetAssembly,
-        string targetAssemblyName,
+        WorkerTypeHome home,
         string targetAssemblyMvid,
         IntroducedTypeArtifactMap artifactMap,
         IReadOnlyList<string> defineSymbols,
@@ -37,12 +36,12 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
-            if (CompiledMemberMatcher.FindCompiledType(typeSymbol, targetAssembly) != null)
+            if (home.FindCompiledType(typeSymbol) != null)
             {
                 continue;
             }
 
-            if (IsRefusedForNesting(unit, typeSymbol, declaration, targetAssembly))
+            if (IsRefusedForNesting(unit, typeSymbol, declaration, home))
             {
                 continue;
             }
@@ -56,7 +55,7 @@ internal static class IntroducedTypePlanner
             if (IntroducedTypeConstDriftDetector.TryFindUnusableReferencedConst(
                     declaration,
                     unit.ConstDriftSemanticModel ?? unit.SemanticModel,
-                    targetAssembly,
+                    home,
                     out string unusableConst,
                     out string unusableConstReason))
             {
@@ -73,14 +72,14 @@ internal static class IntroducedTypePlanner
                 defineSymbols,
                 typeSymbol,
                 unit.SemanticModel,
-                targetAssembly,
-                targetAssemblyName,
+                home.AssemblySymbol,
+                home.AssemblyName,
                 targetAssemblyMvid,
                 artifactMap);
             if (IsAlreadyIntroduced(
                     unit,
                     artifactMap,
-                    targetAssemblyName,
+                    home.AssemblyName,
                     targetAssemblyMvid,
                     metadataName,
                     declarationFingerprint))
@@ -91,7 +90,7 @@ internal static class IntroducedTypePlanner
             unit.IntroducedTypes.Add(
                 new WorkerIntroducedType
                 {
-                    OriginalAssemblyName = targetAssemblyName ?? string.Empty,
+                    OriginalAssemblyName = home.AssemblyName ?? string.Empty,
                     OriginalAssemblyMvid = targetAssemblyMvid ?? string.Empty,
                     MetadataName = metadataName,
                     OwnerProjectRelativePath = unit.Input.ProjectRelativePath,
@@ -103,7 +102,7 @@ internal static class IntroducedTypePlanner
         foreach (DelegateDeclarationSyntax declaration in unit.Root.DescendantNodes().OfType<DelegateDeclarationSyntax>())
         {
             INamedTypeSymbol delegateSymbol = unit.SemanticModel.GetDeclaredSymbol(declaration);
-            if (delegateSymbol == null || CompiledMemberMatcher.FindCompiledType(delegateSymbol, targetAssembly) != null)
+            if (delegateSymbol == null || home.FindCompiledType(delegateSymbol) != null)
             {
                 continue;
             }
@@ -120,14 +119,14 @@ internal static class IntroducedTypePlanner
         WorkerSourceUnit unit,
         INamedTypeSymbol typeSymbol,
         BaseTypeDeclarationSyntax declaration,
-        IAssemblySymbol targetAssembly)
+        WorkerTypeHome home)
     {
         if (typeSymbol.ContainingType != null)
         {
             // Why silent when the outer type is not compiled either: that outer declaration
             // is refused on its own, and its diagnostic already names this nested one as the
             // reason. Reporting both turns a single refusal into two lines about one type.
-            if (CompiledMemberMatcher.FindCompiledType(typeSymbol.ContainingType, targetAssembly) == null)
+            if (home.FindCompiledType(typeSymbol.ContainingType) == null)
             {
                 return true;
             }

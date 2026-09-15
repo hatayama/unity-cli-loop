@@ -17,18 +17,6 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class CompiledMemberMatcher
 {
-    internal static INamedTypeSymbol FindCompiledType(
-        INamedTypeSymbol sourceType,
-        IAssemblySymbol targetTypesAssemblySymbol)
-    {
-        if (sourceType == null || targetTypesAssemblySymbol == null)
-        {
-            return null;
-        }
-
-        return targetTypesAssemblySymbol.GetTypeByMetadataName(ConstDriftCollector.ToReflectionMetadataName(sourceType));
-    }
-
     internal static CompiledMethodMatch MatchCompiledOrdinaryMethod(
         INamedTypeSymbol compiledType,
         IMethodSymbol sourceMethod)

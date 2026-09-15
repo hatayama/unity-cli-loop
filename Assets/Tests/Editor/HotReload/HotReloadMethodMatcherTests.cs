@@ -1,6 +1,9 @@
+using System.IO;
 using System.Reflection;
 
 using NUnit.Framework;
+
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -15,6 +18,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCoreFixture";
 
+        // The test assembly is itself a project assembly, so its compiled image is the one the
+        // matcher reads: a ScriptAssemblies home naming it is what production passes in.
+        private static HotReloadTypeHome TestAssemblyHome =>
+            HotReloadTypeHome.ScriptAssemblies(TestAssemblyName, TestAssemblyDllPath);
+
+        private static string TestAssemblyDllPath
+        {
+            get
+            {
+                string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+                return Path.Combine(projectRoot, "Library/ScriptAssemblies", TestAssemblyName + ".dll");
+            }
+        }
+
         /// <summary>
         /// What: a known instance method resolves to the live MethodBase with matching MetadataToken identity.
         /// </summary>
@@ -22,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Resolve_KnownInstanceMethod_ReturnsLiveMethodBase()
         {
             HotReloadMethodMatchResult result = HotReloadMethodMatcher.Resolve(
-                TestAssemblyName,
+                TestAssemblyHome,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
                 new[] { "System.Int32", "System.Int32" },
@@ -46,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Resolve_Overload_SelectsMatchingParameterTypes()
         {
             HotReloadMethodMatchResult result = HotReloadMethodMatcher.Resolve(
-                TestAssemblyName,
+                TestAssemblyHome,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
                 new[] { "System.Int32", "System.Int32", "System.Int32" },
@@ -68,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Resolve_ParameterTypeMismatch_ReturnsMethodNotFound()
         {
             HotReloadMethodMatchResult result = HotReloadMethodMatcher.Resolve(
-                TestAssemblyName,
+                TestAssemblyHome,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
                 new[] { "System.String", "System.Int32" },
@@ -85,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Resolve_StaticMethod_ReturnsLiveMethodBase()
         {
             HotReloadMethodMatchResult result = HotReloadMethodMatcher.Resolve(
-                TestAssemblyName,
+                TestAssemblyHome,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.StaticPing),
                 new string[0],
@@ -109,13 +126,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] parameterTypeFullNames = { "System.Int32" };
 
             HotReloadMethodMatchResult nonGeneric = HotReloadMethodMatcher.Resolve(
-                TestAssemblyName,
+                TestAssemblyHome,
                 typeMetadataName,
                 nameof(HotReloadSignatureChangeGenericCallerFixture.Caller),
                 parameterTypeFullNames,
                 0);
             HotReloadMethodMatchResult generic = HotReloadMethodMatcher.Resolve(
-                TestAssemblyName,
+                TestAssemblyHome,
                 typeMetadataName,
                 nameof(HotReloadSignatureChangeGenericCallerFixture.Caller),
                 parameterTypeFullNames,
@@ -144,7 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int metadataToken = knownMethod.MetadataToken;
 
             HotReloadMethodMatchResult result = HotReloadMethodMatcher.ResolveLoadedMethod(
-                TestAssemblyName,
+                TestAssemblyHome,
                 "00000000-0000-0000-0000-000000000000",
                 metadataToken);
 

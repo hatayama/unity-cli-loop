@@ -649,6 +649,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that an active artifact is found by the simple name of its assembly, which is
+        /// how a patch target names the assembly it belongs to.
+        /// </summary>
+        [Test]
+        public void TryFindActiveArtifactByAssemblyName_ActiveArtifact_ReturnsThatArtifact()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifact("by-name");
+            registry.RegisterPrepared(artifact);
+            registry.Activate(artifact);
+
+            bool found = registry.TryFindActiveArtifactByAssemblyName(
+                artifact.Assembly.GetName().Name,
+                out HotReloadIntroducedTypeArtifact foundArtifact);
+
+            Assert.That(found, Is.True);
+            Assert.That(foundArtifact, Is.SameAs(artifact));
+        }
+
+        /// <summary>
+        /// Verifies that a name no active artifact carries finds nothing, so a project assembly
+        /// keeps resolving to its compiled image.
+        /// </summary>
+        [Test]
+        public void TryFindActiveArtifactByAssemblyName_UnknownName_ReturnsFalse()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifact("by-name");
+            registry.RegisterPrepared(artifact);
+            registry.Activate(artifact);
+
+            bool found = registry.TryFindActiveArtifactByAssemblyName(
+                artifact.Assembly.GetName().Name + ".Absent",
+                out HotReloadIntroducedTypeArtifact foundArtifact);
+
+            Assert.That(found, Is.False);
+            Assert.That(foundArtifact, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that a prepared artifact that was never activated is not found by name, so a
+        /// run that has not reached its commit boundary cannot be patched against it.
+        /// </summary>
+        [Test]
+        public void TryFindActiveArtifactByAssemblyName_PreparedButNotActivated_ReturnsFalse()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifact("prepared-only");
+            registry.RegisterPrepared(artifact);
+
+            bool found = registry.TryFindActiveArtifactByAssemblyName(
+                artifact.Assembly.GetName().Name,
+                out HotReloadIntroducedTypeArtifact foundArtifact);
+
+            Assert.That(found, Is.False);
+            Assert.That(foundArtifact, Is.Null);
+        }
+
+        /// <summary>
         /// Judges each background resolution against the identity that was requested, without
         /// keeping one entry per call in memory.
         /// </summary>

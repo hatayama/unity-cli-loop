@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadIsolationRetryContext retryContext = new HotReloadIsolationRetryContext(
                 context.WorkerInput,
                 context.CompilationAssembly,
-                context.TargetDllPath,
+                context.Home,
                 context.Defines,
                 context.WorkerOutput.skipped,
                 context.GroupFilePaths,
