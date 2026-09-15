@@ -171,8 +171,25 @@ and the ones left out because every assembly they reference kept the same public
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: no Bee build artifacts found**
 The project has never been built by this Editor, or `Library` was deleted. Raised only when the dag
 holds no assembly at all: a build that failed and took some assemblies down with it is replayed
-rather than refused, and the assemblies it left no artifact for are the ones this run compiles. Open
-the project once (`uloop launch`) and let it compile, then retry.
+rather than refused, and the assemblies it left no artifact for are the ones this run compiles.
+
+compile-check cannot create the response files itself: which sources belong to which assembly, the
+scripting defines, and the package references are all decided by the Editor, and part of that
+decision lives in native code. So the first build has to be Unity's. It does not need a window: a
+headless run imports the project, writes the response files and exits.
+
+```bash
+# macOS
+"/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -quit -projectPath "<PROJECT_ROOT>"
+# Windows
+"C:\Program Files\Unity\Hub\Editor\<version>\Editor\Unity.exe" -batchmode -nographics -quit -projectPath "<PROJECT_ROOT>"
+```
+
+`uloop launch` is the same first build with the Editor window open; use whichever fits. The run
+takes as long as the project's initial import (about a minute for a 100-assembly project, longer
+for a large one). Once `Library` exists, compile-check runs without the Editor until an `.asmdef` or
+define change asks for another build. The same applies on CI: restore `Library` from a cache or
+run this headless build once per job before calling compile-check.
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: an assembly definition no longer matches the last build**
 Raised when an `.asmdef` was added, deleted or moved, when an `.asmref` was added, moved, removed

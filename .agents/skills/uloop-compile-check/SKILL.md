@@ -25,6 +25,16 @@ in `Library/uloop/compile-check/` and are never handed to the Editor.
   run `uloop compile` once first. The response files describe the previous build only, so
   compile-check refuses the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED` instead of reporting
   diagnostics for a configuration the project no longer has.
+- The project has no `Library` yet (a fresh clone, or an Editor that has never opened it): there is
+  no build to replay, so the run is refused with the same code. Let Unity build once; a headless run
+  is enough and needs no window:
+
+  ```bash
+  <Unity executable> -batchmode -nographics -quit -projectPath /path/to/project
+  ```
+
+  `uloop launch` does the same with the Editor window open. After that one build, compile-check works
+  without the Editor until an `.asmdef` or define change asks for another.
 
 ## Usage
 
