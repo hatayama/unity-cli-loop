@@ -6,6 +6,7 @@ func TestNativeCommandEntriesDeclareOwners(t *testing.T) {
 	// Verifies native command ownership lives in the command registry.
 	expectedOwners := map[string]CommandOwner{
 		LaunchCommandName:               DispatcherOwned,
+		CompileCheckCommandName:         DispatcherOwned,
 		InstallCommandName:              DispatcherOwned,
 		UpdateCommandName:               DispatcherOwned,
 		UninstallCommandName:            DispatcherOwned,

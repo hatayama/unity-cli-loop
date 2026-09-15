@@ -226,6 +226,11 @@ runner built beside it, and no response field says which runner served a command
 runner actually ran" in that document before concluding that a runner-side change does or does
 not work.
 
+`uloop compile-check` compiles the project's C# offline by replaying the last Unity build's Bee
+response files through the Editor-bundled Roslyn compiler; it never contacts the Editor and its
+output is never loaded by Unity. What it can and cannot detect, and why it sometimes refuses to
+run, are in `docs/compile-check.md`.
+
 ## Unity Freeze Prevention
 
 Unity EditMode tests can freeze the Editor. `uloop` is single-flight per Editor: a command sent

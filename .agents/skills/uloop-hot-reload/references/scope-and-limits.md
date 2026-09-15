@@ -257,7 +257,7 @@ stay `Skipped`.
 |-----------|-------|
 | File does not belong to any compiled assembly | Per-file entry with `Method` = `(file)`; only `Assets/` and `Packages/` sources resolve |
 | Resolved assembly name is missing from CompilationPipeline | Per-file entry with `Method` = `(file)`; Unity may have mapped a not-yet-imported `.asmdef` onto a predefined assembly. Run `uloop compile` first |
-| Script is not in the last compiled assembly's source list | Per-file entry with `Method` = `(file)`; a newly added script is not hot-reloadable until `uloop compile` |
+| Script is not in the last compiled assembly's source list and its assembly membership cannot be confirmed | Per-file entry with `Method` = `(file)`; a new file passed with `--files` is hot-reloadable when its membership in an existing, unchanged compiled assembly is confirmed (`.asmdef` / `.asmref` boundaries are checked when present; a predefined assembly with none also passes), but fails when the Editor is not ready or an `.asmdef` / `.asmref` on its path was added, deleted, or changed since the last import — run `uloop compile` first |
 | Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
 | Source file fails to parse | Per-file `Failed` entry with `Method` = `(file)` carrying the parse errors; nothing from that file is applied, its earlier patches stay active, and `Success` is false |
 | Method signature not found in the loaded assembly | Usually a stale assembly; run `uloop compile`. In-file renames and signature changes are classified as added members before reaching this point |

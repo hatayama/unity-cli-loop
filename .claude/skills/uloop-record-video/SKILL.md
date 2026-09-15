@@ -12,7 +12,7 @@ Record the Unity Game View while Play Mode is running, or any Editor window with
 
 1. For a Game View recording, ensure Play Mode is running (`uloop control-play-mode --action Play`) and the Game View is open; `start` fails in Edit Mode. With `--window-name` the recording targets that Editor window instead and needs no Play Mode.
 2. `uloop record-video --action start [options]`. It returns immediately; encoding continues inside the Editor.
-3. Drive the scene with other uloop commands (`simulate-keyboard`, `simulate-mouse-input`, `replay-input`, ...). Do **not** run `uloop compile` or exit Play Mode mid-recording: both auto-stop and finalize the file.
+3. Drive the scene with other uloop commands (`simulate-keyboard`, `simulate-mouse-input`, `replay-input`, ...). Do **not** run `uloop compile` mid-recording: a compile that runs auto-stops and finalizes the file (when Unity's Script Changes While Playing is `Recompile After Finished Playing`, the compile is refused instead and the recording continues). Exiting Play Mode also auto-stops a Game View recording; a `--window-name` recording keeps running when Play Mode stops.
 4. `uloop record-video --action stop`. The file is playable only after this call (or after an auto-stop).
 5. Read `OutputPath` from the JSON and use exactly that path. The output directory holds earlier recordings too (the newest 20 per extension are kept), so `ls -t` can pick a stale file.
 6. To inspect the content yourself, extract stills with ffmpeg (e.g. `ffmpeg -i "<OutputPath>" -vf fps=1 frames_%03d.png`) and view the PNGs. Otherwise report the path and duration to the user.
