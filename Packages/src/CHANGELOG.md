@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.7.0](https://github.com/hatayama/unity-cli-loop/compare/v3.6.3...v3.7.0) (2026-09-15)
+
+
+### Features
+
+* uloop compile-check compiles C# with the bundled Roslyn without launching Unity ([#2773](https://github.com/hatayama/unity-cli-loop/issues/2773)) ([dc0bb70](https://github.com/hatayama/unity-cli-loop/commit/dc0bb70bfbc318aa2355717643a0100d97545fcb))
+
+
+### Bug Fixes
+
+* Agent skill docs for pause points, hot reload, and video recording now match actual tool behavior ([#2761](https://github.com/hatayama/unity-cli-loop/issues/2761)) ([cc12dc2](https://github.com/hatayama/unity-cli-loop/commit/cc12dc2bae88c39bc2c36d0b0988e0b5ee317323))
+
 ## [3.6.3](https://github.com/hatayama/unity-cli-loop/compare/v3.6.2...v3.6.3) (2026-09-10)
 
 
