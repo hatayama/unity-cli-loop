@@ -38,10 +38,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(defineSymbols != null, "defineSymbols must not be null.");
             Debug.Assert(projectRelativePaths != null, "projectRelativePaths must not be null.");
 
-            // Application.dataPath (CreateWorkDirectory) needs the Unity main thread.
+            // Application.dataPath (ResolveWorkDirectory) needs the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
-            string workDirectory = CreateWorkDirectory();
+            string workDirectory = ResolveWorkDirectory();
             try
             {
                 string sourcePath = Path.Combine(workDirectory, "HotReloadShim.cs");
@@ -239,17 +239,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return errors;
         }
 
-        private static string CreateWorkDirectory()
+        // Why only the path is built here: an unresolvable external compiler must leave the disk
+        // exactly as it was, so nothing may be created before the compiler is resolved. The
+        // directory comes into existence when the compiler writes the shim source into it.
+        private static string ResolveWorkDirectory()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string workDirectory = Path.Combine(
+            return Path.Combine(
                 projectRoot,
                 "Library",
                 "UloopHotReload",
                 "ShimCompile",
                 Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(workDirectory);
-            return workDirectory;
         }
     }
 
