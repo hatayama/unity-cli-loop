@@ -2,6 +2,7 @@ package compilecheck
 
 import (
 	"path/filepath"
+	"sort"
 )
 
 // directoryOwner is the .asmdef or .asmref that decides which assembly a directory's C# files
@@ -81,6 +82,20 @@ func (index assemblyOwnerIndex) attachesTo(directory string, assemblyName string
 	}
 
 	return owner.AssemblyName == assemblyName
+}
+
+// directoriesAttachedTo lists, in a stable order, the folders whose .asmref hands their sources to
+// the named assembly.
+func (index assemblyOwnerIndex) directoriesAttachedTo(assemblyName string) []string {
+	directories := []string{}
+	for directory, name := range index.referencesByDirectory {
+		if name == assemblyName {
+			directories = append(directories, directory)
+		}
+	}
+	sort.Strings(directories)
+
+	return directories
 }
 
 // startsAnotherAssembly reports whether a directory hands its sources to an assembly of its own, and

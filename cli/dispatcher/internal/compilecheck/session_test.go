@@ -118,3 +118,14 @@ func TestResolveActiveDagDirFailsWhenNoArtifactsExist(t *testing.T) {
 		t.Fatal("expected a project without Bee artifacts to fail")
 	}
 }
+
+// Verifies the script debug setting does not pick the first of two dags of the same mode, since
+// nothing says which of them the last build wrote.
+func TestResolveActiveDagDirFailsWhenTwoDagsMatchTheScriptDebugSetting(t *testing.T) {
+	projectRoot := newDagProject(t, "aaaa.dag", "aaaaDbg.dag", "bbbbDbg.dag")
+	writeScriptDebugSetting(t, projectRoot, true)
+
+	if _, err := ResolveActiveDagDir(projectRoot); err == nil {
+		t.Fatal("expected two debug dags to be reported as ambiguous")
+	}
+}

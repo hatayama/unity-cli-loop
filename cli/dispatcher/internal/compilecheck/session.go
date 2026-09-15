@@ -196,13 +196,19 @@ func dagNameFromScriptDebugSetting(projectRoot string, candidates []string) (str
 		return "", false
 	}
 
+	// Why exactly one match is required: the setting tells debug from release and nothing else, so
+	// a second dag of the same mode could be the one the last build wrote just as well.
+	matches := []string{}
 	for _, name := range candidates {
 		if strings.HasSuffix(name, debugDagDirectorySuffix) == settings.ScriptDebugInfoEnabled.Value {
-			return name, true
+			matches = append(matches, name)
 		}
 	}
+	if len(matches) != 1 {
+		return "", false
+	}
 
-	return "", false
+	return matches[0], true
 }
 
 // containsName reports whether a name is in a list.

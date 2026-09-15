@@ -446,3 +446,42 @@ func TestRebuildSourcesGlobsIntoAnAsmrefFolderOfAnUnbuiltAssembly(t *testing.T) 
 		"Assets/Pkg/Samples/Optional/Helper.cs",
 	})
 }
+
+// Verifies a source created after the last build inside an .asmref folder of this assembly is
+// compiled, even though the folder sits inside a child assembly's directory the glob stops at.
+func TestRebuildSourcesGlobsANewSourceInsideANestedAsmrefFolder(t *testing.T) {
+	projectRoot, rsp, asmdef := newNestedAsmrefProject(t)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "P", "Core", "Dialog", "New.cs"), "")
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		"Assets/P/A.cs",
+		"Assets/P/Core/Dialog/Dialog.cs",
+		"Assets/P/Core/Dialog/New.cs",
+	})
+}
+
+// Verifies a source created after the last build inside an .asmref folder outside the assembly's
+// own directory is compiled, and one under a nested assembly inside that folder is not.
+func TestRebuildSourcesGlobsANewSourceInsideAnOutsideAsmrefFolder(t *testing.T) {
+	projectRoot, rsp, asmdef := newNestedAsmrefProject(t)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Ext", "P.Ext.asmref"), `{"reference":"P"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Ext", "Ext.cs"), "")
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Ext", "Own", "Own.asmdef"), `{"name":"Own"}`)
+	writeFileAt(t, filepath.Join(projectRoot, "Assets", "Ext", "Own", "Own.cs"), "")
+
+	sources, err := RebuildSources(projectRoot, rsp, &asmdef, newOwnerIndexForProject(t, projectRoot))
+	if err != nil {
+		t.Fatalf("expected the rebuild to succeed, got error: %v", err)
+	}
+
+	assertStrings(t, "sources", sources, []string{
+		"Assets/Ext/Ext.cs",
+		"Assets/P/A.cs",
+		"Assets/P/Core/Dialog/Dialog.cs",
+	})
+}

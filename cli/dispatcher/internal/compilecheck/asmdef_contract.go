@@ -89,7 +89,9 @@ func detectContractDisagreement(
 	if reference, found := missingProjectReference(contract, rsp, dagDir, context); found {
 		return fmt.Sprintf("now references %s, which the last build did not compile against", reference)
 	}
-	if contract.AllowUnsafeCode && !hasUnsafeFlag(rsp.OtherFlags) {
+	// Why both flag lists: csc is handed the companion response file too, so a flag there counts.
+	if contract.AllowUnsafeCode &&
+		!hasUnsafeFlag(rsp.OtherFlags) && !hasUnsafeFlag(rsp.CompanionFlags) {
 		return "now allows unsafe code"
 	}
 	if name, found := missingPrecompiledReference(contract, rsp); found {

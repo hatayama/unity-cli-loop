@@ -216,3 +216,15 @@ func TestUnityBuildRequiredErrorClassifiesToItsOwnErrorCode(t *testing.T) {
 		t.Error("the error must tell the user to run uloop compile")
 	}
 }
+
+// Verifies the unsafe check also reads the companion response file, since csc is handed both.
+func TestDetectStructuralChangeAcceptsUnsafeCodeInTheCompanionResponseFile(t *testing.T) {
+	projectRoot, rsp, asmdef, context := newContractProject(
+		t, `{"name":"A","references":["B"],"allowUnsafeCode":true}`)
+	rsp.CompanionFlags = append(rsp.CompanionFlags, "/unsafe+")
+
+	if err := DetectStructuralChange(
+		projectRoot, rsp, &asmdef, planDagDirectory, context); err != nil {
+		t.Fatalf("expected a companion /unsafe+ to satisfy allowUnsafeCode, got error: %v", err)
+	}
+}

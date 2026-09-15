@@ -177,6 +177,17 @@ func RebuildSources(
 		return nil, movedErr
 	}
 
+	// Why the .asmref folders are globbed as well: the glob above stops at every folder an .asmref
+	// starts, including one that hands its sources to this very assembly, so a .cs file created there
+	// since the last build would otherwise be compiled into no assembly at all.
+	for _, attachedDirectory := range owners.directoriesAttachedTo(asmdef.Name) {
+		attached, attachedErr := globAssemblySources(projectRoot, attachedDirectory, owners)
+		if attachedErr != nil {
+			return nil, attachedErr
+		}
+		globbed = append(globbed, attached...)
+	}
+
 	return rescueRecordedSources(projectRoot, *asmdef, globbed, existing, owners)
 }
 
