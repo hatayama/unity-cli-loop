@@ -17,9 +17,8 @@ const (
 	// nothing about whether this one would compile the same thing.
 	resultManifestFormatVersion = 1
 
-	resultManifestExtension   = ".result.json"
-	resultManifestTempSuffix  = ".tmp"
-	resultManifestPermissions = 0o600
+	resultManifestExtension  = ".result.json"
+	resultManifestTempSuffix = ".tmp"
 )
 
 // unitResultManifest is what one finished compile left behind for the next run: the inputs it ran
@@ -100,11 +99,27 @@ func writeUnitResultManifest(
 	}
 
 	path := manifestPath(outputDirectoryPath, unit)
-	temporaryPath := path + resultManifestTempSuffix
-	if err := os.WriteFile(temporaryPath, content, resultManifestPermissions); err != nil {
+	// Why the temporary name is unique per writer: two runs of the same project writing the same
+	// manifest at once must not rename each other's half-written file into place.
+	temporary, err := os.CreateTemp(outputDirectoryPath, filepath.Base(path)+".*"+resultManifestTempSuffix)
+	if err != nil {
+		return fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	temporaryPath := temporary.Name()
+	if _, err := temporary.Write(content); err != nil {
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
+
+		return fmt.Errorf("failed to write %s: %w", temporaryPath, err)
+	}
+	if err := temporary.Close(); err != nil {
+		_ = os.Remove(temporaryPath)
+
 		return fmt.Errorf("failed to write %s: %w", temporaryPath, err)
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
+		_ = os.Remove(temporaryPath)
+
 		return fmt.Errorf("failed to write %s: %w", path, err)
 	}
 
