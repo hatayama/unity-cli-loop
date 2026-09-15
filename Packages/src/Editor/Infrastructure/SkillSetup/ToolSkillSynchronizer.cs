@@ -81,15 +81,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static List<SkillTargetInfo> DetectTargetsForLayoutAtProjectRoot(
             string projectRoot,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            IReadOnlyCollection<string> disabledTools)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
             return SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck: true);
+                includeFreshnessCheck: true,
+                disabledTools);
         }
 
         internal static List<SkillTargetInfo> DetectTargetsForLayoutFastAtProjectRoot(
@@ -98,11 +101,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
+            // The fast path reports Checking instead of comparing skill files, so tool settings
+            // cannot change its result.
             return SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck: false);
+                includeFreshnessCheck: false,
+                System.Array.Empty<string>());
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesForToolWithDisabledTools(

@@ -114,3 +114,24 @@ To verify again, on a Windows machine with a Unity project that has been built a
 3. Open one `Library\Bee\artifacts\<dag>\*.rsp` and check the separator in its `-out:` line.
 4. Run `compile-check` without `--all` and no edits, and confirm it reports that no assembly changed.
 5. Introduce a deliberate compile error and check the separator in the diagnostic's `File` field.
+
+## `launch --restart` and the Temp directory
+
+### Symptom
+
+`uloop launch -r` fails before Unity is relaunched:
+
+```
+INTERNAL_ERROR: unlinkat <PROJECT_ROOT>\Temp\FSTimeGet-...: The process cannot access the file because it is being used by another process.
+```
+
+Restart deletes the project's `Temp` directory once the old Editor has exited. On Windows the Editor's exit does not mean every handle under `Temp` is released: helper processes it spawned (the build backend, the shader compiler, the IL post-processor) can outlive it, and Defender may still be scanning a file it just saw written. Deleting `Temp` then fails with a sharing violation. The window is widest during an asset import, which is where the report above came from.
+
+### How restart handles it
+
+- Only `Temp/UnityLockfile` has to go. A leftover lockfile makes the next Editor refuse to open the project as already opened; everything else under `Temp` is a cache Unity recreates on startup.
+- The lockfile is deleted with a short retry (250 ms apart, up to 5 seconds) so a handle that is about to be released does not fail the restart. If it still cannot be deleted, restart stops with an error and does not launch Unity.
+- The rest of `Temp` is deleted on a best-effort basis. A failure prints one warning line to stderr and the launch continues.
+- Windows kills the Editor with `taskkill /PID <pid> /T /F` so its helper processes go down with it, instead of leaving them holding files. If `taskkill` cannot be run, restart falls back to killing the Editor process alone.
+
+Unix does not need any of this: an open file can be unlinked there, so a helper process that outlives the Editor does not block the Temp cleanup.

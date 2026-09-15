@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.3](https://github.com/hatayama/unity-cli-loop/compare/v3.6.2...v3.6.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* installed skills no longer stay Outdated when a tool is turned off ([#2757](https://github.com/hatayama/unity-cli-loop/issues/2757)) ([f24fe70](https://github.com/hatayama/unity-cli-loop/commit/f24fe70b180c7647e2ac80e92af777b98c4ce362))
+
 ## [3.6.2](https://github.com/hatayama/unity-cli-loop/compare/v3.6.1...v3.6.2) (2026-09-09)
 
 

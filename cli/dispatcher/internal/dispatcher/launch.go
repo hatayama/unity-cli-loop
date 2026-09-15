@@ -249,13 +249,16 @@ func startUnityAndWaitForReadiness(
 	stderr io.Writer,
 	deps launchDeps,
 ) int {
-	removedStaleTemp, err := cleanStaleUnityTemp(projectRoot)
+	cleanupResult, err := cleanStaleUnityTemp(ctx, projectRoot, deps)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
-	if removedStaleTemp {
-		writeStaleUnityTempCleanupMessage(stdout, projectRoot)
+	if cleanupResult.lockfileRemoved {
+		writeStaleUnityTempCleanupMessage(stdout, projectRoot, cleanupResult.leftoverError == nil)
+	}
+	if cleanupResult.leftoverError != nil {
+		writeStaleUnityTempLeftoverWarning(stderr, cleanupResult.leftoverError)
 	}
 
 	unityVersion, err := resolveLaunchEditorVersion(projectRoot, options)
@@ -326,25 +329,15 @@ func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {
 	return command
 }
 
-func cleanStaleUnityTemp(projectRoot string) (bool, error) {
-	lockfilePath := unityLockfilePath(projectRoot)
-	if _, err := os.Stat(lockfilePath); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, os.RemoveAll(filepath.Join(projectRoot, launchTempDirectoryName))
-}
-
 // A stale lockfile only proves no Unity process is currently running for this project;
 // it cannot distinguish a crash from a normal shutdown that left cleanup incomplete, so
 // the message must not assert a crash happened.
-func writeStaleUnityTempCleanupMessage(stdout io.Writer, projectRoot string) {
+func writeStaleUnityTempCleanupMessage(stdout io.Writer, projectRoot string, tempDirectoryFullyDeleted bool) {
 	clicore.WriteFormat(stdout, "Stale UnityLockfile found (no active Unity process): %s\n", unityLockfilePath(projectRoot))
 	clicore.WriteLine(stdout, "Cleaning Temp directory and continuing launch.")
-	clicore.WriteLine(stdout, "Deleted Temp directory.")
+	if tempDirectoryFullyDeleted {
+		clicore.WriteLine(stdout, "Deleted Temp directory.")
+	}
 	clicore.WriteLine(stdout, "Deleted UnityLockfile.")
 	clicore.WriteLine(stdout, "")
 }
@@ -459,14 +452,6 @@ func unityExecutableCandidates(version string) []string {
 	default:
 		return []string{}
 	}
-}
-
-func killUnityProcess(pid int) error {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return err
-	}
-	return process.Kill()
 }
 
 func printLaunchHelp(stdout io.Writer) {
