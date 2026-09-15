@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -1583,7 +1584,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string originalAssemblyName,
             string originalAssemblyMvid)
         {
-            Assembly assembly = typeof(HotReloadIntroducedTypeActivationTests).Assembly;
+            Assembly assembly = CreateIntroducedTypeAssembly();
             List<HotReloadIntroducedTypeDescriptor> descriptors =
                 new List<HotReloadIntroducedTypeDescriptor>
                 {
@@ -1597,9 +1598,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 };
             return new HotReloadIntroducedTypeArtifact(
                 assembly,
-                assembly.Location,
-                assembly.Location,
+                "stale-generation-artifact.dll",
+                "stale-generation-artifact.pdb",
                 descriptors);
+        }
+
+        // Why a generated name: a production artifact assembly is compiled under a name of its
+        // own, so a fixture that reused the patch target's assembly name would resolve the type
+        // home through the retained-artifact branch instead of the one production takes.
+        private static Assembly CreateIntroducedTypeAssembly()
+        {
+            AssemblyName assemblyName = new AssemblyName(
+                "UloopIntroducedTypes_" + Guid.NewGuid().ToString("N"));
+            return AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
         }
 
         private static string ResolveAssemblyName(string scriptPath)
