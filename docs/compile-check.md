@@ -187,8 +187,9 @@ headless run imports the project, writes the response files and exits.
 
 `uloop launch` is the same first build with the Editor window open; use whichever fits. The run
 takes as long as the project's initial import (about a minute for a 100-assembly project, longer
-for a large one). Once `Library` exists, compile-check runs without the Editor until an `.asmdef` or
-define change asks for another build. The same applies on CI: restore `Library` from a cache or
+for a large one). Once `Library` exists, compile-check runs without the Editor; it refuses again only
+when it detects an `.asmdef` change. A scripting define change is not detected (see Limitations), so
+run `uloop compile` yourself after one. The same applies on CI: restore `Library` from a cache or
 run this headless build once per job before calling compile-check.
 
 **`COMPILE_CHECK_UNITY_BUILD_REQUIRED`: an assembly definition no longer matches the last build**

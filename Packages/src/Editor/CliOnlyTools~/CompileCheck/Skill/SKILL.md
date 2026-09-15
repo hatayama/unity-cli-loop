@@ -34,7 +34,8 @@ in `Library/uloop/compile-check/` and are never handed to the Editor.
   ```
 
   `uloop launch` does the same with the Editor window open. After that one build, compile-check works
-  without the Editor until an `.asmdef` or define change asks for another.
+  without the Editor; it asks for another build when it detects an `.asmdef` change. A scripting define
+  change it cannot detect, so run `uloop compile` yourself after one.
 
 ## Usage
 
