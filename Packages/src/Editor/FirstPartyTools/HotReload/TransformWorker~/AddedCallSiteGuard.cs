@@ -144,7 +144,7 @@ internal static class AddedCallSiteGuard
             return (propertyReason, null);
         }
 
-        return (AddedFieldClassifier.EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog), null);
+        return (AddedFieldSkipEvaluator.EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog), null);
     }
 
     internal static bool BodyReferencesAddedMethodGroup(
