@@ -108,10 +108,14 @@ internal static class RetainedDeclarationStage
                 continue;
             }
 
-            // A wider difference than the method bodies leaves the declaration to the ordinary
-            // path, which finds the type absent from the patch target and says so. Reporting it
-            // as retained instead would claim the artifact still runs a definition it does not.
-            if (verdict.Match.Kind != IntroducedTypeFingerprintMatchKind.MethodBodiesOnly)
+            // A difference the artifact cannot be brought up to leaves the declaration to the
+            // ordinary path, which finds the type absent from the patch target and says so.
+            // Reporting it as retained instead would claim the artifact still runs a definition
+            // it does not. Added members are not such a difference: the artifact still runs
+            // every member it was built with, and the new ones are emitted onto it the way they
+            // are emitted onto a compiled type.
+            if (verdict.Match.Kind != IntroducedTypeFingerprintMatchKind.MethodBodiesOnly
+                && verdict.Match.Kind != IntroducedTypeFingerprintMatchKind.MembersAdded)
             {
                 continue;
             }

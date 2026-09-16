@@ -20,16 +20,7 @@ internal static class RetainedBodyEditHome
         WorkerRetainedBodyEditType bodyEditType = FindBodyEditType(
             typeState.SourceUnit.RetainedBodyEditTypes,
             CecilTypeNames.ToMetadataName(typeState.TypeSymbol));
-        if (bodyEditType == null || !(semanticModel.Compilation is CSharpCompilation compilation))
-        {
-            return null;
-        }
-
-        INamedTypeSymbol artifactType = typeState.SourceUnit.ArtifactMap.FindArtifactType(
-            compilation,
-            bodyEditType.OriginalAssemblyName,
-            bodyEditType.OriginalAssemblyMvid,
-            bodyEditType.MetadataName);
+        INamedTypeSymbol artifactType = ResolveArtifactType(typeState.SourceUnit, semanticModel, bodyEditType);
         if (artifactType == null)
         {
             return null;
@@ -52,6 +43,45 @@ internal static class RetainedBodyEditHome
             bodyEditType.ChangedMethodKeys ?? new string[0],
             StringComparer.Ordinal);
         return artifactType;
+    }
+
+    /// <summary>
+    /// The artifact serving a type whose declaration this run keeps in its tree, or null when no
+    /// artifact of this run serves it. A member lookup that stopped at the patch target would read
+    /// every member of such a type as one this edit added, the ones the artifact already runs
+    /// included.
+    /// </summary>
+    internal static INamedTypeSymbol FindRetainedType(
+        WorkerSourceUnit sourceUnit,
+        SemanticModel semanticModel,
+        INamedTypeSymbol typeSymbol)
+    {
+        if (sourceUnit == null || typeSymbol == null)
+        {
+            return null;
+        }
+
+        return ResolveArtifactType(
+            sourceUnit,
+            semanticModel,
+            FindBodyEditType(sourceUnit.RetainedBodyEditTypes, CecilTypeNames.ToMetadataName(typeSymbol)));
+    }
+
+    private static INamedTypeSymbol ResolveArtifactType(
+        WorkerSourceUnit sourceUnit,
+        SemanticModel semanticModel,
+        WorkerRetainedBodyEditType bodyEditType)
+    {
+        if (bodyEditType == null || !(semanticModel.Compilation is CSharpCompilation compilation))
+        {
+            return null;
+        }
+
+        return sourceUnit.ArtifactMap.FindArtifactType(
+            compilation,
+            bodyEditType.OriginalAssemblyName,
+            bodyEditType.OriginalAssemblyMvid,
+            bodyEditType.MetadataName);
     }
 
     private static WorkerRetainedBodyEditType FindBodyEditType(

@@ -54,6 +54,17 @@ internal static class TypeEmitPlanner
                 TypeSymbol = typeSymbol,
                 TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
             };
+
+            // Why the counterpart is resolved before anything is classified: every stage below
+            // asks which members the assembly serving this type already holds, and a type a
+            // retained artifact serves has to answer that the way a compiled one does - it is
+            // the same question, asked of the assembly the domain really loaded the type from.
+            // Why the artifact is only consulted after the patch target: a type the target
+            // already holds is compiled, and a record left over from an earlier reload must not
+            // take the classification of it away from the assembly the request named.
+            typeState.CompiledType = home.FindCompiledType(typeSymbol)
+                ?? RetainedBodyEditHome.Adopt(typeState, semanticModel);
+
             AddedPropertyClassifier.ClassifyAddedProperties(
                 typeState,
                 semanticModel,
@@ -153,18 +164,12 @@ internal static class TypeEmitPlanner
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
         ShimNameAllocator shimNames)
     {
-        // Why the artifact is only consulted after the patch target: a type the target already
-        // holds is compiled, and a record left over from an earlier reload must not take the
-        // classification of it away from the assembly the request named.
-        INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol)
-            ?? RetainedBodyEditHome.Adopt(typeState, semanticModel);
+        INamedTypeSymbol compiledType = typeState.CompiledType;
         if (compiledType == null)
         {
             OrdinaryMethodShimTypes.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
             return;
         }
-
-        typeState.CompiledType = compiledType;
 
         AddedFieldClassifier.ClassifyAddedFields(
             typeState,
