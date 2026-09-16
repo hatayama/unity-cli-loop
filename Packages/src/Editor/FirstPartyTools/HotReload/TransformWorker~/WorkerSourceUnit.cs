@@ -81,6 +81,12 @@ internal sealed class WorkerSourceUnit
     // introduced type from an edit that really requires a compile.
     public List<string> RetainedIntroducedTypeMetadataNames { get; } = new List<string>();
 
+    // The declarations of this file a verified artifact serves and whose ordinary method bodies
+    // this edit changed. Empty for every run that has no such edit, which is every run whose
+    // retained declarations still match the definition their artifact was compiled from.
+    public List<WorkerRetainedBodyEditType> RetainedBodyEditTypes { get; } =
+        new List<WorkerRetainedBodyEditType>();
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();

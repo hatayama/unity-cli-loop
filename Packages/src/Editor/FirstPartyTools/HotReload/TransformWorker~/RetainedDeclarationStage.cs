@@ -1,17 +1,21 @@
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 // The stage that decides which declarations of a group a retained artifact already serves, and
-// takes them out of the trees the transform binds against. It runs before anything is emitted,
-// because a declaration left in place would bind callers to the source definition instead of the
-// assembly an earlier reload retained.
+// what the transform does with each of them: a declaration the artifact still matches exactly
+// leaves the trees the transform binds against, because leaving it in would bind callers to the
+// source definition instead of the assembly an earlier reload retained; one whose ordinary method
+// bodies alone changed stays, so those bodies can be transformed and patched onto that assembly.
+// It runs before anything is emitted, for the same reason.
 internal static class RetainedDeclarationStage
 {
-    // Removes from each unit's binding tree the declarations a retained artifact already serves,
-    // and reports why the artifacts could not be used at all. Returns null when the run has no
-    // artifact to bind against, which is every run until introduced types are in play.
+    // Removes from each unit's binding tree the declarations a retained artifact already serves
+    // unchanged, records the ones whose method bodies this edit changed, and reports why the
+    // artifacts could not be used at all. Returns null when the run has no artifact to bind
+    // against, which is every run until introduced types are in play.
     internal static string PrepareBindingTrees(
         WorkerInput input,
         List<WorkerSourceUnit> loadedUnits,
@@ -45,7 +49,7 @@ internal static class RetainedDeclarationStage
             syntaxTrees: editedTrees,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        IAssemblySymbol targetAssembly = WorkerGroupPipeline.ResolveTargetTypesAssemblySymbol(
+        IAssemblySymbol targetAssembly = WorkerCompiledAssemblySymbols.ResolveWithAllMembers(
             verificationCompilation,
             targetTypesReference);
 
@@ -69,31 +73,14 @@ internal static class RetainedDeclarationStage
         {
             loadedUnit.ArtifactMap = artifactMap;
         }
-        Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> retainedDeclarations =
+        Dictionary<WorkerSourceUnit, List<RetainedDeclarationVerdict>> verdicts =
             IntroducedTypeDeclarationVerifier.FindRetainedDeclarations(
                 loadedUnits, verificationCompilation, input, targetAssembly, artifactMap);
         List<string> bindingParseErrors = new List<string>();
-        foreach (KeyValuePair<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> entry in retainedDeclarations)
+        foreach (KeyValuePair<WorkerSourceUnit, List<RetainedDeclarationVerdict>> entry in verdicts)
         {
-            // Recorded before the removal, because the rewriter replaces the unit's tree and
-            // these declarations belong to the tree it replaces. Built from the syntax rather
-            // than the symbol: the drift check strips by the syntax key of the edited root.
-            foreach (BaseTypeDeclarationSyntax declaration in entry.Value)
-            {
-                if (declaration is TypeDeclarationSyntax typeDeclaration)
-                {
-                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
-                        WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration));
-                }
-                else if (declaration is EnumDeclarationSyntax enumDeclaration)
-                {
-                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
-                        WorkerSyntaxIndex.BuildEnumMetadataNameFromSyntax(enumDeclaration));
-                }
-            }
-
             IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(
-                entry.Key, entry.Value, parseOptions, bindingParseErrors);
+                entry.Key, ApplyVerdicts(entry.Key, entry.Value), parseOptions, bindingParseErrors);
         }
 
         if (bindingParseErrors.Count > 0)
@@ -102,5 +89,61 @@ internal static class RetainedDeclarationStage
         }
 
         return null;
+    }
+
+    // Records what the unit's verdicts mean for it and returns the declarations to remove. The
+    // recording happens before the removal, because the rewriter replaces the unit's tree and
+    // these declarations belong to the tree it replaces.
+    private static List<BaseTypeDeclarationSyntax> ApplyVerdicts(
+        WorkerSourceUnit unit,
+        List<RetainedDeclarationVerdict> verdicts)
+    {
+        List<BaseTypeDeclarationSyntax> removable = new List<BaseTypeDeclarationSyntax>();
+        foreach (RetainedDeclarationVerdict verdict in verdicts)
+        {
+            if (verdict.Match.Kind == IntroducedTypeFingerprintMatchKind.Identical)
+            {
+                RecordRetainedMetadataName(unit, verdict.Declaration);
+                removable.Add(verdict.Declaration);
+                continue;
+            }
+
+            // A wider difference than the method bodies leaves the declaration to the ordinary
+            // path, which finds the type absent from the patch target and says so. Reporting it
+            // as retained instead would claim the artifact still runs a definition it does not.
+            if (verdict.Match.Kind != IntroducedTypeFingerprintMatchKind.MethodBodiesOnly)
+            {
+                continue;
+            }
+
+            RecordRetainedMetadataName(unit, verdict.Declaration);
+            unit.RetainedBodyEditTypes.Add(new WorkerRetainedBodyEditType
+            {
+                MetadataName = verdict.MetadataName,
+                OriginalAssemblyName = verdict.Record.OriginalAssemblyName,
+                OriginalAssemblyMvid = verdict.Record.OriginalAssemblyMvid,
+                ChangedMethodKeys = verdict.Match.ChangedMethodSyntaxKeys.ToArray()
+            });
+        }
+
+        return removable;
+    }
+
+    // Built from the syntax rather than the symbol: the drift check strips by the syntax key of
+    // the edited root.
+    private static void RecordRetainedMetadataName(WorkerSourceUnit unit, BaseTypeDeclarationSyntax declaration)
+    {
+        if (declaration is TypeDeclarationSyntax typeDeclaration)
+        {
+            unit.RetainedIntroducedTypeMetadataNames.Add(
+                WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration));
+            return;
+        }
+
+        if (declaration is EnumDeclarationSyntax enumDeclaration)
+        {
+            unit.RetainedIntroducedTypeMetadataNames.Add(
+                WorkerSyntaxIndex.BuildEnumMetadataNameFromSyntax(enumDeclaration));
+        }
     }
 }

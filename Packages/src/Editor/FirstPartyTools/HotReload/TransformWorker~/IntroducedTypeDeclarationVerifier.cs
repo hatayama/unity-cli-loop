@@ -5,14 +5,15 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-// Decides which source declarations may be removed from the tree the transform binds against.
-// A declaration is only removable when the artifact record that claims it still describes the
-// source: same owner file, same metadata name, and the same fingerprint recomputed from the
-// edited text. Otherwise the source is newer than the artifact and the source has to win.
+// Reports how each source declaration compares to the artifact record that claims it: same owner
+// file, same metadata name, and the fingerprint recomputed from the edited text against the
+// recorded one. Only a declaration the record still describes exactly may leave the tree the
+// transform binds against; one whose method bodies alone changed has to stay so those bodies can
+// be transformed, and any wider difference means the source is newer and the source has to win.
 internal static class IntroducedTypeDeclarationVerifier
 {
-    // The declarations of each unit that a retained artifact already serves, keyed by unit.
-    internal static Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> FindRetainedDeclarations(
+    // The verdicts of each unit whose declarations a retained artifact claims, keyed by unit.
+    internal static Dictionary<WorkerSourceUnit, List<RetainedDeclarationVerdict>> FindRetainedDeclarations(
         IReadOnlyList<WorkerSourceUnit> units,
         CSharpCompilation verificationCompilation,
         WorkerInput input,
@@ -20,27 +21,27 @@ internal static class IntroducedTypeDeclarationVerifier
         IntroducedTypeArtifactMap artifactMap)
     {
         Dictionary<string, WorkerIntroducedTypeArtifactType> recordsByKey = BuildRecordIndex(input);
-        Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> retainedDeclarations =
-            new Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>>();
+        Dictionary<WorkerSourceUnit, List<RetainedDeclarationVerdict>> verdicts =
+            new Dictionary<WorkerSourceUnit, List<RetainedDeclarationVerdict>>();
         if (recordsByKey.Count == 0)
         {
-            return retainedDeclarations;
+            return verdicts;
         }
 
         foreach (WorkerSourceUnit unit in units)
         {
-            List<BaseTypeDeclarationSyntax> declarations = FindRetainedDeclarationsOfUnit(
+            List<RetainedDeclarationVerdict> unitVerdicts = FindRetainedDeclarationsOfUnit(
                 unit, verificationCompilation, input, targetAssembly, artifactMap, recordsByKey);
-            if (declarations.Count > 0)
+            if (unitVerdicts.Count > 0)
             {
-                retainedDeclarations.Add(unit, declarations);
+                verdicts.Add(unit, unitVerdicts);
             }
         }
 
-        return retainedDeclarations;
+        return verdicts;
     }
 
-    private static List<BaseTypeDeclarationSyntax> FindRetainedDeclarationsOfUnit(
+    private static List<RetainedDeclarationVerdict> FindRetainedDeclarationsOfUnit(
         WorkerSourceUnit unit,
         CSharpCompilation verificationCompilation,
         WorkerInput input,
@@ -48,7 +49,7 @@ internal static class IntroducedTypeDeclarationVerifier
         IntroducedTypeArtifactMap artifactMap,
         Dictionary<string, WorkerIntroducedTypeArtifactType> recordsByKey)
     {
-        List<BaseTypeDeclarationSyntax> declarations = new List<BaseTypeDeclarationSyntax>();
+        List<RetainedDeclarationVerdict> verdicts = new List<RetainedDeclarationVerdict>();
         SemanticModel semanticModel = verificationCompilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: false);
         foreach (BaseTypeDeclarationSyntax declaration in unit.Root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
         {
@@ -78,13 +79,17 @@ internal static class IntroducedTypeDeclarationVerifier
                 input.TargetAssemblyName,
                 input.TargetAssemblyMvid,
                 artifactMap).Serialize();
-            if (string.Equals(fingerprint, record.DeclarationFingerprint, StringComparison.Ordinal))
-            {
-                declarations.Add(declaration);
-            }
+
+            // Classified through the shared reader rather than compared here, so this stage and
+            // the planner cannot disagree about whether one edit is a body edit.
+            IntroducedTypeFingerprintMatch match = IntroducedTypeFingerprintMatch.Classify(
+                record.DeclarationFingerprint,
+                fingerprint,
+                IntroducedTypeFingerprintMatch.CollectOrdinaryMethodKeys(declaration, metadataName));
+            verdicts.Add(new RetainedDeclarationVerdict(declaration, metadataName, match, record));
         }
 
-        return declarations;
+        return verdicts;
     }
 
     private static Dictionary<string, WorkerIntroducedTypeArtifactType> BuildRecordIndex(WorkerInput input)

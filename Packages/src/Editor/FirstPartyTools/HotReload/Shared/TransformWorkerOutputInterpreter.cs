@@ -78,6 +78,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TransformWorkerClientResult.Failure(skippedError);
             }
 
+            if (!_validator.TryValidateHomeAssemblyNames(output, out string homeAssemblyError))
+            {
+                return TransformWorkerClientResult.Failure(homeAssemblyError);
+            }
+
             return TransformWorkerClientResult.SuccessResult(output);
         }
 

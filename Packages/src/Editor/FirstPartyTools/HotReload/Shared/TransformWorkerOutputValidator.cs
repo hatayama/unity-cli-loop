@@ -132,6 +132,64 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        /// <summary>
+        /// Rejects a row that names the assembly it belongs to as nothing at all. An absent name
+        /// means the assembly the edited file belongs to, so a present but blank one would be read
+        /// as that assembly and patch it instead of the retained one the row was meant to name.
+        /// </summary>
+        internal bool TryValidateHomeAssemblyNames(
+            TransformWorkerOutputDto output,
+            out string errorMessage)
+        {
+            if (output.entries != null)
+            {
+                foreach (TransformWorkerEntryDto entry in output.entries)
+                {
+                    if (entry == null)
+                    {
+                        errorMessage = "Transform worker output must not contain a null patched row.";
+                        return false;
+                    }
+
+                    if (IsBlankHomeAssemblyName(entry.homeAssemblyName))
+                    {
+                        errorMessage =
+                            "A patched row must either name the assembly it is patched in or leave it out.";
+                        return false;
+                    }
+                }
+            }
+
+            if (output.unchangedMethods != null)
+            {
+                foreach (TransformWorkerUnchangedMethodDto unchanged in output.unchangedMethods)
+                {
+                    if (unchanged == null)
+                    {
+                        errorMessage = "Transform worker output must not contain a null unchanged-method row.";
+                        return false;
+                    }
+
+                    if (IsBlankHomeAssemblyName(unchanged.homeAssemblyName))
+                    {
+                        errorMessage =
+                            "An unchanged-method row must either name the assembly its type is served from or leave it out.";
+                        return false;
+                    }
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        // Null is every row until a retained artifact serves the type, so only a name that is
+        // present and says nothing is a row this check refuses.
+        private bool IsBlankHomeAssemblyName(string homeAssemblyName)
+        {
+            return homeAssemblyName != null && string.IsNullOrWhiteSpace(homeAssemblyName);
+        }
+
         internal bool TryValidateRequiredPreparationOutput(
             TransformWorkerInputDto input,
             TransformWorkerOutputDto output,

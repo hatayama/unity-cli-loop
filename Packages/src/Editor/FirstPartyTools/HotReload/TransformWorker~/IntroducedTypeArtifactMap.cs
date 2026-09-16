@@ -21,21 +21,14 @@ using Microsoft.CodeAnalysis.Text;
 // though the definition did not change.
 internal sealed class IntroducedTypeArtifactMap
 {
-    private readonly Dictionary<string, string> normalizedIdentities;
-    private readonly Dictionary<string, string> fingerprintsByNormalizedIdentity;
+    private readonly Index index;
 
-    private IntroducedTypeArtifactMap(
-        Dictionary<string, string> normalizedIdentities,
-        Dictionary<string, string> fingerprintsByNormalizedIdentity)
+    private IntroducedTypeArtifactMap(Index index)
     {
-        this.normalizedIdentities = normalizedIdentities;
-        this.fingerprintsByNormalizedIdentity = fingerprintsByNormalizedIdentity;
+        this.index = index;
     }
 
-    internal static IntroducedTypeArtifactMap Empty { get; } =
-        new IntroducedTypeArtifactMap(
-            new Dictionary<string, string>(StringComparer.Ordinal),
-            new Dictionary<string, string>(StringComparer.Ordinal));
+    internal static IntroducedTypeArtifactMap Empty { get; } = new IntroducedTypeArtifactMap(new Index());
 
     // Builds the mapping, or reports why the records cannot be trusted. A record is only usable
     // when the assembly resolved from its own reference path reports the identity the record
@@ -47,8 +40,7 @@ internal sealed class IntroducedTypeArtifactMap
         out IntroducedTypeArtifactMap map,
         out string errorMessage)
     {
-        Dictionary<string, string> identities = new Dictionary<string, string>(StringComparer.Ordinal);
-        Dictionary<string, string> fingerprints = new Dictionary<string, string>(StringComparer.Ordinal);
+        Index index = new Index();
         foreach ((WorkerIntroducedTypeArtifact artifact, MetadataReference reference) in artifactReferences)
         {
             if (!TryResolveArtifactAssembly(compilation, artifact, reference, out IAssemblySymbol assembly, out errorMessage))
@@ -69,7 +61,7 @@ internal sealed class IntroducedTypeArtifactMap
 
             foreach (WorkerIntroducedTypeArtifactType artifactType in artifact.Types)
             {
-                if (!TryAddArtifactType(assembly, artifactType, identities, fingerprints, out errorMessage))
+                if (!TryAddArtifactType(assembly, reference, artifactType, index, out errorMessage))
                 {
                     map = null;
                     return false;
@@ -77,7 +69,7 @@ internal sealed class IntroducedTypeArtifactMap
             }
         }
 
-        map = new IntroducedTypeArtifactMap(identities, fingerprints);
+        map = new IntroducedTypeArtifactMap(index);
         errorMessage = null;
         return true;
     }
@@ -91,7 +83,7 @@ internal sealed class IntroducedTypeArtifactMap
             return null;
         }
 
-        return normalizedIdentities.TryGetValue(BuildKey(containingAssembly, metadataName), out string identity)
+        return index.NormalizedIdentities.TryGetValue(BuildKey(containingAssembly, metadataName), out string identity)
             ? identity
             : null;
     }
@@ -104,15 +96,59 @@ internal sealed class IntroducedTypeArtifactMap
         string originalAssemblyMvid,
         string metadataName)
     {
-        if (originalAssemblyName == null || originalAssemblyMvid == null || metadataName == null)
+        string normalizedIdentity = BuildNormalizedIdentity(originalAssemblyName, originalAssemblyMvid, metadataName);
+        if (normalizedIdentity == null)
         {
             return null;
         }
 
-        string normalizedIdentity = originalAssemblyName + "|" + originalAssemblyMvid + "|" + metadataName;
-        return fingerprintsByNormalizedIdentity.TryGetValue(normalizedIdentity, out string fingerprint)
+        return index.FingerprintsByNormalizedIdentity.TryGetValue(normalizedIdentity, out string fingerprint)
             ? fingerprint
             : null;
+    }
+
+    /// <summary>
+    /// The type a retained artifact serves under a recorded identity, bound in the compilation
+    /// asked about, or null when no record holds the type. Every member is visible, private ones
+    /// included, because a caller that classifies the source against this type would otherwise
+    /// read a private method the artifact already runs as one this edit added.
+    /// </summary>
+    internal INamedTypeSymbol FindArtifactType(
+        CSharpCompilation compilation,
+        string originalAssemblyName,
+        string originalAssemblyMvid,
+        string metadataName)
+    {
+        string normalizedIdentity = BuildNormalizedIdentity(originalAssemblyName, originalAssemblyMvid, metadataName);
+        if (compilation == null
+            || normalizedIdentity == null
+            || !index.HomesByNormalizedIdentity.TryGetValue(normalizedIdentity, out ArtifactTypeHome home))
+        {
+            return null;
+        }
+
+        IAssemblySymbol assembly = WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, home.Reference);
+        return assembly?.GetTypeByMetadataName(metadataName);
+    }
+
+    /// <summary>
+    /// The simple name of the assembly a retained artifact serves a recorded type from, or null
+    /// when no record holds the type. It is the assembly a patch of that type has to name, which
+    /// is not the one the edited file belongs to.
+    /// </summary>
+    internal string FindArtifactAssemblyName(
+        string originalAssemblyName,
+        string originalAssemblyMvid,
+        string metadataName)
+    {
+        string normalizedIdentity = BuildNormalizedIdentity(originalAssemblyName, originalAssemblyMvid, metadataName);
+        if (normalizedIdentity == null
+            || !index.HomesByNormalizedIdentity.TryGetValue(normalizedIdentity, out ArtifactTypeHome home))
+        {
+            return null;
+        }
+
+        return home.AssemblySimpleName;
     }
 
     private static bool TryResolveArtifactAssembly(
@@ -144,9 +180,9 @@ internal sealed class IntroducedTypeArtifactMap
 
     private static bool TryAddArtifactType(
         IAssemblySymbol assembly,
+        MetadataReference reference,
         WorkerIntroducedTypeArtifactType artifactType,
-        Dictionary<string, string> identities,
-        Dictionary<string, string> fingerprintsByNormalizedIdentity,
+        Index index,
         out string errorMessage)
     {
         if (artifactType == null
@@ -177,7 +213,7 @@ internal sealed class IntroducedTypeArtifactMap
         string normalizedIdentity = artifactType.OriginalAssemblyName
             + "|" + artifactType.OriginalAssemblyMvid
             + "|" + artifactType.MetadataName;
-        if (!identities.TryAdd(BuildKey(assembly, artifactType.MetadataName), normalizedIdentity))
+        if (!index.NormalizedIdentities.TryAdd(BuildKey(assembly, artifactType.MetadataName), normalizedIdentity))
         {
             errorMessage = "Introduced-type artifact lists " + artifactType.MetadataName + " more than once.";
             return false;
@@ -185,13 +221,27 @@ internal sealed class IntroducedTypeArtifactMap
 
         // Two artifacts normalizing to the same original type would leave the fingerprint
         // depending on which record happened to be consulted first.
-        if (!fingerprintsByNormalizedIdentity.TryAdd(normalizedIdentity, artifactType.DeclarationFingerprint))
+        if (!index.FingerprintsByNormalizedIdentity.TryAdd(normalizedIdentity, artifactType.DeclarationFingerprint))
         {
             errorMessage = "Two introduced-type artifacts normalize to " + artifactType.MetadataName + ".";
             return false;
         }
 
+        index.HomesByNormalizedIdentity[normalizedIdentity] = new ArtifactTypeHome(reference, assembly.Identity.Name);
         return TrySucceed(out errorMessage);
+    }
+
+    private static string BuildNormalizedIdentity(
+        string originalAssemblyName,
+        string originalAssemblyMvid,
+        string metadataName)
+    {
+        if (originalAssemblyName == null || originalAssemblyMvid == null || metadataName == null)
+        {
+            return null;
+        }
+
+        return originalAssemblyName + "|" + originalAssemblyMvid + "|" + metadataName;
     }
 
     private static bool TrySucceed(out string errorMessage)
@@ -203,5 +253,35 @@ internal sealed class IntroducedTypeArtifactMap
     private static string BuildKey(IAssemblySymbol assembly, string metadataName)
     {
         return assembly.Identity.GetDisplayName() + "|" + metadataName;
+    }
+
+    // Where one recorded type is served from: the reference the run put into the compilation, so
+    // the type can be bound again where a later stage needs it, and the simple name that patch
+    // has to be applied to.
+    private sealed class ArtifactTypeHome
+    {
+        internal ArtifactTypeHome(MetadataReference reference, string assemblySimpleName)
+        {
+            Reference = reference;
+            AssemblySimpleName = assemblySimpleName;
+        }
+
+        internal MetadataReference Reference { get; }
+
+        internal string AssemblySimpleName { get; }
+    }
+
+    // The three lookups the map is built from, carried together so building one entry does not
+    // spread over a parameter list that says nothing about which dictionary is which.
+    private sealed class Index
+    {
+        internal Dictionary<string, string> NormalizedIdentities { get; } =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        internal Dictionary<string, string> FingerprintsByNormalizedIdentity { get; } =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        internal Dictionary<string, ArtifactTypeHome> HomesByNormalizedIdentity { get; } =
+            new Dictionary<string, ArtifactTypeHome>(StringComparer.Ordinal);
     }
 }

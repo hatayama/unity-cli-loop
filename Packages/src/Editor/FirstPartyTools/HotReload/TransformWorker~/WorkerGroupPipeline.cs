@@ -105,7 +105,7 @@ internal static class WorkerGroupPipeline
 
         WorkerTypeHome home = new WorkerTypeHome(
             input.TargetAssemblyName,
-            ResolveTargetTypesAssemblySymbol(compilation, targetTypesReference));
+            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference));
         List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(transformUnits.Count);
         foreach (WorkerSourceUnit transformUnit in transformUnits)
         {
@@ -359,25 +359,6 @@ internal static class WorkerGroupPipeline
 
         return (references, targetTypesReference);
     }
-    internal static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
-        CSharpCompilation compilation,
-        MetadataReference targetTypesReference)
-    {
-        // The drift comparison must see private and internal consts in the compiled target
-        // assembly, which the default MetadataImportOptions (Public) hides. Widening the main
-        // compilation would also widen what every classification query can bind to, so the
-        // wider import is confined to a throwaway compilation used only for this lookup.
-        if (targetTypesReference == null)
-        {
-            return null;
-        }
-
-        CSharpCompilation driftCompilation = compilation.WithOptions(
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithMetadataImportOptions(MetadataImportOptions.All));
-        return driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
-    }
-
     private static WorkerOutput BuildWorkerOutput(
         List<WorkerSourceUnit> units,
         List<ShimTypeBuilder> shimTypes,

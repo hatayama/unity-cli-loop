@@ -35,5 +35,14 @@ internal sealed class TypeEmitState
 
     public List<QueuedShimMethod> QueuedMethods { get; } = new List<QueuedShimMethod>();
 
+    // Simple name of the assembly this type's methods are patched in, or null when that is the
+    // patch target the request named. Set only for a type a retained artifact serves.
+    public string HomeAssemblyName { get; set; }
+
+    // The syntax method keys whose bodies this edit changed on a type a retained artifact serves,
+    // or null when no artifact serves the type. An ordinary method outside the set still runs the
+    // body the artifact holds, so patching it would replace a body with the same body.
+    public HashSet<string> RetainedChangedMethodKeys { get; set; }
+
     public bool TypeIsAbsentFromCompiledAssembly { get; set; }
 }

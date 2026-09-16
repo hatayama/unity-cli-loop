@@ -3174,6 +3174,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.ErrorMessage, Does.Contain("null skipped row"));
         }
 
+        /// <summary>
+        /// Verifies that a patched row naming its home assembly as an empty string is rejected,
+        /// because an absent name means the edited file's own assembly and the row would
+        /// otherwise patch that assembly instead of the retained one it meant to name.
+        /// </summary>
+        [Test]
+        public void InterpretOutputJson_PatchedRowWithBlankHomeAssembly_ReturnsFailure()
+        {
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
+                BuildSingleSourceInput(),
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/One.cs\"}],"
+                + "\"entries\":[{\"sourceProjectRelativePath\":\"Assets/One.cs\","
+                + "\"typeMetadataName\":\"Host\",\"methodName\":\"Run\",\"homeAssemblyName\":\"\"}]}");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("name the assembly it is patched in"));
+        }
+
+        /// <summary>
+        /// Verifies that an unchanged-method row naming its home assembly as an empty string is
+        /// rejected for the same reason a patched row is: the revert would look the method up in
+        /// the edited file's own assembly rather than the one serving its type.
+        /// </summary>
+        [Test]
+        public void InterpretOutputJson_UnchangedRowWithBlankHomeAssembly_ReturnsFailure()
+        {
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
+                BuildSingleSourceInput(),
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/One.cs\"}],"
+                + "\"unchangedMethods\":[{\"sourceProjectRelativePath\":\"Assets/One.cs\","
+                + "\"typeMetadataName\":\"Host\",\"methodName\":\"Run\",\"homeAssemblyName\":\"  \"}]}");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("name the assembly its type is served from"));
+        }
+
         private static TransformWorkerInputDto BuildSingleSourceInput()
         {
             return new TransformWorkerInputDto

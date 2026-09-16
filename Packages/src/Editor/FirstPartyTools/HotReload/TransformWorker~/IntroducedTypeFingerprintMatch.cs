@@ -26,20 +26,24 @@ internal sealed class IntroducedTypeFingerprintMatch
 
     private IntroducedTypeFingerprintMatch(
         IntroducedTypeFingerprintMatchKind kind,
-        IReadOnlyList<string> changedMethodKeys,
+        IReadOnlyList<string> changedMethodSyntaxKeys,
         IReadOnlyList<string> changedOtherKeys,
         IReadOnlyList<string> details)
     {
         Kind = kind;
-        ChangedMethodKeys = changedMethodKeys;
+        ChangedMethodSyntaxKeys = changedMethodSyntaxKeys;
         ChangedOtherKeys = changedOtherKeys;
         Details = details;
     }
 
     internal IntroducedTypeFingerprintMatchKind Kind { get; }
 
-    /// <summary>Ordinary methods whose body changed. Empty unless the kind is MethodBodiesOnly.</summary>
-    internal IReadOnlyList<string> ChangedMethodKeys { get; }
+    /// <summary>
+    /// Ordinary methods whose body changed, named by the syntax method key the emit stages spell a
+    /// method with rather than by the key the fingerprint recorded. Empty unless the kind is
+    /// MethodBodiesOnly.
+    /// </summary>
+    internal IReadOnlyList<string> ChangedMethodSyntaxKeys { get; }
 
     /// <summary>Members that are not ordinary methods whose body changed. Empty unless the kind is OtherBodiesChanged.</summary>
     internal IReadOnlyList<string> ChangedOtherKeys { get; }
@@ -50,7 +54,7 @@ internal sealed class IntroducedTypeFingerprintMatch
     internal static IntroducedTypeFingerprintMatch Classify(
         string recordedFingerprint,
         string currentFingerprint,
-        ISet<string> ordinaryMethodKeysOfDeclaration)
+        IReadOnlyDictionary<string, string> syntaxMethodKeysByMemberKey)
     {
         // Why the text comparison first: it is the decision this stage made before it could tell
         // one difference from another, so an unchanged declaration never depends on the parser.
@@ -84,7 +88,7 @@ internal sealed class IntroducedTypeFingerprintMatch
             HotReloadIntroducedTypeFingerprint.Compare(recorded, current);
         if (comparison.Kind == HotReloadIntroducedTypeFingerprintDifference.BodyOnly)
         {
-            return ClassifyChangedBodies(comparison, ordinaryMethodKeysOfDeclaration);
+            return ClassifyChangedBodies(comparison, syntaxMethodKeysByMemberKey);
         }
 
         if (comparison.Kind == HotReloadIntroducedTypeFingerprintDifference.Identical)
@@ -104,32 +108,42 @@ internal sealed class IntroducedTypeFingerprintMatch
     }
 
     /// <summary>
-    /// The keys the fingerprint gives the declaration's ordinary methods, which is the set of
-    /// members a body edit can be patched on. Built along the path the fingerprint builds its own
-    /// keys on, so the two never disagree about how a key is spelled.
+    /// The declaration's ordinary methods, keyed by the name the fingerprint records them under
+    /// and valued by the syntax method key the emit stages spell the same method with. The keys
+    /// are built along the path the fingerprint builds its own keys on, so the two never disagree
+    /// about how a member is named; the values are what a later stage can match a method
+    /// declaration against without normalizing it a second way.
     /// </summary>
-    internal static ISet<string> CollectOrdinaryMethodKeys(
+    internal static IReadOnlyDictionary<string, string> CollectOrdinaryMethodKeys(
         BaseTypeDeclarationSyntax declaration,
         string typeMetadataName)
     {
-        HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal);
+        Dictionary<string, string> syntaxKeysByMemberKey = new Dictionary<string, string>(StringComparer.Ordinal);
         IReadOnlyList<MemberDeclarationSyntax> members = IntroducedTypeMemberRegions.CollectMembers(declaration);
         for (int index = 0; index < members.Count; index++)
         {
-            // Why the trivia is stripped first: a key builder keeps a comment written inside a
-            // parameter type, and the fingerprint recorded its keys from a stripped declaration.
-            // The same builder on an unstripped one spells the same method differently, which
-            // would read an edited body as a member the reload cannot patch.
-            MemberDeclarationSyntax member = IntroducedTypeMemberRegions.StripTrivia(members[index]);
-            if (!(member is MethodDeclarationSyntax))
+            if (!(members[index] is MethodDeclarationSyntax methodDeclaration))
             {
                 continue;
             }
 
-            keys.Add(IntroducedTypeMemberRegions.BuildMemberKey(member, typeMetadataName, index));
+            // Why the trivia is stripped first: a key builder keeps a comment written inside a
+            // parameter type, and the fingerprint recorded its keys from a stripped declaration.
+            // The same builder on an unstripped one spells the same method differently, which
+            // would read an edited body as a member the reload cannot patch.
+            MemberDeclarationSyntax member = IntroducedTypeMemberRegions.StripTrivia(methodDeclaration);
+            string memberKey = IntroducedTypeMemberRegions.BuildMemberKey(member, typeMetadataName, index);
+
+            // Two methods spelling the same key do not compile, and the fingerprint numbers them
+            // instead. Leaving the second one out keeps the first mapping intact, and a changed
+            // body of either is then read as a member the reload cannot patch, which is the
+            // refusal such a source has to get anyway.
+            syntaxKeysByMemberKey.TryAdd(
+                memberKey,
+                WorkerSyntaxIndex.BuildSyntaxMethodKey(typeMetadataName, methodDeclaration));
         }
 
-        return keys;
+        return syntaxKeysByMemberKey;
     }
 
     // Why a single non-method member settles it: the reload patches one body at a time, and a
@@ -137,15 +151,15 @@ internal sealed class IntroducedTypeFingerprintMatch
     // while its neighbours ran the edited one.
     private static IntroducedTypeFingerprintMatch ClassifyChangedBodies(
         HotReloadIntroducedTypeFingerprintComparison comparison,
-        ISet<string> ordinaryMethodKeysOfDeclaration)
+        IReadOnlyDictionary<string, string> syntaxMethodKeysByMemberKey)
     {
         List<string> methodKeys = new List<string>();
         List<string> otherKeys = new List<string>();
         foreach (string key in comparison.ChangedBodyKeys)
         {
-            if (ordinaryMethodKeysOfDeclaration.Contains(key))
+            if (syntaxMethodKeysByMemberKey.TryGetValue(key, out string syntaxMethodKey))
             {
-                methodKeys.Add(key);
+                methodKeys.Add(syntaxMethodKey);
                 continue;
             }
 
