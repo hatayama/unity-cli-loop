@@ -48,7 +48,8 @@ nothing from them is applied, while files in other assemblies still apply.
 
 | Condition | `Reason` |
 |---|---|
-| The declaration of a type this domain already introduced has changed | `Changed introduced type requires a compile: <type>` |
+| The declaration of a type this domain already introduced has changed | `Changed introduced type requires a compile: <type> Declaration differences: <parts>.` — the differences name the fingerprint parts that stopped matching (`added:` / `removed:` / `changed:` member keys), and are omitted when the comparison only knows the type name |
+| A member body of a type this domain already introduced changed in a way that cannot be patched | `Changed member body of introduced type requires a compile: <type> Changed members: <keys>. Only ordinary method bodies of an introduced type can be hot reloaded.` |
 | Two files of the same reload declare the same type | `Introduced type <type> is declared in more than one file of the group: <paths>.` |
 | The artifact assembly failed to compile | `Introduced-type compilation failed: <compiler output>` |
 
@@ -63,6 +64,14 @@ callers bound to a definition the source no longer declares. Deleting the declar
 unload it either — the type stays loaded, and the active state of the domain is unchanged.
 `uloop compile` is the only way to get a changed or removed declaration into the running Editor.
 
+What is fixed is the declaration, not the code behind it. Editing only the bodies of the type's
+ordinary methods leaves the declaration identical, so the reload patches those bodies on the
+artifact assembly that already carries the type and reports the type as an `AlreadyActive` row
+with the methods as `Patched`. Restoring such a body to what the artifact was compiled from
+reverts the patch, so the artifact runs its own code again. Bodies that are not ordinary method
+bodies — constructors, property and event accessors, field and property initializers — and any
+change to the declaration itself still require a compile.
+
 ## Partial apply
 
 Type preparation runs before the reload commits its method patches, so a run can introduce types
@@ -72,6 +81,7 @@ and still fail a method. The three shapes a caller has to be able to read:
 |---|---|---|---|---|
 | Only a new type, nothing to patch | `true` | one `Introduced` row | empty | `Hot reload introduced 1 type(s); no method body needed patching.` |
 | The declaration was already introduced by an earlier reload | `true` | one `AlreadyActive` row | empty | `Hot reload bound 1 introduced type(s) this domain already holds; no method body needed patching.` |
+| The declaration was already introduced and this run edited a method body of it | `true` | one `AlreadyActive` row | one `Patched` row | `Hot reload bound 1 introduced type(s) this domain already holds; 1 method body(ies) were patched.` |
 | A type became active, then a method failed | `false` | one `Introduced` row | one `Failed` row | `Hot reload finished with one or more Failed method outcomes. See Methods. IntroducedTypes=1.` |
 
 `ActiveIntroducedTypeTotal` always reports how many types the domain holds after the run,
@@ -114,8 +124,8 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 - **Values are not preserved.** Nothing carries the state of an introduced type's instances
   across the domain reload that ends its life, and this stage makes no attempt to. Treat an
   introduced type as an Editor-session illusion, exactly like an added member.
-- Editing the body of a method **of** an introduced type is out of scope for this stage. The
-  type's implementation is fixed once it is active.
+- Body-only edits of an introduced type's ordinary methods are patched on the artifact assembly;
+  constructor / accessor / initializer bodies and any member addition still require a compile.
 
 ## File selection and new files
 

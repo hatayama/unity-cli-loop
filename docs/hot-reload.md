@@ -179,21 +179,18 @@ What the spike **proved**:
 carries the target assembly Mvid, so all fingerprints under comparison must come from the same
 fixture generation — rebuilding the fixture makes every comparison a declaration change.
 
-**Open items for Phase 1.** The spike changed no production code; these are the gaps it
-found:
+**Open items the spike found.** The spike changed no production code; Phase 1 closed the first
+three of the gaps it named:
 
-1. `Patching/HotReloadDomain.cs:71` `ResolveTypeHome` has one caller,
-   `HotReloadPatchTargetSupport.cs:100`, and the assembly name it passes always comes from
-   `CompilationPipeline.GetAssemblyNameFromScriptPath` (`HotReloadPatchTargetSupport.cs:46`),
-   so the retained-artifact branch is never taken today.
-2. Publicizing refuses an artifact: `Patching/ReferencePublicizer.cs:66` asserts the home is
-   publicizable and `:71` asserts a script-assembly path (`:180`), while
-   `Patching/HotReloadShimReferenceBuilder.cs:279` publicizes the target home
-   unconditionally.
-3. The worker deliberately does not look a compiled type up in the artifacts
-   (`TransformWorker~/WorkerTypeHome.cs:24` explains why), and a type with no compiled
-   counterpart has all its methods skipped
-   (`TransformWorker~/TypeEmitPlanner.cs:156-159`).
+1. **Resolved in Phase 1.** A worker row now names the assembly its method lives in, and one
+   resolver turns that name into a home, so a method of a retained declaration reaches the
+   artifact instead of a project assembly of the same name.
+2. **Resolved in Phase 1.** The shim compile references a publicized copy of each introduced-type
+   assembly, which is what lets a shim compiled for an edited body read that type's private
+   members; engine and system assemblies are still never rewritten.
+3. **Resolved in Phase 1.** The worker classifies a body-only edit of an already-introduced type
+   and emits its methods against the retained declaration, instead of skipping every method of a
+   type with no compiled counterpart.
 4. Nothing records the artifact assembly's own Mvid:
    `IntroducedType/HotReloadIntroducedTypeArtifact.cs` holds only the assembly, the dll and
    pdb paths and the descriptors, and a descriptor's Mvid
