@@ -70,7 +70,8 @@ artifact assembly that already carries the type and reports the type as an `Alre
 with the methods as `Patched`. Restoring such a body to what the artifact was compiled from
 reverts the patch, so the artifact runs its own code again. Bodies that are not ordinary method
 bodies — constructors, property and event accessors, field and property initializers — and any
-change to the declaration itself still require a compile.
+change to the declaration other than adding an ordinary method, field or property still require
+a compile.
 
 ## Partial apply
 
