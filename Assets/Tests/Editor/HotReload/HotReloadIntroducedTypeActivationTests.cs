@@ -1817,8 +1817,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
-        // The same type with one member more, which is what redefining it means: a body edit is
-        // not a redefinition, because the declaration the artifact was compiled from still holds.
+        // The same type with the signature of its one member changed, which is what redefining it
+        // means here: a body edit is not a redefinition, because the declaration the artifact was
+        // compiled from still holds.
         // Why a changed signature rather than an added member: a member added to an already
         // introduced type is applied on the artifact that carries it, so only a member the
         // artifact holds and the source no longer declares the same way leaves the artifact

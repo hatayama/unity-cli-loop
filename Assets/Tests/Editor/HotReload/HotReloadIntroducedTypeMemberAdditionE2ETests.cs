@@ -30,14 +30,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedMethodExpression = "Extra()";
         private const string NoAddedMembers = "";
 
-        // The members the second reload adds: an ordinary method that reads both the compiled
-        // private field and the added one, the added field itself, and an auto-property whose
-        // accessors have to arrive as added methods of their own.
+        // The members the second reload adds: an ordinary method that reads the compiled private
+        // field, the added field itself, and an auto-property whose accessors have to arrive as
+        // added methods of their own. Why the method writes and reads the property rather than
+        // the field twice: the value the test checks then depends on both accessors running, so
+        // an accessor that was reported as added without working would change it.
         private static readonly string AddedMembers =
             "\n"
             + "        public int Extra()\n"
             + "        {\n"
-            + "            return _seed + extra;\n"
+            + "            Count = extra;\n"
+            + "            return _seed + Count;\n"
             + "        }\n"
             + "\n"
             + "        private int extra = " + AddedFieldValue.ToString() + ";\n"
@@ -49,7 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// while editing a body of it in the same reload, keeps the type active and applies every
         /// addition: the type row says the reload bound what the domain already holds, the edited
         /// body is patched, each added member is reported as added, and a call into the retained
-        /// assembly runs the new code.
+        /// assembly runs the new code - through the added property, which the added method writes
+        /// and reads on the way to the value.
         /// </summary>
         [Test]
         public async Task Run_MembersAddedToIntroducedType_AppliesThemOnTheRetainedArtifact()
