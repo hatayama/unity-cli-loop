@@ -140,6 +140,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the added-method variant of the detail-required contract fails fast on its own,
+        /// so weakening only that template is caught instead of being covered by the event one.
+        /// </summary>
+        [Test]
+        public void Render_AddedMethodInaccessibleAccessWithoutDetail_Throws()
+        {
+            TransformWorkerReasonDto reason = new TransformWorkerReasonDto
+            {
+                code = HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite
+            };
+
+            Assert.Throws<ArgumentException>(() => HotReloadWorkerReasonText.Render(reason));
+        }
+
+        /// <summary>
         /// What: a sentence that takes no values renders the same whether args is null or empty.
         /// </summary>
         [Test]
