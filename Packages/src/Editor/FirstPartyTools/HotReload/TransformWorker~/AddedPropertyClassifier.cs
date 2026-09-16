@@ -101,7 +101,7 @@ internal static class AddedPropertyClassifier
             AddedPropertySkipEvaluator.RegisterAutoPropertyStore(candidate.Binding, addedFieldCatalog);
         }
 
-        ShimTypeBuilder shimType = OrdinaryMethodQueue.EnsureShimType(
+        ShimTypeBuilder shimType = OrdinaryMethodShimTypes.EnsureShimType(
             typeState,
             root,
             assemblyGlobalUsings,

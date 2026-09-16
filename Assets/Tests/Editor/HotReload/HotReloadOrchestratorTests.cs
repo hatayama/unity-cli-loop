@@ -47,15 +47,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             VibeLogger.ClearMemoryLogs();
         }
 
-        // Keep in sync with the AddedMethodUnavailableAddedCall template in
-        // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.cs.
+        // Mirrors the AddedMethodUnavailableAddedCall template in
+        // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.AddedMemberTemplates.cs.
         // The literal is spelled out here so a template edit fails this test instead of silently
         // changing what a skipped caller reports.
         private const string UnavailableAddedCallSkipReason =
             "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
-        // Keep in sync with the MethodTransformGenericMethodOrType template in
-        // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.cs.
+        // Mirrors the MethodTransformGenericMethodOrType template in
+        // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.MethodTransformTemplates.cs.
         private const string ExpectedGenericMethodSkipReason =
             "Generic methods and methods inside generic types cannot be safely patched with Harmony. Run 'uloop compile'.";
 

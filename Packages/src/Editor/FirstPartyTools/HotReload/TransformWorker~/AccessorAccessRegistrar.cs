@@ -197,7 +197,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        return TryRegisterPropertyOrFieldRead(
+        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
             semanticModel.GetSymbolInfo(memberAccess).Symbol
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
@@ -234,7 +234,7 @@ internal static class AccessorAccessRegistrar
             }
         }
 
-        return TryRegisterPropertyOrFieldRead(
+        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
             semanticModel.GetSymbolInfo(name).Symbol,
             plan,
             out rejectReason);
@@ -382,96 +382,6 @@ internal static class AccessorAccessRegistrar
         }
 
         plan.GetOrAddMethod(methodSymbol);
-        return true;
-    }
-
-    internal static bool TryRegisterPropertyOrFieldRead(
-        ISymbol symbol,
-        AccessorPlan plan,
-        out WorkerReason rejectReason)
-    {
-        rejectReason = null;
-        if (symbol is IFieldSymbol fieldSymbol)
-        {
-            if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
-            {
-                return false;
-            }
-
-            if (fieldSymbol.IsConst)
-            {
-                return true;
-            }
-
-            plan.GetOrAddField(fieldSymbol);
-            return true;
-        }
-
-        if (symbol is IPropertySymbol propertySymbol)
-        {
-            if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
-            {
-                return false;
-            }
-
-            return TryRegisterPropertyRead(propertySymbol, plan, out rejectReason);
-        }
-
-        if (symbol is IEventSymbol eventSymbol)
-        {
-            plan.GetOrAddEventBackingField(eventSymbol);
-            return true;
-        }
-
-        if (symbol is IMethodSymbol methodSymbol
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape);
-            return false;
-        }
-
-        if (symbol != null
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol)
-            && symbol is not INamespaceSymbol
-            && symbol is not ITypeSymbol
-            && symbol is not ILocalSymbol
-            && symbol is not IParameterSymbol)
-        {
-            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMemberKindUnsupported);
-            return false;
-        }
-
-        return false;
-    }
-
-    internal static bool TryRegisterPropertyRead(
-        IPropertySymbol propertySymbol,
-        AccessorPlan plan,
-        out WorkerReason rejectReason)
-    {
-        rejectReason = null;
-        if (propertySymbol.IsIndexer)
-        {
-            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorIndexerNoShape);
-            return false;
-        }
-
-        if (propertySymbol.IsStatic)
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape);
-            return false;
-        }
-
-        if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape);
-            return false;
-        }
-
-        plan.GetOrAddPropertyGetter(propertySymbol);
         return true;
     }
 }
