@@ -171,6 +171,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadEntryHomeResolver(_domain, files[0].ProjectRoot);
             foreach (HotReloadGroupFile file in files)
             {
+                // Why a file left unapplied is left alone: a file the shim compile refused keeps
+                // the previous run's patches, and the patch on a method this run reports unchanged
+                // is one of them. Peeling it would drop what this run never replaced, which is the
+                // one thing the file-atomic isolation exists to prevent.
+                if (file.SkipApply)
+                {
+                    continue;
+                }
+
                 IReadOnlyList<TransformWorkerUnchangedMethodDto> fileUnchanged =
                     rows.UnchangedFor(file.ProjectRelativePath);
                 TransformWorkerUnchangedMethodDto[] unchangedMethods =

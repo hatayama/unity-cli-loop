@@ -199,6 +199,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why a run that commits types skips it: peeling a patch here would mutate the domain
             // before the commit boundary, which a failed recheck could then no longer undo, so
             // such a run reverts at the boundary instead.
+            // Why the peel's unapplied-file guard changes nothing here: the isolation retry that
+            // marks a file unapplied runs later, so the only mark a file can carry at this point
+            // is a parse error, and the worker drops a unit with parse errors before the transform
+            // that reports unchanged methods, leaving such a file no row to peel either way.
             if (!_collaborators.CommitPolicy.CommitsIntroducedTypes(prepared, files[0].AssemblyName)
                 && !await RevalidateBeforeRevertAsync(
                     files,
