@@ -150,6 +150,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Builds a prepare input that also carries recorded artifacts, so a test can plan the
+        /// edited source against a declaration the domain is already serving.
+        /// </summary>
+        public TransformWorkerInputDto BuildPrepareInputWithArtifacts(
+            TransformWorkerIntroducedTypeArtifactDto[] artifacts)
+        {
+            return BuildInput("prepareIntroducedTypes", artifacts, includeSibling: false);
+        }
+
+        /// <summary>
         /// Builds a prepare input covering both edited files of the group, so planning binds the
         /// sibling's types from source instead of from the target assembly.
         /// </summary>
