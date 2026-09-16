@@ -35,6 +35,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string EditedExpression = "_seed * 2";
         private const string NoExtraMembers = "";
 
+        // The member the removal test introduces first and drops afterwards.
+        private const string RemovableMember =
+            "        public int Twice()\n"
+            + "        {\n"
+            + "            return _seed * 2;\n"
+            + "        }\n"
+            + "\n";
+
         private HotReloadDomainTestScope _scope;
 
         [SetUp]
@@ -170,19 +178,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that adding a member to an already introduced type still asks for a compile: the
+        /// Verifies that removing a member from an already introduced type asks for a compile: the
         /// type row fails with the changed-declaration reason, which names the type and lists the
-        /// declaration difference that made the reload refuse it.
+        /// removal that made the reload refuse it. The retained assembly still holds the member, so
+        /// a caller compiled against it would keep finding a definition the source no longer has.
         /// </summary>
         [Test]
-        public async Task Run_IntroducedTypeDeclarationChanged_FailsAndAsksForACompile()
+        public async Task Run_IntroducedTypeMemberRemoved_FailsAndAsksForACompile()
         {
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
             await RunInIntroducedTypeDomainAsync(async readArtifact =>
             {
-                await RunReloadAsync(hostPath, callerPath, CreateIntroducingEdits(hostPath, callerPath));
+                await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducingEditsWithTwoMembers(hostPath, callerPath));
                 AssertComputedValue(
                     readArtifact(),
                     IntroducedSeed,
@@ -191,14 +203,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadOrchestratorResult changed = await RunReloadAsync(
                     hostPath,
                     callerPath,
-                    CreateDeclarationChangedEdits(hostPath, callerPath));
+                    CreateMemberRemovedEdits(hostPath, callerPath));
 
                 HotReloadIntroducedTypeOutcome outcome = FindIntroducedTypeOutcome(changed);
                 Assert.That(
                     outcome.Kind,
                     Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed),
-                    "Adding a member to an introduced type changes its declaration, which needs a "
-                    + "compile.\n"
+                    "Removing a member from an introduced type changes its declaration, which needs "
+                    + "a compile.\n"
                     + DescribeOutcomes(changed));
                 Assert.That(
                     outcome.Reason,
@@ -212,8 +224,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + DescribeOutcomes(changed));
                 Assert.That(
                     outcome.Reason,
-                    Does.Contain("added:"),
-                    "The differences must name the added member.\n"
+                    Does.Contain("removed:"),
+                    "The differences must name the removed member.\n"
                     + DescribeOutcomes(changed));
             });
         }
@@ -456,25 +468,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        // The declaration of the introduced type with one member more than the retained assembly
-        // holds, which is the change a reload cannot apply without a compile.
-        private static Dictionary<string, string> CreateDeclarationChangedEdits(
+        // The declaration the removal is measured against: the introduced type with a second
+        // member, so the reload that drops it has something the retained assembly still holds.
+        private static Dictionary<string, string> CreateIntroducingEditsWithTwoMembers(
             string hostPath,
             string callerPath)
         {
-            string extraMember =
-                "        public int Twice()\n"
-                + "        {\n"
-                + "            return _seed * 2;\n"
-                + "        }\n"
-                + "\n";
             return new Dictionary<string, string>
             {
                 [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
-                    "IntroducedTypeDeclarationChangedHost.cs",
-                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, extraMember)),
+                    "IntroducedTypeTwoMemberHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, RemovableMember)),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
-                    "IntroducedTypeDeclarationChangedCaller.cs",
+                    "IntroducedTypeTwoMemberCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The same declaration with the second member gone, which is the change a reload cannot
+        // apply without a compile: the member stays in the assembly the domain runs the type from.
+        private static Dictionary<string, string> CreateMemberRemovedEdits(
+            string hostPath,
+            string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeMemberRemovedHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, NoExtraMembers)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeMemberRemovedCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
             };
         }
