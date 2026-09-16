@@ -32,13 +32,11 @@ internal sealed class IntroducedTypeFingerprintMatch
         IntroducedTypeFingerprintMatchKind kind,
         IReadOnlyList<string> changedMethodSyntaxKeys,
         IReadOnlyList<string> changedOtherKeys,
-        IReadOnlyList<string> addedMemberKeys,
         IReadOnlyList<string> details)
     {
         Kind = kind;
         ChangedMethodSyntaxKeys = changedMethodSyntaxKeys;
         ChangedOtherKeys = changedOtherKeys;
-        AddedMemberKeys = addedMemberKeys;
         Details = details;
     }
 
@@ -53,12 +51,6 @@ internal sealed class IntroducedTypeFingerprintMatch
 
     /// <summary>Members that are not ordinary methods whose body changed. Empty unless the kind is OtherBodiesChanged.</summary>
     internal IReadOnlyList<string> ChangedOtherKeys { get; }
-
-    /// <summary>
-    /// Members the declaration holds and the record does not, named by the key the fingerprint
-    /// records them under. Empty unless the kind is MembersAdded.
-    /// </summary>
-    internal IReadOnlyList<string> AddedMemberKeys { get; }
 
     /// <summary>Why the declaration or the record itself did not account for the edit.</summary>
     internal IReadOnlyList<string> Details { get; }
@@ -76,7 +68,6 @@ internal sealed class IntroducedTypeFingerprintMatch
                 IntroducedTypeFingerprintMatchKind.Identical,
                 NoKeys,
                 NoKeys,
-                NoKeys,
                 NoKeys);
         }
 
@@ -92,7 +83,6 @@ internal sealed class IntroducedTypeFingerprintMatch
         {
             return new IntroducedTypeFingerprintMatch(
                 IntroducedTypeFingerprintMatchKind.RecordUnreadable,
-                NoKeys,
                 NoKeys,
                 NoKeys,
                 UnreadableRecordDetails);
@@ -155,7 +145,6 @@ internal sealed class IntroducedTypeFingerprintMatch
                 IntroducedTypeFingerprintMatchKind.OtherBodiesChanged,
                 NoKeys,
                 changedOtherKeys,
-                NoKeys,
                 NoKeys);
         }
 
@@ -165,7 +154,6 @@ internal sealed class IntroducedTypeFingerprintMatch
                 IntroducedTypeFingerprintMatchKind.MembersAdded,
                 changedMethodSyntaxKeys,
                 NoKeys,
-                addedMemberKeys,
                 comparison.Details);
         }
 
@@ -175,13 +163,11 @@ internal sealed class IntroducedTypeFingerprintMatch
                 IntroducedTypeFingerprintMatchKind.MethodBodiesOnly,
                 changedMethodSyntaxKeys,
                 NoKeys,
-                NoKeys,
                 NoKeys);
         }
 
         return new IntroducedTypeFingerprintMatch(
             IntroducedTypeFingerprintMatchKind.Identical,
-            NoKeys,
             NoKeys,
             NoKeys,
             NoKeys);
@@ -245,7 +231,6 @@ internal sealed class IntroducedTypeFingerprintMatch
     {
         return new IntroducedTypeFingerprintMatch(
             IntroducedTypeFingerprintMatchKind.DeclarationChanged,
-            NoKeys,
             NoKeys,
             NoKeys,
             comparison.Details);
