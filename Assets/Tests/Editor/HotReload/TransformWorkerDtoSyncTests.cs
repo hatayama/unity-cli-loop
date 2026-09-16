@@ -169,11 +169,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return editorType.GetFields(BindingFlags.Public | BindingFlags.Instance);
         }
 
-        // Why the first character only: the worker writes camelCase names, and every property here
-        // is a single capitalized word run. A name like 'ID' would produce a name neither side
-        // agrees on, and that difference surfaces as a missing field rather than passing silently.
+        // The worker serializes with JsonNamingPolicy.CamelCase, which lowercases a whole run of
+        // capitals ('URLValue' becomes 'urlValue'), so lowercasing the first character alone only
+        // agrees with it while every payload property is a single capitalized word run. The
+        // approximation is pinned here rather than assumed: a name that breaks it fails the test
+        // instead of being compared against a name neither side ever writes.
         private static string ToCamelCase(string name)
         {
+            if (name.Length > 1 && char.IsUpper(name[1]))
+            {
+                Assert.Fail(
+                    "Worker property '" + name + "' starts with more than one capital, which this"
+                    + " comparison cannot convert the way the worker's naming policy does. Name a"
+                    + " payload property so that only its first character is capitalized.");
+            }
+
             return char.ToLowerInvariant(name[0]) + name.Substring(1);
         }
 
