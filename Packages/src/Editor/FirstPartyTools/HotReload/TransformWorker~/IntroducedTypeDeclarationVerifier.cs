@@ -70,7 +70,6 @@ internal static class IntroducedTypeDeclarationVerifier
             // a retained declaration may itself depend on another retained type, and computing
             // its fingerprint without the mapping would never reproduce the recorded value.
             string fingerprint = IntroducedTypeFingerprint.Compute(
-                unit.Root,
                 declaration,
                 input.Defines,
                 typeSymbol,
@@ -78,7 +77,7 @@ internal static class IntroducedTypeDeclarationVerifier
                 targetAssembly,
                 input.TargetAssemblyName,
                 input.TargetAssemblyMvid,
-                artifactMap);
+                artifactMap).Serialize();
             if (string.Equals(fingerprint, record.DeclarationFingerprint, StringComparison.Ordinal))
             {
                 declarations.Add(declaration);
