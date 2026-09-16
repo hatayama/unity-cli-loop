@@ -1,19 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Collections.Immutable;
-using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Runtime.Loader;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
 
 internal static class OutsideMethodBodyDeclarationDiff
 {
@@ -25,16 +15,82 @@ internal static class OutsideMethodBodyDeclarationDiff
         internal readonly HashSet<string> PairedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     }
 
-    private sealed class MemberMaps
+    // One member kind, with the declarations both files hold for it. Subclasses differ in what a
+    // pair means: most kinds compare one declaration against one declaration, while fields and
+    // event fields compare whole declarations because several names can share one header.
+    private abstract class MemberMapEntry
     {
-        internal Dictionary<string, MethodDeclarationSyntax> Methods;
-        internal Dictionary<string, VariableDeclaratorSyntax> Fields;
-        internal Dictionary<string, PropertyDeclarationSyntax> Properties;
-        internal Dictionary<string, IndexerDeclarationSyntax> Indexers;
-        internal Dictionary<string, ConstructorDeclarationSyntax> Constructors;
-        internal Dictionary<string, MemberDeclarationSyntax> Operators;
-        internal Dictionary<string, EventDeclarationSyntax> Events;
-        internal Dictionary<string, VariableDeclaratorSyntax> EventFields;
+        internal readonly Dictionary<string, SyntaxNode> SnapshotMap;
+        internal readonly Dictionary<string, SyntaxNode> CurrentMap;
+
+        internal MemberMapEntry(
+            Dictionary<string, SyntaxNode> snapshotMap,
+            Dictionary<string, SyntaxNode> currentMap)
+        {
+            SnapshotMap = snapshotMap;
+            CurrentMap = currentMap;
+        }
+
+        internal abstract void AppendChangeLabels(
+            HashSet<string> handledSnapshotKeys,
+            HashSet<string> handledCurrentKeys,
+            Result result);
+    }
+
+    private sealed class SingleNodeMemberMapEntry : MemberMapEntry
+    {
+        private readonly Func<SyntaxNode, string> _describeLabel;
+
+        internal SingleNodeMemberMapEntry(
+            Dictionary<string, SyntaxNode> snapshotMap,
+            Dictionary<string, SyntaxNode> currentMap,
+            Func<SyntaxNode, string> describeLabel)
+            : base(snapshotMap, currentMap)
+        {
+            _describeLabel = describeLabel;
+        }
+
+        internal override void AppendChangeLabels(
+            HashSet<string> handledSnapshotKeys,
+            HashSet<string> handledCurrentKeys,
+            Result result)
+        {
+            AppendPairedSyntaxNodeLabels(
+                SnapshotMap,
+                CurrentMap,
+                handledSnapshotKeys,
+                handledCurrentKeys,
+                result,
+                _describeLabel);
+        }
+    }
+
+    private sealed class BaseFieldMemberMapEntry : MemberMapEntry
+    {
+        private readonly string _kindNoun;
+
+        internal BaseFieldMemberMapEntry(
+            Dictionary<string, SyntaxNode> snapshotMap,
+            Dictionary<string, SyntaxNode> currentMap,
+            string kindNoun)
+            : base(snapshotMap, currentMap)
+        {
+            _kindNoun = kindNoun;
+        }
+
+        internal override void AppendChangeLabels(
+            HashSet<string> handledSnapshotKeys,
+            HashSet<string> handledCurrentKeys,
+            Result result)
+        {
+            OutsideMethodBodyFieldGroupDiff.AppendBaseFieldChangeLabels(
+                SnapshotMap,
+                CurrentMap,
+                handledSnapshotKeys,
+                handledCurrentKeys,
+                result,
+                _kindNoun);
+        }
     }
 
     /// <summary>
@@ -47,111 +103,128 @@ internal static class OutsideMethodBodyDeclarationDiff
         HashSet<string> handledSnapshotKeys,
         HashSet<string> handledCurrentKeys)
     {
-        MemberMaps snapshotMaps = TryBuildMemberMaps(snapshotRoot);
-        MemberMaps currentMaps = TryBuildMemberMaps(currentRoot);
         Result result = new Result();
-        if (snapshotMaps == null || currentMaps == null)
+        List<MemberMapEntry> entries = TryBuildMemberMapEntriesOrNull(snapshotRoot, currentRoot);
+        if (entries == null)
         {
             result.DuplicateKeys = true;
             return result;
         }
 
-        AppendBaseFieldChangeLabels(
-            snapshotMaps.Fields,
-            currentMaps.Fields,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            "field");
-        AppendBaseFieldChangeLabels(
-            snapshotMaps.EventFields,
-            currentMaps.EventFields,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            "event");
-        AppendPairedSyntaxNodeLabels(
-            snapshotMaps.Methods,
-            currentMaps.Methods,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            FormatMethodLabel);
-        AppendPairedSyntaxNodeLabels(
-            snapshotMaps.Properties,
-            currentMaps.Properties,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            FormatPropertyLabel);
-        AppendPairedSyntaxNodeLabels(
-            snapshotMaps.Indexers,
-            currentMaps.Indexers,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            FormatIndexerLabel);
-        AppendPairedSyntaxNodeLabels(
-            snapshotMaps.Constructors,
-            currentMaps.Constructors,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            FormatConstructorLabel);
-        AppendPairedSyntaxNodeLabels(
-            snapshotMaps.Operators,
-            currentMaps.Operators,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            FormatOperatorLabel);
-        AppendPairedSyntaxNodeLabels(
-            snapshotMaps.Events,
-            currentMaps.Events,
-            handledSnapshotKeys,
-            handledCurrentKeys,
-            result,
-            FormatEventLabel);
-        MarkOrderDriftIfPairedKeysReordered(snapshotMaps, currentMaps, result);
+        foreach (MemberMapEntry entry in entries)
+        {
+            entry.AppendChangeLabels(handledSnapshotKeys, handledCurrentKeys, result);
+        }
+
+        result.OrderDrift = OutsideMethodBodyOrderDrift.PairedKeysAreReordered(
+            result.PairedSyntaxKeys,
+            CollectSnapshotMaps(entries),
+            CollectCurrentMaps(entries));
         return result;
     }
 
-    private static MemberMaps TryBuildMemberMaps(CompilationUnitSyntax root)
+    // The kinds in the order they are compared, which is also the order a key is looked up in
+    // when the order-drift check asks where a member sits.
+    private static List<MemberMapEntry> TryBuildMemberMapEntriesOrNull(
+        CompilationUnitSyntax snapshotRoot,
+        CompilationUnitSyntax currentRoot)
     {
-        MemberMaps maps = new MemberMaps();
-        maps.Methods = WorkerSyntaxIndex.BuildSyntaxMethodMapOrNull(root);
-        maps.Fields = WorkerSyntaxIndex.BuildSyntaxFieldMapOrNull(root);
-        maps.Properties = WorkerSyntaxIndex.BuildSyntaxPropertyMapOrNull(root);
-        maps.Indexers = WorkerSyntaxIndex.BuildSyntaxIndexerMapOrNull(root);
-        maps.Constructors = WorkerSyntaxIndex.BuildSyntaxConstructorMapOrNull(root);
-        maps.Operators = WorkerSyntaxIndex.BuildSyntaxOperatorMapOrNull(root);
-        maps.Events = WorkerSyntaxIndex.BuildSyntaxEventMapOrNull(root);
-        maps.EventFields = WorkerSyntaxIndex.BuildSyntaxEventFieldMapOrNull(root);
-        if (maps.Methods == null
-            || maps.Fields == null
-            || maps.Properties == null
-            || maps.Indexers == null
-            || maps.Constructors == null
-            || maps.Operators == null
-            || maps.Events == null
-            || maps.EventFields == null)
+        List<MemberMapEntry> entries = new List<MemberMapEntry>();
+        entries.Add(new BaseFieldMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(currentRoot)),
+            "field"));
+        entries.Add(new BaseFieldMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxEventFieldMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxEventFieldMapOrNull(currentRoot)),
+            "event"));
+        entries.Add(new SingleNodeMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxMethodMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxMethodMapOrNull(currentRoot)),
+            FormatMethodLabel));
+        entries.Add(new SingleNodeMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxPropertyMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxPropertyMapOrNull(currentRoot)),
+            FormatPropertyLabel));
+        entries.Add(new SingleNodeMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxIndexerMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxIndexerMapOrNull(currentRoot)),
+            FormatIndexerLabel));
+        entries.Add(new SingleNodeMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxConstructorMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxConstructorMapOrNull(currentRoot)),
+            FormatConstructorLabel));
+        entries.Add(new SingleNodeMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxOperatorMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxOperatorMapOrNull(currentRoot)),
+            FormatOperatorLabel));
+        entries.Add(new SingleNodeMemberMapEntry(
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxEventMapOrNull(snapshotRoot)),
+            RaiseToSyntaxNodes(WorkerSyntaxMemberMaps.BuildSyntaxEventMapOrNull(currentRoot)),
+            FormatEventLabel));
+        foreach (MemberMapEntry entry in entries)
         {
-            return null;
+            // A null map means a duplicate key made that kind unusable for pairing.
+            if (entry.SnapshotMap == null || entry.CurrentMap == null)
+            {
+                return null;
+            }
+        }
+
+        return entries;
+    }
+
+    private static List<Dictionary<string, SyntaxNode>> CollectSnapshotMaps(List<MemberMapEntry> entries)
+    {
+        List<Dictionary<string, SyntaxNode>> maps = new List<Dictionary<string, SyntaxNode>>();
+        foreach (MemberMapEntry entry in entries)
+        {
+            maps.Add(entry.SnapshotMap);
         }
 
         return maps;
     }
 
-    private static void AppendPairedSyntaxNodeLabels<TNode>(
-        Dictionary<string, TNode> snapshotMap,
-        Dictionary<string, TNode> currentMap,
+    private static List<Dictionary<string, SyntaxNode>> CollectCurrentMaps(List<MemberMapEntry> entries)
+    {
+        List<Dictionary<string, SyntaxNode>> maps = new List<Dictionary<string, SyntaxNode>>();
+        foreach (MemberMapEntry entry in entries)
+        {
+            maps.Add(entry.CurrentMap);
+        }
+
+        return maps;
+    }
+
+    // The maps arrive typed per kind, but pairing and ordering only ever read them as nodes, and a
+    // dictionary of a derived value type cannot be read as one of the base type.
+    private static Dictionary<string, SyntaxNode> RaiseToSyntaxNodes<TNode>(Dictionary<string, TNode> map)
+        where TNode : SyntaxNode
+    {
+        if (map == null)
+        {
+            return null;
+        }
+
+        Dictionary<string, SyntaxNode> raised =
+            new Dictionary<string, SyntaxNode>(map.Count, StringComparer.Ordinal);
+        foreach (KeyValuePair<string, TNode> pair in map)
+        {
+            raised[pair.Key] = pair.Value;
+        }
+
+        return raised;
+    }
+
+    private static void AppendPairedSyntaxNodeLabels(
+        Dictionary<string, SyntaxNode> snapshotMap,
+        Dictionary<string, SyntaxNode> currentMap,
         HashSet<string> handledSnapshotKeys,
         HashSet<string> handledCurrentKeys,
         Result result,
-        Func<TNode, string> formatLabel)
-        where TNode : SyntaxNode
+        Func<SyntaxNode, string> formatLabel)
     {
-        foreach (KeyValuePair<string, TNode> pair in snapshotMap)
+        foreach (KeyValuePair<string, SyntaxNode> pair in snapshotMap)
         {
             if (!currentMap.ContainsKey(pair.Key))
             {
@@ -166,7 +239,7 @@ internal static class OutsideMethodBodyDeclarationDiff
                 continue;
             }
 
-            TNode currentNode = currentMap[pair.Key];
+            SyntaxNode currentNode = currentMap[pair.Key];
             result.PairedSyntaxKeys.Add(pair.Key);
 
             if (SyntaxFactory.AreEquivalent(pair.Value, currentNode, topLevel: false))
@@ -178,246 +251,9 @@ internal static class OutsideMethodBodyDeclarationDiff
         }
     }
 
-    private static void AppendBaseFieldChangeLabels(
-        Dictionary<string, VariableDeclaratorSyntax> snapshotMap,
-        Dictionary<string, VariableDeclaratorSyntax> currentMap,
-        HashSet<string> handledSnapshotKeys,
-        HashSet<string> handledCurrentKeys,
-        Result result,
-        string kindNoun)
+    private static string FormatMethodLabel(SyntaxNode node)
     {
-        HashSet<BaseFieldDeclarationSyntax> processedParents =
-            new HashSet<BaseFieldDeclarationSyntax>();
-        foreach (KeyValuePair<string, VariableDeclaratorSyntax> pair in snapshotMap)
-        {
-            if (!currentMap.ContainsKey(pair.Key))
-            {
-                continue;
-            }
-
-            if (handledSnapshotKeys.Contains(pair.Key) || handledCurrentKeys.Contains(pair.Key))
-            {
-                continue;
-            }
-
-            BaseFieldDeclarationSyntax snapshotParent =
-                pair.Value.Parent?.Parent as BaseFieldDeclarationSyntax;
-            if (snapshotParent == null || !processedParents.Add(snapshotParent))
-            {
-                continue;
-            }
-
-            AppendLabelsForBaseFieldDeclaration(
-                snapshotParent,
-                snapshotMap,
-                currentMap,
-                handledSnapshotKeys,
-                handledCurrentKeys,
-                result,
-                kindNoun);
-        }
-    }
-
-    private static void AppendLabelsForBaseFieldDeclaration(
-        BaseFieldDeclarationSyntax snapshotParent,
-        Dictionary<string, VariableDeclaratorSyntax> snapshotMap,
-        Dictionary<string, VariableDeclaratorSyntax> currentMap,
-        HashSet<string> handledSnapshotKeys,
-        HashSet<string> handledCurrentKeys,
-        Result result,
-        string kindNoun)
-    {
-        List<string> comparableKeys = CollectComparableSiblingKeys(
-            snapshotParent,
-            snapshotMap,
-            currentMap,
-            handledSnapshotKeys,
-            handledCurrentKeys);
-        if (comparableKeys.Count == 0)
-        {
-            return;
-        }
-
-        VariableDeclaratorSyntax currentFirst = currentMap[comparableKeys[0]];
-        BaseFieldDeclarationSyntax currentParent =
-            currentFirst.Parent?.Parent as BaseFieldDeclarationSyntax;
-        if (currentParent == null)
-        {
-            return;
-        }
-
-        // Why fail-open: splitting a multi-declarator across declarations makes the shared
-        // header ambiguous. Pairing here would strip siblings whose own header was never
-        // compared and hide the residual warning.
-        if (!CurrentDeclaratorsShareParent(comparableKeys, currentMap, currentParent))
-        {
-            return;
-        }
-
-        foreach (string key in comparableKeys)
-        {
-            result.PairedSyntaxKeys.Add(key);
-        }
-
-        bool attributesDiffer = AttributeListsDiffer(
-            snapshotParent.AttributeLists,
-            currentParent.AttributeLists);
-        bool modifiersDiffer = TokenListsDiffer(snapshotParent.Modifiers, currentParent.Modifiers);
-        bool typeDiffers = !SyntaxFactory.AreEquivalent(
-            snapshotParent.Declaration.Type,
-            currentParent.Declaration.Type,
-            topLevel: false);
-        if (attributesDiffer || modifiersDiffer || typeDiffers)
-        {
-            result.ChangedLabels.Add(
-                FormatSharedHeaderLabel(
-                    kindNoun,
-                    comparableKeys,
-                    snapshotMap,
-                    attributesDiffer,
-                    modifiersDiffer,
-                    typeDiffers));
-        }
-
-        AppendInitializerLabels(
-            comparableKeys,
-            snapshotMap,
-            currentMap,
-            result,
-            kindNoun);
-    }
-
-    private static List<string> CollectComparableSiblingKeys(
-        BaseFieldDeclarationSyntax snapshotParent,
-        Dictionary<string, VariableDeclaratorSyntax> snapshotMap,
-        Dictionary<string, VariableDeclaratorSyntax> currentMap,
-        HashSet<string> handledSnapshotKeys,
-        HashSet<string> handledCurrentKeys)
-    {
-        List<string> comparableKeys = new List<string>();
-        foreach (KeyValuePair<string, VariableDeclaratorSyntax> pair in snapshotMap)
-        {
-            if (pair.Value.Parent?.Parent != snapshotParent)
-            {
-                continue;
-            }
-
-            if (!currentMap.ContainsKey(pair.Key))
-            {
-                continue;
-            }
-
-            if (handledSnapshotKeys.Contains(pair.Key) || handledCurrentKeys.Contains(pair.Key))
-            {
-                continue;
-            }
-
-            comparableKeys.Add(pair.Key);
-        }
-
-        return comparableKeys;
-    }
-
-    private static bool CurrentDeclaratorsShareParent(
-        List<string> comparableKeys,
-        Dictionary<string, VariableDeclaratorSyntax> currentMap,
-        BaseFieldDeclarationSyntax currentParent)
-    {
-        foreach (string key in comparableKeys)
-        {
-            if (currentMap[key].Parent?.Parent != currentParent)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static string FormatSharedHeaderLabel(
-        string kindNoun,
-        List<string> comparableKeys,
-        Dictionary<string, VariableDeclaratorSyntax> snapshotMap,
-        bool attributesDiffer,
-        bool modifiersDiffer,
-        bool typeDiffers)
-    {
-        List<string> names = new List<string>();
-        foreach (string key in comparableKeys)
-        {
-            names.Add(snapshotMap[key].Identifier.Text);
-        }
-
-        names.Sort(StringComparer.Ordinal);
-        string joinedNames = string.Join(", ", names);
-        if (attributesDiffer && !modifiersDiffer && !typeDiffers)
-        {
-            return kindNoun + " attributes: " + joinedNames;
-        }
-
-        return kindNoun + ": " + joinedNames;
-    }
-
-    private static void AppendInitializerLabels(
-        List<string> comparableKeys,
-        Dictionary<string, VariableDeclaratorSyntax> snapshotMap,
-        Dictionary<string, VariableDeclaratorSyntax> currentMap,
-        Result result,
-        string kindNoun)
-    {
-        foreach (string key in comparableKeys)
-        {
-            VariableDeclaratorSyntax snapshotVariable = snapshotMap[key];
-            VariableDeclaratorSyntax currentVariable = currentMap[key];
-            if (SyntaxFactory.AreEquivalent(snapshotVariable, currentVariable, topLevel: false))
-            {
-                continue;
-            }
-
-            result.ChangedLabels.Add(kindNoun + " initializer: " + snapshotVariable.Identifier.Text);
-        }
-    }
-
-    private static bool AttributeListsDiffer(
-        SyntaxList<AttributeListSyntax> left,
-        SyntaxList<AttributeListSyntax> right)
-    {
-        if (left.Count != right.Count)
-        {
-            return true;
-        }
-
-        for (int index = 0; index < left.Count; index++)
-        {
-            if (!SyntaxFactory.AreEquivalent(left[index], right[index], topLevel: false))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool TokenListsDiffer(SyntaxTokenList left, SyntaxTokenList right)
-    {
-        if (left.Count != right.Count)
-        {
-            return true;
-        }
-
-        for (int index = 0; index < left.Count; index++)
-        {
-            if (!SyntaxFactory.AreEquivalent(left[index], right[index]))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string FormatMethodLabel(MethodDeclarationSyntax method)
-    {
+        MethodDeclarationSyntax method = (MethodDeclarationSyntax)node;
         string name = method.Identifier.Text;
         if (method.ExplicitInterfaceSpecifier != null)
         {
@@ -428,150 +264,42 @@ internal static class OutsideMethodBodyDeclarationDiff
         return "method: " + name;
     }
 
-    private static string FormatPropertyLabel(PropertyDeclarationSyntax property)
+    private static string FormatPropertyLabel(SyntaxNode node)
     {
+        PropertyDeclarationSyntax property = (PropertyDeclarationSyntax)node;
         return "property: " + property.Identifier.Text;
     }
 
-    private static string FormatIndexerLabel(IndexerDeclarationSyntax indexer)
+    private static string FormatIndexerLabel(SyntaxNode node)
     {
         return "indexer: this";
     }
 
-    private static string FormatConstructorLabel(ConstructorDeclarationSyntax constructor)
+    private static string FormatConstructorLabel(SyntaxNode node)
     {
+        ConstructorDeclarationSyntax constructor = (ConstructorDeclarationSyntax)node;
         string name = constructor.Modifiers.Any(SyntaxKind.StaticKeyword) ? ".cctor" : ".ctor";
         return "constructor: " + name;
     }
 
-    private static string FormatOperatorLabel(MemberDeclarationSyntax member)
+    private static string FormatOperatorLabel(SyntaxNode node)
     {
-        if (member is OperatorDeclarationSyntax operatorDeclaration)
+        if (node is OperatorDeclarationSyntax operatorDeclaration)
         {
             return "operator: " + operatorDeclaration.OperatorToken.ValueText;
         }
 
         ConversionOperatorDeclarationSyntax conversion =
-            (ConversionOperatorDeclarationSyntax)member;
+            (ConversionOperatorDeclarationSyntax)node;
         string targetType = conversion.Type != null
             ? conversion.Type.NormalizeWhitespace().ToString()
             : string.Empty;
         return "conversion: " + conversion.ImplicitOrExplicitKeyword.ValueText + "->" + targetType;
     }
 
-    private static string FormatEventLabel(EventDeclarationSyntax eventDeclaration)
+    private static string FormatEventLabel(SyntaxNode node)
     {
+        EventDeclarationSyntax eventDeclaration = (EventDeclarationSyntax)node;
         return "event: " + eventDeclaration.Identifier.Text;
-    }
-
-    private static void MarkOrderDriftIfPairedKeysReordered(
-        MemberMaps snapshotMaps,
-        MemberMaps currentMaps,
-        Result result)
-    {
-        if (result.PairedSyntaxKeys.Count < 2)
-        {
-            return;
-        }
-
-        List<string> snapshotOrder = OrderKeysBySpanStart(result.PairedSyntaxKeys, snapshotMaps);
-        List<string> currentOrder = OrderKeysBySpanStart(result.PairedSyntaxKeys, currentMaps);
-        result.OrderDrift = !StringListsEqual(snapshotOrder, currentOrder);
-    }
-
-    private static List<string> OrderKeysBySpanStart(HashSet<string> keys, MemberMaps maps)
-    {
-        List<string> ordered = new List<string>(keys);
-        ordered.Sort(new SyntaxKeySpanComparer(maps));
-        return ordered;
-    }
-
-    private static bool StringListsEqual(List<string> left, List<string> right)
-    {
-        if (left.Count != right.Count)
-        {
-            return false;
-        }
-
-        for (int index = 0; index < left.Count; index++)
-        {
-            if (!string.Equals(left[index], right[index], StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static int GetMappedNodeSpanStart(MemberMaps maps, string key)
-    {
-        SyntaxNode node = FindMappedNodeOrNull(maps, key);
-        if (node == null)
-        {
-            return int.MaxValue;
-        }
-
-        return node.SpanStart;
-    }
-
-    private static SyntaxNode FindMappedNodeOrNull(MemberMaps maps, string key)
-    {
-        if (maps.Fields.ContainsKey(key))
-        {
-            return maps.Fields[key];
-        }
-
-        if (maps.EventFields.ContainsKey(key))
-        {
-            return maps.EventFields[key];
-        }
-
-        if (maps.Methods.ContainsKey(key))
-        {
-            return maps.Methods[key];
-        }
-
-        if (maps.Properties.ContainsKey(key))
-        {
-            return maps.Properties[key];
-        }
-
-        if (maps.Indexers.ContainsKey(key))
-        {
-            return maps.Indexers[key];
-        }
-
-        if (maps.Constructors.ContainsKey(key))
-        {
-            return maps.Constructors[key];
-        }
-
-        if (maps.Operators.ContainsKey(key))
-        {
-            return maps.Operators[key];
-        }
-
-        if (maps.Events.ContainsKey(key))
-        {
-            return maps.Events[key];
-        }
-
-        return null;
-    }
-
-    private sealed class SyntaxKeySpanComparer : IComparer<string>
-    {
-        private readonly MemberMaps _maps;
-
-        internal SyntaxKeySpanComparer(MemberMaps maps)
-        {
-            _maps = maps;
-        }
-
-        public int Compare(string left, string right)
-        {
-            return GetMappedNodeSpanStart(_maps, left).CompareTo(GetMappedNodeSpanStart(_maps, right));
-        }
     }
 }

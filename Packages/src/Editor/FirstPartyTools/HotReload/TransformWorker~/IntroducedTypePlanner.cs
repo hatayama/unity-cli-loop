@@ -67,7 +67,6 @@ internal static class IntroducedTypePlanner
 
             string metadataName = CecilTypeNames.ToMetadataName(typeSymbol);
             string declarationFingerprint = IntroducedTypeFingerprint.Compute(
-                unit.Root,
                 declaration,
                 defineSymbols,
                 typeSymbol,
@@ -75,7 +74,7 @@ internal static class IntroducedTypePlanner
                 home.AssemblySymbol,
                 home.AssemblyName,
                 targetAssemblyMvid,
-                artifactMap);
+                artifactMap).Serialize();
             if (IsAlreadyIntroduced(
                     unit,
                     artifactMap,

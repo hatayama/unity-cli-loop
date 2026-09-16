@@ -45,9 +45,9 @@ internal static class RemovedMemberCollector
             removedMembers,
             removedMethodSignatures);
         Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
-            WorkerSyntaxIndex.BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
+            WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
         Dictionary<string, VariableDeclaratorSyntax> currentFieldMap =
-            WorkerSyntaxIndex.BuildSyntaxFieldMapOrNull(plainRoot);
+            WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(plainRoot);
         if (snapshotFieldMap != null && currentFieldMap != null)
         {
             CollectRemovedFields(
