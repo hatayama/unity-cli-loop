@@ -130,12 +130,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentException("members must not be null.", nameof(members));
             }
 
-            RequireAscendingUniqueKeys(members);
+            // Copied before it is published: a caller that keeps editing its own list would
+            // otherwise be able to break the ascending unique order after the checks passed.
+            HotReloadIntroducedTypeMemberFingerprint[] ownedMembers =
+                new HotReloadIntroducedTypeMemberFingerprint[members.Count];
+            for (int index = 0; index < members.Count; index++)
+            {
+                if (members[index] == null)
+                {
+                    throw new ArgumentException("members must not contain null.", nameof(members));
+                }
+
+                ownedMembers[index] = members[index];
+            }
+
+            RequireAscendingUniqueKeys(ownedMembers);
 
             HeaderHash = headerHash;
             DefinesHash = definesHash;
             MemberOrderHash = memberOrderHash;
-            Members = members;
+            Members = ownedMembers;
         }
 
         internal string HeaderHash { get; }
@@ -205,12 +219,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            int memberCount;
-            if (!int.TryParse(
-                lines[4].Substring(2),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out memberCount))
+            int memberCount = ReadCanonicalCountOrNegative(lines[4].Substring(2));
+            if (memberCount < 0)
             {
                 return false;
             }
@@ -412,6 +422,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        // Reads a non-negative decimal in the one spelling Serialize emits, so text that parses
+        // always writes back the same way. A leading zero would round-trip to a different string.
+        private static int ReadCanonicalCountOrNegative(string text)
+        {
+            if (text.Length == 0 || (text.Length > 1 && text[0] == '0'))
+            {
+                return -1;
+            }
+
+            int value;
+            if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value))
+            {
+                return -1;
+            }
+
+            return value;
+        }
+
         private static string ReadHashLineOrNull(string line, string prefix)
         {
             if (!line.StartsWith(prefix, StringComparison.Ordinal))
@@ -436,23 +464,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            int keyLength;
-            if (!int.TryParse(
-                line.Substring(2, keyLengthEnd - 2),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out keyLength))
+            int keyLength = ReadCanonicalCountOrNegative(line.Substring(2, keyLengthEnd - 2));
+            if (keyLength <= 0)
             {
                 return null;
             }
 
+            // Compared by subtraction rather than by adding the declared length to the offset: a
+            // hostile length close to the maximum would wrap the sum negative and slip past the check.
             int keyStart = keyLengthEnd + 1;
-            int declarationStart = keyStart + keyLength + 1;
-            if (keyLength == 0 || declarationStart + HashLength > line.Length)
+            int remainingAfterKeyStart = line.Length - keyStart;
+            if (keyLength > remainingAfterKeyStart - 1 - HashLength)
             {
                 return null;
             }
 
+            int declarationStart = keyStart + keyLength + 1;
             if (line[declarationStart - 1] != ':')
             {
                 return null;

@@ -279,6 +279,184 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(value.Serialize(), Is.EqualTo(original.Serialize()));
         }
 
+        /// <summary>
+        /// What: a member key length that would overflow the line offsets is refused instead of throwing.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithOverflowingKeyLength_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash
+                + "\nn:1\nm:2147483647:k:" + DeclarationHash + ":\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// What: a member count written with a leading zero is refused, because it would not serialize back the same way.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberCountWithLeadingZero_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:01\n"
+                + "m:" + MethodKey.Length + ":" + MethodKey + ":" + DeclarationHash + ":" + BodyHash + "\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// What: a member key length written with a leading zero is refused for the same round-trip reason.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberKeyLengthWithLeadingZero_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash
+                + "\nn:1\nm:08:" + MethodKey + ":" + DeclarationHash + ":" + BodyHash + "\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// What: text whose member keys repeat or descend is refused and yields no value.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberKeysRepeatedOrDescending_ReturnsFalseWithNoValue()
+        {
+            string repeated = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:2\n"
+                + "m:" + MethodKey.Length + ":" + MethodKey + ":" + DeclarationHash + ":" + BodyHash + "\n"
+                + "m:" + MethodKey.Length + ":" + MethodKey + ":" + DeclarationHash + ":" + BodyHash + "\n";
+            string descending = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:2\n"
+                + "m:" + MethodKey.Length + ":" + MethodKey + ":" + DeclarationHash + ":" + BodyHash + "\n"
+                + "m:" + FieldKey.Length + ":" + FieldKey + ":" + DeclarationHash + ":\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(repeated, out HotReloadIntroducedTypeFingerprint fromRepeated), Is.False);
+            Assert.That(fromRepeated, Is.Null);
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(descending, out HotReloadIntroducedTypeFingerprint fromDescending), Is.False);
+            Assert.That(fromDescending, Is.Null);
+        }
+
+        /// <summary>
+        /// What: the fingerprint keeps its own copy of the member list, so a later edit of the caller's list cannot break its invariants.
+        /// </summary>
+        [Test]
+        public void Constructor_CallerMutatesTheListAfterwards_FingerprintIsUnaffected()
+        {
+            List<HotReloadIntroducedTypeMemberFingerprint> members =
+                new List<HotReloadIntroducedTypeMemberFingerprint> { CreateMember(MethodKey, DeclarationHash, BodyHash) };
+            HotReloadIntroducedTypeFingerprint fingerprint = new HotReloadIntroducedTypeFingerprint(
+                HeaderHash,
+                DefinesHash,
+                OrderHash,
+                members);
+            string serializedBefore = fingerprint.Serialize();
+
+            members.Add(CreateMember(MethodKey, OtherHash, BodyHash));
+
+            Assert.That(fingerprint.Members.Count, Is.EqualTo(1));
+            Assert.That(fingerprint.Serialize(), Is.EqualTo(serializedBefore));
+        }
+
+        /// <summary>
+        /// What: a null member is refused at construction rather than surfacing later as a null reference.
+        /// </summary>
+        [Test]
+        public void Constructor_NullMemberInTheList_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => CreateFingerprint((HotReloadIntroducedTypeMemberFingerprint)null));
+            Assert.Throws<ArgumentException>(() => CreateFingerprint(
+                null,
+                CreateMember(MethodKey, DeclarationHash, BodyHash)));
+            Assert.Throws<ArgumentException>(() => CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, string.Empty),
+                null));
+        }
+
+        /// <summary>
+        /// What: a 64 character value that is not lowercase hex is not accepted as a hash.
+        /// </summary>
+        [Test]
+        public void Constructor_HashOfTheRightLengthButNotLowercaseHex_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeFingerprint(
+                new string('A', 64),
+                DefinesHash,
+                OrderHash,
+                new List<HotReloadIntroducedTypeMemberFingerprint>()));
+            Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeFingerprint(
+                new string('z', 64),
+                DefinesHash,
+                OrderHash,
+                new List<HotReloadIntroducedTypeMemberFingerprint>()));
+        }
+
+        /// <summary>
+        /// What: a member appended at the end of the newer fingerprint is reported as an addition.
+        /// </summary>
+        [Test]
+        public void Compare_MemberAppendedAtTheEnd_ReturnsAddedDetail()
+        {
+            HotReloadIntroducedTypeFingerprint left = CreateFingerprint(CreateMember(FieldKey, DeclarationHash, string.Empty));
+            HotReloadIntroducedTypeFingerprint right = CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, string.Empty),
+                CreateMember(MethodKey, DeclarationHash, BodyHash));
+
+            HotReloadIntroducedTypeFingerprintComparison comparison = HotReloadIntroducedTypeFingerprint.Compare(left, right);
+
+            Assert.That(comparison.Details, Is.EqualTo(new List<string> { "added:" + MethodKey }));
+        }
+
+        /// <summary>
+        /// What: comparing a fingerprint that has members against one that has none lists every member as removed.
+        /// </summary>
+        [Test]
+        public void Compare_RightHasNoMembers_ReportsEveryMemberAsRemoved()
+        {
+            HotReloadIntroducedTypeFingerprint left = CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, string.Empty),
+                CreateMember(MethodKey, DeclarationHash, BodyHash));
+            HotReloadIntroducedTypeFingerprint right = CreateFingerprint();
+
+            HotReloadIntroducedTypeFingerprintComparison comparison = HotReloadIntroducedTypeFingerprint.Compare(left, right);
+
+            Assert.That(
+                comparison.Details,
+                Is.EqualTo(new List<string> { "removed:" + FieldKey, "removed:" + MethodKey }));
+        }
+
+        /// <summary>
+        /// What: a member whose declaration and body both changed is reported in both the details and the changed bodies.
+        /// </summary>
+        [Test]
+        public void Compare_DeclarationAndBodyBothChanged_ReportsTheKeyInBothLists()
+        {
+            HotReloadIntroducedTypeFingerprint left = CreateFingerprint(CreateMember(MethodKey, DeclarationHash, BodyHash));
+            HotReloadIntroducedTypeFingerprint right = CreateFingerprint(CreateMember(MethodKey, OtherHash, OtherHash));
+
+            HotReloadIntroducedTypeFingerprintComparison comparison = HotReloadIntroducedTypeFingerprint.Compare(left, right);
+
+            Assert.That(comparison.Kind, Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.DeclarationChanged));
+            Assert.That(comparison.Details, Is.EqualTo(new List<string> { "declaration:" + MethodKey }));
+            Assert.That(comparison.ChangedBodyKeys, Is.EqualTo(new List<string> { MethodKey }));
+        }
+
+        /// <summary>
+        /// What: several members changing only their bodies are all listed, and the difference stays body only.
+        /// </summary>
+        [Test]
+        public void Compare_SeveralBodiesChanged_ListsEveryChangedBodyKey()
+        {
+            HotReloadIntroducedTypeFingerprint left = CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, BodyHash),
+                CreateMember(MethodKey, DeclarationHash, BodyHash));
+            HotReloadIntroducedTypeFingerprint right = CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, OtherHash),
+                CreateMember(MethodKey, DeclarationHash, OtherHash));
+
+            HotReloadIntroducedTypeFingerprintComparison comparison = HotReloadIntroducedTypeFingerprint.Compare(left, right);
+
+            Assert.That(comparison.Kind, Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.BodyOnly));
+            Assert.That(comparison.ChangedBodyKeys, Is.EqualTo(new List<string> { FieldKey, MethodKey }));
+        }
+
         private static HotReloadIntroducedTypeFingerprint CreateFingerprint(
             params HotReloadIntroducedTypeMemberFingerprint[] members)
         {
