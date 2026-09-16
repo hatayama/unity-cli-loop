@@ -49,7 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static bool TryBuildMessage(
             IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes,
             bool hasMethodFailure,
-            int appliedMethodCount,
+            int patchedMethodCount,
+            int addedMethodCount,
             out string message)
         {
             message = null;
@@ -72,9 +73,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int introducedCount = CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.Introduced);
-            if (appliedMethodCount > 0)
+            if (patchedMethodCount + addedMethodCount > 0)
             {
-                return TryBuildBodyEditedMessage(outcomes, introducedCount, appliedMethodCount, out message);
+                return TryBuildBodyEditedMessage(
+                    outcomes,
+                    introducedCount,
+                    patchedMethodCount,
+                    addedMethodCount,
+                    out message);
             }
 
             message = string.Format(
@@ -96,16 +102,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <remarks>
         /// Why only when this run introduced nothing: a run that also activated a type of its own
         /// has two different things to report about its types, and the ordinary apply message with
-        /// the type-row summary appended is what says both.
+        /// the type-row summary appended is what says both. Why only when it added nothing: an
+        /// added method is not a patched body, so counting it here would both overstate the
+        /// patched bodies and drop the addition the ordinary message names.
         /// </remarks>
         private static bool TryBuildBodyEditedMessage(
             IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes,
             int introducedCount,
-            int appliedMethodCount,
+            int patchedMethodCount,
+            int addedMethodCount,
             out string message)
         {
             message = null;
-            if (introducedCount > 0 || !HoldsBodyEditedDeclaration(outcomes))
+            if (introducedCount > 0 || addedMethodCount > 0 || !HoldsBodyEditedDeclaration(outcomes))
             {
                 return false;
             }
@@ -114,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CultureInfo.InvariantCulture,
                 HotReloadConstants.AlreadyActiveIntroducedTypesPatchedApplyMessageFormat,
                 CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.AlreadyActive),
-                appliedMethodCount);
+                patchedMethodCount);
             return true;
         }
 
