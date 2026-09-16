@@ -6,6 +6,9 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
+/// <summary>
+/// Classifies properties missing from a compiled type before accessor skips and body emission.
+/// </summary>
 internal static class AddedPropertyClassifier
 {
     internal static void ClassifyAddedProperties(
