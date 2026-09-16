@@ -47,4 +47,8 @@ internal sealed class WorkerEntry
     public string LifecycleNote { get; set; }
 
     public bool ReplacesCompiledMethod { get; set; }
+
+    // Simple name of the assembly the patched method lives in, or null when it lives in the
+    // assembly the edited file belongs to.
+    public string HomeAssemblyName { get; set; }
 }

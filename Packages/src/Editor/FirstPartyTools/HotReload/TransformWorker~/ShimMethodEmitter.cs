@@ -109,7 +109,8 @@ internal static class ShimMethodEmitter
                     queued.MethodDeclaration,
                     queued.MethodSymbol,
                     typeState.TypeSymbol),
-                ReplacesCompiledMethod = queued.ReplacesCompiledMethod
+                ReplacesCompiledMethod = queued.ReplacesCompiledMethod,
+                HomeAssemblyName = typeState.HomeAssemblyName
             });
         }
     }

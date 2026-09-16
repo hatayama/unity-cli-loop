@@ -27,4 +27,8 @@ internal sealed class WorkerUnchangedMethod
     public string[] ParameterTypeFullNames { get; set; }
 
     public int GenericArity { get; set; }
+
+    // Simple name of the assembly this method's type is served from, or null when it is the
+    // assembly the edited file belongs to.
+    public string HomeAssemblyName { get; set; }
 }

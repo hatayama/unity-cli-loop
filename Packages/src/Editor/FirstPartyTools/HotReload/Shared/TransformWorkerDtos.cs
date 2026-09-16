@@ -250,6 +250,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Open generic arity. 0 for non-generic methods so existing keys stay unchanged.
         public int genericArity;
+
+        // Simple name of the assembly this method's type is served from, when that is not the
+        // assembly the edited file belongs to. Null/empty means the edited file's own assembly,
+        // which is every row until a retained artifact serves the type.
+        public string homeAssemblyName;
     }
 
     [Serializable]
@@ -288,6 +293,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // True when this addedMethod entry replaces a compiled method whose return type changed.
         public bool replacesCompiledMethod;
+
+        // Simple name of the assembly the patched method lives in, when that is not the assembly
+        // the edited file belongs to. Null/empty means the edited file's own assembly, which is
+        // every row until a retained artifact serves the type.
+        public string homeAssemblyName;
     }
 
     /// <summary>

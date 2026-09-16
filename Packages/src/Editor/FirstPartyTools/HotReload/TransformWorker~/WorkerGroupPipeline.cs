@@ -76,7 +76,12 @@ internal static class WorkerGroupPipeline
         // revert, gating and compile whenever the run succeeds, so a run that could not trust its
         // retained artifacts has to stop the whole group rather than transform against a binding
         // that is missing a type or attributing it to the wrong assembly.
-        string artifactFailure = PrepareBindingTrees(input, transformUnits, references, targetTypesReference, parseOptions);
+        string artifactFailure = RetainedDeclarationStage.PrepareBindingTrees(
+            input,
+            transformUnits,
+            references,
+            targetTypesReference,
+            parseOptions);
         if (artifactFailure != null)
         {
             return CreateRunFailureOutput(artifactFailure);
@@ -100,7 +105,7 @@ internal static class WorkerGroupPipeline
 
         WorkerTypeHome home = new WorkerTypeHome(
             input.TargetAssemblyName,
-            ResolveTargetTypesAssemblySymbol(compilation, targetTypesReference));
+            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference));
         List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(transformUnits.Count);
         foreach (WorkerSourceUnit transformUnit in transformUnits)
         {
@@ -223,101 +228,6 @@ internal static class WorkerGroupPipeline
         }
 
         return transformUnits;
-    }
-
-    // Removes from each unit's binding tree the declarations a retained artifact already serves,
-    // and reports why the artifacts could not be used at all. Returns null when the run has no
-    // artifact to bind against, which is every run until introduced types are in play.
-    private static string PrepareBindingTrees(
-        WorkerInput input,
-        List<WorkerSourceUnit> loadedUnits,
-        List<MetadataReference> references,
-        MetadataReference targetTypesReference,
-        CSharpParseOptions parseOptions)
-    {
-        if (input.IntroducedTypeArtifacts.Length == 0)
-        {
-            return null;
-        }
-
-        List<string> artifactErrors = new List<string>();
-        List<(WorkerIntroducedTypeArtifact Artifact, MetadataReference Reference)> artifactReferences =
-            IntroducedTypeArtifactReferences.Collect(input, references, artifactErrors);
-        if (artifactErrors.Count > 0)
-        {
-            return artifactErrors[0];
-        }
-
-        List<SyntaxTree> editedTrees = new List<SyntaxTree>(loadedUnits.Count);
-        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
-        {
-            editedTrees.Add(loadedUnit.SyntaxTree);
-        }
-
-        // The declarations are verified against the edited text, so this compilation binds the
-        // trees as written; the binding compilation is built from what survives the removal.
-        CSharpCompilation verificationCompilation = CSharpCompilation.Create(
-            assemblyName: "UloopHotReloadRetainedDeclarationVerification",
-            syntaxTrees: editedTrees,
-            references: references,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(
-            verificationCompilation,
-            targetTypesReference);
-
-        // A record is only valid for the assembly generation it was planned against, and the
-        // recorded identities are what the fingerprint is rebuilt from. Binding against an
-        // assembly the request cannot name would rebuild them from an empty identity, no
-        // declaration would match its record, and every retained type would quietly bind from
-        // source again.
-        if (!IntroducedTypeTargetIdentity.MatchesRequest(input, targetAssembly))
-        {
-            return "Retained introduced types require the assembly identity the records were planned against.";
-        }
-
-        if (!IntroducedTypeArtifactMap.TryBuild(
-                verificationCompilation, artifactReferences, out IntroducedTypeArtifactMap artifactMap, out string artifactError))
-        {
-            return artifactError;
-        }
-
-        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
-        {
-            loadedUnit.ArtifactMap = artifactMap;
-        }
-        Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> retainedDeclarations =
-            IntroducedTypeDeclarationVerifier.FindRetainedDeclarations(
-                loadedUnits, verificationCompilation, input, targetAssembly, artifactMap);
-        List<string> bindingParseErrors = new List<string>();
-        foreach (KeyValuePair<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> entry in retainedDeclarations)
-        {
-            // Recorded before the removal, because the rewriter replaces the unit's tree and
-            // these declarations belong to the tree it replaces. Built from the syntax rather
-            // than the symbol: the drift check strips by the syntax key of the edited root.
-            foreach (BaseTypeDeclarationSyntax declaration in entry.Value)
-            {
-                if (declaration is TypeDeclarationSyntax typeDeclaration)
-                {
-                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
-                        WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration));
-                }
-                else if (declaration is EnumDeclarationSyntax enumDeclaration)
-                {
-                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
-                        WorkerSyntaxIndex.BuildEnumMetadataNameFromSyntax(enumDeclaration));
-                }
-            }
-
-            IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(
-                entry.Key, entry.Value, parseOptions, bindingParseErrors);
-        }
-
-        if (bindingParseErrors.Count > 0)
-        {
-            return bindingParseErrors[0];
-        }
-
-        return null;
     }
 
     private static WorkerOutput CreateRunFailureOutput(string parseError)
@@ -449,25 +359,6 @@ internal static class WorkerGroupPipeline
 
         return (references, targetTypesReference);
     }
-    internal static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
-        CSharpCompilation compilation,
-        MetadataReference targetTypesReference)
-    {
-        // The drift comparison must see private and internal consts in the compiled target
-        // assembly, which the default MetadataImportOptions (Public) hides. Widening the main
-        // compilation would also widen what every classification query can bind to, so the
-        // wider import is confined to a throwaway compilation used only for this lookup.
-        if (targetTypesReference == null)
-        {
-            return null;
-        }
-
-        CSharpCompilation driftCompilation = compilation.WithOptions(
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithMetadataImportOptions(MetadataImportOptions.All));
-        return driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
-    }
-
     private static WorkerOutput BuildWorkerOutput(
         List<WorkerSourceUnit> units,
         List<ShimTypeBuilder> shimTypes,

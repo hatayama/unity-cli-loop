@@ -43,6 +43,21 @@ internal static class PropertyGetterEmitter
                 continue;
             }
 
+            // Why a type a retained artifact serves never reaches the ordinary getter path: that
+            // path decides a getter is unchanged from a baseline snapshot, and a type introduced
+            // by an earlier reload has none - so every accessor of it would be emitted as an
+            // entry, in an assembly the row would not even name. The comparison that kept this
+            // declaration already reported that no accessor body changed.
+            if (typeState.RetainedChangedMethodKeys != null)
+            {
+                UnchangedOrdinaryMethodRecorder.RecordRetainedPropertyGetterAsUnchanged(
+                    typeState,
+                    propertyDeclaration,
+                    semanticModel,
+                    unchangedMethods);
+                continue;
+            }
+
             if (typeState.TypeIsAbsentFromCompiledAssembly)
             {
                 PropertyGetterClassifier.SkipPropertyGetterOnUncompiledType(
