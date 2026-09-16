@@ -410,7 +410,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// Verifies that a later reload which redefines a type this domain already introduced is
         /// refused instead of binding the caller against the stale retained definition: stage one
-        /// cannot replace an artifact assembly a live type was loaded from.
+        /// cannot replace an artifact assembly a live type was loaded from. The redefinition here
+        /// changes the signature of the member the artifact holds, which is a difference the
+        /// artifact cannot be brought up to; adding a member is applied instead of refused.
         /// </summary>
         [Test]
         public async Task Run_ActiveIntroducedTypeRedefined_FailsAndLeavesTheActiveTypeInPlace()
@@ -1817,20 +1819,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // The same type with one member more, which is what redefining it means: a body edit is
         // not a redefinition, because the declaration the artifact was compiled from still holds.
+        // Why a changed signature rather than an added member: a member added to an already
+        // introduced type is applied on the artifact that carries it, so only a member the
+        // artifact holds and the source no longer declares the same way leaves the artifact
+        // unable to describe the declaration.
         private static string InsertRedefinedIntroducedType(string hostSource)
         {
             Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
             string introduced =
                 "    public sealed class HotReloadCrossFileIntroducedValue\n"
                 + "    {\n"
-                + "        public int Read()\n"
+                + "        public int Read(int offset)\n"
                 + "        {\n"
-                + "            return 7;\n"
-                + "        }\n"
-                + "\n"
-                + "        public int ReadAgain()\n"
-                + "        {\n"
-                + "            return 8;\n"
+                + "            return 7 + offset;\n"
                 + "        }\n"
                 + "    }\n"
                 + "\n";
