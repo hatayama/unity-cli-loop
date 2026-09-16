@@ -25,6 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        // A second file the fingerprint cases never edit, so only the first file introduces a type.
+        private const string UnrelatedSecondSource = "namespace Unrelated { public class Untouched { } }";
+
         // Reopens a type the target assembly already holds, so the nested declaration is the only
         // thing this file introduces and the outer declaration is never refused.
         private const string CompiledOuterWithNestedSource =
@@ -781,6 +784,270 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 after.Output.files[0].introducedTypes[0].declarationFingerprint,
                 Is.Not.EqualTo(before.Output.files[0].introducedTypes[0].declarationFingerprint));
+        }
+
+        /// <summary>
+        /// Verifies that editing only a method body reads as a body difference, while changing its
+        /// signature reads as a declaration change, and that an unedited rerun stays identical.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_SeparatesBodyEditsFromSignatureEdits()
+        {
+            string directory = CreateSourceDirectory("FingerprintBodyEdits");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string baseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class BodyEdit { public int Value(int x) { return x + 1; } } }");
+            string rerun = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class BodyEdit { public int Value(int x) { return x + 1; } } }");
+            string bodyEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class BodyEdit { public int Value(int x) { return x + 2; } } }");
+            string signatureEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class BodyEdit { public int Value(int x, int y) { return x + 1; } } }");
+
+            Assert.That(rerun, Is.EqualTo(baseline));
+            HotReloadIntroducedTypeFingerprintComparison unchanged = CompareFingerprints(baseline, rerun);
+            Assert.That(unchanged.Kind, Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.Identical));
+
+            HotReloadIntroducedTypeFingerprintComparison bodyOnly = CompareFingerprints(baseline, bodyEdited);
+            Assert.That(bodyOnly.Kind, Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.BodyOnly));
+            Assert.That(bodyOnly.ChangedBodyKeys, Has.Count.EqualTo(1));
+            Assert.That(bodyOnly.ChangedBodyKeys[0], Does.Contain("Value"));
+
+            HotReloadIntroducedTypeFingerprintComparison signatureChanged = CompareFingerprints(baseline, signatureEdited);
+            Assert.That(
+                signatureChanged.Kind,
+                Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.DeclarationChanged));
+            Assert.That(signatureChanged.Details, Has.Some.StartsWith("removed:"));
+            Assert.That(signatureChanged.Details, Has.Some.StartsWith("added:"));
+        }
+
+        /// <summary>
+        /// Verifies that reordering members, which leaves every member hash untouched, still reads
+        /// as a declaration change: enum values and field initialization both depend on that order.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_ReorderedMembers_ReportOrderChanged()
+        {
+            string directory = CreateSourceDirectory("FingerprintMemberOrder");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string enumBaseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public enum Sample { A, B } }");
+            string enumReordered = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public enum Sample { B, A } }");
+            string fieldsBaseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Ordered { public int A = 1; public int B = 2; } }");
+            string fieldsReordered = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Ordered { public int B = 2; public int A = 1; } }");
+
+            Assert.That(enumReordered, Is.Not.EqualTo(enumBaseline));
+            Assert.That(fieldsReordered, Is.Not.EqualTo(fieldsBaseline));
+            HotReloadIntroducedTypeFingerprintComparison enumComparison = CompareFingerprints(enumBaseline, enumReordered);
+            Assert.That(
+                enumComparison.Kind,
+                Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.DeclarationChanged));
+            Assert.That(enumComparison.Details, Contains.Item("order"));
+            HotReloadIntroducedTypeFingerprintComparison fieldComparison = CompareFingerprints(fieldsBaseline, fieldsReordered);
+            Assert.That(
+                fieldComparison.Kind,
+                Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.DeclarationChanged));
+            Assert.That(fieldComparison.Details, Contains.Item("order"));
+        }
+
+        /// <summary>
+        /// Verifies that edits to the observable surface of a type - a field initializer, a default
+        /// argument, a const value, an enum value, and the type header - never read as body edits.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_SurfaceEdits_ReportDeclarationChanged()
+        {
+            string directory = CreateSourceDirectory("FingerprintSurfaceEdits");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string valuesBaseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Surface { public const int Limit = 1; public int Count = 1;"
+                + " public int Value(int x = 1) { return x; } } }");
+            string initializerEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Surface { public const int Limit = 1; public int Count = 2;"
+                + " public int Value(int x = 1) { return x; } } }");
+            string defaultArgumentEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Surface { public const int Limit = 1; public int Count = 1;"
+                + " public int Value(int x = 2) { return x; } } }");
+            string constEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Surface { public const int Limit = 2; public int Count = 1;"
+                + " public int Value(int x = 1) { return x; } } }");
+            string enumValueBaseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public enum Surface { First = 1 } }");
+            string enumValueEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public enum Surface { First = 2 } }");
+            string headerBaseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Surface { public int Value() { return 1; } } }");
+            string headerEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Surface : System.IDisposable { public int Value() { return 1; }"
+                + " public void Dispose() { } } }");
+
+            AssertDeclarationChanged(valuesBaseline, initializerEdited);
+            AssertDeclarationChanged(valuesBaseline, defaultArgumentEdited);
+            AssertDeclarationChanged(valuesBaseline, constEdited);
+            AssertDeclarationChanged(enumValueBaseline, enumValueEdited);
+            HotReloadIntroducedTypeFingerprintComparison headerComparison = CompareFingerprints(headerBaseline, headerEdited);
+            Assert.That(
+                headerComparison.Kind,
+                Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.DeclarationChanged));
+            Assert.That(headerComparison.Details, Contains.Item("header"));
+        }
+
+        /// <summary>
+        /// Verifies that rewriting a body without changing the declaration - an expression body
+        /// turned into a block, an accessor body, and an alias a body depends on - stays body only.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_BodyRewrites_StayBodyOnly()
+        {
+            string directory = CreateSourceDirectory("FingerprintBodyRewrites");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string expressionBodied = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Bodies { public int Value() => 1; } }");
+            string blockBodied = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Bodies { public int Value() { return 1; } } }");
+            string accessorBaseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Bodies { public int Value { get { return 1; } } } }");
+            string accessorEdited = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Bodies { public int Value { get { return 2; } } } }");
+            string aliasBaseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "using Alias = System.IDisposable; namespace Example { public class Bodies"
+                + " { public object Create() { Alias value = null; return value; } } }");
+            string aliasRebound = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "using Alias = System.ICloneable; namespace Example { public class Bodies"
+                + " { public object Create() { Alias value = null; return value; } } }");
+
+            AssertBodyOnly(expressionBodied, blockBodied);
+            AssertBodyOnly(accessorBaseline, accessorEdited);
+            AssertBodyOnly(aliasBaseline, aliasRebound);
+        }
+
+        /// <summary>
+        /// Verifies that a type declaring the same signature twice, which cannot compile, still
+        /// produces a readable fingerprint instead of failing the worker on a duplicate member key.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_DuplicateMemberSignature_StillProducesAFingerprint()
+        {
+            string directory = CreateSourceDirectory("FingerprintDuplicateMembers");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string fingerprint = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Duplicated { public int Value() { return 1; }"
+                + " public int Value() { return 2; } } }");
+
+            HotReloadIntroducedTypeFingerprint parsed = ParseFingerprint(fingerprint);
+            Assert.That(parsed.Members.Count, Is.EqualTo(2));
+            Assert.That(parsed.Members[1].Key, Is.Not.EqualTo(parsed.Members[0].Key));
+        }
+
+        private static void AssertDeclarationChanged(string baseline, string edited)
+        {
+            HotReloadIntroducedTypeFingerprintComparison comparison = CompareFingerprints(baseline, edited);
+            Assert.That(
+                comparison.Kind,
+                Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.DeclarationChanged),
+                "Expected a declaration change for: " + edited);
+        }
+
+        private static void AssertBodyOnly(string baseline, string edited)
+        {
+            HotReloadIntroducedTypeFingerprintComparison comparison = CompareFingerprints(baseline, edited);
+            Assert.That(
+                comparison.Kind,
+                Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.BodyOnly),
+                "Expected a body-only change for: " + edited);
+        }
+
+        private static HotReloadIntroducedTypeFingerprintComparison CompareFingerprints(string baseline, string edited)
+        {
+            return HotReloadIntroducedTypeFingerprint.Compare(ParseFingerprint(baseline), ParseFingerprint(edited));
+        }
+
+        private static HotReloadIntroducedTypeFingerprint ParseFingerprint(string text)
+        {
+            bool parsed = HotReloadIntroducedTypeFingerprint.TryParse(
+                text,
+                out HotReloadIntroducedTypeFingerprint value);
+            Assert.That(parsed, Is.True, "Fingerprint is not in the canonical form: " + text);
+            return value;
+        }
+
+        private static async Task<string> RunFingerprintAsync(
+            string firstSourcePath,
+            string secondSourcePath,
+            string source)
+        {
+            File.WriteAllText(firstSourcePath, source);
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                CreateInput(firstSourcePath, secondSourcePath),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
+            return result.Output.files[0].introducedTypes[0].declarationFingerprint;
         }
 
         private static string CreateSourceDirectory(string name)

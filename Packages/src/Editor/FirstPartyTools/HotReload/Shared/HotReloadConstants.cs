@@ -36,11 +36,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Editor/FirstPartyTools/HotReload/TransformWorker~";
 
         // Package-relative sources compiled into the worker in addition to the tilde directory.
-        // Why: the resident-mode line protocol is shared verbatim between the Editor host and the
-        // worker so the two ends cannot drift apart.
+        // Why: the resident-mode line protocol and the introduced-type fingerprint are shared
+        // verbatim between the Editor host and the worker so the two ends cannot drift apart.
         public static readonly string[] WorkerSharedSourcePackageRelativePaths =
         {
-            "Editor/FirstPartyTools/HotReload/Shared/TransformWorkerServeProtocol.cs"
+            "Editor/FirstPartyTools/HotReload/Shared/TransformWorkerServeProtocol.cs",
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadIntroducedTypeFingerprint.cs"
         };
 
         public const string WorkerDllFileName = "worker.dll";
