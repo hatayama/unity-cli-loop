@@ -302,7 +302,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         HotReloadIntroducedTypeOutcome.AlreadyActive(
                             reuse.metadataName,
                             reuse.originalAssemblyName,
-                            file.projectRelativePath));
+                            file.projectRelativePath,
+                            reuse.bodyEdited));
                 }
             }
 
