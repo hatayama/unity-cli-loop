@@ -33,6 +33,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string RestrictedDeclarationFingerprint =
             "0000000000000000000000000000000000000000000000000000000000000000";
 
+        // What the artifact type held before a test could ask for other methods, kept as the
+        // default so every existing test still describes the same world.
+        private static readonly string[] DefaultArtifactMethodNames = { "Compute" };
+
+        private static readonly string[] NoArtifactMethodNames = new string[0];
+
         // A second edited file of the same group, so a test can show that a run-level failure
         // takes the whole group down rather than reporting one file's diagnostics.
         private const string SiblingSource =
@@ -56,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TargetAssemblyName = targetAssemblyName;
             TargetAssemblyMvid = targetAssemblyMvid;
             ArtifactPath = artifactPath;
+            ArtifactAssemblyName = ReadAssemblySimpleName(artifactPath);
             RetainedFingerprint = string.Empty;
         }
 
@@ -71,6 +78,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public string ArtifactPath { get; }
 
+        // The simple name of the artifact assembly, which is the home a row of a type served from
+        // that assembly has to name instead of the assembly the edited file belongs to.
+        public string ArtifactAssemblyName { get; }
+
         public string SiblingSourcePath { get; }
 
         public string SiblingProjectRelativePath { get; }
@@ -81,17 +92,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string name,
             string editedSource)
         {
-            return CreateWithSiblingSourceAsync(name, editedSource, SiblingSource);
+            return BuildAsync(
+                name,
+                editedSource,
+                SiblingSource,
+                DefaultArtifactMethodNames,
+                NoArtifactMethodNames);
         }
 
         /// <summary>
         /// Builds the same world with a caller-supplied sibling file, so a test can put the source
         /// of a type the target assembly also holds into the same run.
         /// </summary>
-        public static async Task<HotReloadRetainedArtifactFixture> CreateWithSiblingSourceAsync(
+        public static Task<HotReloadRetainedArtifactFixture> CreateWithSiblingSourceAsync(
             string name,
             string editedSource,
             string siblingSource)
+        {
+            return BuildAsync(
+                name,
+                editedSource,
+                siblingSource,
+                DefaultArtifactMethodNames,
+                NoArtifactMethodNames);
+        }
+
+        /// <summary>
+        /// Builds the same world with the artifact type holding the named ordinary methods, so a
+        /// test can edit one body and leave its neighbours alone. The private names are what a
+        /// source method the reload must not report as added looks like once the artifact serves
+        /// the type it belongs to.
+        /// </summary>
+        public static Task<HotReloadRetainedArtifactFixture> CreateWithArtifactMethodsAsync(
+            string name,
+            string editedSource,
+            string[] publicMethodNames,
+            string[] privateMethodNames)
+        {
+            return BuildAsync(name, editedSource, SiblingSource, publicMethodNames, privateMethodNames);
+        }
+
+        private static async Task<HotReloadRetainedArtifactFixture> BuildAsync(
+            string name,
+            string editedSource,
+            string siblingSource,
+            string[] publicMethodNames,
+            string[] privateMethodNames)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(
@@ -109,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string targetAssemblyPath = Path.Combine(directory, "RetainedTarget.dll");
             string targetAssemblyMvid = CreateTargetAssembly(targetAssemblyPath);
             string artifactPath = Path.Combine(directory, "RetainedArtifact.dll");
-            CreateArtifactAssembly(artifactPath);
+            CreateArtifactAssembly(artifactPath, publicMethodNames, privateMethodNames);
             HotReloadRetainedArtifactFixture fixture = new HotReloadRetainedArtifactFixture(
                 sourcePath,
                 "Assets/RetainedDeclaration/" + name + "/Edited.cs",
@@ -160,6 +206,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Builds a prepare input covering both edited files of the group and the recorded
+        /// artifacts, so a test can plan a new type of one file against a type the other file
+        /// declares and the domain already serves.
+        /// </summary>
+        public TransformWorkerInputDto BuildPrepareGroupInputWithArtifacts(
+            TransformWorkerIntroducedTypeArtifactDto[] artifacts)
+        {
+            return BuildInput("prepareIntroducedTypes", artifacts, includeSibling: true);
+        }
+
+        /// <summary>
         /// Builds a prepare input covering both edited files of the group, so planning binds the
         /// sibling's types from source instead of from the target assembly.
         /// </summary>
@@ -200,6 +257,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
+        }
+
+        private static string ReadAssemblySimpleName(string path)
+        {
+            using (AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(path))
+            {
+                return assembly.Name.Name;
+            }
         }
 
         public static string ReadAssemblyFullName(string path)
@@ -304,7 +369,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
-        private static void CreateArtifactAssembly(string path)
+        private static void CreateArtifactAssembly(
+            string path,
+            string[] publicMethodNames,
+            string[] privateMethodNames)
         {
             AssemblyNameDefinition assemblyName = new AssemblyNameDefinition("RetainedArtifact", new Version(1, 0, 0, 0));
             using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(assemblyName, "RetainedArtifact", ModuleKind.Dll))
@@ -320,7 +388,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     assembly.MainModule.TypeSystem.Int32);
                 retained.Fields.Add(valueField);
                 AddConstructor(assembly, retained, CecilMethodAttributes.Public);
-                AddInstanceInt32Method(assembly, retained, "Compute");
+                foreach (string methodName in publicMethodNames)
+                {
+                    AddInstanceInt32Method(assembly, retained, methodName, CecilMethodAttributes.Public);
+                }
+
+                foreach (string methodName in privateMethodNames)
+                {
+                    AddInstanceInt32Method(assembly, retained, methodName, CecilMethodAttributes.Private);
+                }
+
                 AddInstanceInt32Property(assembly, retained, "Number");
                 assembly.MainModule.Types.Add(retained);
 
@@ -359,11 +436,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static void AddInstanceInt32Method(
             AssemblyDefinition assembly,
             TypeDefinition type,
-            string name)
+            string name,
+            CecilMethodAttributes accessibility)
         {
             MethodDefinition method = new MethodDefinition(
                 name,
-                CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig,
+                accessibility | CecilMethodAttributes.HideBySig,
                 assembly.MainModule.TypeSystem.Int32);
             ILProcessor processor = method.Body.GetILProcessor();
             processor.Append(processor.Create(OpCodes.Ldc_I4_0));

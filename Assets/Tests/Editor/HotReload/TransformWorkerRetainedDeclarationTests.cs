@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class TransformWorkerRetainedDeclarationTests
     {
+        private const string RetainedTypeMetadataName = "Example.Retained";
+
         private const string EditedSource =
             "namespace Example\n"
             + "{\n"
@@ -36,6 +40,111 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        }\n"
             + "    }\n"
             + "}\n";
+
+        // The members the extended fixture's artifact type holds, so the edited source can change
+        // one body and leave the others to the bodies the artifact assembly already runs. The
+        // private method is what a source method the reload must not report as added looks like
+        // once the artifact serves the type it belongs to.
+        private const string ArtifactBackedSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public class Retained\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "\n"
+            + "        public int Twice()\n"
+            + "        {\n"
+            + "            return Value * 2;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int Thrice()\n"
+            + "        {\n"
+            + "            return Value * 3;\n"
+            + "        }\n"
+            + "\n"
+            + "        private int Hidden()\n"
+            + "        {\n"
+            + "            return Value + 1;\n"
+            + "        }\n"
+            + "    }\n"
+            + "\n"
+            + "    public class Caller\n"
+            + "    {\n"
+            + "        public int Read()\n"
+            + "        {\n"
+            + "            return Retained.Value + 1;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+        // The same source with one ordinary method body changed, which is the only kind of edit a
+        // type the domain already serves from an artifact can have applied to it.
+        private const string ArtifactBackedBodyEditedSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public class Retained\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "\n"
+            + "        public int Twice()\n"
+            + "        {\n"
+            + "            return Value * 4;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int Thrice()\n"
+            + "        {\n"
+            + "            return Value * 3;\n"
+            + "        }\n"
+            + "\n"
+            + "        private int Hidden()\n"
+            + "        {\n"
+            + "            return Value + 1;\n"
+            + "        }\n"
+            + "    }\n"
+            + "\n"
+            + "    public class Caller\n"
+            + "    {\n"
+            + "        public int Read()\n"
+            + "        {\n"
+            + "            return Retained.Value + 1;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+        // A retained type whose only method is the one the default artifact holds, so a planning
+        // test can compare a body edit of it against the same declaration left alone.
+        private const string DependedOnSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public class Retained\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "\n"
+            + "        public int Compute()\n"
+            + "        {\n"
+            + "            return Value * 2;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+        private const string DependedOnBodyEditedSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public class Retained\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "\n"
+            + "        public int Compute()\n"
+            + "        {\n"
+            + "            return Value * 3;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+        // A type this run really introduces, written in another file and depending on the retained
+        // one, so its recorded fingerprint has to be stable across the retained type's body edits.
+        private const string DependentSource =
+            "namespace Example { public class Dependent { public int Read() { return new Retained().Compute(); } } }";
 
         // The region opens above the retained declaration and closes inside it, so blanking the
         // declaration takes the closing directive with it and leaves the text unparseable.
@@ -257,6 +366,94 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output, Is.Null.Or.Property("entries").Empty);
         }
 
+        /// <summary>
+        /// What: editing one ordinary method body of a type a retained artifact serves patches that
+        /// method on the artifact assembly and leaves every other member of the type to the bodies
+        /// the artifact already runs, instead of refusing the type as not compiled yet.
+        /// </summary>
+        [Test]
+        public async Task Transform_RetainedDeclarationMethodBodyEdited_PatchesOnlyTheEditedMethod()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "BodyEditedMethod",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, ArtifactBackedBodyEditedSource);
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] patched = FindEntries(result, "Twice");
+            Assert.That(patched.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(patched[0].typeMetadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(patched[0].homeAssemblyName, Is.EqualTo(fixture.ArtifactAssemblyName));
+            Assert.That(FindEntries(result, "Thrice"), Is.Empty, DescribeRows(result));
+            TransformWorkerUnchangedMethodDto[] unchanged = FindUnchanged(result, "Thrice");
+            Assert.That(unchanged.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(unchanged[0].homeAssemblyName, Is.EqualTo(fixture.ArtifactAssemblyName));
+            Assert.That(FindSkippedCodes(result, "Hidden"), Is.Empty, DescribeRows(result));
+            Assert.That(FindEntries(result, "Hidden"), Is.Empty, DescribeRows(result));
+            Assert.That(
+                FindSkippedCodes(result, "Twice"),
+                Has.None.EqualTo(HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced),
+                DescribeRows(result));
+            Assert.That(result.Output.files[0].addedFieldNames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a source whose bodies match the artifact again leaves nothing to patch, because
+        /// the declaration is taken out of the binding tree the way an unedited retained type is.
+        /// </summary>
+        [Test]
+        public async Task Transform_RetainedDeclarationBodyMatchesTheRecord_ReportsNoRowsForTheType()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "BodyMatchesRecord",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(fixture.RetainedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntriesOfRetainedType(result), Is.Empty, DescribeRows(result));
+            Assert.That(FindUnchangedOfRetainedType(result), Is.Empty, DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: a type this run introduces records the same declaration fingerprint whether the
+        /// retained type it depends on was body-edited or left alone, so a body edit of the
+        /// dependency does not make the new type look like a different definition.
+        /// </summary>
+        [Test]
+        public async Task Prepare_RetainedDependencyBodyEdited_KeepsTheDependentFingerprint()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithSiblingSourceAsync(
+                    "DependentFingerprint",
+                    DependedOnSource,
+                    DependentSource);
+            string recordedFingerprint = fixture.RetainedFingerprint;
+
+            TransformWorkerFileOutputDto[] unedited = await PlanGroupAsync(fixture, recordedFingerprint);
+            File.WriteAllText(fixture.SourcePath, DependedOnBodyEditedSource);
+            TransformWorkerFileOutputDto[] bodyEdited = await PlanGroupAsync(fixture, recordedFingerprint);
+
+            Assert.That(FindReuse(unedited[0]).bodyEdited, Is.False);
+            Assert.That(FindReuse(bodyEdited[0]).bodyEdited, Is.True);
+            Assert.That(
+                FindDependentFingerprint(bodyEdited[1]),
+                Is.EqualTo(FindDependentFingerprint(unedited[1])));
+        }
+
         private static async Task<TransformWorkerClientResult> RunAsync(
             HotReloadRetainedArtifactFixture fixture,
             TransformWorkerIntroducedTypeArtifactDto[] artifacts)
@@ -264,6 +461,143 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 fixture.BuildTransformInput(artifacts),
                 CancellationToken.None);
+        }
+
+        private static async Task<TransformWorkerFileOutputDto[]> PlanGroupAsync(
+            HotReloadRetainedArtifactFixture fixture,
+            string recordedFingerprint)
+        {
+            TransformWorkerClientResult result =
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                    fixture.BuildPrepareGroupInputWithArtifacts(
+                        new[] { fixture.CreateRecordedArtifact(recordedFingerprint) }),
+                    CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            return result.Output.files;
+        }
+
+        private static TransformWorkerIntroducedTypeReuseDto FindReuse(TransformWorkerFileOutputDto file)
+        {
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].metadataName, Is.EqualTo(RetainedTypeMetadataName));
+            return file.introducedTypeReuses[0];
+        }
+
+        private static string FindDependentFingerprint(TransformWorkerFileOutputDto file)
+        {
+            foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
+            {
+                if (introducedType.metadataName == "Example.Dependent")
+                {
+                    return introducedType.declarationFingerprint;
+                }
+            }
+
+            Assert.Fail("Planning did not report the dependent type.");
+            return null;
+        }
+
+        private static TransformWorkerEntryDto[] FindEntries(
+            TransformWorkerClientResult result,
+            string methodName)
+        {
+            List<TransformWorkerEntryDto> found = new List<TransformWorkerEntryDto>();
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    found.Add(entry);
+                }
+            }
+
+            return found.ToArray();
+        }
+
+        private static TransformWorkerEntryDto[] FindEntriesOfRetainedType(TransformWorkerClientResult result)
+        {
+            List<TransformWorkerEntryDto> found = new List<TransformWorkerEntryDto>();
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.typeMetadataName == RetainedTypeMetadataName)
+                {
+                    found.Add(entry);
+                }
+            }
+
+            return found.ToArray();
+        }
+
+        private static TransformWorkerUnchangedMethodDto[] FindUnchanged(
+            TransformWorkerClientResult result,
+            string methodName)
+        {
+            List<TransformWorkerUnchangedMethodDto> found = new List<TransformWorkerUnchangedMethodDto>();
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                if (unchanged.methodName == methodName)
+                {
+                    found.Add(unchanged);
+                }
+            }
+
+            return found.ToArray();
+        }
+
+        private static TransformWorkerUnchangedMethodDto[] FindUnchangedOfRetainedType(
+            TransformWorkerClientResult result)
+        {
+            List<TransformWorkerUnchangedMethodDto> found = new List<TransformWorkerUnchangedMethodDto>();
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                if (unchanged.typeMetadataName == RetainedTypeMetadataName)
+                {
+                    found.Add(unchanged);
+                }
+            }
+
+            return found.ToArray();
+        }
+
+        private static HotReloadWorkerReasonCode[] FindSkippedCodes(
+            TransformWorkerClientResult result,
+            string memberName)
+        {
+            List<HotReloadWorkerReasonCode> codes = new List<HotReloadWorkerReasonCode>();
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null && skipped.method.Contains(memberName))
+                {
+                    codes.Add(skipped.reason.code);
+                }
+            }
+
+            return codes.ToArray();
+        }
+
+        // What every row-level assertion prints on failure: which methods were patched, left
+        // unchanged and skipped, because a wrong classification is only readable as a whole.
+        private static string DescribeRows(TransformWorkerClientResult result)
+        {
+            List<string> lines = new List<string>();
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                lines.Add("entry " + entry.typeMetadataName + "::" + entry.methodName
+                    + " home=" + (entry.homeAssemblyName ?? "<null>"));
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                lines.Add("unchanged " + unchanged.typeMetadataName + "::" + unchanged.methodName
+                    + " home=" + (unchanged.homeAssemblyName ?? "<null>"));
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                lines.Add("skipped " + skipped.method + " reason=" + skipped.reason.code);
+            }
+
+            return string.Join("\n", lines);
         }
 
         private static TransformWorkerEntryDto FindReadEntry(TransformWorkerClientResult result)
