@@ -2,12 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
-
-using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -22,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// body lives in an assembly of its own, so it can only reach that field if the run publicizes
     /// the retained artifact the same way it publicizes a script assembly.
     /// </remarks>
-    public class HotReloadIntroducedTypeBodyEditE2ETests
+    public class HotReloadIntroducedTypeBodyEditE2ETests : HotReloadIntroducedTypeE2ETestBase
     {
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
         private const string CallerBodyAnchor = "return host.Value();";
@@ -42,25 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "            return _seed * 2;\n"
             + "        }\n"
             + "\n";
-
-        private HotReloadDomainTestScope _scope;
-
-        [SetUp]
-        public void SetUp()
-        {
-            _scope = new HotReloadDomainTestScope();
-            HotReloadAutoRefreshHold.SyncToActiveChanges();
-        }
-
-        // Why reverting here as well: a run of this class patches a method of an artifact assembly
-        // that only lives while the run's scope is open, so leaving the patch active would fail
-        // the first later test that reaches that assembly.
-        [TearDown]
-        public void TearDown()
-        {
-            _scope.Dispose();
-            HotReloadAutoRefreshHold.SyncToActiveChanges();
-        }
 
         /// <summary>
         /// Verifies that editing only an ordinary method body of an already introduced type patches
@@ -230,70 +208,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
-        // Why one helper owns both scopes: every reload of a run has to see the same domain and the
-        // same captured artifact, and the artifact assembly only lives while the scopes are open.
-        private static async Task RunInIntroducedTypeDomainAsync(
-            Func<Func<HotReloadIntroducedTypeArtifact>, Task> runReloads)
-        {
-            HotReloadIntroducedTypeArtifact artifact = null;
-
-            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
-            {
-                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
-                    CreateArtifactCapturingDependencies(
-                        collaborators,
-                        prepared =>
-                        {
-                            if (prepared != null)
-                            {
-                                artifact = prepared;
-                            }
-                        })))
-                {
-                    await runReloads(() => artifact);
-                }
-            }
-        }
-
-        private static Task<HotReloadOrchestratorResult> RunReloadAsync(
-            string hostPath,
-            string callerPath,
-            Dictionary<string, string> edits)
-        {
-            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                new[] { hostPath, callerPath },
-                contentPathOverride: null,
-                CancellationToken.None,
-                edits);
-        }
-
-        private static HotReloadResponse BuildResponse(HotReloadOrchestratorResult result)
-        {
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
-        }
-
-        // Why the preparation stage is the only one wrapped: the test reads the edited body back
-        // through the artifact assembly, and the prepared artifact is the only handle on it.
-        private static HotReloadGroupProcessorDependencies CreateArtifactCapturingDependencies(
-            HotReloadGroupStageCollaborators collaborators,
-            Action<HotReloadIntroducedTypeArtifact> captureArtifact)
-        {
-            return HotReloadGroupProcessorDependencies.Create(
-                files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
-                async (files, input, ct) =>
-                {
-                    HotReloadIntroducedTypePreparationResult preparation =
-                        await HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct);
-                    captureArtifact(preparation.Prepared?.Artifact);
-                    return preparation;
-                },
-                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
-                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
-                (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
-                    collaborators, context, compileResult, entriesToPatch),
-                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
-        }
-
         private static void AssertComputedValue(
             HotReloadIntroducedTypeArtifact artifact,
             int expected,
@@ -369,28 +283,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return count;
         }
 
-        private static int CountFailures(HotReloadOrchestratorResult result)
-        {
-            int count = 0;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
-                {
-                    count++;
-                }
-            }
-
-            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
-            {
-                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
         private static void AssertCallerIsPatched(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -405,23 +297,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("The caller edited against the introduced type must be patched.\n"
                 + DescribeOutcomes(result));
-        }
-
-        private static string DescribeOutcomes(HotReloadOrchestratorResult result)
-        {
-            string description = "Methods:";
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                description += "\n  " + outcome.Kind + " " + outcome.Method + " " + outcome.Reason;
-            }
-
-            description += "\nIntroducedTypes:";
-            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
-            {
-                description += "\n  " + outcome.Kind + " " + outcome.MetadataName + " " + outcome.Reason;
-            }
-
-            return description;
         }
 
         private static Dictionary<string, string> CreateIntroducingEdits(string hostPath, string callerPath)
@@ -536,12 +411,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
         }
 
-        private static string FixturePath(string fileName)
-        {
-            string path = Path.GetFullPath(
-                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fileName));
-            Assert.That(File.Exists(path), Is.True, "Fixture missing: " + path);
-            return path;
-        }
     }
 }
