@@ -17,13 +17,13 @@ using Microsoft.CodeAnalysis.Text;
 
 internal sealed class MethodTransformDecision
 {
-    public string SkipReason { get; private set; }
+    public WorkerReason SkipReason { get; private set; }
 
     public string PatchKind { get; private set; }
 
     public bool UsesDelegation { get; private set; }
 
-    public static MethodTransformDecision Skip(string reason)
+    public static MethodTransformDecision Skip(WorkerReason reason)
     {
         return new MethodTransformDecision { SkipReason = reason };
     }

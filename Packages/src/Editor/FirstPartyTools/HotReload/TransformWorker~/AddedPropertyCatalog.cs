@@ -39,7 +39,7 @@ internal sealed class AddedPropertyCatalog : AddedMemberCatalog<AddedPropertyBin
             propertySymbol.Name));
     }
 
-    public void MarkUnavailable(string propertyKey, string reason)
+    public void MarkUnavailable(string propertyKey, WorkerReason reason)
     {
         AddedPropertyBinding binding = FindOrNull(propertyKey);
         if (binding != null)

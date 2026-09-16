@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class PropertyGetterClassifier
 {
@@ -87,7 +88,7 @@ internal static class PropertyGetterClassifier
             return (true, decision);
         }
 
-        (string addedCallSiteSkip, string calledAddedMethodKey) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
+        (WorkerReason addedCallSiteSkip, string calledAddedMethodKey) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
             getterBodyNode,
             semanticModel,
             addedMethodCatalog,
@@ -204,7 +205,7 @@ internal static class PropertyGetterClassifier
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
-            Reason = AddedMethodSkipReasons.TypeNotIntroduced
+            Reason = WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced)
         });
     }
 }

@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 outcomes.Add(
                     HotReloadMethodOutcome.Skipped(
                         skipped.method ?? "(unknown)",
-                        skipped.reason ?? string.Empty,
+                        HotReloadWorkerReasonText.Render(skipped.reason),
                         assemblyResolvePath));
             }
         }

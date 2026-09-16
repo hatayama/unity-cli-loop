@@ -110,7 +110,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = Surface11SkippedMethod,
-                    reason = Surface11SkippedReason
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodGeneric
+                    }
                 }
             };
 
@@ -130,7 +133,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = Surface11SkippedMethod,
-                    reason = Surface11SkippedReason
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodGeneric
+                    }
                 }
             };
 
@@ -153,7 +159,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = "Ns.Type.get_HasTarget",
-                    reason = reason
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedPropertySetOnly
+                    }
                 }
             };
             TransformWorkerSkippedDto[] setterSkipped =
@@ -161,7 +170,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = "Ns.Type.set_HasTarget",
-                    reason = reason
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedPropertySetOnly
+                    }
                 }
             };
 
@@ -184,12 +196,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = "Ns.Type.Get_HasTarget",
-                    reason = "wrong-case get_"
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.MethodTransformNoBody
+                    }
                 },
                 new TransformWorkerSkippedDto
                 {
                     method = "Ns.Type.getHasTarget",
-                    reason = "missing underscore"
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.MethodTransformNoBody
+                    }
                 }
             };
 
@@ -209,7 +227,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = "Ns.Type.DescribeValue(System.Int32)",
-                    reason = Surface11SkippedReason
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodGeneric
+                    }
                 }
             };
 
@@ -229,7 +250,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = Surface11SkippedMethod,
-                    reason = Surface11SkippedReason
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodGeneric
+                    }
                 }
             };
             string reason = HotReloadSkippedMemberCompileNote.FindSkippedMemberNote("DescribeValue", skipped);
@@ -252,7 +276,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSkippedDto
                 {
                     method = Surface11SkippedMethod,
-                    reason = Surface11SkippedReason
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodGeneric
+                    }
                 }
             };
             string composed = HotReloadShimCompiler.ComposeShimCompileFailureMessage(

@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class AccessorPropertyWriteRules
 {
@@ -22,7 +23,7 @@ internal static class AccessorPropertyWriteRules
         AssignmentExpressionSyntax assignment,
         IPropertySymbol propertySymbol,
         AccessorPlan plan,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
@@ -39,7 +40,7 @@ internal static class AccessorPropertyWriteRules
             return false;
         }
 
-        string shapeRejectReason = TryGetPropertyWriteShapeRejectReason(
+        WorkerReason shapeRejectReason = TryGetPropertyWriteShapeRejectReason(
             semanticModel,
             assignment,
             propertySymbol,
@@ -56,7 +57,7 @@ internal static class AccessorPropertyWriteRules
         {
             if (propertySymbol.SetMethod == null)
             {
-                rejectReason = "inaccessible property has no setter to bind.";
+                rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyNoSetter);
                 return false;
             }
 
@@ -67,7 +68,7 @@ internal static class AccessorPropertyWriteRules
         {
             if (propertySymbol.GetMethod == null)
             {
-                rejectReason = "inaccessible property has no getter to bind.";
+                rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyNoGetter);
                 return false;
             }
 
@@ -77,7 +78,7 @@ internal static class AccessorPropertyWriteRules
         return true;
     }
 
-    internal static string TryGetPropertyWriteShapeRejectReason(
+    internal static WorkerReason TryGetPropertyWriteShapeRejectReason(
         SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment,
         IPropertySymbol propertySymbol,
@@ -88,13 +89,13 @@ internal static class AccessorPropertyWriteRules
         if (assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
         {
             return
-                "null-coalescing assignment writes conditionally and has no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorCoalesceAssignmentNoShape);
         }
 
         if (needsGetter && !AccessorEligibility.IsSupportedCompoundAssignmentKind(assignment.Kind()))
         {
             return
-                "unsupported compound assignment kind has no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorCompoundAssignmentKindUnsupported);
         }
 
         // Compound assignment with a private getter and a public setter has no rewrite shape:
@@ -102,39 +103,38 @@ internal static class AccessorPropertyWriteRules
         if (getterInaccessible && !setterInaccessible)
         {
             return
-                "compound assignment reading an inaccessible getter with an accessible setter "
-                + "has no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorCompoundInaccessibleGetterNoShape);
         }
 
         // Setter delegates are void — consuming the assignment expression value cannot compile.
         if (assignment.Parent is not ExpressionStatementSyntax)
         {
             return
-                "assignment value is consumed; the setter delegate returns void.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorAssignmentValueConsumed);
         }
 
         // Compound/get+set rewrite embeds the receiver twice; reject side-effecting receivers.
         if (needsGetter && !AccessorEligibility.IsSideEffectFreeAssignmentReceiver(semanticModel, assignment.Left))
         {
             return
-                "receiver with possible side effects would be evaluated twice.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorReceiverDoubleEvaluation);
         }
 
         if (propertySymbol.IsIndexer)
         {
-            return "inaccessible indexer access has no accessor rewrite shape.";
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorIndexerNoShape);
         }
 
         if (propertySymbol.IsStatic)
         {
             return
-                "inaccessible static property access has no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape);
         }
 
         if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
         {
             return
-                "inaccessible ref-returning properties have no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape);
         }
 
         return null;

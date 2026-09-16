@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // Decides when an added property must be left to a full compile rather than patched, and where an
 // auto-property's value is kept when it can be patched. Kept apart from classifying the property
@@ -14,7 +15,7 @@ internal static class AddedPropertySkipEvaluator
     // Why before every other rule: a compiled field or event of the same name still owns the
     // member, so emitting accessors would leave compiled code on the old storage while edited
     // code reads a side table that never sees the compiled value.
-    internal static string EvaluateCompiledMemberKindChangeReason(
+    internal static WorkerReason EvaluateCompiledMemberKindChangeReason(
         INamedTypeSymbol compiledType,
         string propertyName)
     {
@@ -22,9 +23,8 @@ internal static class AddedPropertySkipEvaluator
         {
             if (member is IFieldSymbol || member is IEventSymbol)
             {
-                return string.Format(
-                    CultureInfo.InvariantCulture,
-                    AddedPropertySkipReasons.CompiledMemberKindChanged,
+                return WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedPropertyCompiledMemberKindChanged,
                     propertyName);
             }
         }
@@ -48,7 +48,7 @@ internal static class AddedPropertySkipEvaluator
 
     // Why the shared store rules: an auto-property's backing value lives in the same
     // side table as an added field, so it must be rejected on exactly the same grounds.
-    internal static string EvaluateAutoPropertyStoreSkipReason(
+    internal static WorkerReason EvaluateAutoPropertyStoreSkipReason(
         PropertyDeclarationSyntax declaration,
         IPropertySymbol symbol,
         INamedTypeSymbol hostType,
@@ -69,13 +69,13 @@ internal static class AddedPropertySkipEvaluator
             case AddedFieldStoreAvailability.Available:
                 return null;
             case AddedFieldStoreAvailability.StructHost:
-                return AddedPropertySkipReasons.StructHost;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyStructHost);
             case AddedFieldStoreAvailability.InitializerNotEmittable:
-                return AddedPropertySkipReasons.InitializerNotEmittable;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyInitializerNotEmittable);
             default:
                 // The declaration check already rejects unresolved and non-visible value types, so
                 // anything left names a type the shim assembly cannot see.
-                return AddedPropertySkipReasons.ValueTypeNotExternallyVisible;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyValueTypeNotExternallyVisible);
         }
     }
 
@@ -104,7 +104,7 @@ internal static class AddedPropertySkipEvaluator
         addedFieldCatalog.MarkStoreRewrite(binding.PropertyKey);
     }
 
-    internal static string EvaluateDeclarationSkipReason(
+    internal static WorkerReason EvaluateDeclarationSkipReason(
         IPropertySymbol symbol,
         PropertyDeclarationSyntax declaration,
         INamedTypeSymbol hostType)
@@ -114,12 +114,12 @@ internal static class AddedPropertySkipEvaluator
         // read and write the same value.
         if (hostType.IsGenericType)
         {
-            return AddedPropertySkipReasons.GenericHostType;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyGenericHostType);
         }
 
         if (hostType.TypeKind == TypeKind.Struct)
         {
-            return AddedPropertySkipReasons.StructHost;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyStructHost);
         }
 
         if (hostType.TypeKind == TypeKind.Interface
@@ -127,37 +127,36 @@ internal static class AddedPropertySkipEvaluator
             || symbol.IsOverride
             || symbol.IsAbstract)
         {
-            return AddedPropertySkipReasons.VirtualOrAbstract;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyVirtualOrAbstract);
         }
 
         if (declaration.ExplicitInterfaceSpecifier != null)
         {
-            return AddedPropertySkipReasons.ExplicitInterface;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyExplicitInterface);
         }
 
         if (HasInitAccessor(declaration))
         {
-            return AddedPropertySkipReasons.InitAccessor;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyInitAccessor);
         }
 
         if (symbol.ReturnsByRef || symbol.ReturnsByRefReadonly)
         {
-            return AddedPropertySkipReasons.RefOutIn;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyRefOutIn);
         }
 
         // Why unresolved types before visibility: TypeKind.Error is not externally visible, so the
         // shim-visibility reason would hide a missing using directive or a typo in the declaration.
         if (AddedFieldClassifier.TryFindUnresolvedType(symbol.Type, out ITypeSymbol unresolvedType))
         {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedPropertySkipReasons.ValueTypeUnresolvedFormat,
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedPropertyValueTypeUnresolved,
                 unresolvedType.ToDisplayString());
         }
 
         if (!AccessibilityRules.IsExternallyVisibleType(symbol.Type))
         {
-            return AddedPropertySkipReasons.ValueTypeNotExternallyVisible;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyValueTypeNotExternallyVisible);
         }
 
         return null;

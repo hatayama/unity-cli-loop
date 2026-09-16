@@ -14,17 +14,10 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class UnsupportedMemberSkipCollector
 {
-    internal const string ExplicitAccessorSkipReason =
-        "Property setter, init, or indexer accessors are skipped; "
-        + "run 'uloop compile' to apply accessor edits.";
-
-    internal const string UnsupportedMemberKindSkipReason =
-        "Constructors, operators, and event accessors are skipped; "
-        + "run 'uloop compile' to apply these edits.";
-
     // What: reports each property/indexer accessor that has an explicit body as Skipped.
     // Auto-properties ({ get; set; }) have no body and are not listed.
     // When a verified snapshot declares an equivalent property/indexer, skip rows are omitted
@@ -157,7 +150,7 @@ internal static class UnsupportedMemberSkipCollector
             skipped.Add(new WorkerSkipped
             {
                 Method = WorkerMethodKeys.FormatMethodLabel(accessorMethod),
-                Reason = ExplicitAccessorSkipReason
+                Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor)
             });
             emittedSkip = true;
         }
@@ -190,7 +183,7 @@ internal static class UnsupportedMemberSkipCollector
                 skipped.Add(new WorkerSkipped
                 {
                     Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
-                    Reason = ExplicitAccessorSkipReason
+                    Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor)
                 });
             }
 
@@ -218,7 +211,7 @@ internal static class UnsupportedMemberSkipCollector
             skipped.Add(new WorkerSkipped
             {
                 Method = WorkerMethodKeys.FormatMethodLabel(accessorMethod),
-                Reason = ExplicitAccessorSkipReason
+                Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor)
             });
         }
     }
@@ -496,7 +489,7 @@ internal static class UnsupportedMemberSkipCollector
         skipped.Add(new WorkerSkipped
         {
             Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
-            Reason = UnsupportedMemberKindSkipReason
+            Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberUnsupportedKind)
         });
     }
 }

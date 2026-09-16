@@ -73,6 +73,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TransformWorkerClientResult.Failure(validationError);
             }
 
+            if (!_validator.TryValidateSkippedRows(output, out string skippedError))
+            {
+                return TransformWorkerClientResult.Failure(skippedError);
+            }
+
             return TransformWorkerClientResult.SuccessResult(output);
         }
 

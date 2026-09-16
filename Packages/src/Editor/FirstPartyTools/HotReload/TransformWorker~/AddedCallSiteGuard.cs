@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class AddedCallSiteGuard
 {
@@ -48,7 +49,7 @@ internal static class AddedCallSiteGuard
                 {
                     SyntaxNode bodyNode =
                         (SyntaxNode)queued.MethodDeclaration.Body ?? queued.MethodDeclaration.ExpressionBody;
-                    string skipReason;
+                    WorkerReason skipReason;
                     string calledAddedMethodKey;
                     (skipReason, calledAddedMethodKey) = EvaluateAddedCallSiteSkipReason(
                         bodyNode,
@@ -86,7 +87,7 @@ internal static class AddedCallSiteGuard
         while (progressed);
     }
 
-    internal static (string Reason, string CalledAddedMethodKey) EvaluateAddedCallSiteSkipReason(
+    internal static (WorkerReason Reason, string CalledAddedMethodKey) EvaluateAddedCallSiteSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
@@ -120,21 +121,21 @@ internal static class AddedCallSiteGuard
             if (IsConditionalAccessReceiverSpine(invocation)
                 && addedMethodCatalog.IsClassifiedAdded(calledKey))
             {
-                return (AddedMethodSkipReasons.ConditionalAccess, null);
+                return (WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodConditionalAccess), null);
             }
 
             if (addedMethodCatalog.IsUnavailableAdded(calledKey))
             {
-                return (AddedMethodSkipReasons.UnavailableAddedCall, calledKey);
+                return (WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall), calledKey);
             }
         }
 
         if (BodyReferencesAddedMethodGroup(bodyNode, semanticModel, addedMethodCatalog))
         {
-            return (AddedMethodSkipReasons.MethodGroupReference, null);
+            return (WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodMethodGroupReference), null);
         }
 
-        string propertyReason = AddedPropertyBodyScan.EvaluateAddedPropertySkipReason(
+        WorkerReason propertyReason = AddedPropertyBodyScan.EvaluateAddedPropertySkipReason(
             bodyNode,
             semanticModel,
             addedPropertyCatalog,

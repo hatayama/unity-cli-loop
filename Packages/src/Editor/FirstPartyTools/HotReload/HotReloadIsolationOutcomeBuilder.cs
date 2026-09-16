@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retryOnly.Add(
                     HotReloadMethodOutcome.Skipped(
                         retryRow.method ?? "(unknown)",
-                        retryRow.reason ?? string.Empty,
+                        HotReloadWorkerReasonText.Render(retryRow.reason),
                         groupFilePaths.ResolveAssemblyResolvePath(retryRow.sourceProjectRelativePath)));
             }
 
@@ -60,11 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerSkippedDto retryRow)
         {
             string retryMethod = retryRow.method ?? string.Empty;
-            string retryReason = retryRow.reason ?? string.Empty;
+            string retryReason = HotReloadWorkerReasonText.Render(retryRow.reason);
             foreach (TransformWorkerSkippedDto firstPassRow in firstPassSkipped)
             {
                 string firstMethod = firstPassRow.method ?? string.Empty;
-                string firstReason = firstPassRow.reason ?? string.Empty;
+                string firstReason = HotReloadWorkerReasonText.Render(firstPassRow.reason);
                 if (string.Equals(firstMethod, retryMethod, StringComparison.Ordinal)
                     && string.Equals(firstReason, retryReason, StringComparison.Ordinal))
                 {

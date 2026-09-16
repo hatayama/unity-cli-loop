@@ -934,7 +934,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     && skipped.method.Contains(nameof(HotReloadAddedMemberHost.ExistingCaller)))
                 {
                     Assert.That(
-                        skipped.reason,
+                        HotReloadWorkerReasonText.Render(skipped.reason),
                         Does.Not.Contain("not visible to the shim assembly"));
                 }
             }
@@ -1879,7 +1879,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 bool methodHit = skipped.method != null
                     && skipped.method.Contains(fragment, StringComparison.Ordinal);
                 bool reasonHit = skipped.reason != null
-                    && skipped.reason.Contains(fragment, StringComparison.Ordinal);
+                    && HotReloadWorkerReasonText.Render(skipped.reason)
+                        .Contains(fragment, StringComparison.Ordinal);
                 if (methodHit || reasonHit)
                 {
                     Assert.Fail(
@@ -2051,7 +2052,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (skipped.method != null
                     && skipped.method.Contains(methodNameFragment)
                     && skipped.reason != null
-                    && skipped.reason.Contains(reasonFragment))
+                    && HotReloadWorkerReasonText.Render(skipped.reason)
+                        .Contains(reasonFragment))
                 {
                     return;
                 }
@@ -2087,7 +2089,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> rows = new List<string>();
             foreach (TransformWorkerSkippedDto entry in skipped)
             {
-                rows.Add(entry.method + " :: " + entry.reason);
+                rows.Add(
+                    entry.method + " :: "
+                    + (entry.reason == null
+                        ? "(no reason)"
+                        : HotReloadWorkerReasonText.Render(entry.reason)));
             }
 
             return string.Join("\n", rows);

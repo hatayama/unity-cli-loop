@@ -557,7 +557,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (skipped.method != null
                     && skipped.method.Contains(methodNameFragment)
                     && skipped.reason != null
-                    && skipped.reason.Contains(reasonFragment))
+                    && HotReloadWorkerReasonText.Render(skipped.reason)
+                        .Contains(reasonFragment))
                 {
                     return;
                 }
@@ -2458,7 +2459,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 if (skipped.method != null
                     && skipped.method.Contains(methodFragment)
-                    && skipped.reason == expectedReason)
+                    && skipped.reason != null
+                    && HotReloadWorkerReasonText.Render(skipped.reason) == expectedReason)
                 {
                     return;
                 }
@@ -3137,6 +3139,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("changed introduced-type diagnostic"));
+        }
+
+        /// <summary>
+        /// Verifies that a skipped row carrying no reason is rejected, because the Editor words
+        /// the sentence from the reason code and would otherwise report a skip with no
+        /// explanation at all.
+        /// </summary>
+        [Test]
+        public void InterpretOutputJson_SkippedRowWithoutReason_ReturnsFailure()
+        {
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
+                BuildSingleSourceInput(),
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/One.cs\"}],"
+                + "\"skipped\":[{\"method\":\"Host.Skipped()\"}]}");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("must carry the reason"));
+        }
+
+        /// <summary>
+        /// Verifies that a null skipped row is rejected rather than reaching the code that reads
+        /// the row's reason.
+        /// </summary>
+        [Test]
+        public void InterpretOutputJson_NullSkippedRow_ReturnsFailure()
+        {
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutputJson(
+                BuildSingleSourceInput(),
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/One.cs\"}],"
+                + "\"skipped\":[null]}");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("null skipped row"));
+        }
+
+        private static TransformWorkerInputDto BuildSingleSourceInput()
+        {
+            return new TransformWorkerInputDto
+            {
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/One.cs" }
+                }
+            };
         }
 
         private static TransformWorkerInputDto BuildPrepareInputForDiagnostics()

@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class PropertyGetterEmitter
 {
@@ -157,7 +158,7 @@ internal static class PropertyGetterEmitter
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
-                Reason = MethodTransformSkipReasons.ExplicitInterfaceImplementation
+                Reason = WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation)
             });
             return currentShimType;
         }

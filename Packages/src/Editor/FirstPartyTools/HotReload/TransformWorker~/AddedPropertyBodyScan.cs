@@ -14,13 +14,14 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
 /// Detects added-property uses whose source shape cannot be rewritten without changing meaning.
 /// </summary>
 internal static class AddedPropertyBodyScan
 {
-    internal static string EvaluateAddedPropertySkipReason(
+    internal static WorkerReason EvaluateAddedPropertySkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedPropertyCatalog addedPropertyCatalog,
@@ -31,7 +32,7 @@ internal static class AddedPropertyBodyScan
             return null;
         }
 
-        string refArgumentReason = EvaluateRefArgumentSkipReason(
+        WorkerReason refArgumentReason = EvaluateRefArgumentSkipReason(
             bodyNode,
             semanticModel,
             addedPropertyCatalog,
@@ -43,7 +44,7 @@ internal static class AddedPropertyBodyScan
 
         foreach (ExpressionSyntax expression in bodyNode.DescendantNodesAndSelf().OfType<ExpressionSyntax>())
         {
-            string expressionReason = EvaluateExpressionSkipReason(
+            WorkerReason expressionReason = EvaluateExpressionSkipReason(
                 expression,
                 semanticModel,
                 addedPropertyCatalog,
@@ -57,7 +58,7 @@ internal static class AddedPropertyBodyScan
         return null;
     }
 
-    private static string EvaluateRefArgumentSkipReason(
+    private static WorkerReason EvaluateRefArgumentSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedPropertyCatalog addedPropertyCatalog,
@@ -77,14 +78,14 @@ internal static class AddedPropertyBodyScan
                 enclosingType);
             if (binding != null)
             {
-                return AddedPropertySkipReasons.RefOutIn;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyRefOutIn);
             }
         }
 
         return null;
     }
 
-    private static string EvaluateExpressionSkipReason(
+    private static WorkerReason EvaluateExpressionSkipReason(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         AddedPropertyCatalog addedPropertyCatalog,
@@ -102,62 +103,62 @@ internal static class AddedPropertyBodyScan
 
         if (binding.UnavailableReason != null)
         {
-            return AddedPropertySkipReasons.UnavailableAddedProperty;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty);
         }
 
         if (NameofRules.IsInsideNameofArgument(expression))
         {
-            return AddedPropertySkipReasons.NameofReference;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyNameofReference);
         }
 
         if (IsPropertyPatternMemberName(expression))
         {
-            return AddedPropertySkipReasons.PropertyPattern;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyPropertyPattern);
         }
 
         if (expression is MemberBindingExpressionSyntax || IsConditionalAccess(expression))
         {
-            return AddedPropertySkipReasons.ConditionalAccess;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyConditionalAccess);
         }
 
         return EvaluateWriteSkipReason(expression);
     }
 
-    private static string EvaluateWriteSkipReason(ExpressionSyntax expression)
+    private static WorkerReason EvaluateWriteSkipReason(ExpressionSyntax expression)
     {
         if (IsDeconstructionTarget(expression))
         {
-            return AddedPropertySkipReasons.DeconstructionTarget;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyDeconstructionTarget);
         }
 
         if (expression.Parent is AssignmentExpressionSyntax assignment && assignment.Left == expression)
         {
             if (assignment.Parent is InitializerExpressionSyntax)
             {
-                return AddedPropertySkipReasons.ObjectInitializer;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyObjectInitializer);
             }
 
             if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
             {
-                return AddedPropertySkipReasons.CompoundAssignment;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyCompoundAssignment);
             }
 
             if (assignment.Parent is not ExpressionStatementSyntax)
             {
-                return AddedPropertySkipReasons.ConsumedWrite;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyConsumedWrite);
             }
         }
 
         if (expression.Parent is PrefixUnaryExpressionSyntax prefix
             && AddedFieldBodyScan.IsIncrementOrDecrement(prefix.Kind()))
         {
-            return AddedPropertySkipReasons.CompoundAssignment;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyCompoundAssignment);
         }
 
         if (expression.Parent is PostfixUnaryExpressionSyntax postfix
             && AddedFieldBodyScan.IsIncrementOrDecrement(postfix.Kind()))
         {
-            return AddedPropertySkipReasons.CompoundAssignment;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyCompoundAssignment);
         }
 
         return null;

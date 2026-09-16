@@ -17,7 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class AddedFieldBodyScan
 {
-    internal static string BodyReferencesUnavailableAddedField(
+    internal static WorkerReason BodyReferencesUnavailableAddedField(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedFieldCatalog addedFieldCatalog)

@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
 /// What: decides how a body's field-like event uses are handled — rewritten through the event's
@@ -21,40 +22,11 @@ using Microsoft.CodeAnalysis.Text;
 /// </summary>
 internal static class EventAccessorRules
 {
-    internal const string CustomAccessorReason =
-        "Methods that raise or read an event with custom add/remove accessors are skipped; "
-        + "there is no backing field for the shim to reach. Use uloop compile.";
-
-    internal const string NoBackingFieldReason =
-        "Methods that raise or read an abstract, extern, or interface event are skipped; "
-        + "there is no backing field for the shim to reach. Use uloop compile.";
-
-    internal const string DelegateTypeNotVisibleReason =
-        "Methods that raise or read an event whose delegate type is not visible from an external "
-        + "assembly are skipped; the shim cannot name the accessor field type. Use uloop compile.";
-
-    internal const string AddedInThisEditReason =
-        "Methods that raise a field-like event added in this edit are skipped; "
-        + "the compiled assembly has no backing field yet. Use uloop compile.";
-
-    internal const string NameofReason =
-        "Methods that name a field-like event inside nameof are skipped; the shim is a different "
-        + "type and cannot keep the bare event name. Use uloop compile.";
-
-    internal const string ConditionalReceiverReason =
-        "Methods that raise or read a field-like event through a conditional receiver "
-        + "('a?.E') are skipped; the shim cannot name the conditional receiver as the accessor "
-        + "call's argument. Use uloop compile.";
-
-    internal const string AccessorRewriteUnavailableReasonPrefix =
-        "Methods that raise or read a field-like event are skipped when the body cannot be "
-        + "rewritten into accessor delegates. Accessor rewrite unavailable: ";
-
     /// <summary>
     /// What: the skip reason for a body's event uses, or null when every use is either a
     /// subscription (+= / -=) or rewritable through the backing field.
     /// </summary>
-    internal static string EvaluateEventUseSkipReason(
+    internal static WorkerReason EvaluateEventUseSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType)
@@ -68,17 +40,17 @@ internal static class EventAccessorRules
 
             if (NameofRules.IsInsideNameofArgument(use.Node))
             {
-                return NameofReason;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.EventNameof);
             }
 
             // 'a?.E' binds the event on a receiver the shim has no name for, so the accessor
             // call cannot be built and the raw event access would reach the shim source.
             if (use.Node is MemberBindingExpressionSyntax)
             {
-                return ConditionalReceiverReason;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.EventConditionalReceiver);
             }
 
-            string reason = EvaluateEventSkipReason(use.EventSymbol, compiledType);
+            WorkerReason reason = EvaluateEventSkipReason(use.EventSymbol, compiledType);
             if (reason != null)
             {
                 return reason;
@@ -121,29 +93,29 @@ internal static class EventAccessorRules
             || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
     }
 
-    private static string EvaluateEventSkipReason(IEventSymbol eventSymbol, INamedTypeSymbol compiledType)
+    private static WorkerReason EvaluateEventSkipReason(IEventSymbol eventSymbol, INamedTypeSymbol compiledType)
     {
         if (eventSymbol.IsAbstract || eventSymbol.IsExtern || eventSymbol.ContainingType.TypeKind == TypeKind.Interface)
         {
-            return NoBackingFieldReason;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventNoBackingField);
         }
 
         // A custom add/remove event has no compiler-generated backing field to reach. C# also
         // rejects raising one from source (CS0079), so this is a guard, not a reachable path.
         if (HasCustomAccessors(eventSymbol))
         {
-            return CustomAccessorReason;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventCustomAccessor);
         }
 
         if (!AccessibilityRules.IsExternallyVisibleType(eventSymbol.Type)
             || !AccessibilityRules.IsExternallyVisibleType(eventSymbol.ContainingType))
         {
-            return DelegateTypeNotVisibleReason;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventDelegateTypeNotVisible);
         }
 
         if (!CompiledBackingFieldExists(eventSymbol, compiledType))
         {
-            return AddedInThisEditReason;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventAddedInThisEdit);
         }
 
         return null;
