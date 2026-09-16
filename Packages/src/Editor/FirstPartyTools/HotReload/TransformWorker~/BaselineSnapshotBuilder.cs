@@ -36,9 +36,9 @@ internal static class BaselineSnapshotBuilder
                 parseOptions)
             .GetCompilationUnitRoot();
         Dictionary<string, MethodDeclarationSyntax> snapMethods =
-            WorkerSyntaxIndex.BuildSyntaxMethodMapOrNull(baseline.SnapshotRoot);
+            WorkerSyntaxMemberMaps.BuildSyntaxMethodMapOrNull(baseline.SnapshotRoot);
         // Why plainRoot: annotated current nodes break AreEquivalent for some shapes (see plainRoot above).
-        Dictionary<string, MethodDeclarationSyntax> currentMethods = WorkerSyntaxIndex.BuildSyntaxMethodMapOrNull(plainRoot);
+        Dictionary<string, MethodDeclarationSyntax> currentMethods = WorkerSyntaxMemberMaps.BuildSyntaxMethodMapOrNull(plainRoot);
         if (snapMethods == null || currentMethods == null)
         {
             // Why surface: previously a colliding key silently disabled baseline and patched all.
@@ -53,16 +53,16 @@ internal static class BaselineSnapshotBuilder
         baseline.PlainCurrentMethodMap = currentMethods;
         // Why null is kept as-is: a colliding property/indexer key only disables accessor
         // gating for this file; method-level baseline matching still applies.
-        baseline.SnapshotPropertyMap = WorkerSyntaxIndex.BuildSyntaxPropertyMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotIndexerMap = WorkerSyntaxIndex.BuildSyntaxIndexerMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotConstructorMap = WorkerSyntaxIndex.BuildSyntaxConstructorMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotOperatorMap = WorkerSyntaxIndex.BuildSyntaxOperatorMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotEventMap = WorkerSyntaxIndex.BuildSyntaxEventMapOrNull(baseline.SnapshotRoot);
-        baseline.PlainCurrentPropertyMap = WorkerSyntaxIndex.BuildSyntaxPropertyMapOrNull(plainRoot);
-        baseline.PlainCurrentIndexerMap = WorkerSyntaxIndex.BuildSyntaxIndexerMapOrNull(plainRoot);
-        baseline.PlainCurrentConstructorMap = WorkerSyntaxIndex.BuildSyntaxConstructorMapOrNull(plainRoot);
-        baseline.PlainCurrentOperatorMap = WorkerSyntaxIndex.BuildSyntaxOperatorMapOrNull(plainRoot);
-        baseline.PlainCurrentEventMap = WorkerSyntaxIndex.BuildSyntaxEventMapOrNull(plainRoot);
+        baseline.SnapshotPropertyMap = WorkerSyntaxMemberMaps.BuildSyntaxPropertyMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotIndexerMap = WorkerSyntaxMemberMaps.BuildSyntaxIndexerMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotConstructorMap = WorkerSyntaxMemberMaps.BuildSyntaxConstructorMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotOperatorMap = WorkerSyntaxMemberMaps.BuildSyntaxOperatorMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotEventMap = WorkerSyntaxMemberMaps.BuildSyntaxEventMapOrNull(baseline.SnapshotRoot);
+        baseline.PlainCurrentPropertyMap = WorkerSyntaxMemberMaps.BuildSyntaxPropertyMapOrNull(plainRoot);
+        baseline.PlainCurrentIndexerMap = WorkerSyntaxMemberMaps.BuildSyntaxIndexerMapOrNull(plainRoot);
+        baseline.PlainCurrentConstructorMap = WorkerSyntaxMemberMaps.BuildSyntaxConstructorMapOrNull(plainRoot);
+        baseline.PlainCurrentOperatorMap = WorkerSyntaxMemberMaps.BuildSyntaxOperatorMapOrNull(plainRoot);
+        baseline.PlainCurrentEventMap = WorkerSyntaxMemberMaps.BuildSyntaxEventMapOrNull(plainRoot);
         return baseline;
     }
 }
