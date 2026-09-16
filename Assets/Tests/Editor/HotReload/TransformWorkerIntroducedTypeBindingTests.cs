@@ -59,6 +59,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "namespace Example { public class Dependent { public int Value() { return 2; } } "
             + "public class Introduced { } }";
 
+        private const string RetainedSource =
+            "namespace Example { public class Retained { public int Value; } }";
+
+        // The retained declaration after an ordinary method is added to it. A type that reads the
+        // retained one is fingerprinted against the identity of what it reads, so the addition
+        // must leave that reading unchanged.
+        private const string RetainedSourceWithAnAddedMethod =
+            "namespace Example { public class Retained { public int Value; public int Extra() { return Value + 1; } } }";
+
         private const string IndirectDependentSource =
             "using System.Collections.Generic; namespace Example { public static class Holder { public static List<Retained> All() { return null; } } public class Dependent { public int Count() { return Holder.All().Count; } } }";
 
@@ -656,6 +665,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(new[] { "Example.Retained" }));
         }
 
+        /// <summary>
+        /// Verifies that a type introduced in another file keeps its fingerprint when a member is
+        /// added to the retained type it reads, so one file's addition cannot make a neighbouring
+        /// declaration read as a different definition and be introduced a second time.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_RetainedDependencyGainsAMember_KeepsFingerprint()
+        {
+            BindingFixture fixture = CreateFixture("RetainedDependencyGainsAMember", DirectDependentSource);
+
+            TransformWorkerClientResult sourceDeclared = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: true,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    Array.Empty<string>()),
+                CancellationToken.None);
+            Assert.That(sourceDeclared.Success, Is.True, sourceDeclared.ErrorMessage);
+            TransformWorkerIntroducedTypeArtifactDto artifact = CreateRetainedArtifactMatching(
+                fixture,
+                FindFingerprint(sourceDeclared, "Example.Retained"));
+            TransformWorkerClientResult unchanged = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                CreateInput(fixture, includeRetainedSource: true, new[] { artifact }, Array.Empty<string>()),
+                CancellationToken.None);
+
+            File.WriteAllText(fixture.RetainedSourcePath, RetainedSourceWithAnAddedMethod);
+            TransformWorkerClientResult memberAdded = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                CreateInput(fixture, includeRetainedSource: true, new[] { artifact }, Array.Empty<string>()),
+                CancellationToken.None);
+
+            Assert.That(unchanged.Success, Is.True, unchanged.ErrorMessage);
+            Assert.That(memberAdded.Success, Is.True, memberAdded.ErrorMessage);
+            Assert.That(
+                CollectReusedMetadataNames(memberAdded.Output),
+                Is.EqualTo(new[] { "Example.Retained" }),
+                "The type the addition was made to must still be reported as a reuse.");
+            Assert.That(
+                FindFingerprint(memberAdded, "Example.Dependent"),
+                Is.EqualTo(FindFingerprint(unchanged, "Example.Dependent")),
+                "A member added to the retained type must not change what its reader is.");
+        }
+
         private static List<string> CollectMetadataNames(TransformWorkerOutputDto output)
         {
             List<string> names = new List<string>();
@@ -729,9 +780,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string dependentSourcePath = Path.Combine(directory, "Dependent.cs");
             string retainedSourcePath = Path.Combine(directory, "Retained.cs");
             File.WriteAllText(dependentSourcePath, dependentSource);
-            File.WriteAllText(
-                retainedSourcePath,
-                "namespace Example { public class Retained { public int Value; } }");
+            File.WriteAllText(retainedSourcePath, RetainedSource);
             string targetAssemblyPath = Path.Combine(directory, "BindingTarget.dll");
             string targetAssemblyMvid = includeCompiledDependent
                 ? CreateTargetAssemblyWithCompiledDependent(targetAssemblyPath, "BindingTarget")
