@@ -156,7 +156,7 @@ internal static class TypeEmitPlanner
         INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol);
         if (compiledType == null)
         {
-            OrdinaryMethodQueue.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
+            OrdinaryMethodShimTypes.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
             return;
         }
 

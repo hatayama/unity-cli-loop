@@ -40,7 +40,7 @@ internal sealed class AddedFieldBinding
 
     public ExpressionSyntax Initializer { get; set; }
 
-    public string UnavailableReason { get; set; }
+    public WorkerReason UnavailableReason { get; set; }
 
     public bool IsStoreRewriteable => UnavailableReason == null && !IsConst;
 }

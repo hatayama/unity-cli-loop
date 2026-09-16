@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
 /// What: one Harmony accessor delegate field plus the statements that bind it in __BindAccessors.
@@ -109,14 +110,15 @@ internal sealed class AccessorEntry
         };
     }
 
-    public bool TryGetVisibilityFailure(out string reason)
+    public bool TryGetVisibilityFailure(out WorkerReason reason)
     {
         foreach (ITypeSymbol typeSymbol in EnumerateSignatureTypes())
         {
             if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol))
             {
-                reason = "accessor signature type is not visible from an external assembly: "
-                    + typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                reason = WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AccessorSignatureTypeNotVisible,
+                    typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                 return true;
             }
         }

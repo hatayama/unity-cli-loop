@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class OrdinaryMethodQueue
 {
@@ -233,7 +234,7 @@ internal static class OrdinaryMethodQueue
         {
             SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
-            Reason = AddedMethodSkipReasons.InterfaceMember
+            Reason = WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodInterfaceMember)
         });
         if (isAddedMethod)
         {
@@ -293,7 +294,7 @@ internal static class OrdinaryMethodQueue
     {
         SyntaxNode methodBodyNode =
             (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
-        string addedSkip = isAddedMethod
+        WorkerReason addedSkip = isAddedMethod
             ? MethodTransformDecider.EvaluateAddedMethodSkipReason(methodSymbol, methodDeclaration)
             : null;
         MethodTransformDecision decision = addedSkip != null
@@ -340,7 +341,7 @@ internal static class OrdinaryMethodQueue
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
         ShimNameAllocator shimNames)
     {
-        ShimTypeBuilder shimType = EnsureShimType(
+        ShimTypeBuilder shimType = OrdinaryMethodShimTypes.EnsureShimType(
             typeState,
             root,
             assemblyGlobalUsings,
@@ -394,7 +395,7 @@ internal static class OrdinaryMethodQueue
                 replacesCompiledMethod,
                 snapshotMethodMap,
                 plainCurrentMethodMap);
-            AppendUnityMessageWarningIfNeeded(
+            OrdinaryMethodShimTypes.AppendUnityMessageWarningIfNeeded(
                 typeState.TypeSymbol,
                 methodSymbol,
                 declarationDriftWarnings);
@@ -404,76 +405,5 @@ internal static class OrdinaryMethodQueue
                 methodSymbol,
                 declarationDriftWarnings);
         }
-    }
-
-    internal static ShimTypeBuilder EnsureShimType(
-        TypeEmitState typeState,
-        CompilationUnitSyntax root,
-        List<UsingDirectiveSyntax> assemblyGlobalUsings,
-        List<ShimTypeBuilder> shimTypes,
-        ShimNameAllocator shimNames)
-    {
-        if (typeState.CurrentShimType != null)
-        {
-            return typeState.CurrentShimType;
-        }
-
-        string shimTypeName = shimNames.NextShimTypeName(typeState.TypeSymbol.Name);
-        string namespaceName = typeState.TypeSymbol.ContainingNamespace == null
-            || typeState.TypeSymbol.ContainingNamespace.IsGlobalNamespace
-            ? string.Empty
-            : typeState.TypeSymbol.ContainingNamespace.ToDisplayString();
-        typeState.CurrentShimType = new ShimTypeBuilder(
-            shimTypeName,
-            namespaceName,
-            WorkerUsingCollector.CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings),
-            typeState.SourceUnit.Input.ProjectRelativePath);
-        shimTypes.Add(typeState.CurrentShimType);
-        return typeState.CurrentShimType;
-    }
-
-    internal static void SkipAllMethodsOnUncompiledType(
-        TypeEmitState typeState,
-        SemanticModel semanticModel,
-        List<WorkerSkipped> skipped,
-        AddedMethodCatalog addedMethodCatalog)
-    {
-        typeState.TypeIsAbsentFromCompiledAssembly = true;
-        addedMethodCatalog.AddAddedTypeSyntaxKey(typeState.TypeMetadataNameFromSyntax);
-        foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
-            .OfType<MethodDeclarationSyntax>())
-        {
-            IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(methodDeclaration);
-            if (methodSymbol == null)
-            {
-                continue;
-            }
-
-            skipped.Add(new WorkerSkipped
-            {
-                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
-                Reason = AddedMethodSkipReasons.TypeNotIntroduced
-            });
-        }
-    }
-
-    internal static void AppendUnityMessageWarningIfNeeded(
-        INamedTypeSymbol typeSymbol,
-        IMethodSymbol methodSymbol,
-        List<string> declarationDriftWarnings)
-    {
-        if (!ShimMethodEmitter.IsUnityEngineMonoBehaviourDerived(typeSymbol)
-            || !UnityMessageNames.Contains(methodSymbol.Name))
-        {
-            return;
-        }
-
-        declarationDriftWarnings.Add(
-            string.Format(
-                CultureInfo.InvariantCulture,
-                UnityMessageNames.AddedMessageWarningFormat,
-                methodSymbol.Name,
-                typeSymbol.ToDisplayString()));
     }
 }

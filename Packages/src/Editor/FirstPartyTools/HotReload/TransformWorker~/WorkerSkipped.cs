@@ -18,12 +18,11 @@ using Microsoft.CodeAnalysis.Text;
 internal sealed class WorkerSkipped
 {
     // Project-relative forward-slash path of the file this row was produced from.
-    // Keep in sync with TransformWorkerSkippedDto.sourceProjectRelativePath.
     public string SourceProjectRelativePath { get; set; }
 
     public string Method { get; set; }
 
-    public string Reason { get; set; }
+    public WorkerReason Reason { get; set; }
 
     public string MethodKey { get; set; }
 

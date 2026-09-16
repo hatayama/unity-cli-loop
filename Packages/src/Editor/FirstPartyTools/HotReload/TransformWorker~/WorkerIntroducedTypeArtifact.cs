@@ -18,7 +18,6 @@ using Microsoft.CodeAnalysis.Text;
 // One retained introduced-type assembly this run may bind against. Identity and reference path
 // travel in the same record so the worker can confirm the file it resolved is the assembly the
 // record claims before normalizing any reference through it.
-// Keep in sync with TransformWorkerDtos.cs TransformWorkerIntroducedTypeArtifactDto.
 internal sealed class WorkerIntroducedTypeArtifact
 {
     public string AssemblyFullName { get; set; }
@@ -29,7 +28,6 @@ internal sealed class WorkerIntroducedTypeArtifact
 }
 
 // One retained type inside an artifact assembly, with the original identity it normalizes back to.
-// Keep in sync with TransformWorkerDtos.cs TransformWorkerIntroducedTypeArtifactTypeDto.
 internal sealed class WorkerIntroducedTypeArtifactType
 {
     public string MetadataName { get; set; }

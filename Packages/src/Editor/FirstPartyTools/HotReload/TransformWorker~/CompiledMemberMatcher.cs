@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class CompiledMemberMatcher
 {
@@ -128,31 +129,28 @@ internal static class CompiledMemberMatcher
             || fieldMatch == CompiledFieldMatch.MemberKindChanged;
     }
 
-    internal static string TryFormatCompiledFieldDeclarationChangeReason(
+    internal static WorkerReason TryBuildCompiledFieldDeclarationChangeReason(
         CompiledFieldMatch fieldMatch,
         string fieldName)
     {
         if (fieldMatch == CompiledFieldMatch.FieldTypeChanged)
         {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.FieldTypeChanged,
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged,
                 fieldName);
         }
 
         if (fieldMatch == CompiledFieldMatch.FieldModifiersChanged)
         {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.FieldModifiersChanged,
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedFieldFieldModifiersChanged,
                 fieldName);
         }
 
         if (fieldMatch == CompiledFieldMatch.MemberKindChanged)
         {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.MemberKindChanged,
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedFieldMemberKindChanged,
                 fieldName);
         }
 

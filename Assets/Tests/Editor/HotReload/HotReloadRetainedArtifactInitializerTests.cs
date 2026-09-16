@@ -151,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 if (skipped.method != null && skipped.method.Contains(methodName))
                 {
-                    return skipped.reason;
+                    return HotReloadWorkerReasonText.Render(skipped.reason);
                 }
             }
 

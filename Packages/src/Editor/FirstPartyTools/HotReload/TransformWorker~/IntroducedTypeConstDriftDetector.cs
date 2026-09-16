@@ -4,6 +4,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // Finds const fields an introduced declaration reads that the artifact cannot be compiled against:
 // the edited source value no longer matches the value compiled into the target assembly, or the
@@ -19,7 +20,7 @@ internal static class IntroducedTypeConstDriftDetector
         SemanticModel semanticModel,
         WorkerTypeHome home,
         out string identifier,
-        out string reason)
+        out HotReloadWorkerReasonCode reason)
     {
         foreach (SyntaxNode node in declaration.DescendantNodesAndSelf())
         {
@@ -42,20 +43,20 @@ internal static class IntroducedTypeConstDriftDetector
             if (!field.HasConstantValue)
             {
                 identifier = CecilTypeNames.ToMetadataName(field.ContainingType) + "." + field.Name;
-                reason = "Const value cannot be verified";
+                reason = HotReloadWorkerReasonCode.IntroducedTypeConstValueUnverifiable;
                 return true;
             }
 
             if (HasDriftedFromCompiledValue(field, home))
             {
                 identifier = CecilTypeNames.ToMetadataName(field.ContainingType) + "." + field.Name;
-                reason = "Changed const requires a compile";
+                reason = HotReloadWorkerReasonCode.IntroducedTypeConstChanged;
                 return true;
             }
         }
 
         identifier = null;
-        reason = null;
+        reason = default;
         return false;
     }
 

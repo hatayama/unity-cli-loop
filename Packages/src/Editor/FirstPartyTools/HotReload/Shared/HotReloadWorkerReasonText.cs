@@ -1,0 +1,149 @@
+using System;
+using System.Collections.Generic;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Builds the English sentence for a reason the worker reported. This is the only place a
+    /// worker reason is worded: the worker sends a code and the values the sentence needs, so a
+    /// wording change never has to be mirrored across the process boundary.
+    /// </summary>
+    internal static partial class HotReloadWorkerReasonText
+    {
+        // The "compile it properly" call to action the skip sentences end with, and the phrase
+        // that introduces a rejected accessor rewrite. They are shared because several sentences
+        // end the same way, not because they carry meaning of their own.
+        private const string CompileCallToAction = "Run 'uloop compile'.";
+
+        private const string CompileCallToActionToAddIt = "Run 'uloop compile' to add it.";
+
+        private const string CompileCallToActionToAddThem = "Run 'uloop compile' to add them.";
+
+        private const string AccessorRewriteUnavailableSeparator = " Accessor rewrite unavailable: ";
+
+        private static readonly Dictionary<HotReloadWorkerReasonCode, ReasonTemplate> Templates =
+            BuildTemplates();
+
+        /// <summary>
+        /// The sentence for this reason, with its values substituted and its detail appended.
+        /// </summary>
+        internal static string Render(TransformWorkerReasonDto reason)
+        {
+            if (reason == null)
+            {
+                throw new ArgumentNullException(nameof(reason));
+            }
+
+            ReasonTemplate template = Templates[reason.code];
+            string[] args = reason.args ?? Array.Empty<string>();
+            if (args.Length != template.PlaceholderCount)
+            {
+                throw new ArgumentException(
+                    "Reason " + reason.code + " takes " + template.PlaceholderCount
+                    + " value(s) but carries " + args.Length + ".",
+                    nameof(reason));
+            }
+
+            string text = template.Text;
+            for (int index = 0; index < args.Length; index++)
+            {
+                // Why not string.Format: some sentences quote C# source containing braces, which
+                // a format string would read as a placeholder and reject.
+                text = text.Replace("{" + index + "}", args[index] ?? string.Empty);
+            }
+
+            if (reason.detail == null)
+            {
+                if (template.RequiresDetail)
+                {
+                    throw new ArgumentException(
+                        "Reason " + reason.code + " is only reported with a detail.",
+                        nameof(reason));
+                }
+
+                return text;
+            }
+
+            if (!template.AllowsDetail)
+            {
+                throw new ArgumentException(
+                    "Reason " + reason.code + " has no place for a detail.",
+                    nameof(reason));
+            }
+
+            return text + template.DetailSeparator + Render(reason.detail) + template.DetailSuffix;
+        }
+
+        private static Dictionary<HotReloadWorkerReasonCode, ReasonTemplate> BuildTemplates()
+        {
+            Dictionary<HotReloadWorkerReasonCode, ReasonTemplate> templates =
+                new Dictionary<HotReloadWorkerReasonCode, ReasonTemplate>();
+
+            AddMethodTransformTemplates(templates);
+            AddAddedMemberTemplates(templates);
+            AddAccessorTemplates(templates);
+            AddIntroducedTypeTemplates(templates);
+
+            return templates;
+        }
+
+        private static ReasonTemplate Plain(string text, int placeholderCount)
+        {
+            return new ReasonTemplate(text, placeholderCount, false, false, string.Empty, string.Empty);
+        }
+
+        // A reason that reads on its own but appends a detail when it has one.
+        private static ReasonTemplate Composing(
+            string text,
+            int placeholderCount,
+            string detailSeparator,
+            string detailSuffix)
+        {
+            return new ReasonTemplate(text, placeholderCount, true, false, detailSeparator, detailSuffix);
+        }
+
+        // A reason that is incomplete without its detail.
+        private static ReasonTemplate RequiringDetail(
+            string text,
+            int placeholderCount,
+            string detailSeparator,
+            string detailSuffix)
+        {
+            return new ReasonTemplate(text, placeholderCount, true, true, detailSeparator, detailSuffix);
+        }
+
+        /// <summary>
+        /// One reason's sentence and the shape of reason it words.
+        /// </summary>
+        private sealed class ReasonTemplate
+        {
+            internal ReasonTemplate(
+                string text,
+                int placeholderCount,
+                bool allowsDetail,
+                bool requiresDetail,
+                string detailSeparator,
+                string detailSuffix)
+            {
+                Text = text;
+                PlaceholderCount = placeholderCount;
+                AllowsDetail = allowsDetail;
+                RequiresDetail = requiresDetail;
+                DetailSeparator = detailSeparator;
+                DetailSuffix = detailSuffix;
+            }
+
+            internal string Text { get; }
+
+            internal int PlaceholderCount { get; }
+
+            internal bool AllowsDetail { get; }
+
+            internal bool RequiresDetail { get; }
+
+            internal string DetailSeparator { get; }
+
+            internal string DetailSuffix { get; }
+        }
+    }
+}

@@ -97,7 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     {
                         sourceProjectRelativePath = FirstPath,
                         method = "First.Skipped",
-                        reason = "reason"
+                        reason = new TransformWorkerReasonDto
+                        {
+                            code = HotReloadWorkerReasonCode.MethodTransformNoBody
+                        }
                     }
                 },
                 unchangedMethods = new[]

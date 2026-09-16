@@ -15,7 +15,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-// Keep in sync with TransformWorkerDtos.cs TransformWorkerIntroducedTypeDto.
 internal sealed class WorkerIntroducedType
 {
     public string OriginalAssemblyName { get; set; }

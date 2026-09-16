@@ -99,6 +99,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        /// <summary>
+        /// Rejects a skipped row the Editor could not word: the row's sentence is built from its
+        /// reason code, so a row without one would report a skip with no explanation at all.
+        /// </summary>
+        internal bool TryValidateSkippedRows(
+            TransformWorkerOutputDto output,
+            out string errorMessage)
+        {
+            if (output.skipped == null)
+            {
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in output.skipped)
+            {
+                if (skipped == null)
+                {
+                    errorMessage = "Transform worker output must not contain a null skipped row.";
+                    return false;
+                }
+
+                if (skipped.reason == null)
+                {
+                    errorMessage = "A skipped row must carry the reason it was skipped.";
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
         internal bool TryValidateRequiredPreparationOutput(
             TransformWorkerInputDto input,
             TransformWorkerOutputDto output,
@@ -201,6 +234,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 errorMessage = "Preparation output must contain introducedTypes and introducedTypeDiagnostics.";
                 return false;
+            }
+
+            // A missing diagnostic would render as no sentence at all, so it is refused here
+            // rather than reaching the renderer.
+            foreach (TransformWorkerReasonDto diagnostic in file.introducedTypeDiagnostics)
+            {
+                if (diagnostic == null)
+                {
+                    errorMessage = "Preparation output must not contain a null introduced-type diagnostic.";
+                    return false;
+                }
+
+                // Why only this code is checked here: it is the one diagnostic the Editor acts
+                // on, and it reads the redefined type's metadata name straight out of args[0].
+                if (diagnostic.code != HotReloadWorkerReasonCode.IntroducedTypeChanged)
+                {
+                    continue;
+                }
+
+                if (diagnostic.args == null
+                    || diagnostic.args.Length != 1
+                    || string.IsNullOrEmpty(diagnostic.args[0]))
+                {
+                    errorMessage =
+                        "Preparation output must name the type of a changed introduced-type diagnostic.";
+                    return false;
+                }
             }
 
             foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)

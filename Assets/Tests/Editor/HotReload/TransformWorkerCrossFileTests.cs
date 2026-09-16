@@ -468,7 +468,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     skipped.method,
                     Does.Not.Contain("." + methodName + "("),
-                    "Unexpected skip: " + skipped.method + " (" + skipped.reason + ")");
+                    "Unexpected skip: " + skipped.method + " ("
+                    + HotReloadWorkerReasonText.Render(skipped.reason) + ")");
             }
         }
 

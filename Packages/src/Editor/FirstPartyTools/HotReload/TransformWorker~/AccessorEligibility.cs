@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
 /// What: decides whether an async/iterator/closure private-access skip can be rescued by
@@ -27,14 +28,14 @@ internal static class AccessorEligibility
         INamedTypeSymbol typeSymbol,
         SyntaxNode bodyNode,
         out AccessorPlan plan,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         plan = null;
         rejectReason = null;
 
         if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol))
         {
-            rejectReason = "containing type is not visible from an external assembly (condition c).";
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorContainingTypeNotVisible);
             return false;
         }
 
@@ -69,7 +70,6 @@ internal static class AccessorEligibility
         {
             if (entry.TryGetVisibilityFailure(out rejectReason))
             {
-                rejectReason = rejectReason + " (condition c).";
                 return false;
             }
         }
@@ -77,7 +77,7 @@ internal static class AccessorEligibility
         if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode))
         {
             rejectReason =
-                "inaccessible property increment/decrement has no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
             return false;
         }
 
@@ -86,22 +86,28 @@ internal static class AccessorEligibility
         return true;
     }
 
-    private static bool AreMethodSignatureTypesVisible(IMethodSymbol methodSymbol, out string rejectReason)
+    private static bool AreMethodSignatureTypesVisible(IMethodSymbol methodSymbol, out WorkerReason rejectReason)
     {
-        if (TryDescribeUnresolvedType(methodSymbol.ReturnType, "method return type", out rejectReason))
+        if (TryDescribeUnresolvedType(
+                methodSymbol.ReturnType,
+                HotReloadWorkerReasonCode.AccessorMethodReturnTypeUnresolved,
+                out rejectReason))
         {
             return false;
         }
 
         if (!AccessibilityRules.IsExternallyVisibleType(methodSymbol.ReturnType))
         {
-            rejectReason = "method return type is not visible from an external assembly (condition c).";
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodReturnTypeNotVisible);
             return false;
         }
 
         foreach (IParameterSymbol parameter in methodSymbol.Parameters)
         {
-            if (TryDescribeUnresolvedType(parameter.Type, "method parameter type", out rejectReason))
+            if (TryDescribeUnresolvedType(
+                    parameter.Type,
+                    HotReloadWorkerReasonCode.AccessorMethodParameterTypeUnresolved,
+                    out rejectReason))
             {
                 return false;
             }
@@ -109,7 +115,7 @@ internal static class AccessorEligibility
             if (!AccessibilityRules.IsExternallyVisibleType(parameter.Type))
             {
                 rejectReason =
-                    "method parameter type is not visible from an external assembly (condition c).";
+                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodParameterTypeNotVisible);
                 return false;
             }
         }
@@ -122,7 +128,10 @@ internal static class AccessorEligibility
     // tells the caller the type exists but cannot be seen, which hides missing usings/typos.
     // Why recurse: List<MissingType>, MissingType[], and MissingType* have a resolved outer
     // kind, so only the type argument, element, or pointed-at type is Error.
-    private static bool TryDescribeUnresolvedType(ITypeSymbol typeSymbol, string role, out string reason)
+    private static bool TryDescribeUnresolvedType(
+        ITypeSymbol typeSymbol,
+        HotReloadWorkerReasonCode code,
+        out WorkerReason reason)
     {
         if (typeSymbol == null)
         {
@@ -132,21 +141,20 @@ internal static class AccessorEligibility
 
         if (typeSymbol.TypeKind == TypeKind.Error)
         {
-            reason = role
-                + " '"
-                + typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
-                + "' could not be resolved (missing using directive, typo, or a type that is not compiled yet).";
+            reason = WorkerReason.Of(
+                code,
+                typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat));
             return true;
         }
 
         if (typeSymbol is IPointerTypeSymbol pointerType)
         {
-            return TryDescribeUnresolvedType(pointerType.PointedAtType, role, out reason);
+            return TryDescribeUnresolvedType(pointerType.PointedAtType, code, out reason);
         }
 
         if (typeSymbol is IArrayTypeSymbol arrayType)
         {
-            return TryDescribeUnresolvedType(arrayType.ElementType, role, out reason);
+            return TryDescribeUnresolvedType(arrayType.ElementType, code, out reason);
         }
 
         INamedTypeSymbol namedType = typeSymbol as INamedTypeSymbol;
@@ -158,7 +166,7 @@ internal static class AccessorEligibility
 
         foreach (ITypeSymbol typeArgument in namedType.TypeArguments)
         {
-            if (TryDescribeUnresolvedType(typeArgument, role, out reason))
+            if (TryDescribeUnresolvedType(typeArgument, code, out reason))
             {
                 return true;
             }
@@ -171,7 +179,7 @@ internal static class AccessorEligibility
     private static bool AreBodyTypeUsagesVisible(
         SemanticModel semanticModel,
         SyntaxNode bodyNode,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
@@ -203,9 +211,9 @@ internal static class AccessorEligibility
 
             if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol))
             {
-                rejectReason = "body uses a type that is not visible from an external assembly: "
-                    + typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                    + " (condition c).";
+                rejectReason = WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AccessorBodyTypeNotVisible,
+                    typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                 return false;
             }
         }

@@ -36,10 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 progressed = false;
                 foreach (TransformWorkerSkippedDto row in retryOnlyRows)
                 {
-                    if (!string.Equals(
-                        row.reason,
-                        HotReloadConstants.UnavailableAddedCallSkipReason,
-                        StringComparison.Ordinal))
+                    if (row.reason.code != HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall)
                     {
                         continue;
                     }
@@ -50,7 +47,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    row.reason = HotReloadConstants.IsolatedAddedMethodCallerSkipReason;
+                    row.reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.EditorIsolatedAddedMethodCaller
+                    };
                     progressed = true;
                     if (!string.IsNullOrEmpty(row.methodKey))
                     {

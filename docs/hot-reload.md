@@ -47,6 +47,13 @@ Harmony transpiler transplant  (5) patch the original method with a transpiler t
                                    DynamicMethod replacement
 ```
 
+Skip reasons and introduced-type diagnostics leave the worker as a reason `code` plus its
+`args` (and an optional free-form detail), never as a sentence. Only the Editor's
+`HotReloadWorkerReasonText` turns those into the English a caller reads, so a wording change
+touches one renderer instead of both processes. `TransformWorkerDtoSyncTests` compares the
+worker's payload types against the Editor's data transfer objects field by field, so a field
+added on one side alone fails a test rather than silently serializing to nothing.
+
 Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point's ID).
 Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/Worker/<sourceHash>/`, and

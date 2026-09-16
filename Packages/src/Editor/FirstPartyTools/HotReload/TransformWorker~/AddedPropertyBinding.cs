@@ -46,7 +46,7 @@ internal sealed class AddedPropertyBinding
 
     public ExpressionSyntax Initializer { get; set; }
 
-    public string UnavailableReason { get; set; }
+    public WorkerReason UnavailableReason { get; set; }
 
     public PropertyDeclarationSyntax Declaration { get; set; }
 

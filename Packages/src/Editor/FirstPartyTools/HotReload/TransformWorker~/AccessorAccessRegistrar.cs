@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class AccessorAccessRegistrar
 {
@@ -26,7 +27,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         SyntaxNode node,
         AccessorPlan plan,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
 
@@ -81,14 +82,14 @@ internal static class AccessorAccessRegistrar
     internal static bool TryRegisterObjectCreation(
         SemanticModel semanticModel,
         SyntaxNode node,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
         if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
         {
             rejectReason =
-                "inaccessible constructor call has no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConstructorCallNoShape);
             return false;
         }
 
@@ -98,7 +99,7 @@ internal static class AccessorAccessRegistrar
     internal static bool TryRegisterInitializerAssignment(
         SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         // Initializer assignments are always writes (including ImplicitElementAccess indexers).
@@ -110,8 +111,7 @@ internal static class AccessorAccessRegistrar
         if (inaccessibleWrite)
         {
             rejectReason =
-                "inaccessible member assignment in an object/collection initializer has no "
-                + "accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorInitializerAssignmentNoShape);
             return false;
         }
 
@@ -121,7 +121,7 @@ internal static class AccessorAccessRegistrar
     internal static bool TryRegisterElementAccess(
         SemanticModel semanticModel,
         ElementAccessExpressionSyntax elementAccess,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         // Assignment-left ElementAccess is owned by the assignment branch (write context).
@@ -138,13 +138,13 @@ internal static class AccessorAccessRegistrar
             if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
             {
                 rejectReason =
-                    "inaccessible indexer access has no accessor rewrite shape.";
+                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorIndexerNoShape);
                 return false;
             }
         }
         else if (symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
         {
-            rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorIndexerNoShape);
             return false;
         }
 
@@ -154,7 +154,7 @@ internal static class AccessorAccessRegistrar
     internal static bool TryRegisterMemberBinding(
         SemanticModel semanticModel,
         MemberBindingExpressionSyntax memberBinding,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         ISymbol bound = semanticModel.GetSymbolInfo(memberBinding.Name).Symbol;
@@ -164,7 +164,7 @@ internal static class AccessorAccessRegistrar
             && IsInaccessibleBindingTarget(bound))
         {
             rejectReason =
-                "inaccessible member access via conditional access has no rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalAccessNoShape);
             return false;
         }
 
@@ -175,7 +175,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         MemberAccessExpressionSyntax memberAccess,
         AccessorPlan plan,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         // Method-group invocation targets are owned by the invocation branch; delegate-typed
@@ -197,7 +197,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        return TryRegisterPropertyOrFieldRead(
+        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
             semanticModel.GetSymbolInfo(memberAccess).Symbol
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
@@ -208,7 +208,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         SimpleNameSyntax name,
         AccessorPlan plan,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         if (AccessorEligibility.IsNameHandledByParent(name))
@@ -234,7 +234,7 @@ internal static class AccessorAccessRegistrar
             }
         }
 
-        return TryRegisterPropertyOrFieldRead(
+        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
             semanticModel.GetSymbolInfo(name).Symbol,
             plan,
             out rejectReason);
@@ -255,7 +255,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment,
         AccessorPlan plan,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
@@ -296,7 +296,7 @@ internal static class AccessorAccessRegistrar
 
             if (!EventAccessorRules.IsBackingFieldWrite(assignment))
             {
-                rejectReason = "compound assignment to an event has no accessor rewrite shape.";
+                rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape);
                 return false;
             }
 
@@ -311,7 +311,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         InvocationExpressionSyntax invocation,
         AccessorPlan plan,
-        out string rejectReason)
+        out WorkerReason rejectReason)
     {
         rejectReason = null;
         if (NameofRules.IsNameofInvocation(invocation))
@@ -337,20 +337,20 @@ internal static class AccessorAccessRegistrar
 
         if (methodSymbol.IsExtensionMethod)
         {
-            rejectReason = "inaccessible extension method calls are not rewritten.";
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
             return false;
         }
 
         if (methodSymbol.IsGenericMethod)
         {
-            rejectReason = "inaccessible generic method calls are not rewritten.";
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten);
             return false;
         }
 
         if (methodSymbol.ReturnsByRef || methodSymbol.ReturnsByRefReadonly)
         {
             rejectReason =
-                "inaccessible methods that return by ref have no accessor rewrite shape.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape);
             return false;
         }
 
@@ -359,7 +359,7 @@ internal static class AccessorAccessRegistrar
             if (parameter.RefKind != RefKind.None)
             {
                 rejectReason =
-                    "inaccessible method calls with ref/out/in parameters are not rewritten.";
+                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten);
                 return false;
             }
         }
@@ -369,7 +369,7 @@ internal static class AccessorAccessRegistrar
             if (argument.NameColon != null)
             {
                 rejectReason =
-                    "inaccessible method calls with named arguments are not rewritten.";
+                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten);
                 return false;
             }
         }
@@ -377,102 +377,11 @@ internal static class AccessorAccessRegistrar
         if (invocation.ArgumentList.Arguments.Count != methodSymbol.Parameters.Length)
         {
             rejectReason =
-                "inaccessible method calls with omitted optional or expanded params arguments "
-                + "are not rewritten.";
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
             return false;
         }
 
         plan.GetOrAddMethod(methodSymbol);
-        return true;
-    }
-
-    internal static bool TryRegisterPropertyOrFieldRead(
-        ISymbol symbol,
-        AccessorPlan plan,
-        out string rejectReason)
-    {
-        rejectReason = null;
-        if (symbol is IFieldSymbol fieldSymbol)
-        {
-            if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
-            {
-                return false;
-            }
-
-            if (fieldSymbol.IsConst)
-            {
-                return true;
-            }
-
-            plan.GetOrAddField(fieldSymbol);
-            return true;
-        }
-
-        if (symbol is IPropertySymbol propertySymbol)
-        {
-            if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
-            {
-                return false;
-            }
-
-            return TryRegisterPropertyRead(propertySymbol, plan, out rejectReason);
-        }
-
-        if (symbol is IEventSymbol eventSymbol)
-        {
-            plan.GetOrAddEventBackingField(eventSymbol);
-            return true;
-        }
-
-        if (symbol is IMethodSymbol methodSymbol
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
-        {
-            rejectReason =
-                "inaccessible method group (non-invocation) has no accessor rewrite shape.";
-            return false;
-        }
-
-        if (symbol != null
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol)
-            && symbol is not INamespaceSymbol
-            && symbol is not ITypeSymbol
-            && symbol is not ILocalSymbol
-            && symbol is not IParameterSymbol)
-        {
-            rejectReason = "inaccessible member kind is not field/method/property access.";
-            return false;
-        }
-
-        return false;
-    }
-
-    internal static bool TryRegisterPropertyRead(
-        IPropertySymbol propertySymbol,
-        AccessorPlan plan,
-        out string rejectReason)
-    {
-        rejectReason = null;
-        if (propertySymbol.IsIndexer)
-        {
-            rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
-            return false;
-        }
-
-        if (propertySymbol.IsStatic)
-        {
-            rejectReason =
-                "inaccessible static property access has no accessor rewrite shape.";
-            return false;
-        }
-
-        if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
-        {
-            rejectReason =
-                "inaccessible ref-returning properties have no accessor rewrite shape.";
-            return false;
-        }
-
-        plan.GetOrAddPropertyGetter(propertySymbol);
         return true;
     }
 }

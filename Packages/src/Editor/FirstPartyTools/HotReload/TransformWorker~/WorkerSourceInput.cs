@@ -15,7 +15,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-// Keep in sync with TransformWorkerDtos.cs TransformWorkerSourceDto.
 internal sealed class WorkerSourceInput
 {
     // Absolute path the worker reads the edited text from. May be a temp override copy.

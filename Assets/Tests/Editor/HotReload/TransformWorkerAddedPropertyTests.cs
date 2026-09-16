@@ -1026,7 +1026,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (skipped.method != null
                     && skipped.method.IndexOf(methodNameFragment, StringComparison.Ordinal) >= 0)
                 {
-                    return skipped.reason;
+                    return HotReloadWorkerReasonText.Render(skipped.reason);
                 }
             }
 
@@ -1043,7 +1043,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> rows = new List<string>();
             foreach (TransformWorkerSkippedDto entry in skipped)
             {
-                rows.Add(entry.method + " :: " + entry.reason);
+                rows.Add(
+                    entry.method + " :: "
+                    + (entry.reason == null
+                        ? "(no reason)"
+                        : HotReloadWorkerReasonText.Render(entry.reason)));
             }
 
             return string.Join("\n", rows);

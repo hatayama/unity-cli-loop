@@ -4,13 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // Decides when an added field must be left to a full compile rather than patched: the body that
 // touches it may run before the field exists, and its initializer may name things the shim cannot
 // see. Kept apart from classifying the field itself so each reads on its own.
 internal static class AddedFieldSkipEvaluator
 {
-    internal static string EvaluateAddedFieldSkipReason(
+    internal static WorkerReason EvaluateAddedFieldSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedFieldCatalog addedFieldCatalog)
@@ -20,7 +21,7 @@ internal static class AddedFieldSkipEvaluator
             return null;
         }
 
-        string unavailable = AddedFieldBodyScan.BodyReferencesUnavailableAddedField(bodyNode, semanticModel, addedFieldCatalog);
+        WorkerReason unavailable = AddedFieldBodyScan.BodyReferencesUnavailableAddedField(bodyNode, semanticModel, addedFieldCatalog);
         if (unavailable != null)
         {
             return unavailable;
@@ -28,32 +29,32 @@ internal static class AddedFieldSkipEvaluator
 
         if (AddedFieldBodyScan.BodyPassesAddedFieldByRef(bodyNode, semanticModel, addedFieldCatalog))
         {
-            return AddedFieldSkipReasons.RefOutIn;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldRefOutIn);
         }
 
         if (AddedFieldBodyScan.BodyHasUnsupportedAddedFieldCompound(bodyNode, semanticModel, addedFieldCatalog))
         {
-            return AddedFieldSkipReasons.UnavailableAddedField;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField);
         }
 
         if (AddedFieldBodyScan.BodyHasNonNumericAddedFieldIncrement(bodyNode, semanticModel, addedFieldCatalog))
         {
-            return AddedFieldSkipReasons.IncrementNotNumeric;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldIncrementNotNumeric);
         }
 
         if (AddedFieldBodyScan.BodyHasConsumedAddedFieldWrite(bodyNode, semanticModel, addedFieldCatalog))
         {
-            return AddedFieldSkipReasons.ConsumedWrite;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldConsumedWrite);
         }
 
         if (AddedFieldBodyScan.BodyHasDoubleEvalAddedFieldReceiver(bodyNode, semanticModel, addedFieldCatalog))
         {
-            return AddedFieldSkipReasons.DoubleEvalReceiver;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver);
         }
 
-        if (AddedFieldBodyScan.BodyHasValueTypeAddedFieldMemberWrite(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldValueTypeWriteScan.BodyHasValueTypeAddedFieldMemberWrite(bodyNode, semanticModel, addedFieldCatalog))
         {
-            return AddedFieldSkipReasons.ValueTypeMemberWrite;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite);
         }
 
         return null;

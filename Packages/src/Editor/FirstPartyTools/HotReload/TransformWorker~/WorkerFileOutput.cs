@@ -14,8 +14,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
-// Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.
 internal sealed class WorkerFileOutput
 {
     // Echoes WorkerSourceInput.ProjectRelativePath of the source this row set describes.
@@ -39,12 +39,9 @@ internal sealed class WorkerFileOutput
 
     public string[] AddedConstNames { get; set; }
 
-    // Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.introducedTypes.
     public WorkerIntroducedType[] IntroducedTypes { get; set; }
 
-    // Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.introducedTypeDiagnostics.
-    public string[] IntroducedTypeDiagnostics { get; set; }
+    public WorkerReason[] IntroducedTypeDiagnostics { get; set; }
 
-    // Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.introducedTypeReuses.
     public WorkerIntroducedTypeReuse[] IntroducedTypeReuses { get; set; }
 }

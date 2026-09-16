@@ -175,17 +175,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadIntroducedTypeNotice> notices = new List<HotReloadIntroducedTypeNotice>();
             foreach (TransformWorkerFileOutputDto file in output.files)
             {
-                foreach (string diagnostic in file.introducedTypeDiagnostics)
+                foreach (TransformWorkerReasonDto diagnostic in file.introducedTypeDiagnostics)
                 {
-                    if (diagnostic == null
-                        || diagnostic.StartsWith(
-                            HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix,
-                            StringComparison.Ordinal))
+                    if (diagnostic.code == HotReloadWorkerReasonCode.IntroducedTypeChanged)
                     {
                         continue;
                     }
 
-                    notices.Add(new HotReloadIntroducedTypeNotice(file.projectRelativePath, diagnostic));
+                    notices.Add(
+                        new HotReloadIntroducedTypeNotice(
+                            file.projectRelativePath,
+                            HotReloadWorkerReasonText.Render(diagnostic)));
                 }
             }
 
@@ -199,24 +199,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadIntroducedTypeOutcome> failures = new List<HotReloadIntroducedTypeOutcome>();
             foreach (TransformWorkerFileOutputDto file in output.files)
             {
-                foreach (string diagnostic in file.introducedTypeDiagnostics)
+                foreach (TransformWorkerReasonDto diagnostic in file.introducedTypeDiagnostics)
                 {
-                    if (diagnostic == null
-                        || !diagnostic.StartsWith(
-                            HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix,
-                            StringComparison.Ordinal))
+                    if (diagnostic.code != HotReloadWorkerReasonCode.IntroducedTypeChanged)
                     {
                         continue;
                     }
 
                     failures.Add(
                         HotReloadIntroducedTypeOutcome.Failed(
-                            diagnostic
-                                .Substring(HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix.Length)
-                                .Trim(),
+                            diagnostic.args[0],
                             targetAssemblyName,
                             file.projectRelativePath,
-                            diagnostic));
+                            HotReloadWorkerReasonText.Render(diagnostic)));
                 }
             }
 

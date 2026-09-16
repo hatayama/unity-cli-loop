@@ -21,7 +21,6 @@ internal sealed class WorkerInput
     public string Operation { get; set; }
 
     // Edited files this run transforms together; all belong to the same compilation assembly.
-    // Keep in sync with TransformWorkerDtos.cs TransformWorkerInputDto.sources.
     public WorkerSourceInput[] Sources { get; set; }
 
     public string[] Defines { get; set; }

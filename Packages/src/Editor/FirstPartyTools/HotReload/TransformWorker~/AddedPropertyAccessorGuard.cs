@@ -41,7 +41,7 @@ internal static class AddedPropertyAccessorGuard
                 continue;
             }
 
-            string reason = FindAccessorSkipReason(
+            WorkerReason reason = FindAccessorSkipReason(
                 binding,
                 typeState,
                 addedMethodCatalog,
@@ -79,7 +79,7 @@ internal static class AddedPropertyAccessorGuard
         return null;
     }
 
-    private static string FindAccessorSkipReason(
+    private static WorkerReason FindAccessorSkipReason(
         AddedPropertyBinding binding,
         TypeEmitState typeState,
         AddedMethodCatalog addedMethodCatalog,
@@ -103,7 +103,7 @@ internal static class AddedPropertyAccessorGuard
         {
             SyntaxNode bodyNode = (SyntaxNode)accessor.Body ?? accessor.ExpressionBody;
             bool isGetter = accessor.IsKind(SyntaxKind.GetAccessorDeclaration);
-            string reason = EvaluateAccessor(
+            WorkerReason reason = EvaluateAccessor(
                 binding,
                 isGetter ? binding.Getter : binding.Setter,
                 isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod,
@@ -121,7 +121,7 @@ internal static class AddedPropertyAccessorGuard
         return null;
     }
 
-    private static string EvaluateAccessor(
+    private static WorkerReason EvaluateAccessor(
         AddedPropertyBinding binding,
         AddedMethodBinding accessorBinding,
         IMethodSymbol accessorSymbol,
@@ -161,7 +161,7 @@ internal static class AddedPropertyAccessorGuard
         }
 
         SetAccessorDecision(binding, accessorBinding, decision);
-        (string callSiteReason, _) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
+        (WorkerReason callSiteReason, _) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
             bodyNode,
             typeState.SourceUnit.SemanticModel,
             addedMethodCatalog,

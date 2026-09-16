@@ -36,12 +36,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Editor/FirstPartyTools/HotReload/TransformWorker~";
 
         // Package-relative sources compiled into the worker in addition to the tilde directory.
-        // Why: the resident-mode line protocol and the introduced-type fingerprint are shared
-        // verbatim between the Editor host and the worker so the two ends cannot drift apart.
+        // Why: the resident-mode line protocol, the introduced-type fingerprint and the reason
+        // code the worker reports are shared verbatim between the Editor host and the worker so
+        // the two ends cannot drift apart.
         public static readonly string[] WorkerSharedSourcePackageRelativePaths =
         {
             "Editor/FirstPartyTools/HotReload/Shared/TransformWorkerServeProtocol.cs",
-            "Editor/FirstPartyTools/HotReload/Shared/HotReloadIntroducedTypeFingerprint.cs"
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadIntroducedTypeFingerprint.cs",
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonCode.cs"
         };
 
         public const string WorkerDllFileName = "worker.dll";
@@ -72,13 +74,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "the shim assembly. Members referenced from other assemblies, or from files that are "
             + "neither passed to this reload nor already hot-reloaded, still require a real compile "
             + "(uloop compile).";
-
-        // Keep in sync with IntroducedTypePlanner.IsAlreadyIntroduced in the transform worker,
-        // which emits the diagnostic this prefix identifies. The preparation stage turns that one
-        // diagnostic into a run failure, because proceeding would bind callers against the
-        // retained definition the source no longer declares.
-        public const string ChangedIntroducedTypeDiagnosticPrefix =
-            "Changed introduced type requires a compile: ";
 
         public const string ActiveSiblingsRebindWarningFormat =
             "Also re-applied {0} unchanged file(s) with active patches in assembly '{1}' so their "
@@ -116,11 +111,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string IsolatedAddedMethodCallerSkipReason =
             "Calls an added method whose shim failed to compile; the caller was left unpatched. "
             + "Fix the compile error in the added method (see the Failed row in this response) and reload again, or run 'uloop compile'.";
-
-        // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in
-        // TransformWorker~/AddedMethodSkipReasons.cs.
-        public const string UnavailableAddedCallSkipReason =
-            "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
         public const string SignatureChangedGateSkipReasonFormat =
             "The return type of '{0}' changed, but this hot reload does not patch every compiled call site of the old method. Applying it would leave those call sites on the old version. Run 'uloop compile'.";

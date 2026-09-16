@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class AddedFieldClassifier
 {
@@ -92,7 +93,7 @@ internal static class AddedFieldClassifier
             Initializer = variable.Initializer != null ? variable.Initializer.Value : null
         };
 
-        string declarationChangeReason = CompiledMemberMatcher.TryFormatCompiledFieldDeclarationChangeReason(
+        WorkerReason declarationChangeReason = CompiledMemberMatcher.TryBuildCompiledFieldDeclarationChangeReason(
             fieldMatch,
             fieldSymbol.Name);
         if (declarationChangeReason != null)
@@ -128,7 +129,7 @@ internal static class AddedFieldClassifier
         addedFieldCatalog.Register(binding);
     }
 
-    internal static string EvaluateAddedFieldAvailability(
+    internal static WorkerReason EvaluateAddedFieldAvailability(
         INamedTypeSymbol hostType,
         SemanticModel semanticModel,
         WorkerTypeHome home,
@@ -140,7 +141,7 @@ internal static class AddedFieldClassifier
         {
             if (ConstantLiteralFactory.TryCreateConstantLiteral(binding.ConstantValue, fieldSymbol.Type) == null)
             {
-                return AddedFieldSkipReasons.UnavailableAddedField;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField);
             }
 
             return null;
@@ -208,7 +209,7 @@ internal static class AddedFieldClassifier
     }
 
     /// <summary>Words a store outcome as the skip reason an added field reports.</summary>
-    private static string DescribeStoreAvailability(
+    private static WorkerReason DescribeStoreAvailability(
         AddedFieldStoreAvailability availability,
         ITypeSymbol unresolvedType)
     {
@@ -217,16 +218,15 @@ internal static class AddedFieldClassifier
             case AddedFieldStoreAvailability.Available:
                 return null;
             case AddedFieldStoreAvailability.StructHost:
-                return AddedFieldSkipReasons.StructHost;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldStructHost);
             case AddedFieldStoreAvailability.ValueTypeUnresolved:
-                return string.Format(
-                    CultureInfo.InvariantCulture,
-                    AddedFieldSkipReasons.FieldTypeUnresolvedFormat,
+                return WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedFieldFieldTypeUnresolved,
                     unresolvedType.ToDisplayString());
             case AddedFieldStoreAvailability.ValueTypeNotExternallyVisible:
-                return AddedFieldSkipReasons.FieldTypeNotExternallyVisible;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldFieldTypeNotExternallyVisible);
             default:
-                return AddedFieldSkipReasons.InitializerNotLiteralOrExternalStatic;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic);
         }
     }
 
