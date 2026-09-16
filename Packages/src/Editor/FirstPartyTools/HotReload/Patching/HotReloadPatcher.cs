@@ -303,6 +303,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.ListActiveFilePaths();
         }
 
+        /// <summary>
+        /// The live patches on the methods one assembly declares on one type, so a run can peel
+        /// what an earlier reload left on a retained declaration its source no longer edits.
+        /// </summary>
+        public IReadOnlyList<MethodBase> ListActiveMethodsDeclaredBy(
+            System.Reflection.Assembly assembly,
+            HotReloadReflectionTypeName reflectionTypeName)
+        {
+            return _domain.ListActiveMethodsDeclaredBy(assembly, reflectionTypeName);
+        }
+
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
             IEnumerable<CodeInstruction> instructions,
             ILGenerator generator,

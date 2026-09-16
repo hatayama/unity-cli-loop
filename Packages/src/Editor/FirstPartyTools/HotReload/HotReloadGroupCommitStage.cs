@@ -18,24 +18,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadFileEntryApplier _fileEntryApplier;
         private readonly HotReloadEntryApplier _entryApplier;
         private readonly HotReloadGroupCommitPolicy _commitPolicy;
+        private readonly HotReloadRetainedTypePatchReverter _retainedTypePatchReverter;
 
         internal HotReloadGroupCommitStage(
             HotReloadDomain domain,
             HotReloadGroupProcessorDependencies dependencies,
             HotReloadFileEntryApplier fileEntryApplier,
             HotReloadEntryApplier entryApplier,
-            HotReloadGroupCommitPolicy commitPolicy)
+            HotReloadGroupCommitPolicy commitPolicy,
+            HotReloadRetainedTypePatchReverter retainedTypePatchReverter)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(dependencies != null, "dependencies must not be null.");
             Debug.Assert(fileEntryApplier != null, "fileEntryApplier must not be null.");
             Debug.Assert(entryApplier != null, "entryApplier must not be null.");
             Debug.Assert(commitPolicy != null, "commitPolicy must not be null.");
+            Debug.Assert(
+                retainedTypePatchReverter != null,
+                "retainedTypePatchReverter must not be null.");
             _domain = domain;
             _dependencies = dependencies;
             _fileEntryApplier = fileEntryApplier;
             _entryApplier = entryApplier;
             _commitPolicy = commitPolicy;
+            _retainedTypePatchReverter = retainedTypePatchReverter;
         }
 
         internal bool HoldsUnresolvedFile(IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
@@ -103,6 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _entryApplier.RevertUnchangedPatchesPerFile(
                     files,
                     HotReloadWorkerRowsByFile.Build(context.WorkerOutput, context.ProjectRelativePaths));
+                // Why two peels and not one: a method whose body the compiled assembly already
+                // runs is an unchanged method of this run's worker output, but a method whose body
+                // a retained artifact already runs belongs to a declaration the preparation bound,
+                // so the leftover patches of the two are known from different places.
+                _retainedTypePatchReverter.RevertRestoredBodiesPerFile(
+                    files,
+                    context.WorkerInput.targetAssemblyName,
+                    context.WorkerInput.targetAssemblyMvid);
             }
 
             if (preparedFiles == null)
