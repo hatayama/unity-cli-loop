@@ -603,6 +603,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             Assert.That(reason, Does.Contain("order"));
         }
 
+        /// <summary>What: removing one member while adding another asks for a compile and names
+        /// both, because the removal is refused on its own account rather than by the order the
+        /// insertion shifts.</summary>
+        [Test]
+        public async Task Plan_RemovedMethodWithAnAddedMethod_RequiresACompileAndNamesBoth()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5RemoveAndAdd",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + AddedMethodMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
+            Assert.That(reason, Does.Contain("removed:"));
+            Assert.That(reason, Does.Contain("added:"));
+        }
+
         /// <summary>
         /// Writes a retained declaration out of the members a test cares about, so each test
         /// spells only what differs from the recorded declaration.
