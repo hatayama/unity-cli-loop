@@ -83,14 +83,15 @@ internal static class AddedFieldSkipEvaluator
 
 
     // Why this gate (not inaccessible-only): the initializer is spliced into a static lambda on
-    // a shim type, so even public instance members of the host are CS0103 / CS0026, and
-    // same-file added members do not exist on the compiled type the shim references.
+    // a shim type, so even public instance members of the host are CS0103 / CS0026, and a member
+    // this edit adds in the same file is on neither the compiled type nor the retained artifact
+    // the shim references.
     internal static bool InitializerCannotEmitInShimLambda(
         ExpressionSyntax initializer,
         SemanticModel semanticModel,
         INamedTypeSymbol hostType,
         WorkerTypeHome home,
-        IntroducedTypeArtifactMap artifactMap)
+        WorkerSourceUnit sourceUnit)
     {
         foreach (SyntaxNode node in initializer.DescendantNodesAndSelf())
         {
@@ -109,7 +110,7 @@ internal static class AddedFieldSkipEvaluator
             // leaves GetSymbolInfo without a symbol, so the general check would let it through.
             if (node is ObjectCreationExpressionSyntax creation)
             {
-                if (!IsIntroducedTypeConstruction(creation, semanticModel, artifactMap))
+                if (!IsIntroducedTypeConstruction(creation, semanticModel, sourceUnit))
                 {
                     return true;
                 }
@@ -121,7 +122,8 @@ internal static class AddedFieldSkipEvaluator
                 semanticModel.GetSymbolInfo(node).Symbol,
                 hostType,
                 home,
-                initializer.SyntaxTree))
+                semanticModel,
+                sourceUnit))
             {
                 return true;
             }
@@ -137,8 +139,9 @@ internal static class AddedFieldSkipEvaluator
     private static bool IsIntroducedTypeConstruction(
         ObjectCreationExpressionSyntax creation,
         SemanticModel semanticModel,
-        IntroducedTypeArtifactMap artifactMap)
+        WorkerSourceUnit sourceUnit)
     {
+        IntroducedTypeArtifactMap artifactMap = sourceUnit?.ArtifactMap;
         if (artifactMap == null)
         {
             return false;
@@ -182,7 +185,8 @@ internal static class AddedFieldSkipEvaluator
         ISymbol symbol,
         INamedTypeSymbol hostType,
         WorkerTypeHome home,
-        SyntaxTree currentTree)
+        SemanticModel semanticModel,
+        WorkerSourceUnit sourceUnit)
     {
         if (symbol == null
             || symbol is INamespaceSymbol
@@ -212,7 +216,7 @@ internal static class AddedFieldSkipEvaluator
             return true;
         }
 
-        if (AddedFieldClassifier.IsSameFileAddedMember(symbol, home, currentTree))
+        if (AddedFieldClassifier.IsSameFileAddedMember(symbol, home, semanticModel, sourceUnit))
         {
             return true;
         }
