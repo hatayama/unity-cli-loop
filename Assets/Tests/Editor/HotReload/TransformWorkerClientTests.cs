@@ -3104,6 +3104,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that preparation rejects a null introduced-type diagnostic, which would
+        /// otherwise reach the renderer and be reported to the user as no sentence at all.
+        /// </summary>
+        [Test]
+        public void InterpretOutput_PrepareNullIntroducedTypeDiagnostic_ReturnsFailure()
+        {
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(
+                BuildPrepareInputForDiagnostics(),
+                BuildPrepareOutputWithDiagnostics(new TransformWorkerReasonDto[] { null }));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("null introduced-type diagnostic"));
+        }
+
+        /// <summary>
+        /// Verifies that preparation rejects a changed-introduced-type diagnostic that names no
+        /// type, because the Editor reads that name straight out of the diagnostic's arguments.
+        /// </summary>
+        [Test]
+        public void InterpretOutput_PrepareChangedDiagnosticWithoutTypeName_ReturnsFailure()
+        {
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(
+                BuildPrepareInputForDiagnostics(),
+                BuildPrepareOutputWithDiagnostics(new[]
+                {
+                    new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.IntroducedTypeChanged
+                    }
+                }));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("changed introduced-type diagnostic"));
+        }
+
+        private static TransformWorkerInputDto BuildPrepareInputForDiagnostics()
+        {
+            return new TransformWorkerInputDto
+            {
+                operation = "prepareIntroducedTypes",
+                targetAssemblyName = "Assembly",
+                targetAssemblyMvid = "mvid",
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
+                }
+            };
+        }
+
+        private static TransformWorkerOutputDto BuildPrepareOutputWithDiagnostics(
+            TransformWorkerReasonDto[] diagnostics)
+        {
+            return new TransformWorkerOutputDto
+            {
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = "Assets/Edited.cs",
+                        introducedTypes = Array.Empty<TransformWorkerIntroducedTypeDto>(),
+                        introducedTypeDiagnostics = diagnostics,
+                        introducedTypeReuses = Array.Empty<TransformWorkerIntroducedTypeReuseDto>()
+                    }
+                }
+            };
+        }
+
+        /// <summary>
         /// Verifies that preparation rejects a descriptor with a mismatched assembly name when
         /// its owner and assembly MVID match the input row.
         /// </summary>

@@ -14,27 +14,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadWorkerReasonTextTests
     {
-        // No sentence in the table takes more values than this; the coverage test only has to
-        // try shapes up to it.
-        private const int MaxTemplatePlaceholders = 3;
-
         /// <summary>
-        /// What: every reason code has a template, so rendering it with the arguments its
-        /// sentence declares never throws.
+        /// What: every reason code has a byte-match case below, so a code added without a
+        /// sentence - or a case left behind after a code was removed - fails here.
         /// </summary>
         [Test]
-        public void Render_EveryReasonCode_HasATemplate()
+        public void RenderCases_CoverEveryReasonCode()
         {
-            List<string> failures = new List<string>();
-            foreach (HotReloadWorkerReasonCode code in Enum.GetValues(typeof(HotReloadWorkerReasonCode)))
+            HashSet<string> declared = new HashSet<string>(
+                Enum.GetNames(typeof(HotReloadWorkerReasonCode)),
+                StringComparer.Ordinal);
+            HashSet<string> covered = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TestCaseData testCase in RenderCases())
             {
-                if (!TryRenderInAnyShape(code, out string lastError))
-                {
-                    failures.Add(code + ": " + lastError);
-                }
+                covered.Add((string)testCase.Arguments[0]);
             }
 
-            Assert.That(failures, Is.Empty, string.Join("\n", failures));
+            List<string> missing = new List<string>(declared);
+            missing.RemoveAll(covered.Contains);
+            missing.Sort(StringComparer.Ordinal);
+            List<string> unknown = new List<string>(covered);
+            unknown.RemoveAll(declared.Contains);
+            unknown.Sort(StringComparer.Ordinal);
+
+            Assert.That(
+                missing,
+                Is.Empty,
+                "reason codes with no expected sentence: " + string.Join(", ", missing));
+            Assert.That(
+                unknown,
+                Is.Empty,
+                "expected sentences for codes that no longer exist: " + string.Join(", ", unknown));
         }
 
         /// <summary>
@@ -118,53 +128,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 HotReloadWorkerReasonText.Render(withNull),
                 Is.EqualTo(HotReloadWorkerReasonText.Render(withEmpty)));
-        }
-
-        // Whether the template table answers for this code at all. The renderer exposes only
-        // Render, so the shapes a code accepts are discovered by trying them: a code missing
-        // from the table fails every shape, while a code that is present succeeds in exactly
-        // the one its template declares.
-        private static bool TryRenderInAnyShape(HotReloadWorkerReasonCode code, out string lastError)
-        {
-            lastError = "no shape was attempted.";
-            for (int argumentCount = 0; argumentCount <= MaxTemplatePlaceholders; argumentCount++)
-            {
-                string[] args = new string[argumentCount];
-                for (int index = 0; index < argumentCount; index++)
-                {
-                    args[index] = "A" + index;
-                }
-
-                foreach (TransformWorkerReasonDto detail in DetailShapes())
-                {
-                    TransformWorkerReasonDto reason = new TransformWorkerReasonDto
-                    {
-                        code = code,
-                        args = args,
-                        detail = detail
-                    };
-                    try
-                    {
-                        HotReloadWorkerReasonText.Render(reason);
-                        return true;
-                    }
-                    catch (Exception exception)
-                    {
-                        lastError = exception.GetType().Name + ": " + exception.Message;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        private static IEnumerable<TransformWorkerReasonDto> DetailShapes()
-        {
-            yield return null;
-            yield return new TransformWorkerReasonDto
-            {
-                code = HotReloadWorkerReasonCode.IntroducedTypeSymbolUnresolved
-            };
         }
 
         private static IEnumerable<TestCaseData> RenderCases()

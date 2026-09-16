@@ -212,6 +212,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errorMessage = "Preparation output must not contain a null introduced-type diagnostic.";
                     return false;
                 }
+
+                // Why only this code is checked here: it is the one diagnostic the Editor acts
+                // on, and it reads the redefined type's metadata name straight out of args[0].
+                if (diagnostic.code != HotReloadWorkerReasonCode.IntroducedTypeChanged)
+                {
+                    continue;
+                }
+
+                if (diagnostic.args == null
+                    || diagnostic.args.Length != 1
+                    || string.IsNullOrEmpty(diagnostic.args[0]))
+                {
+                    errorMessage =
+                        "Preparation output must name the type of a changed introduced-type diagnostic.";
+                    return false;
+                }
             }
 
             foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
