@@ -114,7 +114,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 dependencies,
                 fileEntryApplier,
                 entryApplier,
-                collaborators.CommitPolicy);
+                collaborators.CommitPolicy,
+                new HotReloadRetainedTypePatchReverter(patcher, domain.IntroducedTypes));
             HotReloadGroupProcessor groupProcessor = new HotReloadGroupProcessor(
                 dependencies,
                 collaborators,

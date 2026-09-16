@@ -24,9 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string artifactId = Guid.NewGuid().ToString("N");
             string directory = Path.Combine(
                 projectRoot,
-                "Library",
-                "UloopHotReload",
-                "IntroducedTypes",
+                HotReloadConstants.IntroducedTypeArtifactsRelativeDirectory,
                 sessionId,
                 artifactId);
             string assemblyName = "UloopIntroducedTypes_" + artifactId;

@@ -204,7 +204,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (HotReloadIntroducedTypeResponseSection.TryBuildMessage(
                     result.IntroducedTypes,
                     hasMethodFailure,
-                    result.PatchedTotal + CountAddedOutcomes(result),
+                    result.PatchedTotal,
+                    CountAddedOutcomes(result),
                     out string typeMessage))
             {
                 return AppendWarningCount(typeMessage, warningCount, appendCompileResolution);

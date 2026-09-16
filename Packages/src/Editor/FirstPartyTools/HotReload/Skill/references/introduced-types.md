@@ -27,6 +27,7 @@ apply, and patches from earlier reloads stay active:
 | Condition | `Reason` starts with |
 |---|---|
 | The declaration of an already-introduced type changed | `Changed introduced type requires a compile:` |
+| A member body of an already-introduced type changed and is not an ordinary method body | `Changed member body of introduced type requires a compile:` |
 | Two files of the reload declare the same type | `Introduced type <type> is declared in more than one file of the group:` |
 | The artifact assembly did not compile | `Introduced-type compilation failed:` |
 
@@ -34,7 +35,8 @@ apply, and patches from earlier reloads stay active:
 
 - `Introduced` — this reload compiled and activated the declaration.
 - `AlreadyActive` — an earlier reload of this domain already holds it; this reload introduced
-  nothing for it. Not an error.
+  nothing for it. Not an error. Editing only the bodies of its ordinary methods keeps this row
+  and patches those bodies on the artifact that already carries the type.
 - `Failed` — refused; see the table above.
 - `ActiveIntroducedTypeTotal` counts the types the domain holds after the run, whatever the
   methods did. Type rows never count toward `PatchedTotal`, `ActivePatchTotal`,
@@ -59,8 +61,9 @@ discards the types with the patches; they are counted in `DroppedByPlayModeEntry
 later apply re-introduces them. With Enter Play Mode Options set to disable Domain Reload, the
 active changes and the introduced types survive Play entry and nothing is recorded as dropped.
 
-Values are not preserved across the reload that ends a type's life, and editing the body of a
-method **of** an introduced type is out of scope for this stage.
+Values are not preserved across the reload that ends a type's life. Body-only edits of an
+introduced type's ordinary methods are patched on the artifact assembly; constructor, accessor
+and initializer bodies and any member addition still require a compile.
 
 ## Still needs `uloop compile`
 

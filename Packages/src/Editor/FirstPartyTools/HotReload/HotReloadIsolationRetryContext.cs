@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -15,7 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             TransformWorkerSkippedDto[] firstPassSkipped,
             HotReloadGroupFilePaths groupFilePaths,
-            string correlationId)
+            string correlationId,
+            IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes)
         {
             WorkerInput = workerInput;
             CompilationAssembly = compilationAssembly;
@@ -24,6 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FirstPassSkipped = firstPassSkipped;
             GroupFilePaths = groupFilePaths;
             CorrelationId = correlationId;
+            IntroducedTypeArtifactHomes =
+                introducedTypeArtifactHomes ?? Array.Empty<HotReloadTypeHome>();
         }
 
         internal TransformWorkerInputDto WorkerInput { get; }
@@ -37,5 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal HotReloadGroupFilePaths GroupFilePaths { get; }
         internal string CorrelationId { get; }
+
+        // The retained artifact assemblies the retry's shim compile references, resolved once by
+        // the run that triggered the retry: the retry compiles the same group against them.
+        internal IReadOnlyList<HotReloadTypeHome> IntroducedTypeArtifactHomes { get; }
     }
 }

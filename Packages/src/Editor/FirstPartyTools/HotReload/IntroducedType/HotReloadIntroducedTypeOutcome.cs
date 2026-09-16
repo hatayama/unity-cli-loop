@@ -15,9 +15,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string metadataName,
             string originalAssemblyName,
             string ownerProjectRelativePath,
-            string reason)
+            string reason,
+            bool bodyEdited)
         {
             Kind = kind;
+            BodyEdited = bodyEdited;
             MetadataName = metadataName ?? string.Empty;
             OriginalAssemblyName = originalAssemblyName ?? string.Empty;
             OwnerProjectRelativePath = ownerProjectRelativePath ?? string.Empty;
@@ -35,6 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string Reason { get; }
 
+        /// <summary>
+        /// True when the run bound this type from an artifact whose method bodies the edited
+        /// source no longer matches. False for every other outcome kind.
+        /// </summary>
+        public bool BodyEdited { get; }
+
         /// <summary>A type this run compiled into an artifact and activated at the commit boundary.</summary>
         public static HotReloadIntroducedTypeOutcome Introduced(
             string metadataName,
@@ -46,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 metadataName,
                 originalAssemblyName,
                 ownerProjectRelativePath,
-                string.Empty);
+                string.Empty,
+                bodyEdited: false);
         }
 
         /// <summary>
@@ -56,14 +65,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static HotReloadIntroducedTypeOutcome AlreadyActive(
             string metadataName,
             string originalAssemblyName,
-            string ownerProjectRelativePath)
+            string ownerProjectRelativePath,
+            bool bodyEdited)
         {
             return new HotReloadIntroducedTypeOutcome(
                 HotReloadIntroducedTypeOutcomeKind.AlreadyActive,
                 metadataName,
                 originalAssemblyName,
                 ownerProjectRelativePath,
-                HotReloadConstants.AlreadyActiveIntroducedTypeReason);
+                HotReloadConstants.AlreadyActiveIntroducedTypeReason,
+                bodyEdited);
         }
 
         /// <summary>
@@ -82,7 +93,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 metadataName,
                 originalAssemblyName,
                 ownerProjectRelativePath,
-                reason);
+                reason,
+                bodyEdited: false);
         }
     }
 

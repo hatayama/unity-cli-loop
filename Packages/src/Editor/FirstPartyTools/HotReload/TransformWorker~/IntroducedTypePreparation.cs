@@ -78,7 +78,8 @@ internal static class IntroducedTypePreparation
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         AppendUnreadableReferenceErrors(compilation, references, referenceParseErrors);
-        IAssemblySymbol targetAssembly = WorkerGroupPipeline.ResolveTargetTypesAssemblySymbol(compilation, targetTypesReference);
+        IAssemblySymbol targetAssembly =
+            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference);
         WorkerTypeHome home = new WorkerTypeHome(input.TargetAssemblyName, targetAssembly);
         List<CompilationUnitSyntax> analyzableRoots = new List<CompilationUnitSyntax>(analyzableUnits.Count);
         foreach (WorkerSourceUnit analyzableUnit in analyzableUnits)

@@ -2,15 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Mono.Cecil;
 using NUnit.Framework;
+using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
+using ReflectionAssembly = System.Reflection.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -22,6 +26,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string FixtureTypeFullName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture";
+
+        private const string ArtifactAssemblyName = "UloopIntroducedTypes_PublicizerFixture";
+
+        private const string ArtifactIntroducedTypeMetadataName = "PublicizerFixture.Introduced";
+
+        private const string ArtifactIntroducedTypeSource = @"namespace PublicizerFixture
+{
+    public class Introduced
+    {
+        private int _counter;
+
+        public int Bump()
+        {
+            _counter = _counter + 1;
+            return Secret();
+        }
+
+        private int Secret()
+        {
+            return _counter;
+        }
+    }
+}
+";
 
         /// <summary>
         /// What: publicizing the test assembly exposes private fields/methods and reuses the
@@ -241,6 +269,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 (removeAccessor.Attributes & CecilMethodAttributes.MemberAccessMask),
                 Is.EqualTo(CecilMethodAttributes.Public),
                 "remove_ScoreChanged must be public after publicize.");
+        }
+
+        /// <summary>
+        /// What: an introduced-type artifact this domain retains is publicized as well, so a shim
+        /// compiled against it can bind the private members of a type that lives there instead of
+        /// under Library/ScriptAssemblies.
+        /// </summary>
+        [Test]
+        public async Task GetOrCreatePublicizedCopy_PublicizesARetainedIntroducedTypeArtifact()
+        {
+            HotReloadTypeHome home = await CompileAndLoadIntroducedTypeArtifactAsync();
+
+            string publicizedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(
+                home,
+                PublicizerTestSearchDirectories.ForHotReloadTestAssembly());
+
+            Assert.That(File.Exists(publicizedPath), Is.True, "Publicized artifact copy must be written.");
+            Assert.That(
+                new FileInfo(publicizedPath).Length,
+                Is.GreaterThan(0),
+                "Publicized artifact copy must not be empty.");
+
+            using AssemblyDefinition publicizedAssembly = AssemblyDefinition.ReadAssembly(publicizedPath);
+            TypeDefinition introducedType = publicizedAssembly.MainModule.GetType(ArtifactIntroducedTypeMetadataName);
+            Assert.That(introducedType, Is.Not.Null, $"Type not found: {ArtifactIntroducedTypeMetadataName}");
+
+            FieldDefinition counterField = introducedType.Fields.First(field => field.Name == "_counter");
+            Assert.That(
+                (counterField.Attributes & CecilFieldAttributes.FieldAccessMask),
+                Is.EqualTo(CecilFieldAttributes.Public),
+                "A private field of the artifact type must be public after publicize.");
+
+            MethodDefinition secretMethod = introducedType.Methods.First(method => method.Name == "Secret");
+            Assert.That(
+                (secretMethod.Attributes & CecilMethodAttributes.MemberAccessMask),
+                Is.EqualTo(CecilMethodAttributes.Public),
+                "A private method of the artifact type must be public after publicize.");
+        }
+
+        // Why a real compile and load: the publicizer reads the image from disk and decides on
+        // where it sits, so a dynamic assembly with no file would not exercise the decision, and
+        // a retained-artifact home has to name the assembly this domain actually loaded.
+        private static async Task<HotReloadTypeHome> CompileAndLoadIntroducedTypeArtifactAsync()
+        {
+            string projectRootPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string artifactDirectoryPath = Path.Combine(
+                projectRootPath,
+                "Library",
+                "UloopHotReload",
+                "IntroducedTypes",
+                "publicizer-fixture");
+            Directory.CreateDirectory(artifactDirectoryPath);
+
+            string sourcePath = Path.Combine(artifactDirectoryPath, ArtifactAssemblyName + ".cs");
+            File.WriteAllText(sourcePath, ArtifactIntroducedTypeSource);
+            string dllPath = Path.Combine(artifactDirectoryPath, ArtifactAssemblyName + ".dll");
+
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(
+                externalCompilerPaths,
+                Is.Not.Null,
+                "External compiler paths could not be resolved for this Unity installation.");
+
+            RoslynCompilerOptions compilerOptions = new RoslynCompilerOptions(
+                new List<string>(),
+                false,
+                emitDebugCode: false);
+            using CancellationTokenSource cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            DynamicCompilationBackendResult result = await RoslynCompilerBackend.CompileAsync(
+                sourcePath,
+                dllPath,
+                new List<string> { typeof(object).Assembly.Location },
+                externalCompilerPaths,
+                compilerOptions,
+                cancellation.Token,
+                () => { },
+                () => { },
+                () => { });
+
+            AssertNoArtifactCompileErrors(result.CompilerMessages);
+            Assert.That(File.Exists(dllPath), Is.True, $"Artifact dll was not produced: {dllPath}");
+
+            ReflectionAssembly artifactAssembly = ReflectionAssembly.Load(File.ReadAllBytes(dllPath));
+            return HotReloadTypeHome.RetainedArtifact(ArtifactAssemblyName, dllPath, artifactAssembly);
+        }
+
+        private static void AssertNoArtifactCompileErrors(CompilerMessage[] compilerMessages)
+        {
+            List<string> errors = new List<string>();
+            foreach (CompilerMessage compilerMessage in compilerMessages)
+            {
+                if (compilerMessage.type == CompilerMessageType.Error)
+                {
+                    errors.Add(compilerMessage.message);
+                }
+            }
+
+            Assert.That(errors, Is.Empty, "Artifact compilation failed:\n" + string.Join("\n", errors));
         }
 
         private static HotReloadTypeHome ResolveTestAssemblyHome()

@@ -181,7 +181,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadGroupFilePaths.ForSingleFile(
                     fixture.ProjectRelativePath,
                     fixture.TargetAssemblyPath),
-                "retained-artifact-propagation");
+                "retained-artifact-propagation",
+                Array.Empty<HotReloadTypeHome>());
             return await HotReloadShimIsolation.RunIsolationRetryAsync(
                 HotReloadCompositionRoot.Services.TransformWorkerClient,
                 retryContext,

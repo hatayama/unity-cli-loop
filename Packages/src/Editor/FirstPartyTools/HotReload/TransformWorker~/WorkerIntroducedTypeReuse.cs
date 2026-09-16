@@ -22,4 +22,9 @@ internal sealed class WorkerIntroducedTypeReuse
     public string OriginalAssemblyName { get; set; }
 
     public string OriginalAssemblyMvid { get; set; }
+
+    // Whether the source declares the same type with a different method body. The declaration
+    // still matches the artifact, so the type is bound from it either way; only the reload's
+    // decision about the bodies inside it differs.
+    public bool BodyEdited { get; set; }
 }

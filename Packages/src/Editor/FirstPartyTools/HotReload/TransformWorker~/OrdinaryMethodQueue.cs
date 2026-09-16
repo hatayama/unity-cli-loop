@@ -88,7 +88,18 @@ internal static class OrdinaryMethodQueue
             return;
         }
 
-        if (TryRecordUnchangedOrdinaryMethod(
+        if (UnchangedOrdinaryMethodRecorder.TryRecordRetainedUnchangedOrdinaryMethod(
+            isAddedMethod,
+            syntaxMethodKey,
+            methodSymbol,
+            typeState,
+            parameterTypeFullNames,
+            unchangedMethods))
+        {
+            return;
+        }
+
+        if (UnchangedOrdinaryMethodRecorder.TryRecordUnchangedOrdinaryMethod(
             isAddedMethod,
             hasBaseline,
             syntaxMethodKey,
@@ -247,42 +258,6 @@ internal static class OrdinaryMethodQueue
         }
 
         return true;
-    }
-
-    internal static bool TryRecordUnchangedOrdinaryMethod(
-        bool isAddedMethod,
-        bool hasBaseline,
-        string syntaxMethodKey,
-        IMethodSymbol methodSymbol,
-        TypeEmitState typeState,
-        string[] parameterTypeFullNames,
-        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
-        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
-        List<WorkerUnchangedMethod> unchangedMethods)
-    {
-        if (isAddedMethod || !hasBaseline)
-        {
-            return false;
-        }
-
-        // Why plainDecl: compare unannotated nodes; annotated methodDeclaration breaks
-        // AreEquivalent for long-return / unchecked / switch shapes (see plainRoot).
-        if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
-            && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
-            && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
-        {
-            unchangedMethods.Add(new WorkerUnchangedMethod
-            {
-                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
-                TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-                MethodName = methodSymbol.Name,
-                ParameterTypeFullNames = parameterTypeFullNames,
-                GenericArity = methodSymbol.Arity
-            });
-            return true;
-        }
-
-        return false;
     }
 
     internal static MethodTransformDecision DecideOrdinaryMethodTransform(

@@ -26,7 +26,9 @@ using Microsoft.CodeAnalysis.Text;
 /// also saw the artifacts, a changed introduced type would be found in its own previous
 /// artifact and never reach the fingerprint comparison, so the "Changed introduced type
 /// requires a compile" diagnostic would disappear. Artifacts are indexed separately by
-/// IntroducedTypeArtifactMap.
+/// IntroducedTypeArtifactMap, and the one caller that may fall back to them - the emit stage
+/// patching a body edit of a type an artifact serves - asks that index only after this home
+/// reported nothing, so the fallback cannot take a decision away from the target assembly.
 ///
 /// Which callers take this instead of a bare IAssemblySymbol: the ones that look a compiled
 /// type up in the target. Code that only compares assembly identity or feeds a symbol into a

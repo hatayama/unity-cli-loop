@@ -289,6 +289,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return generation != null && generation.IsActiveMember(methodKey);
         }
 
+        /// <summary>
+        /// The live patches this domain holds on the methods one assembly declares on one type,
+        /// which is what a run peels when an edited body matches that assembly's own code again.
+        /// </summary>
+        /// <remarks>
+        /// Why an assembly and not a file path: the methods of a type an introduced-type artifact
+        /// serves are patched from whichever file declares that type, so the file generation the
+        /// patch sits in does not identify the type — only the assembly that declares it does.
+        /// </remarks>
+        internal IReadOnlyList<MethodBase> ListActiveMethodsDeclaredBy(
+            Assembly assembly,
+            HotReloadReflectionTypeName reflectionTypeName)
+        {
+            Debug.Assert(assembly != null, "assembly must not be null.");
+
+            List<MethodBase> declared = new List<MethodBase>();
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                List<MethodBase> active = pair.Value.ListActiveMethods();
+                for (int index = 0; index < active.Count; index++)
+                {
+                    if (IsDeclaredBy(active[index], assembly, reflectionTypeName))
+                    {
+                        declared.Add(active[index]);
+                    }
+                }
+            }
+
+            return declared;
+        }
+
+        private static bool IsDeclaredBy(
+            MethodBase method,
+            Assembly assembly,
+            HotReloadReflectionTypeName reflectionTypeName)
+        {
+            Type declaringType = method.DeclaringType;
+            return declaringType != null
+                && declaringType.Assembly == assembly
+                && string.Equals(declaringType.FullName, reflectionTypeName.Value, StringComparison.Ordinal);
+        }
+
         /// <summary>Active patches (method key + source file path), sorted by method key.</summary>
         internal IReadOnlyList<HotReloadActivePatchInfo> DescribeActivePatches()
         {

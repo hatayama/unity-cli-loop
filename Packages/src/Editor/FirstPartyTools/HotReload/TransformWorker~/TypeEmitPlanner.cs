@@ -153,7 +153,11 @@ internal static class TypeEmitPlanner
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
         ShimNameAllocator shimNames)
     {
-        INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol);
+        // Why the artifact is only consulted after the patch target: a type the target already
+        // holds is compiled, and a record left over from an earlier reload must not take the
+        // classification of it away from the assembly the request named.
+        INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol)
+            ?? RetainedBodyEditHome.Adopt(typeState, semanticModel);
         if (compiledType == null)
         {
             OrdinaryMethodShimTypes.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
