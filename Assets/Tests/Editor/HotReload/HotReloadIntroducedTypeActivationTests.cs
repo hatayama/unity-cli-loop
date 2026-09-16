@@ -1735,6 +1735,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
+        // The same type with one member more, which is what redefining it means: a body edit is
+        // not a redefinition, because the declaration the artifact was compiled from still holds.
+        private static string InsertRedefinedIntroducedType(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced =
+                "    public sealed class HotReloadCrossFileIntroducedValue\n"
+                + "    {\n"
+                + "        public int Read()\n"
+                + "        {\n"
+                + "            return 7;\n"
+                + "        }\n"
+                + "\n"
+                + "        public int ReadAgain()\n"
+                + "        {\n"
+                + "            return 8;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
+        }
+
         private static string InsertIntroducedType(string hostSource)
         {
             Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
@@ -1775,10 +1797,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeRedefinitionHost.cs",
-                    InsertIntroducedType(File.ReadAllText(hostPath)).Replace(
-                        "            return 7;",
-                        "            return 70;",
-                        StringComparison.Ordinal)),
+                    InsertRedefinedIntroducedType(File.ReadAllText(hostPath))),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeRedefinitionCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
