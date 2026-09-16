@@ -148,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public TransformWorkerIntroducedTypeDto[] introducedTypes;
 
-        public string[] introducedTypeDiagnostics;
+        public TransformWorkerReasonDto[] introducedTypeDiagnostics;
 
         // The declarations this run did not introduce because the domain already retains an
         // assembly for them. Reported so a reload can name the types it bound from an active
@@ -293,6 +293,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // True when this addedMethod entry replaces a compiled method whose return type changed.
         public bool replacesCompiledMethod;
+    }
+
+    /// <summary>
+    /// A reason the worker reports, carried as a code plus the values its sentence needs.
+    /// The sentence itself is built on the Editor side by HotReloadWorkerReasonText.
+    /// </summary>
+    [Serializable]
+    internal sealed class TransformWorkerReasonDto
+    {
+        public HotReloadWorkerReasonCode code;
+
+        // Values substituted into the code's sentence, in the order they appear in it.
+        // Null when the sentence takes none.
+        public string[] args;
+
+        // The fragment a composed reason ends with, such as the reason an accessor rewrite was
+        // unavailable. Null when the code does not compose.
+        public TransformWorkerReasonDto detail;
     }
 
     [Serializable]

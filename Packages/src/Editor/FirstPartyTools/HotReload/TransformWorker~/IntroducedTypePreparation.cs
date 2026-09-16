@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // Plans which newly written top-level declarations of one compilation assembly could be
 // introduced without a compile, and refuses the run outright when the inputs the plan depends on
@@ -87,13 +88,17 @@ internal static class IntroducedTypePreparation
 
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
             WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, analyzableRoots);
-        string incompleteInputsDiagnostic =
+        WorkerReason incompleteInputsDiagnostic =
             DescribeIncompleteCompilationInputs(input, targetAssembly, referenceParseErrors);
         IntroducedTypeArtifactMap artifactMap = IntroducedTypeArtifactMap.Empty;
         if (incompleteInputsDiagnostic == null
             && !IntroducedTypeArtifactMap.TryBuild(compilation, artifactReferences, out artifactMap, out string artifactError))
         {
-            incompleteInputsDiagnostic = "Introduced types require a compile: " + artifactError;
+            // Why the sentence still comes from the worker here: the same artifact error is also
+            // returned as a fatal transform message, so it stays one sentence owned by the map.
+            incompleteInputsDiagnostic = WorkerReason.Of(
+                HotReloadWorkerReasonCode.IntroducedTypeArtifactUnusable,
+                artifactError);
         }
         // Why a second compilation: a const declared in a file this run does not transform binds
         // to the value the target assembly was compiled with, so its edited value is invisible in
@@ -163,7 +168,7 @@ internal static class IntroducedTypePreparation
 
     // The reason planning cannot run, or null when every input the plan depends on was readable
     // and describes the assembly the request named.
-    private static string DescribeIncompleteCompilationInputs(
+    private static WorkerReason DescribeIncompleteCompilationInputs(
         WorkerInput input,
         IAssemblySymbol targetAssembly,
         List<string> referenceParseErrors)
@@ -175,7 +180,7 @@ internal static class IntroducedTypePreparation
         // carries the reason instead.
         if (targetAssembly == null || referenceParseErrors.Count > 0)
         {
-            return "Introduced types require a compile: the target assembly or its references could not be read.";
+            return WorkerReason.Of(HotReloadWorkerReasonCode.IntroducedTypeInputsUnreadable);
         }
 
         // Every descriptor carries the requested identity, and a retained artifact is only valid
@@ -184,7 +189,7 @@ internal static class IntroducedTypePreparation
         // that claim an assembly the planning never looked at.
         if (!IntroducedTypeTargetIdentity.MatchesRequest(input, targetAssembly))
         {
-            return "Introduced types require a compile: the target assembly identity does not match the request.";
+            return WorkerReason.Of(HotReloadWorkerReasonCode.IntroducedTypeIdentityMismatch);
         }
 
         return null;

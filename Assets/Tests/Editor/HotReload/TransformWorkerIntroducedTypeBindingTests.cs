@@ -454,7 +454,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (TransformWorkerFileOutputDto file in result.Output.files)
             {
                 Assert.That(file.introducedTypes, Is.Empty);
-                Assert.That(file.introducedTypeDiagnostics, Is.Not.Empty);
+                Assert.That(HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics), Is.Not.Empty);
             }
         }
 

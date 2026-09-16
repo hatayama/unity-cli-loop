@@ -203,6 +203,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            // A missing diagnostic would render as no sentence at all, so it is refused here
+            // rather than reaching the renderer.
+            foreach (TransformWorkerReasonDto diagnostic in file.introducedTypeDiagnostics)
+            {
+                if (diagnostic == null)
+                {
+                    errorMessage = "Preparation output must not contain a null introduced-type diagnostic.";
+                    return false;
+                }
+
+                // Why only this code is checked here: it is the one diagnostic the Editor acts
+                // on, and it reads the redefined type's metadata name straight out of args[0].
+                if (diagnostic.code != HotReloadWorkerReasonCode.IntroducedTypeChanged)
+                {
+                    continue;
+                }
+
+                if (diagnostic.args == null
+                    || diagnostic.args.Length != 1
+                    || string.IsNullOrEmpty(diagnostic.args[0]))
+                {
+                    errorMessage =
+                        "Preparation output must name the type of a changed introduced-type diagnostic.";
+                    return false;
+                }
+            }
+
             foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
             {
                 if (!TryValidatePreparationDescriptor(introducedType, file, input, out errorMessage))
