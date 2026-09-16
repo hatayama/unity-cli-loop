@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.addedFieldNames ??= Array.Empty<string>();
                 fileOutput.addedConstNames ??= Array.Empty<string>();
                 fileOutput.introducedTypes ??= Array.Empty<TransformWorkerIntroducedTypeDto>();
-                fileOutput.introducedTypeDiagnostics ??= Array.Empty<string>();
+                fileOutput.introducedTypeDiagnostics ??= Array.Empty<TransformWorkerReasonDto>();
                 fileOutput.introducedTypeReuses ??= Array.Empty<TransformWorkerIntroducedTypeReuseDto>();
             }
 

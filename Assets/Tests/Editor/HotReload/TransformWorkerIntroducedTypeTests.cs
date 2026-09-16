@@ -73,13 +73,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.Output.files[1].introducedTypes,
                 Is.Empty);
             Assert.That(
-                result.Output.files[1].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[1].introducedTypeDiagnostics),
                 Has.Some.Contains("Non-public"));
             Assert.That(
-                result.Output.files[1].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[1].introducedTypeDiagnostics),
                 Has.Some.Contains("Generic"));
             Assert.That(
-                result.Output.files[1].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[1].introducedTypeDiagnostics),
                 Has.Some.Contains("Nested"));
         }
 
@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.files[0].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics),
                 Is.EqualTo(
                     new[]
                     {
@@ -135,7 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.files[1].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[1].introducedTypeDiagnostics),
                 Is.EqualTo(
                     new[]
                     {
@@ -357,16 +357,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Non-public"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Generic"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Partial"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Ref-like"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Unsafe"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Unity object"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Serializable"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Module initializer"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Delegate"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Nested"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Non-public"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Generic"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Partial"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Ref-like"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Unsafe"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Unity object"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Serializable"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Module initializer"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Delegate"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Nested"));
         }
 
         /// <summary>
@@ -397,7 +397,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(workerResult.Success, Is.True, workerResult.ErrorMessage);
             Assert.That(workerResult.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
             Assert.That(workerResult.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Safe"));
-            Assert.That(workerResult.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Nested"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(workerResult.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Nested"));
 
             List<HotReloadIntroducedTypeDescriptor> descriptors = CreateDescriptors(workerResult.Output.files);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -603,7 +603,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
             Assert.That(result.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Safe"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Existing.Value"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Existing.Value"));
         }
 
         /// <summary>
@@ -636,7 +636,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Existing.Value"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Existing.Value"));
         }
 
         /// <summary>
@@ -670,7 +670,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
             Assert.That(result.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Introduced"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Is.Empty);
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Is.Empty);
         }
 
         /// <summary>
@@ -703,7 +703,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Existing.Value"));
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Existing.Value"));
         }
 
         /// <summary>
@@ -727,7 +727,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
             Assert.That(result.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Introduced"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Is.Empty);
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Is.Empty);
         }
 
         /// <summary>
@@ -751,7 +751,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
             Assert.That(result.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Introduced"));
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Is.Empty);
+            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Is.Empty);
         }
 
         /// <summary>
@@ -1181,7 +1181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
             Assert.That(
-                result.Output.files[0].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics),
                 Has.Some.Contains("target assembly"));
         }
 
@@ -1214,7 +1214,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
             Assert.That(
-                result.Output.files[0].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics),
                 Has.Some.Contains("its references"));
         }
 
@@ -1239,7 +1239,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
             Assert.That(
-                result.Output.files[0].introducedTypeDiagnostics,
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics),
                 Has.Some.Contains("identity does not match"));
         }
 

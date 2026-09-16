@@ -153,9 +153,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.files[0].introducedTypeDiagnostics,
-                Has.Member(
-                    HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix + RetainedTypeMetadataName));
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics),
+                Has.Member("Changed introduced type requires a compile: " + RetainedTypeMetadataName));
         }
 
         private static HotReloadIntroducedTypeFingerprint ParseOrFail(string text)

@@ -35,7 +35,10 @@ public static class TransformWorkerProgram
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
+        WriteIndented = false,
+        // Reason codes travel as their member name so the Editor reads them back by name and a
+        // reordered enum never changes the wire.
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public static int Main(string[] args)

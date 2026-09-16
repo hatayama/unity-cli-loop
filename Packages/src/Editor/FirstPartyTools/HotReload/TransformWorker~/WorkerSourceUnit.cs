@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // Everything one edited source file contributes to a group run: its parse products, its
 // baseline, and the rows and warnings that belong to that file alone. A group run holds one
@@ -69,7 +70,7 @@ internal sealed class WorkerSourceUnit
 
     public List<WorkerIntroducedType> IntroducedTypes { get; } = new List<WorkerIntroducedType>();
 
-    public List<string> IntroducedTypeDiagnostics { get; } = new List<string>();
+    public List<WorkerReason> IntroducedTypeDiagnostics { get; } = new List<WorkerReason>();
 
     public List<WorkerIntroducedTypeReuse> IntroducedTypeReuses { get; } =
         new List<WorkerIntroducedTypeReuse>();

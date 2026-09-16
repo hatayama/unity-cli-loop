@@ -148,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public TransformWorkerIntroducedTypeDto[] introducedTypes;
 
-        public string[] introducedTypeDiagnostics;
+        public TransformWorkerReasonDto[] introducedTypeDiagnostics;
 
         // The declarations this run did not introduce because the domain already retains an
         // assembly for them. Reported so a reload can name the types it bound from an active

@@ -203,6 +203,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            // A missing diagnostic would render as no sentence at all, so it is refused here
+            // rather than reaching the renderer.
+            foreach (TransformWorkerReasonDto diagnostic in file.introducedTypeDiagnostics)
+            {
+                if (diagnostic == null)
+                {
+                    errorMessage = "Preparation output must not contain a null introduced-type diagnostic.";
+                    return false;
+                }
+            }
+
             foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
             {
                 if (!TryValidatePreparationDescriptor(introducedType, file, input, out errorMessage))

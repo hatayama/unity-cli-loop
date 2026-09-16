@@ -3092,7 +3092,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 source = "public class Introduced { }"
                             }
                         },
-                        introducedTypeDiagnostics = Array.Empty<string>()
+                        introducedTypeDiagnostics = Array.Empty<TransformWorkerReasonDto>()
                     }
                 }
             };
@@ -3545,7 +3545,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 source = "public class Introduced { }"
                             }
                         },
-                        introducedTypeDiagnostics = Array.Empty<string>(),
+                        introducedTypeDiagnostics = Array.Empty<TransformWorkerReasonDto>(),
                         introducedTypeReuses = Array.Empty<TransformWorkerIntroducedTypeReuseDto>()
                     }
                 }

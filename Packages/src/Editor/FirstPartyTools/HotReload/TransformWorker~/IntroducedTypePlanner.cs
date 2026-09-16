@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // Identifies newly declared top-level type definitions without mixing parse-failed files into
 // semantic analysis. Binding/rewriting callers intentionally remains a later-stage concern.
@@ -32,7 +33,8 @@ internal static class IntroducedTypePlanner
             INamedTypeSymbol typeSymbol = unit.SemanticModel.GetDeclaredSymbol(declaration);
             if (typeSymbol == null)
             {
-                unit.IntroducedTypeDiagnostics.Add("Could not resolve a declared type symbol.");
+                unit.IntroducedTypeDiagnostics.Add(
+                    WorkerReason.Of(HotReloadWorkerReasonCode.IntroducedTypeSymbolUnresolved));
                 continue;
             }
 
@@ -46,9 +48,10 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
-            if (!IsSupported(typeSymbol, declaration, unit.SemanticModel, out string reason))
+            if (!IsSupported(typeSymbol, declaration, unit.SemanticModel, out HotReloadWorkerReasonCode reason))
             {
-                unit.IntroducedTypeDiagnostics.Add(reason + ": " + CecilTypeNames.ToMetadataName(typeSymbol));
+                unit.IntroducedTypeDiagnostics.Add(
+                    WorkerReason.Of(reason, CecilTypeNames.ToMetadataName(typeSymbol)));
                 continue;
             }
 
@@ -57,11 +60,13 @@ internal static class IntroducedTypePlanner
                     unit.ConstDriftSemanticModel ?? unit.SemanticModel,
                     home,
                     out string unusableConst,
-                    out string unusableConstReason))
+                    out HotReloadWorkerReasonCode unusableConstReason))
             {
                 unit.IntroducedTypeDiagnostics.Add(
-                    unusableConstReason + ": " + unusableConst
-                    + " referenced by " + CecilTypeNames.ToMetadataName(typeSymbol));
+                    WorkerReason.Of(
+                        unusableConstReason,
+                        unusableConst,
+                        CecilTypeNames.ToMetadataName(typeSymbol)));
                 continue;
             }
 
@@ -107,7 +112,9 @@ internal static class IntroducedTypePlanner
             }
 
             unit.IntroducedTypeDiagnostics.Add(
-                "Delegate introduced type requires a compile: " + CecilTypeNames.ToMetadataName(delegateSymbol));
+                WorkerReason.Of(
+                    HotReloadWorkerReasonCode.IntroducedTypeDelegate,
+                    CecilTypeNames.ToMetadataName(delegateSymbol)));
         }
     }
 
@@ -131,7 +138,9 @@ internal static class IntroducedTypePlanner
             }
 
             unit.IntroducedTypeDiagnostics.Add(
-                "Nested type requires a compile: " + CecilTypeNames.ToMetadataName(typeSymbol));
+                WorkerReason.Of(
+                    HotReloadWorkerReasonCode.IntroducedTypeNested,
+                    CecilTypeNames.ToMetadataName(typeSymbol)));
             return true;
         }
 
@@ -141,8 +150,10 @@ internal static class IntroducedTypePlanner
         if (TryFindNestedDeclaration(declaration, out string nestedName))
         {
             unit.IntroducedTypeDiagnostics.Add(
-                "Nested declaration inside an introduced type requires a compile: "
-                + CecilTypeNames.ToMetadataName(typeSymbol) + "/" + nestedName);
+                WorkerReason.Of(
+                    HotReloadWorkerReasonCode.IntroducedTypeNestedDeclaration,
+                    CecilTypeNames.ToMetadataName(typeSymbol),
+                    nestedName));
             return true;
         }
 
@@ -174,11 +185,10 @@ internal static class IntroducedTypePlanner
         // can do, so a redefined introduced type is reported instead of being introduced again.
         if (!string.Equals(activeFingerprint, declarationFingerprint, StringComparison.Ordinal))
         {
-            // The editor side recognises this text by its prefix and reads the type name back out
-            // of the tail (HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix), so changing
-            // the wording here means changing that constant in the same edit.
+            // The editor side recognises this diagnostic by its code and reads the type name out
+            // of the first value, so the wording it renders is free to change on that side alone.
             unit.IntroducedTypeDiagnostics.Add(
-                "Changed introduced type requires a compile: " + metadataName);
+                WorkerReason.Of(HotReloadWorkerReasonCode.IntroducedTypeChanged, metadataName));
             return true;
         }
 
@@ -219,59 +229,59 @@ internal static class IntroducedTypePlanner
         INamedTypeSymbol typeSymbol,
         BaseTypeDeclarationSyntax declaration,
         SemanticModel semanticModel,
-        out string reason)
+        out HotReloadWorkerReasonCode reason)
     {
         if (typeSymbol.Arity != 0)
         {
-            reason = "Generic introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeGeneric;
             return false;
         }
 
         if (declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
         {
-            reason = "Partial introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypePartial;
             return false;
         }
 
         if (declaration is RecordDeclarationSyntax)
         {
-            reason = "Record introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeRecord;
             return false;
         }
 
         if (typeSymbol.DeclaredAccessibility != Accessibility.Public)
         {
-            reason = "Non-public introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeNonPublic;
             return false;
         }
 
         if (typeSymbol.IsRefLikeType)
         {
-            reason = "Ref-like introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeRefLike;
             return false;
         }
 
         if (ContainsUnsafeCode(declaration))
         {
-            reason = "Unsafe introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeUnsafe;
             return false;
         }
 
         if (InheritsUnityObject(typeSymbol))
         {
-            reason = "Unity object introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeUnityObject;
             return false;
         }
 
         if (HasSerializableAttribute(typeSymbol))
         {
-            reason = "Serializable introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeSerializable;
             return false;
         }
 
         if (HasModuleInitializer(declaration, semanticModel))
         {
-            reason = "Module initializer introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeModuleInitializer;
             return false;
         }
 
@@ -280,11 +290,11 @@ internal static class IntroducedTypePlanner
             && typeSymbol.TypeKind != TypeKind.Enum
             && typeSymbol.TypeKind != TypeKind.Interface)
         {
-            reason = "Unsupported introduced type requires a compile";
+            reason = HotReloadWorkerReasonCode.IntroducedTypeUnsupported;
             return false;
         }
 
-        reason = string.Empty;
+        reason = default;
         return true;
     }
 
