@@ -88,48 +88,67 @@ internal static class IntroducedTypeMemberRegions
         return bodyNodes;
     }
 
-    // The semicolon that closes an expression-bodied member belongs with that body: rewriting
-    // `=> value;` as a block changes nothing a caller can see, and leaving the semicolon on the
-    // declaration side would report that rewrite as a declaration change.
-    internal static SyntaxToken ReadExpressionBodyTerminator(MemberDeclarationSyntax member)
+    // The semicolons that close expression-bodied members and accessors belong with those bodies:
+    // rewriting `=> value;` as a block changes nothing a caller can see, and leaving the semicolon
+    // on the declaration side would report that rewrite as a declaration change.
+    internal static IReadOnlyList<SyntaxToken> CollectBodyTerminators(MemberDeclarationSyntax member)
     {
+        List<SyntaxToken> terminators = new List<SyntaxToken>();
         if (member is MethodDeclarationSyntax method && method.ExpressionBody != null)
         {
-            return method.SemicolonToken;
-        }
-
-        if (member is PropertyDeclarationSyntax property && property.ExpressionBody != null)
-        {
-            return property.SemicolonToken;
-        }
-
-        if (member is IndexerDeclarationSyntax indexer && indexer.ExpressionBody != null)
-        {
-            return indexer.SemicolonToken;
+            terminators.Add(method.SemicolonToken);
         }
 
         if (member is ConstructorDeclarationSyntax constructor && constructor.ExpressionBody != null)
         {
-            return constructor.SemicolonToken;
+            terminators.Add(constructor.SemicolonToken);
         }
 
         if (member is DestructorDeclarationSyntax destructor && destructor.ExpressionBody != null)
         {
-            return destructor.SemicolonToken;
+            terminators.Add(destructor.SemicolonToken);
         }
 
         if (member is OperatorDeclarationSyntax operatorDeclaration && operatorDeclaration.ExpressionBody != null)
         {
-            return operatorDeclaration.SemicolonToken;
+            terminators.Add(operatorDeclaration.SemicolonToken);
         }
 
         if (member is ConversionOperatorDeclarationSyntax conversionDeclaration
             && conversionDeclaration.ExpressionBody != null)
         {
-            return conversionDeclaration.SemicolonToken;
+            terminators.Add(conversionDeclaration.SemicolonToken);
         }
 
-        return default;
+        if (member is PropertyDeclarationSyntax property)
+        {
+            AddExpressionBodyTerminator(terminators, property.ExpressionBody, property.SemicolonToken);
+            AddAccessorTerminators(terminators, property.AccessorList);
+        }
+
+        if (member is IndexerDeclarationSyntax indexer)
+        {
+            AddExpressionBodyTerminator(terminators, indexer.ExpressionBody, indexer.SemicolonToken);
+            AddAccessorTerminators(terminators, indexer.AccessorList);
+        }
+
+        if (member is EventDeclarationSyntax eventDeclaration)
+        {
+            AddAccessorTerminators(terminators, eventDeclaration.AccessorList);
+        }
+
+        return terminators;
+    }
+
+    // Comments and line breaks inside a declaration are invisible to the hashes, which read tokens
+    // only, so they must be invisible to the member key as well: the key builders keep trivia when
+    // they normalize a type name, which would let a comment alone rename a member - or, for a line
+    // comment, put a line break in a key that must stay a single line.
+    internal static MemberDeclarationSyntax StripTrivia(MemberDeclarationSyntax member)
+    {
+        return (MemberDeclarationSyntax)member.ReplaceTrivia(
+            member.DescendantTrivia(null, true),
+            (original, rewritten) => default);
     }
 
     // Names a member the same way the rest of the worker names it, so a fingerprint difference
@@ -212,6 +231,30 @@ internal static class IntroducedTypeMemberRegions
         }
 
         return string.Join(",", names);
+    }
+
+    private static void AddExpressionBodyTerminator(
+        List<SyntaxToken> terminators,
+        ArrowExpressionClauseSyntax expressionBody,
+        SyntaxToken semicolonToken)
+    {
+        if (expressionBody != null)
+        {
+            terminators.Add(semicolonToken);
+        }
+    }
+
+    private static void AddAccessorTerminators(List<SyntaxToken> terminators, AccessorListSyntax accessorList)
+    {
+        if (accessorList == null)
+        {
+            return;
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in accessorList.Accessors)
+        {
+            AddExpressionBodyTerminator(terminators, accessor.ExpressionBody, accessor.SemicolonToken);
+        }
     }
 
     private static void AddAccessorBodies(List<SyntaxNode> bodyNodes, AccessorListSyntax accessorList)

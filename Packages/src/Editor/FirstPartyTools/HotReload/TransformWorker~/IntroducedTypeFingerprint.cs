@@ -42,7 +42,10 @@ internal static class IntroducedTypeFingerprint
         List<string> keys = new List<string>();
         for (int index = 0; index < memberNodes.Count; index++)
         {
-            keys.Add(IntroducedTypeMemberRegions.BuildMemberKey(memberNodes[index], typeMetadataName, index));
+            keys.Add(IntroducedTypeMemberRegions.BuildMemberKey(
+                IntroducedTypeMemberRegions.StripTrivia(memberNodes[index]),
+                typeMetadataName,
+                index));
         }
 
         DisambiguateKeys(keys);
@@ -103,15 +106,13 @@ internal static class IntroducedTypeFingerprint
         IntroducedTypeDependencyWalker walker)
     {
         IReadOnlyList<SyntaxNode> bodyNodes = IntroducedTypeMemberRegions.CollectBodyNodes(member);
-        SyntaxToken bodyTerminator = IntroducedTypeMemberRegions.ReadExpressionBodyTerminator(member);
-        bool hasBodyTerminator = bodyTerminator.RawKind != 0;
+        IReadOnlyList<SyntaxToken> bodyTerminators = IntroducedTypeMemberRegions.CollectBodyTerminators(member);
 
         StringBuilder declarationInput = new StringBuilder();
         AppendTokens(
             declarationInput,
             member.DescendantTokens().Where(token =>
-                !IsInsideBody(bodyNodes, token.Span)
-                && !(hasBodyTerminator && token.Span == bodyTerminator.Span)));
+                !IsInsideBody(bodyNodes, token.Span) && !IsBodyTerminator(bodyTerminators, token)));
         AppendNodeDependencies(
             declarationInput,
             member.DescendantNodesAndSelf().Where(node => !IsInsideBody(bodyNodes, node.Span)),
@@ -126,6 +127,7 @@ internal static class IntroducedTypeFingerprint
 
         StringBuilder bodyInput = new StringBuilder();
         AppendTokens(bodyInput, bodyNodes.SelectMany(node => node.DescendantTokens()));
+        AppendTokens(bodyInput, bodyTerminators);
         AppendNodeDependencies(
             bodyInput,
             bodyNodes.SelectMany(node => node.DescendantNodesAndSelf()),
@@ -139,6 +141,19 @@ internal static class IntroducedTypeFingerprint
         for (int index = 0; index < memberNodes.Count; index++)
         {
             if (memberNodes[index].Span.Contains(span))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsBodyTerminator(IReadOnlyList<SyntaxToken> bodyTerminators, SyntaxToken token)
+    {
+        for (int index = 0; index < bodyTerminators.Count; index++)
+        {
+            if (bodyTerminators[index] == token)
             {
                 return true;
             }

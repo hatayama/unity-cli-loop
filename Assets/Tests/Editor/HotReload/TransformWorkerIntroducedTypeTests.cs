@@ -1003,6 +1003,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(parsed.Members[1].Key, Is.Not.EqualTo(parsed.Members[0].Key));
         }
 
+        /// <summary>
+        /// Verifies that an accessor written as an expression body follows the same rule as a
+        /// method: rewriting it as a block is a body change, not a declaration change.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_AccessorExpressionBody_StaysBodyOnly()
+        {
+            string directory = CreateSourceDirectory("FingerprintAccessorArrow");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string expressionAccessor = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Bodies { public int Value { get => 1; } } }");
+            string blockAccessor = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Bodies { public int Value { get { return 1; } } } }");
+
+            AssertBodyOnly(expressionAccessor, blockAccessor);
+        }
+
+        /// <summary>
+        /// Verifies that a comment written inside a parameter type does not change the fingerprint,
+        /// because the member key must describe the same tokens the hashes read.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_CommentInsideAParameterType_IsIdentical()
+        {
+            string directory = CreateSourceDirectory("FingerprintTypeComment");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string plain = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Commented { public void Take(System.String value) { } } }");
+            string commented = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Commented { public void Take(System./*note*/String value) { } } }");
+
+            HotReloadIntroducedTypeFingerprintComparison comparison = CompareFingerprints(plain, commented);
+            Assert.That(comparison.Kind, Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.Identical));
+        }
+
+        /// <summary>
+        /// Verifies that a line comment inside a declaration still yields a readable fingerprint,
+        /// because a member key carrying that comment's line break cannot be recorded at all.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_LineCommentInsideADeclaration_StillProducesAFingerprint()
+        {
+            string directory = CreateSourceDirectory("FingerprintLineComment");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string plain = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Commented { public void Take(System.String value) { } } }");
+            string commented = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "namespace Example { public class Commented { public void Take(System.//note\n"
+                + "String value) { } } }");
+
+            HotReloadIntroducedTypeFingerprintComparison comparison = CompareFingerprints(plain, commented);
+            Assert.That(comparison.Kind, Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.Identical));
+        }
+
+        /// <summary>
+        /// Verifies that swapping what two aliases bind to inside one body changes the fingerprint,
+        /// because the body records where each dependency is used and not just which ones it uses.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_Fingerprint_SwappedAliasesInOneBody_ReportBodyOnly()
+        {
+            string directory = CreateSourceDirectory("FingerprintAliasSwap");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
+
+            string baseline = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "using First = System.IDisposable; using Second = System.ICloneable;"
+                + " namespace Example { public class Bodies { public object Create()"
+                + " { First first = null; Second second = null; return first ?? (object)second; } } }");
+            string swapped = await RunFingerprintAsync(
+                firstSourcePath,
+                secondSourcePath,
+                "using First = System.ICloneable; using Second = System.IDisposable;"
+                + " namespace Example { public class Bodies { public object Create()"
+                + " { First first = null; Second second = null; return first ?? (object)second; } } }");
+
+            AssertBodyOnly(baseline, swapped);
+        }
+
         private static void AssertDeclarationChanged(string baseline, string edited)
         {
             HotReloadIntroducedTypeFingerprintComparison comparison = CompareFingerprints(baseline, edited);
