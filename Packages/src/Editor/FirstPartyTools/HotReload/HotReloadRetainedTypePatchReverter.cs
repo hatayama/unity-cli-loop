@@ -51,6 +51,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (HotReloadGroupFile file in files)
             {
+                // Why a file left unapplied is left alone: a file the shim compile refused keeps
+                // the previous run's patches, and the patch on its retained declaration is one of
+                // them. Peeling it here would drop what this run never replaced, which is the one
+                // thing the file-atomic isolation exists to prevent.
+                if (file.SkipApply)
+                {
+                    continue;
+                }
+
                 file.RevertedUnchangedCount +=
                     RevertRestoredBodies(file, targetAssemblyName, targetAssemblyMvid);
             }
