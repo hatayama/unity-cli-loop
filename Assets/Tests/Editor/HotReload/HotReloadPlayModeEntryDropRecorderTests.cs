@@ -241,7 +241,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<HotReloadIntroducedTypeOutcome>
                 {
                     HotReloadIntroducedTypeOutcome.Introduced("Fixture.T1", "Fixture.Assembly", "Assets/A.cs"),
-                    HotReloadIntroducedTypeOutcome.AlreadyActive("Fixture.T2", "Fixture.Assembly", "Assets/A.cs"),
+                    HotReloadIntroducedTypeOutcome.AlreadyActive(
+                        "Fixture.T2",
+                        "Fixture.Assembly",
+                        "Assets/A.cs",
+                        bodyEdited: false),
                     HotReloadIntroducedTypeOutcome.Failed("Fixture.T3", "Fixture.Assembly", "Assets/A.cs", "reason")
                 });
 

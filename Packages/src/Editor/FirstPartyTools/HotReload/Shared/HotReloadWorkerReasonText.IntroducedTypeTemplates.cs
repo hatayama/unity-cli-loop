@@ -58,9 +58,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.IntroducedTypeNestedDeclaration,
                 Plain("Nested declaration inside an introduced type requires a compile: {0}/{1}", 2));
+            // Why composing rather than plain: the declaration differences are worth naming when
+            // the comparison found them, and a run that only knows the type name still has to
+            // read the same sentence it always did.
             templates.Add(
                 HotReloadWorkerReasonCode.IntroducedTypeChanged,
-                Plain("Changed introduced type requires a compile: {0}", 1));
+                Composing(
+                    "Changed introduced type requires a compile: {0}",
+                    1,
+                    " Declaration differences: ",
+                    "."));
+            templates.Add(
+                HotReloadWorkerReasonCode.IntroducedTypeMemberBodyChanged,
+                RequiringDetail(
+                    "Changed member body of introduced type requires a compile: {0}",
+                    1,
+                    " Changed members: ",
+                    ". Only ordinary method bodies of an introduced type can be hot reloaded."));
+
+            // The fragment that carries a list the worker already joined: the tokens name
+            // fingerprint parts and member keys rather than reading as English, so wording them
+            // here would only reformat values the reader has to match against their source.
+            templates.Add(
+                HotReloadWorkerReasonCode.IntroducedTypeDifferenceList,
+                Plain("{0}", 1));
 
             // The one sentence whose value is written by the worker rather than here: the same
             // artifact error is also returned as a fatal transform message, so it stays a single

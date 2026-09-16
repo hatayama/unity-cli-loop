@@ -118,6 +118,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         IntroducedTypeNested,
         IntroducedTypeNestedDeclaration,
         IntroducedTypeChanged,
+        IntroducedTypeMemberBodyChanged,
+        IntroducedTypeDifferenceList,
         IntroducedTypeArtifactUnusable,
         IntroducedTypeInputsUnreadable,
         IntroducedTypeIdentityMismatch,

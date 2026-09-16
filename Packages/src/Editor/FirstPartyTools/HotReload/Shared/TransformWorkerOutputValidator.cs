@@ -246,9 +246,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return false;
                 }
 
-                // Why only this code is checked here: it is the one diagnostic the Editor acts
-                // on, and it reads the redefined type's metadata name straight out of args[0].
-                if (diagnostic.code != HotReloadWorkerReasonCode.IntroducedTypeChanged)
+                // Why only these codes are checked here: they are the diagnostics the Editor acts
+                // on, and each reads the refused type's metadata name straight out of args[0].
+                if (!HotReloadIntroducedTypeFailureCodes.IsRedefinedTypeFailure(diagnostic.code))
                 {
                     continue;
                 }

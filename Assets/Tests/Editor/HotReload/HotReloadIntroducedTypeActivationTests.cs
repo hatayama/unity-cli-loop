@@ -480,6 +480,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that editing only the constructor body of an already introduced type fails the
+        /// reload and stops the group, because the reload can patch ordinary method bodies alone
+        /// and a constructor left running the artifact's version would disagree with its neighbours.
+        /// </summary>
+        [Test]
+        public async Task Run_ActiveIntroducedTypeConstructorBodyEdited_FailsAndStopsTheGroup()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                using (HotReloadServicesTestScope.BeginWithDependencies(
+                    HotReloadGroupProcessorDependencies.CreateProduction))
+                {
+                    HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateConstructorIntroducingEdits(hostPath, callerPath));
+
+                    AssertCallerIsPatched(first);
+
+                    HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateConstructorBodyEditedEdits(hostPath, callerPath));
+
+                    Assert.That(
+                        CountTypeFailures(second, "Changed member body of introduced type"),
+                        Is.EqualTo(1),
+                        "An edited constructor body must fail the reload with a compile hint.\n"
+                        + DescribeOutcomes(second));
+                    Assert.That(
+                        FindTypeFailureReason(second, "Changed member body of introduced type"),
+                        Does.Contain("::.ctor()"),
+                        "The refusal must name the member whose body changed.");
+                    Assert.That(
+                        FindTypeFailureOwner(second, "Changed member body of introduced type"),
+                        Does.EndWith(Path.GetFileName(hostPath)),
+                        "The refusal must name the file that declares the type.");
+                    Assert.That(
+                        CountPatchedMethods(second),
+                        Is.EqualTo(0),
+                        "A failed introduced type must stop the group before anything is patched.\n"
+                        + DescribeOutcomes(second));
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies that a file whose entries the group preflight could not resolve stops the run
         /// before the commit point, so a group that will patch nothing activates no introduced
         /// type and leaves the failed file's own resolution failure as the reported outcome.
@@ -994,6 +1046,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed
                     && outcome.Reason.Contains(reasonFragment, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static string FindTypeFailureReason(HotReloadOrchestratorResult result, string reasonFragment)
+        {
+            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
+            {
+                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed
+                    && outcome.Reason.Contains(reasonFragment, StringComparison.Ordinal))
+                {
+                    return outcome.Reason;
+                }
+            }
+
+            return null;
+        }
+
+        private static int CountPatchedMethods(HotReloadOrchestratorResult result)
+        {
+            int count = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched)
                 {
                     count++;
                 }
@@ -1735,6 +1815,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
+        // The same type with one member more, which is what redefining it means: a body edit is
+        // not a redefinition, because the declaration the artifact was compiled from still holds.
+        private static string InsertRedefinedIntroducedType(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced =
+                "    public sealed class HotReloadCrossFileIntroducedValue\n"
+                + "    {\n"
+                + "        public int Read()\n"
+                + "        {\n"
+                + "            return 7;\n"
+                + "        }\n"
+                + "\n"
+                + "        public int ReadAgain()\n"
+                + "        {\n"
+                + "            return 8;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
+        }
+
+        // The introduced type with a constructor, so a later reload can edit a body the reload is
+        // not allowed to patch while leaving the declaration the artifact was compiled from intact.
+        private static string InsertIntroducedTypeWithConstructor(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            return hostSource.Replace(
+                HostTypeAnchor,
+                BuildIntroducedTypeWithSeed("7") + HostTypeAnchor,
+                StringComparison.Ordinal);
+        }
+
+        private static string InsertIntroducedTypeWithEditedConstructor(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            return hostSource.Replace(
+                HostTypeAnchor,
+                BuildIntroducedTypeWithSeed("70") + HostTypeAnchor,
+                StringComparison.Ordinal);
+        }
+
+        private static string BuildIntroducedTypeWithSeed(string seedLiteral)
+        {
+            return "    public sealed class HotReloadCrossFileIntroducedValue\n"
+                + "    {\n"
+                + "        private readonly int seed;\n"
+                + "\n"
+                + "        public HotReloadCrossFileIntroducedValue()\n"
+                + "        {\n"
+                + "            seed = " + seedLiteral + ";\n"
+                + "        }\n"
+                + "\n"
+                + "        public int Read()\n"
+                + "        {\n"
+                + "            return seed;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+        }
+
         private static string InsertIntroducedType(string hostSource)
         {
             Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
@@ -1775,12 +1916,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeRedefinitionHost.cs",
-                    InsertIntroducedType(File.ReadAllText(hostPath)).Replace(
-                        "            return 7;",
-                        "            return 70;",
-                        StringComparison.Ordinal)),
+                    InsertRedefinedIntroducedType(File.ReadAllText(hostPath))),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeRedefinitionCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The first reload of the constructor case: the introduced type as the artifact records it.
+        private static Dictionary<string, string> CreateConstructorIntroducingEdits(
+            string hostPath,
+            string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeConstructorHost.cs",
+                    InsertIntroducedTypeWithConstructor(File.ReadAllText(hostPath))),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeConstructorCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The same declaration with only the constructor body edited, which the reload must refuse
+        // even though nothing about the declaration itself changed.
+        private static Dictionary<string, string> CreateConstructorBodyEditedEdits(
+            string hostPath,
+            string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeConstructorEditedHost.cs",
+                    InsertIntroducedTypeWithEditedConstructor(File.ReadAllText(hostPath))),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeConstructorEditedCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
             };
         }

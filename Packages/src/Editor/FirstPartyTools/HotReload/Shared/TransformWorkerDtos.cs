@@ -163,6 +163,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string originalAssemblyName;
 
         public string originalAssemblyMvid;
+
+        public bool bodyEdited;
     }
 
     /// <summary>

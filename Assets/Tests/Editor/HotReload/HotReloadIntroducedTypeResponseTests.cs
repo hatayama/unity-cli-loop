@@ -422,7 +422,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             HotReloadIntroducedTypeOutcome.AlreadyActive(
                                 "Example.RetainedType",
                                 "SomeAssembly",
-                                files[0].ProjectRelativePath)
+                                files[0].ProjectRelativePath,
+                                bodyEdited: false)
                         })),
                 HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
                 (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
@@ -625,7 +626,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                                 HotReloadIntroducedTypeOutcome.AlreadyActive(
                                     "Example.RetainedType",
                                     "SomeAssembly",
-                                    "Assets/Example.cs")
+                                    "Assets/Example.cs",
+                                    bodyEdited: false)
                             },
                             new[]
                             {

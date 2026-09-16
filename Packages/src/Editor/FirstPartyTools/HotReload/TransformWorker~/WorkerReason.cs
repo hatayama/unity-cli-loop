@@ -25,4 +25,19 @@ internal sealed class WorkerReason
     {
         return new WorkerReason { Code = code, Detail = detail };
     }
+
+    // The same as Composite for a sentence that also substitutes values of its own. It is a
+    // separate name because an overload would let a caller drop the args by accident.
+    internal static WorkerReason CompositeWithArgs(
+        HotReloadWorkerReasonCode code,
+        WorkerReason detail,
+        params string[] args)
+    {
+        return new WorkerReason
+        {
+            Code = code,
+            Args = args != null && args.Length > 0 ? args : null,
+            Detail = detail
+        };
+    }
 }
