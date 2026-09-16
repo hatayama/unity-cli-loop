@@ -154,8 +154,8 @@ Test file: `HotReloadSpikeS5RetainedFingerprintTests.cs`.
 What the spike **proved**:
 
 - `Fingerprint_BodyOnlyEdit_ComparesAsBodyOnlyAndNamesTheMember` — editing only a method body
-  of a type served from a retained artifact compares as body-only and names exactly that
-  member key.
+  of an introduced type, planned twice from the same target generation, compares as body-only
+  and names exactly that member key.
 - `Fingerprint_DeclarationEdit_ComparesAsDeclarationChanged` — changing that member's
   declaration compares as a declaration change instead.
 - `Plan_BodyOnlyEditAgainstRecordedDeclaration_StillRequiresACompile` — planning the body-only
