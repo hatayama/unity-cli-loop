@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerReasonDto reason = new TransformWorkerReasonDto
             {
-                code = HotReloadWorkerReasonCode.IntroducedTypeChanged,
+                code = HotReloadWorkerReasonCode.IntroducedTypeGeneric,
                 args = new[] { "Example.Type" },
                 detail = new TransformWorkerReasonDto
                 {
@@ -659,6 +659,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.IntroducedTypeChanged,
                 new[] { "Example.Type" },
                 "Changed introduced type requires a compile: Example.Type");
+            yield return DetailArgsCase(
+                HotReloadWorkerReasonCode.IntroducedTypeChanged,
+                new[] { "Example.Type" },
+                HotReloadWorkerReasonCode.IntroducedTypeDifferenceList,
+                new[] { "header, added:Example.Type::Extra()" },
+                "Changed introduced type requires a compile: Example.Type"
+                + " Declaration differences: header, added:Example.Type::Extra().");
+            yield return DetailArgsCase(
+                HotReloadWorkerReasonCode.IntroducedTypeMemberBodyChanged,
+                new[] { "Example.Type" },
+                HotReloadWorkerReasonCode.IntroducedTypeDifferenceList,
+                new[] { "Example.Type::.ctor()" },
+                "Changed member body of introduced type requires a compile: Example.Type"
+                + " Changed members: Example.Type::.ctor()."
+                + " Only ordinary method bodies of an introduced type can be hot reloaded.");
+            yield return Case(
+                HotReloadWorkerReasonCode.IntroducedTypeDifferenceList,
+                new[] { "header, order" },
+                "header, order");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeArtifactUnusable,
                 new[] { "an artifact could not be read." },
@@ -681,6 +700,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static TestCaseData Case(HotReloadWorkerReasonCode code, string[] args, string expected)
         {
             return new TestCaseData(code.ToString(), args, null, null, expected).SetName("Render_" + code);
+        }
+
+        // The detail of a composed reason carries values of its own here, which the no-argument
+        // DetailCase cannot express.
+        private static TestCaseData DetailArgsCase(
+            HotReloadWorkerReasonCode code,
+            string[] args,
+            HotReloadWorkerReasonCode detailCode,
+            string[] detailArgs,
+            string expected)
+        {
+            return new TestCaseData(code.ToString(), args, detailCode.ToString(), detailArgs, expected)
+                .SetName("Render_" + code + "_WithDetailArgs");
         }
 
         private static TestCaseData DetailCase(
