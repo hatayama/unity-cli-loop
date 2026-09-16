@@ -68,14 +68,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (TransformWorkerEntryDto entry in entries)
             {
                 identities.Add(new HotReloadQualifiedMethodIdentity(
-                    assemblyName,
+                    ResolveIdentityAssemblyName(assemblyName, entry.homeAssemblyName),
                     HotReloadMethodKeys.BuildMethodKey(entry)));
             }
 
             foreach (TransformWorkerUnchangedMethodDto unchangedMethod in unchangedMethods)
             {
                 identities.Add(new HotReloadQualifiedMethodIdentity(
-                    assemblyName,
+                    ResolveIdentityAssemblyName(assemblyName, unchangedMethod.homeAssemblyName),
                     HotReloadMethodKeys.BuildMethodKeyParts(
                         unchangedMethod.typeMetadataName,
                         unchangedMethod.methodName,
@@ -89,6 +89,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return identities;
+        }
+
+        // Why not always the target assembly: a row whose method lives in an introduced-type
+        // artifact names that assembly, and a removed signature of the target must not be
+        // considered still live because an artifact carries the same type and method.
+        private static string ResolveIdentityAssemblyName(string assemblyName, string homeAssemblyName)
+        {
+            return string.IsNullOrEmpty(homeAssemblyName) ? assemblyName : homeAssemblyName;
         }
     }
 }

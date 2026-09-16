@@ -404,8 +404,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerEntryDto entry)
         {
             return new HotReloadQualifiedMethodIdentity(
-                assemblyName,
+                ResolveIdentityAssemblyName(assemblyName, entry.homeAssemblyName),
                 HotReloadMethodKeys.BuildMethodKey(entry));
+        }
+
+        // Why not always the target assembly: a row whose method lives in an introduced-type
+        // artifact is a different assembly's method that happens to be edited in this file, and
+        // giving it the target's name would let a call-site hit in the target match it.
+        private static string ResolveIdentityAssemblyName(string assemblyName, string homeAssemblyName)
+        {
+            return string.IsNullOrEmpty(homeAssemblyName) ? assemblyName : homeAssemblyName;
         }
 
         private static HotReloadQualifiedMethodIdentity CreateUnchangedMethodIdentity(
@@ -417,7 +425,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchanged.methodName,
                 unchanged.parameterTypeFullNames,
                 unchanged.genericArity);
-            return new HotReloadQualifiedMethodIdentity(assemblyName, methodKey);
+            return new HotReloadQualifiedMethodIdentity(
+                ResolveIdentityAssemblyName(assemblyName, unchanged.homeAssemblyName),
+                methodKey);
         }
 
         private static HotReloadQualifiedMethodIdentity CreateCallerIdentity(

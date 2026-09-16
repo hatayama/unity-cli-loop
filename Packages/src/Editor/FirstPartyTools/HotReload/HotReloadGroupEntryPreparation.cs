@@ -35,11 +35,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // binding per file would re-run the same binders and hide which file first failed.
             Dictionary<string, string> bindFailures =
                 collaborators.EntryApplier.BindShimAccessors(compileResult.Assembly);
+            // Why once for the group: every file of the group is resolved against the same
+            // domain and project, and a row that names an artifact assembly must resolve to the
+            // same retained home no matter which file it came from.
+            HotReloadEntryHomeResolver homeResolver =
+                new HotReloadEntryHomeResolver(collaborators.Domain, context.ProjectRoot);
             List<HotReloadPreparedGroupFile> prepared =
                 new List<HotReloadPreparedGroupFile>(context.Files.Count);
             foreach (HotReloadGroupFile file in context.Files)
             {
-                prepared.Add(PrepareFile(compileResult, file, entriesByFile, bindFailures));
+                prepared.Add(
+                    PrepareFile(compileResult, homeResolver, file, entriesByFile, bindFailures));
             }
 
             return prepared;
@@ -47,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static HotReloadPreparedGroupFile PrepareFile(
             HotReloadShimCompileResult compileResult,
+            HotReloadEntryHomeResolver homeResolver,
             HotReloadGroupFile file,
             Dictionary<string, List<TransformWorkerEntryDto>> entriesByFile,
             Dictionary<string, string> bindFailures)
@@ -65,6 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerEntryDto[] entries = fileEntries.ToArray();
             HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
                 file.Home,
+                homeResolver,
                 file.AssemblyResolvePath,
                 compileResult.Assembly,
                 entries,
