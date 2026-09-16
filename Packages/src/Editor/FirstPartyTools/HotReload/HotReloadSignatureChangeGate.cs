@@ -87,7 +87,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.Defines,
                 context.WorkerOutput.skipped,
                 context.GroupFilePaths,
-                context.CorrelationId);
+                context.CorrelationId,
+                HotReloadShimReferenceBuilder.ResolveIntroducedTypeArtifactHomes(
+                    collaborators.Domain,
+                    context.ProjectRoot,
+                    context.WorkerInput.introducedTypeArtifacts,
+                    context.PreparedIntroducedTypes?.Artifact));
             HotReloadShimIsolation.IsolationRetryRunResult retry = await HotReloadShimIsolation.RunIsolationRetryAsync(
                 collaborators.TransformWorkerClient,
                 retryContext,

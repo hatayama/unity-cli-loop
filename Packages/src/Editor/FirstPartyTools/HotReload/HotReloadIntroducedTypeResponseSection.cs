@@ -66,12 +66,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return true;
             }
 
-            if (hasMethodFailure || appliedMethodCount > 0)
+            if (hasMethodFailure)
             {
                 return false;
             }
 
             int introducedCount = CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.Introduced);
+            if (appliedMethodCount > 0)
+            {
+                return TryBuildBodyEditedMessage(outcomes, introducedCount, appliedMethodCount, out message);
+            }
+
             message = string.Format(
                 CultureInfo.InvariantCulture,
                 introducedCount > 0
@@ -81,6 +86,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? introducedCount
                     : CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.AlreadyActive));
             return true;
+        }
+
+        /// <summary>
+        /// The message a run reports when the only type rows it carries are declarations a
+        /// retained artifact serves and the bodies of some of their methods were patched, or
+        /// false when what the methods did is better told by the ordinary apply message.
+        /// </summary>
+        /// <remarks>
+        /// Why only when this run introduced nothing: a run that also activated a type of its own
+        /// has two different things to report about its types, and the ordinary apply message with
+        /// the type-row summary appended is what says both.
+        /// </remarks>
+        private static bool TryBuildBodyEditedMessage(
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes,
+            int introducedCount,
+            int appliedMethodCount,
+            out string message)
+        {
+            message = null;
+            if (introducedCount > 0 || !HoldsBodyEditedDeclaration(outcomes))
+            {
+                return false;
+            }
+
+            message = string.Format(
+                CultureInfo.InvariantCulture,
+                HotReloadConstants.AlreadyActiveIntroducedTypesPatchedApplyMessageFormat,
+                CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.AlreadyActive),
+                appliedMethodCount);
+            return true;
+        }
+
+        // A retained declaration whose body changed is the one case where a patched method can
+        // belong to a type no compiled assembly of the project carries.
+        private static bool HoldsBodyEditedDeclaration(
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes)
+        {
+            foreach (HotReloadIntroducedTypeOutcome outcome in outcomes)
+            {
+                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.AlreadyActive
+                    && outcome.BodyEdited)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>

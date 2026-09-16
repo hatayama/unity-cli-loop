@@ -85,12 +85,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool includeHarmonyReference = HotReloadShimReferenceBuilder.NeedsHarmonyReference(workerOutput);
             bool includeAddedFieldStoreReference =
                 HotReloadShimReferenceBuilder.NeedsAddedFieldStoreReference(workerOutput);
+            // Why resolved once here: the shim compile and the isolation retry below compile the
+            // same group against the same retained assemblies, and resolving twice would let the
+            // two passes disagree about which artifacts this domain still holds.
+            List<HotReloadTypeHome> introducedTypeArtifactHomes =
+                HotReloadShimReferenceBuilder.ResolveIntroducedTypeArtifactHomes(
+                    collaborators.Domain,
+                    context.ProjectRoot,
+                    context.WorkerInput.introducedTypeArtifacts,
+                    context.PreparedIntroducedTypes?.Artifact);
             HotReloadShimReferenceBuilder.ShimReferencePathsResult shimReferencePaths = HotReloadShimReferenceBuilder.TryBuildShimReferencePaths(
                 context.CompilationAssembly,
                 context.Home,
                 includeHarmonyReference,
                 includeAddedFieldStoreReference,
-                context.WorkerInput.introducedTypeArtifacts);
+                introducedTypeArtifactHomes);
             if (shimReferencePaths.ErrorMessage != null)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(
@@ -131,6 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.Defines,
                 context.GroupFilePaths,
                 context.CorrelationId,
+                introducedTypeArtifactHomes,
                 ct).ConfigureAwait(false);
             if (isolation == null)
             {

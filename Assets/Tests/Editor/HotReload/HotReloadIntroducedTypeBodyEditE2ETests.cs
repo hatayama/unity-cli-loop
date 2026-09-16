@@ -131,8 +131,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "The message must say the declaration came from an assembly already held.");
                     Assert.That(
                         response.Message,
-                        Does.Contain("1 method body(ies) were patched"),
-                        "The message must say how many bodies this reload patched.");
+                        Does.Contain("2 method body(ies) were patched"),
+                        "The message must count every body this reload patched: the edited body of "
+                        + "the introduced type and the caller edited against it.");
                     Assert.That(
                         response.Message,
                         Does.Not.Contain("no method body needed patching"),
@@ -192,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 if (outcome.Method.Contains(
-                        IntroducedTypeMetadataName + "::Compute",
+                        IntroducedTypeMetadataName + ".Compute()",
                         StringComparison.Ordinal))
                 {
                     count++;

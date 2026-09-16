@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             HotReloadGroupFilePaths groupFilePaths,
             string correlationId,
+            IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes,
             CancellationToken ct)
         {
             if (compileResult.Errors.Count == 0)
@@ -84,7 +85,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 workerOutput.skipped,
                 groupFilePaths,
-                correlationId);
+                correlationId,
+                introducedTypeArtifactHomes);
             IsolationRetryRunResult retry = await RunIsolationRetryAsync(
                 transformWorkerClient,
                 retryContext,
@@ -192,7 +194,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.Home,
                 includeHarmonyReference,
                 includeAddedFieldStoreReference,
-                workerInput.introducedTypeArtifacts);
+                context.IntroducedTypeArtifactHomes);
             if (shimReferencePaths.ErrorMessage != null)
             {
                 // First-pass publicize already succeeded, so a miss here is rare; abandon
