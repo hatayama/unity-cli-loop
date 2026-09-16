@@ -128,6 +128,70 @@ rewrites the method entry in place); private methods resolve and patch via `Acce
 transplant mechanism inherits (it uses the same patching machinery with a transpiler instead
 of a prefix).
 
+### S4 — patching a method inside a retained artifact assembly
+
+Test file: `HotReloadSpikeS4ArtifactPatchTests.cs`.
+
+What the spike **proved** (an artifact assembly is built the way production builds one:
+external Roslyn to a dll and a pdb, then the two-argument `Assembly.Load(dllBytes, pdbBytes)`
+the production loader uses, described by a `RetainedArtifact` type home):
+
+- `MethodMatcher_ResolvesMethodInsideRetainedArtifactHome` — the existing matcher resolves a
+  public method of such an assembly through its Cecil metadata token and the Mvid guard, the
+  resolved method belongs to the byte-loaded assembly, and the patcher's preflight check
+  accepts it.
+- `Transpiler_ReplacesBodyOfRetainedArtifactMethod` — a Harmony transpiler replaces the body.
+- `UnpatchAll_RestoresRetainedArtifactMethod` — unpatching restores the original body.
+- `MethodMatcher_ResolvesPrivateMethodInsideRetainedArtifactHome` — a private method takes the
+  same route, and its caller observes the replaced body.
+
+**Nothing refuted.** Carrying a pdb into the load does not affect any of the above.
+
+### S5 — structured fingerprint on a body-only edit
+
+Test file: `HotReloadSpikeS5RetainedFingerprintTests.cs`.
+
+What the spike **proved**:
+
+- `Fingerprint_BodyOnlyEdit_ComparesAsBodyOnlyAndNamesTheMember` — editing only a method body
+  of a type served from a retained artifact compares as body-only and names exactly that
+  member key.
+- `Fingerprint_DeclarationEdit_ComparesAsDeclarationChanged` — changing that member's
+  declaration compares as a declaration change instead.
+- `Plan_BodyOnlyEditAgainstRecordedDeclaration_StillRequiresACompile` — planning the body-only
+  edit against the recorded declaration still emits the "changed introduced type requires a
+  compile" diagnostic. This pins today's outcome, which is what a later change has to move.
+- The other half of the premise — that a type's fingerprint stays stable while a type it
+  depends on moves from source into an artifact — is already pinned by
+  `PrepareIntroducedTypes_DependencyMovedToArtifact_KeepsFingerprint`,
+  `PrepareIntroducedTypes_IndirectDependencyMovedToArtifact_KeepsFingerprint` and
+  `Transform_DeclarationReadingRetainedType_StillMatchesItsRecord` in
+  `TransformWorkerIntroducedTypeBindingTests` (14 tests, all passing).
+
+**Nothing refuted.** One caveat for anyone writing more of these: a fingerprint's header
+carries the target assembly Mvid, so all fingerprints under comparison must come from the same
+fixture generation — rebuilding the fixture makes every comparison a declaration change.
+
+**Open items for Phase 1.** The spike changed no production code; these are the gaps it
+found:
+
+1. `Patching/HotReloadDomain.cs:71` `ResolveTypeHome` has one caller,
+   `HotReloadPatchTargetSupport.cs:100`, and the assembly name it passes always comes from
+   `CompilationPipeline.GetAssemblyNameFromScriptPath` (`HotReloadPatchTargetSupport.cs:46`),
+   so the retained-artifact branch is never taken today.
+2. Publicizing refuses an artifact: `Patching/ReferencePublicizer.cs:66` asserts the home is
+   publicizable and `:71` asserts a script-assembly path (`:180`), while
+   `Patching/HotReloadShimReferenceBuilder.cs:279` publicizes the target home
+   unconditionally.
+3. The worker deliberately does not look a compiled type up in the artifacts
+   (`TransformWorker~/WorkerTypeHome.cs:24` explains why), and a type with no compiled
+   counterpart has all its methods skipped
+   (`TransformWorker~/TypeEmitPlanner.cs:156-159`).
+4. Nothing records the artifact assembly's own Mvid:
+   `IntroducedType/HotReloadIntroducedTypeArtifact.cs` holds only the assembly, the dll and
+   pdb paths and the descriptors, and a descriptor's Mvid
+   (`IntroducedType/HotReloadIntroducedTypeDescriptor.cs:12`) is the original assembly's.
+
 ## Mechanism Decision
 
 **Transplant-primary.** Stage (5) applies a Harmony transpiler per patched method that
