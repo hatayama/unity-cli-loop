@@ -67,6 +67,36 @@ internal static class UnchangedOrdinaryMethodRecorder
         return true;
     }
 
+    /// <summary>
+    /// Records the getter of a property declared on a type a retained artifact serves as
+    /// unchanged. The fingerprint comparison that let this reload keep the declaration reported
+    /// that only ordinary method bodies differ, so an accessor body here is the one the artifact
+    /// was compiled from. Only a getter with a body of its own produces a row, which is the shape
+    /// the ordinary getter path produces too.
+    /// </summary>
+    internal static void RecordRetainedPropertyGetterAsUnchanged(
+        TypeEmitState typeState,
+        PropertyDeclarationSyntax propertyDeclaration,
+        SemanticModel semanticModel,
+        List<WorkerUnchangedMethod> unchangedMethods)
+    {
+        IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
+        if (propertySymbol == null || propertySymbol.GetMethod == null)
+        {
+            return;
+        }
+
+        (bool hasGetterBody, AccessorDeclarationSyntax _) =
+            PropertyGetterClassifier.TryGetPropertyGetterBody(propertyDeclaration);
+        if (!hasGetterBody)
+        {
+            return;
+        }
+
+        unchangedMethods.Add(
+            BuildUnchangedMethod(propertySymbol.GetMethod, typeState, Array.Empty<string>()));
+    }
+
     private static WorkerUnchangedMethod BuildUnchangedMethod(
         IMethodSymbol methodSymbol,
         TypeEmitState typeState,

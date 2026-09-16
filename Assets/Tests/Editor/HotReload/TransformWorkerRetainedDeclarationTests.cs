@@ -426,6 +426,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntriesOfRetainedType(result), Is.Empty, DescribeRows(result));
             Assert.That(FindUnchangedOfRetainedType(result), Is.Empty, DescribeRows(result));
+            // Why the skips are asserted as well: a declaration left in the tree is reported as a
+            // type that is not compiled yet, which produces skip rows alone - the two assertions
+            // above would still hold.
+            Assert.That(FindSkippedCodesOfRetainedType(result), Is.Empty, DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: a body edit of a retained type whose declaration escapes its own name is patched
+        /// too. The changed-body keys and the keys the emit stages spell a method with are both
+        /// built from the declaration, so `@Retained` cannot make the two disagree and report an
+        /// edited method as one whose body the artifact already runs.
+        /// </summary>
+        [Test]
+        public async Task Transform_RetainedDeclarationNameIsEscaped_PatchesTheEditedMethod()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "EscapedTypeName",
+                    WithEscapedTypeName(ArtifactBackedSource),
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, WithEscapedTypeName(ArtifactBackedBodyEditedSource));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] patched = FindEntries(result, "Twice");
+            Assert.That(patched.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(patched[0].typeMetadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(patched[0].homeAssemblyName, Is.EqualTo(fixture.ArtifactAssemblyName));
+        }
+
+        /// <summary>
+        /// What: a property getter of a retained type is reported as unchanged in the assembly
+        /// serving the type, not patched as a getter of the edited file's own assembly. The
+        /// comparison that kept the declaration reported that no accessor body changed, while the
+        /// ordinary getter path decides that from a baseline snapshot this type has none of.
+        /// </summary>
+        [Test]
+        public async Task Transform_RetainedDeclarationHasAPropertyGetter_ReportsTheGetterAsUnchanged()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "PropertyGetter",
+                    WithNumberProperty(ArtifactBackedSource),
+                    new[] { "Twice", "Thrice", "get_Number" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, WithNumberProperty(ArtifactBackedBodyEditedSource));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntries(result, "get_Number"), Is.Empty, DescribeRows(result));
+            TransformWorkerUnchangedMethodDto[] unchanged = FindUnchanged(result, "get_Number");
+            Assert.That(unchanged.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(unchanged[0].homeAssemblyName, Is.EqualTo(fixture.ArtifactAssemblyName));
+            Assert.That(FindEntries(result, "Twice").Length, Is.EqualTo(1), DescribeRows(result));
         }
 
         /// <summary>
@@ -452,6 +515,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindDependentFingerprint(bodyEdited[1]),
                 Is.EqualTo(FindDependentFingerprint(unedited[1])));
+        }
+
+        // The same declaration with its name escaped, which is a legal spelling of it that the
+        // symbol reports without the escape - the two ways of naming the type the emit stages have
+        // to agree on.
+        private static string WithEscapedTypeName(string source)
+        {
+            return source.Replace("public class Retained", "public class @Retained", StringComparison.Ordinal);
+        }
+
+        // The same declaration with a property whose getter has a body, which the artifact serves
+        // as get_Number.
+        private static string WithNumberProperty(string source)
+        {
+            return source.Replace(
+                "        public static int Value = 1;\n",
+                "        public static int Value = 1;\n\n        public int Number => Value;\n",
+                StringComparison.Ordinal);
         }
 
         private static async Task<TransformWorkerClientResult> RunAsync(
@@ -557,6 +638,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return found.ToArray();
+        }
+
+        private static HotReloadWorkerReasonCode[] FindSkippedCodesOfRetainedType(
+            TransformWorkerClientResult result)
+        {
+            List<HotReloadWorkerReasonCode> codes = new List<HotReloadWorkerReasonCode>();
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(RetainedTypeMetadataName, StringComparison.Ordinal))
+                {
+                    codes.Add(skipped.reason.code);
+                }
+            }
+
+            return codes.ToArray();
         }
 
         private static HotReloadWorkerReasonCode[] FindSkippedCodes(

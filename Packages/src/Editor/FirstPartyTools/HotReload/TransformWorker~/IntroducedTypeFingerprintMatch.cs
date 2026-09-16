@@ -119,6 +119,18 @@ internal sealed class IntroducedTypeFingerprintMatch
         string typeMetadataName)
     {
         Dictionary<string, string> syntaxKeysByMemberKey = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // Why the values get their type name from the syntax and not from typeMetadataName: the
+        // emit stages spell a method with the name the declaration itself carries, and an escaped
+        // identifier such as `class @Sample` is written "@Sample" there while the symbol the
+        // fingerprint was keyed from reports "Sample". A value built from the symbol's name would
+        // never be found by the stage looking the key up, which reads an edited body as unchanged.
+        if (!(declaration is TypeDeclarationSyntax typeDeclaration))
+        {
+            return syntaxKeysByMemberKey;
+        }
+
+        string syntaxTypeMetadataName = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
         IReadOnlyList<MemberDeclarationSyntax> members = IntroducedTypeMemberRegions.CollectMembers(declaration);
         for (int index = 0; index < members.Count; index++)
         {
@@ -140,7 +152,7 @@ internal sealed class IntroducedTypeFingerprintMatch
             // refusal such a source has to get anyway.
             syntaxKeysByMemberKey.TryAdd(
                 memberKey,
-                WorkerSyntaxIndex.BuildSyntaxMethodKey(typeMetadataName, methodDeclaration));
+                WorkerSyntaxIndex.BuildSyntaxMethodKey(syntaxTypeMetadataName, methodDeclaration));
         }
 
         return syntaxKeysByMemberKey;
