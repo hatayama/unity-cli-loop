@@ -111,6 +111,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "    }\n"
             + "}\n";
 
+        // The private method both edited sources hold, which is where a test splices an added
+        // member so the insertion lands at the end of the retained declaration.
+        private const string HiddenMember =
+            "        private int Hidden()\n"
+            + "        {\n"
+            + "            return Value + 1;\n"
+            + "        }\n";
+
+        // The compiled caller's own method, which is where a test splices a member the caller
+        // gains.
+        private const string CallerReadMember =
+            "        public int Read()\n"
+            + "        {\n"
+            + "            return Retained.Value + 1;\n"
+            + "        }\n";
+
+        private const string AddedMethodMember =
+            "        public int Extra()\n"
+            + "        {\n"
+            + "            return Value + 5;\n"
+            + "        }\n";
+
+        // An added method that reads a private method of the same type, which only the assembly
+        // serving the type can answer.
+        private const string AddedMethodCallingHiddenMember =
+            "        public int Extra()\n"
+            + "        {\n"
+            + "            return Hidden() + 5;\n"
+            + "        }\n";
+
+        // An added field plus the method that reads it, because a field is only reported once an
+        // emitted body names it.
+        private const string AddedFieldAndReaderMembers =
+            "        private int extra = 7;\n"
+            + "\n"
+            + "        public int Extra()\n"
+            + "        {\n"
+            + "            return extra;\n"
+            + "        }\n";
+
+        private const string AddedAutoPropertyMember =
+            "        public int Extra { get; set; }\n";
+
+        private const string AddedBodiedPropertyMember =
+            "        public int Extra => Value + 5;\n";
+
         // A retained type whose only method is the one the default artifact holds, so a planning
         // test can compare a body edit of it against the same declaration left alone.
         private const string DependedOnSource =
@@ -515,6 +561,283 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindDependentFingerprint(bodyEdited[1]),
                 Is.EqualTo(FindDependentFingerprint(unedited[1])));
+        }
+
+        /// <summary>
+        /// What: an ordinary method added to a type a retained artifact serves is emitted as an
+        /// added method on the artifact assembly, instead of the type being refused as one no
+        /// patch target holds.
+        /// </summary>
+        [Test]
+        public async Task Transform_OrdinaryMethodAddedToRetainedType_EmitsAnAddedMethod()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "AddedMethodOnRetained",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, WithAddedMember(ArtifactBackedSource, AddedMethodMember));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] added = FindEntries(result, "Extra");
+            Assert.That(added.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(added[0].typeMetadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(
+                added[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+            Assert.That(added[0].homeAssemblyName, Is.EqualTo(fixture.ArtifactAssemblyName));
+            Assert.That(FindUnchanged(result, "Twice").Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(FindUnchanged(result, "Thrice").Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(FindSkippedCodesOfRetainedType(result), Is.Empty, DescribeRows(result));
+            Assert.That(result.Output.files[0].addedFieldNames, Is.Empty, DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: adding a method and editing an existing body in the same reload applies both on
+        /// the artifact: the edited method is patched and the new one is added.
+        /// </summary>
+        [Test]
+        public async Task Transform_MethodAddedAndBodyEditedOnRetainedType_PatchesAndAddsInOneRun()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "AddedMethodAndBodyEdit",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                WithAddedMember(ArtifactBackedBodyEditedSource, AddedMethodMember));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] patched = FindEntries(result, "Twice");
+            Assert.That(patched.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(
+                patched[0].patchKind,
+                Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+            TransformWorkerEntryDto[] added = FindEntries(result, "Extra");
+            Assert.That(added.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(
+                added[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+            Assert.That(FindUnchanged(result, "Thrice").Length, Is.EqualTo(1), DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: a method added to a retained type can call a private method of that type, which
+        /// the artifact holds, because the added method binds against the artifact the way it
+        /// binds against a compiled type.
+        /// </summary>
+        [Test]
+        public async Task Transform_AddedMethodCallsAPrivateMethodOfTheRetainedType_EmitsTheAddedMethod()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "AddedMethodCallsPrivate",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                WithAddedMember(ArtifactBackedSource, AddedMethodCallingHiddenMember));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] added = FindEntries(result, "Extra");
+            Assert.That(added.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(
+                added[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+            Assert.That(FindSkippedCodes(result, "Extra"), Is.Empty, DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: a field added to a retained type is held by the added-field store and named in
+        /// the run's added fields, because an emitted body reads it.
+        /// </summary>
+        [Test]
+        public async Task Transform_FieldAddedToRetainedTypeAndRead_ReportsTheAddedField()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "AddedFieldOnRetained",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                WithAddedMember(ArtifactBackedSource, AddedFieldAndReaderMembers));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].addedFieldNames,
+                Does.Contain(RetainedTypeMetadataName + ".extra"),
+                DescribeRows(result));
+            TransformWorkerEntryDto[] added = FindEntries(result, "Extra");
+            Assert.That(added.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(
+                added[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: a field added to a compiled type whose initializer reads a public static member
+        /// of a type the artifact serves is emittable, because that member is already live. The
+        /// retained type is body-edited in the same run so its declaration stays in the tree,
+        /// which is what makes the initializer read a source symbol. A public static member an
+        /// artifact already holds is not a same-file addition, so the read is emittable.
+        /// </summary>
+        [Test]
+        public async Task Transform_AddedFieldInitializerReadsARetainedTypesStaticMember_ReportsTheAddedField()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "AddedFieldReadsRetained",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                WithCallerReadingTheRetainedStatic(ArtifactBackedBodyEditedSource));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].addedFieldNames,
+                Does.Contain("Example.Caller.extra"),
+                DescribeRows(result));
+            TransformWorkerEntryDto[] added = FindEntries(result, "Extra");
+            Assert.That(added.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(added[0].typeMetadataName, Is.EqualTo("Example.Caller"));
+            Assert.That(
+                added[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: an auto property added to a retained type is emitted as two added accessors, the
+        /// way one added to a compiled type is.
+        /// </summary>
+        [Test]
+        public async Task Transform_AutoPropertyAddedToRetainedType_EmitsBothAccessorsAsAddedMethods()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "AddedAutoPropertyOnRetained",
+                    ArtifactBackedSource,
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                WithAddedMember(ArtifactBackedSource, AddedAutoPropertyMember));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] getter = FindEntries(result, "get_Extra");
+            Assert.That(getter.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(getter[0].typeMetadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(
+                getter[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+            TransformWorkerEntryDto[] setter = FindEntries(result, "set_Extra");
+            Assert.That(setter.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(
+                setter[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+        }
+
+        /// <summary>
+        /// What: a property with a body added to a retained type is emitted as one added getter,
+        /// while the property the artifact already serves stays an unchanged row.
+        /// </summary>
+        [Test]
+        public async Task Transform_BodiedPropertyAddedToRetainedType_EmitsTheGetterAsAnAddedMethod()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "AddedBodiedPropertyOnRetained",
+                    WithNumberProperty(ArtifactBackedSource),
+                    new[] { "Twice", "Thrice", "get_Number" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                WithAddedMember(WithNumberProperty(ArtifactBackedSource), AddedBodiedPropertyMember));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] getter = FindEntries(result, "get_Extra");
+            Assert.That(getter.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(
+                getter[0].patchKind,
+                Is.EqualTo(HotReloadConstants.PatchKindAddedMethod),
+                DescribeRows(result));
+            Assert.That(FindEntries(result, "get_Number"), Is.Empty, DescribeRows(result));
+            Assert.That(FindUnchanged(result, "get_Number").Length, Is.EqualTo(1), DescribeRows(result));
+        }
+
+        // The same declaration with one more member on the retained type, which is the edit the
+        // added-member machinery has to apply on the artifact.
+        private static string WithAddedMember(string source, string member)
+        {
+            return source.Replace(HiddenMember, HiddenMember + "\n" + member, StringComparison.Ordinal);
+        }
+
+        // The same declaration with a field added to the compiled caller whose initializer reads
+        // a public static member of the type the artifact serves, plus the method that reads the
+        // field so an emitted body names it.
+        private static string WithCallerReadingTheRetainedStatic(string source)
+        {
+            return source.Replace(
+                CallerReadMember,
+                "        private int extra = Retained.Value + 1;\n"
+                + "\n"
+                + CallerReadMember
+                + "\n"
+                + "        public int Extra()\n"
+                + "        {\n"
+                + "            return extra;\n"
+                + "        }\n",
+                StringComparison.Ordinal);
         }
 
         // The same declaration with its name escaped, which is a legal spelling of it that the

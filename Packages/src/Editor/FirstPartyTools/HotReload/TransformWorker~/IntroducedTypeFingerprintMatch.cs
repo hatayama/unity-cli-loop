@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // How a declaration compares against the fingerprint recorded for the artifact this domain
 // already serves it from, in the terms the reload decides on: whether it can keep the artifact,
-// patch ordinary method bodies on it, or has to ask for a compile.
+// patch ordinary method bodies on it, add members to it, or has to ask for a compile.
 internal enum IntroducedTypeFingerprintMatchKind
 {
     Identical,
     MethodBodiesOnly,
+    MembersAdded,
     OtherBodiesChanged,
     DeclarationChanged,
     RecordUnreadable
@@ -20,6 +20,10 @@ internal enum IntroducedTypeFingerprintMatchKind
 // about whether one edit is a body edit.
 internal sealed class IntroducedTypeFingerprintMatch
 {
+    private const string AddedDetailPrefix = "added:";
+
+    private const string OrderDetail = "order";
+
     private static readonly string[] NoKeys = new string[0];
 
     private static readonly string[] UnreadableRecordDetails = { "record" };
@@ -41,7 +45,7 @@ internal sealed class IntroducedTypeFingerprintMatch
     /// <summary>
     /// Ordinary methods whose body changed, named by the syntax method key the emit stages spell a
     /// method with rather than by the key the fingerprint recorded. Empty unless the kind is
-    /// MethodBodiesOnly.
+    /// MethodBodiesOnly or MembersAdded.
     /// </summary>
     internal IReadOnlyList<string> ChangedMethodSyntaxKeys { get; }
 
@@ -54,7 +58,7 @@ internal sealed class IntroducedTypeFingerprintMatch
     internal static IntroducedTypeFingerprintMatch Classify(
         string recordedFingerprint,
         string currentFingerprint,
-        IReadOnlyDictionary<string, string> syntaxMethodKeysByMemberKey)
+        IntroducedTypeDeclarationMemberIndex memberIndex)
     {
         // Why the text comparison first: it is the decision this stage made before it could tell
         // one difference from another, so an unchanged declaration never depends on the parser.
@@ -86,111 +90,149 @@ internal sealed class IntroducedTypeFingerprintMatch
 
         HotReloadIntroducedTypeFingerprintComparison comparison =
             HotReloadIntroducedTypeFingerprint.Compare(recorded, current);
-        if (comparison.Kind == HotReloadIntroducedTypeFingerprintDifference.BodyOnly)
+
+        // Why every difference is checked before any of them is allowed: a reload that keeps the
+        // artifact has to account for all of them, so one difference it cannot apply settles the
+        // decision no matter what the others say.
+        List<string> addedMemberKeys = new List<string>();
+        bool orderChanged = false;
+        foreach (string detail in comparison.Details)
         {
-            return ClassifyChangedBodies(comparison, syntaxMethodKeysByMemberKey);
+            if (detail.StartsWith(AddedDetailPrefix, StringComparison.Ordinal))
+            {
+                addedMemberKeys.Add(detail.Substring(AddedDetailPrefix.Length));
+                continue;
+            }
+
+            if (string.Equals(detail, OrderDetail, StringComparison.Ordinal))
+            {
+                orderChanged = true;
+                continue;
+            }
+
+            // A removal, a changed signature, a changed header or a changed define set: the
+            // artifact no longer describes the declaration, and no added member explains it.
+            return ReportDeclarationChanged(comparison);
         }
 
-        if (comparison.Kind == HotReloadIntroducedTypeFingerprintDifference.Identical)
+        // The added-member machinery holds ordinary methods, fields and properties. A constructor,
+        // operator, event, indexer, nested type or enum member has to be in the assembly itself.
+        foreach (string addedMemberKey in addedMemberKeys)
+        {
+            if (memberIndex.FindMemberKind(addedMemberKey) == IntroducedTypeMemberKind.Other)
+            {
+                return ReportDeclarationChanged(comparison);
+            }
+        }
+
+        if (orderChanged && !IsOrderExplainedByAdditions(recorded, memberIndex, addedMemberKeys))
+        {
+            return ReportDeclarationChanged(comparison);
+        }
+
+        SplitChangedBodyKeys(
+            comparison,
+            memberIndex,
+            out List<string> changedMethodSyntaxKeys,
+            out List<string> changedOtherKeys);
+
+        // Why a single non-method member settles it: the reload patches one body at a time, and a
+        // constructor or accessor body it cannot patch would be left running the artifact's version
+        // while its neighbours ran the edited one.
+        if (changedOtherKeys.Count > 0)
         {
             return new IntroducedTypeFingerprintMatch(
-                IntroducedTypeFingerprintMatchKind.Identical,
+                IntroducedTypeFingerprintMatchKind.OtherBodiesChanged,
                 NoKeys,
+                changedOtherKeys,
+                NoKeys);
+        }
+
+        if (addedMemberKeys.Count > 0)
+        {
+            return new IntroducedTypeFingerprintMatch(
+                IntroducedTypeFingerprintMatchKind.MembersAdded,
+                changedMethodSyntaxKeys,
+                NoKeys,
+                comparison.Details);
+        }
+
+        if (changedMethodSyntaxKeys.Count > 0)
+        {
+            return new IntroducedTypeFingerprintMatch(
+                IntroducedTypeFingerprintMatchKind.MethodBodiesOnly,
+                changedMethodSyntaxKeys,
                 NoKeys,
                 NoKeys);
         }
 
+        return new IntroducedTypeFingerprintMatch(
+            IntroducedTypeFingerprintMatchKind.Identical,
+            NoKeys,
+            NoKeys,
+            NoKeys);
+    }
+
+    // The order difference an insertion leaves behind is not a reordering: dropping the added keys
+    // from the declared order has to leave exactly the order the record holds. Anything else moved
+    // a member the artifact already serves, and the declared order decides implicit enum values
+    // and the sequence field initializers run in.
+    private static bool IsOrderExplainedByAdditions(
+        HotReloadIntroducedTypeFingerprint recorded,
+        IntroducedTypeDeclarationMemberIndex memberIndex,
+        IReadOnlyList<string> addedMemberKeys)
+    {
+        if (addedMemberKeys.Count == 0)
+        {
+            return false;
+        }
+
+        HashSet<string> added = new HashSet<string>(addedMemberKeys, StringComparer.Ordinal);
+        List<string> remaining = new List<string>();
+        foreach (string memberKey in memberIndex.OrderedKeys)
+        {
+            if (added.Contains(memberKey))
+            {
+                continue;
+            }
+
+            remaining.Add(memberKey);
+        }
+
+        return string.Equals(
+            IntroducedTypeFingerprint.ComputeMemberOrderHash(remaining),
+            recorded.MemberOrderHash,
+            StringComparison.Ordinal);
+    }
+
+    private static void SplitChangedBodyKeys(
+        HotReloadIntroducedTypeFingerprintComparison comparison,
+        IntroducedTypeDeclarationMemberIndex memberIndex,
+        out List<string> changedMethodSyntaxKeys,
+        out List<string> changedOtherKeys)
+    {
+        changedMethodSyntaxKeys = new List<string>();
+        changedOtherKeys = new List<string>();
+        foreach (string memberKey in comparison.ChangedBodyKeys)
+        {
+            string syntaxMethodKey = memberIndex.FindSyntaxMethodKey(memberKey);
+            if (syntaxMethodKey != null)
+            {
+                changedMethodSyntaxKeys.Add(syntaxMethodKey);
+                continue;
+            }
+
+            changedOtherKeys.Add(memberKey);
+        }
+    }
+
+    private static IntroducedTypeFingerprintMatch ReportDeclarationChanged(
+        HotReloadIntroducedTypeFingerprintComparison comparison)
+    {
         return new IntroducedTypeFingerprintMatch(
             IntroducedTypeFingerprintMatchKind.DeclarationChanged,
             NoKeys,
             NoKeys,
             comparison.Details);
-    }
-
-    /// <summary>
-    /// The declaration's ordinary methods, keyed by the name the fingerprint records them under
-    /// and valued by the syntax method key the emit stages spell the same method with. The keys
-    /// are built along the path the fingerprint builds its own keys on, so the two never disagree
-    /// about how a member is named; the values are what a later stage can match a method
-    /// declaration against without normalizing it a second way.
-    /// </summary>
-    internal static IReadOnlyDictionary<string, string> CollectOrdinaryMethodKeys(
-        BaseTypeDeclarationSyntax declaration,
-        string typeMetadataName)
-    {
-        Dictionary<string, string> syntaxKeysByMemberKey = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        // Why the values get their type name from the syntax and not from typeMetadataName: the
-        // emit stages spell a method with the name the declaration itself carries, and an escaped
-        // identifier such as `class @Sample` is written "@Sample" there while the symbol the
-        // fingerprint was keyed from reports "Sample". A value built from the symbol's name would
-        // never be found by the stage looking the key up, which reads an edited body as unchanged.
-        if (!(declaration is TypeDeclarationSyntax typeDeclaration))
-        {
-            return syntaxKeysByMemberKey;
-        }
-
-        string syntaxTypeMetadataName = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
-        IReadOnlyList<MemberDeclarationSyntax> members = IntroducedTypeMemberRegions.CollectMembers(declaration);
-        for (int index = 0; index < members.Count; index++)
-        {
-            if (!(members[index] is MethodDeclarationSyntax methodDeclaration))
-            {
-                continue;
-            }
-
-            // Why the trivia is stripped first: a key builder keeps a comment written inside a
-            // parameter type, and the fingerprint recorded its keys from a stripped declaration.
-            // The same builder on an unstripped one spells the same method differently, which
-            // would read an edited body as a member the reload cannot patch.
-            MemberDeclarationSyntax member = IntroducedTypeMemberRegions.StripTrivia(methodDeclaration);
-            string memberKey = IntroducedTypeMemberRegions.BuildMemberKey(member, typeMetadataName, index);
-
-            // Two methods spelling the same key do not compile, and the fingerprint numbers them
-            // instead. Leaving the second one out keeps the first mapping intact, and a changed
-            // body of either is then read as a member the reload cannot patch, which is the
-            // refusal such a source has to get anyway.
-            syntaxKeysByMemberKey.TryAdd(
-                memberKey,
-                WorkerSyntaxIndex.BuildSyntaxMethodKey(syntaxTypeMetadataName, methodDeclaration));
-        }
-
-        return syntaxKeysByMemberKey;
-    }
-
-    // Why a single non-method member settles it: the reload patches one body at a time, and a
-    // constructor or accessor body it cannot patch would be left running the artifact's version
-    // while its neighbours ran the edited one.
-    private static IntroducedTypeFingerprintMatch ClassifyChangedBodies(
-        HotReloadIntroducedTypeFingerprintComparison comparison,
-        IReadOnlyDictionary<string, string> syntaxMethodKeysByMemberKey)
-    {
-        List<string> methodKeys = new List<string>();
-        List<string> otherKeys = new List<string>();
-        foreach (string key in comparison.ChangedBodyKeys)
-        {
-            if (syntaxMethodKeysByMemberKey.TryGetValue(key, out string syntaxMethodKey))
-            {
-                methodKeys.Add(syntaxMethodKey);
-                continue;
-            }
-
-            otherKeys.Add(key);
-        }
-
-        if (otherKeys.Count > 0)
-        {
-            return new IntroducedTypeFingerprintMatch(
-                IntroducedTypeFingerprintMatchKind.OtherBodiesChanged,
-                NoKeys,
-                otherKeys,
-                NoKeys);
-        }
-
-        return new IntroducedTypeFingerprintMatch(
-            IntroducedTypeFingerprintMatchKind.MethodBodiesOnly,
-            methodKeys,
-            NoKeys,
-            NoKeys);
     }
 }

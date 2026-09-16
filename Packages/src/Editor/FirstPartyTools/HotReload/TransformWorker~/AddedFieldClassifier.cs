@@ -112,7 +112,7 @@ internal static class AddedFieldClassifier
             home,
             fieldSymbol,
             binding,
-            typeState.SourceUnit.ArtifactMap);
+            typeState.SourceUnit);
 
         if (binding.UnavailableReason != null)
         {
@@ -135,7 +135,7 @@ internal static class AddedFieldClassifier
         WorkerTypeHome home,
         IFieldSymbol fieldSymbol,
         AddedFieldBinding binding,
-        IntroducedTypeArtifactMap artifactMap)
+        WorkerSourceUnit sourceUnit)
     {
         if (fieldSymbol.IsConst)
         {
@@ -155,7 +155,7 @@ internal static class AddedFieldClassifier
             home,
             fieldSymbol.Type,
             binding.Initializer,
-            artifactMap,
+            sourceUnit,
             out ITypeSymbol unresolvedStoreType);
         return DescribeStoreAvailability(availability, unresolvedStoreType);
     }
@@ -173,7 +173,7 @@ internal static class AddedFieldClassifier
         WorkerTypeHome home,
         ITypeSymbol valueType,
         ExpressionSyntax initializer,
-        IntroducedTypeArtifactMap artifactMap,
+        WorkerSourceUnit sourceUnit,
         out ITypeSymbol unresolvedType)
     {
         unresolvedType = null;
@@ -200,7 +200,7 @@ internal static class AddedFieldClassifier
                 semanticModel,
                 hostType,
                 home,
-                artifactMap))
+                sourceUnit))
         {
             return AddedFieldStoreAvailability.InitializerNotEmittable;
         }
@@ -282,8 +282,10 @@ internal static class AddedFieldClassifier
     internal static bool IsSameFileAddedMember(
         ISymbol symbol,
         WorkerTypeHome home,
-        SyntaxTree currentTree)
+        SemanticModel semanticModel,
+        WorkerSourceUnit sourceUnit)
     {
+        SyntaxTree currentTree = semanticModel?.SyntaxTree;
         if (symbol.ContainingType == null || currentTree == null)
         {
             return false;
@@ -304,7 +306,12 @@ internal static class AddedFieldClassifier
             return false;
         }
 
-        INamedTypeSymbol compiledType = home.FindCompiledType(symbol.ContainingType);
+        // Why the artifact counts here: a type an earlier reload introduced runs from that
+        // artifact, and every member the artifact holds is one the shim assembly can reference.
+        // Only a type neither the patch target nor an active artifact holds is introduced by
+        // this edit, and only then is every member of it added in the same file.
+        INamedTypeSymbol compiledType = home.FindCompiledType(symbol.ContainingType)
+            ?? RetainedBodyEditHome.FindRetainedType(sourceUnit, semanticModel, symbol.ContainingType);
         if (compiledType == null)
         {
             return true;

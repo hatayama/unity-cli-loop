@@ -27,13 +27,15 @@ internal static class AddedPropertyClassifier
         List<WorkerSkipped> skipped,
         ShimNameAllocator shimNames)
     {
-        INamedTypeSymbol compiledType = home.FindCompiledType(typeState.TypeSymbol);
+        // The counterpart the caller resolved: the patch target's own type, or the artifact of
+        // an earlier reload that serves it. A type neither holds is one this edit introduces,
+        // and nothing of it is an addition to something already running.
+        INamedTypeSymbol compiledType = typeState.CompiledType;
         if (compiledType == null)
         {
             return;
         }
 
-        typeState.CompiledType = compiledType;
         foreach (PropertyDeclarationSyntax declaration in typeState.TypeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>())
         {
@@ -179,7 +181,7 @@ internal static class AddedPropertyClassifier
                 typeState.TypeSymbol,
                 semanticModel,
                 home,
-                typeState.SourceUnit.ArtifactMap);
+                typeState.SourceUnit);
         }
 
         AddedPropertyBinding binding = new AddedPropertyBinding

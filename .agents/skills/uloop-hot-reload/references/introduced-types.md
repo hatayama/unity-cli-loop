@@ -36,7 +36,8 @@ apply, and patches from earlier reloads stay active:
 - `Introduced` — this reload compiled and activated the declaration.
 - `AlreadyActive` — an earlier reload of this domain already holds it; this reload introduced
   nothing for it. Not an error. Editing only the bodies of its ordinary methods keeps this row
-  and patches those bodies on the artifact that already carries the type.
+  and patches those bodies on the artifact that already carries the type. Ordinary methods,
+  fields and properties added to the type keep it as well and are applied as `Added` rows.
 - `Failed` — refused; see the table above.
 - `ActiveIntroducedTypeTotal` counts the types the domain holds after the run, whatever the
   methods did. Type rows never count toward `PatchedTotal`, `ActivePatchTotal`,
@@ -62,8 +63,10 @@ later apply re-introduces them. With Enter Play Mode Options set to disable Doma
 active changes and the introduced types survive Play entry and nothing is recorded as dropped.
 
 Values are not preserved across the reload that ends a type's life. Body-only edits of an
-introduced type's ordinary methods are patched on the artifact assembly; constructor, accessor
-and initializer bodies and any member addition still require a compile.
+introduced type's ordinary methods are patched on the artifact assembly, and added ordinary
+methods, fields and properties are applied as `Added` rows. Constructor, accessor and
+initializer bodies, member removals, signature changes, and added constructors, operators,
+events, indexers or nested types still require a compile.
 
 ## Still needs `uloop compile`
 

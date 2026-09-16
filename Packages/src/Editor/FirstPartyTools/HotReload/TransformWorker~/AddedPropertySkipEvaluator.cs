@@ -54,7 +54,7 @@ internal static class AddedPropertySkipEvaluator
         INamedTypeSymbol hostType,
         SemanticModel semanticModel,
         WorkerTypeHome home,
-        IntroducedTypeArtifactMap artifactMap)
+        WorkerSourceUnit sourceUnit)
     {
         AddedFieldStoreAvailability availability = AddedFieldClassifier.EvaluateStoreAvailability(
             hostType,
@@ -62,7 +62,7 @@ internal static class AddedPropertySkipEvaluator
             home,
             symbol.Type,
             declaration.Initializer?.Value,
-            artifactMap,
+            sourceUnit,
             out ITypeSymbol _);
         switch (availability)
         {
