@@ -1,6 +1,5 @@
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
-// Keep in sync with TransformWorkerDtos.cs TransformWorkerReasonDto.
 // A reason this worker reports, as the code that identifies it plus the values its sentence
 // needs. The English sentence is built on the Editor side, so this process never spells one out.
 internal sealed class WorkerReason

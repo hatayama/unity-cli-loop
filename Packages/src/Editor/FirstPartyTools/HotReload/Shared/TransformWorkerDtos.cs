@@ -13,7 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Edited files this worker run must transform together. One or more; every source must
         // belong to the same compilation assembly so a single shim assembly can host them all.
-        // Keep in sync with TransformWorker~/WorkerInput.cs.
         public TransformWorkerSourceDto[] sources;
 
         public string[] defines;
@@ -50,7 +49,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// One retained introduced-type assembly a worker run may bind against.
     /// </summary>
-    // Keep in sync with TransformWorker~/WorkerIntroducedTypeArtifact.cs.
     [Serializable]
     internal sealed class TransformWorkerIntroducedTypeArtifactDto
     {
@@ -69,7 +67,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// One retained type inside an introduced-type artifact assembly.
     /// </summary>
-    // Keep in sync with WorkerIntroducedTypeArtifactType in TransformWorker~/WorkerIntroducedTypeArtifact.cs.
     [Serializable]
     internal sealed class TransformWorkerIntroducedTypeArtifactTypeDto
     {
@@ -92,7 +89,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// One edited file inside a transform worker run.
     /// </summary>
-    // Keep in sync with TransformWorker~/WorkerSourceInput.cs.
     [Serializable]
     internal sealed class TransformWorkerSourceDto
     {
@@ -112,7 +108,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Per-file half of the transform worker output; one entry per input source, same order.
     /// </summary>
-    // Keep in sync with TransformWorker~/WorkerFileOutput.cs.
     [Serializable]
     internal sealed class TransformWorkerFileOutputDto
     {
@@ -160,7 +155,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// One declaration a preparation run bound from an already active artifact instead of
     /// introducing it a second time.
     /// </summary>
-    // Keep in sync with TransformWorker~/WorkerIntroducedTypeReuse.cs.
     [Serializable]
     internal sealed class TransformWorkerIntroducedTypeReuseDto
     {
@@ -174,7 +168,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// One top-level type declaration prepared by the transform worker for an artifact assembly.
     /// </summary>
-    // Keep in sync with TransformWorker~/WorkerIntroducedType.cs.
     [Serializable]
     internal sealed class TransformWorkerIntroducedTypeDto
     {

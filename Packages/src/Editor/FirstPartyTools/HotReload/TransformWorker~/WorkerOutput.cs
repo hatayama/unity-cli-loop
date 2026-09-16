@@ -24,14 +24,11 @@ internal sealed class WorkerOutput
     public WorkerSkipped[] Skipped { get; set; }
 
     // Per-file results, same order and count as WorkerInput.Sources.
-    // Keep in sync with TransformWorkerOutputDto.files.
     public WorkerFileOutput[] Files { get; set; }
 
     // Run-level failures that cannot be attributed to any single source.
-    // Keep in sync with TransformWorkerOutputDto.parseErrors.
     public string[] ParseErrors { get; set; }
 
-    // Keep in sync with TransformWorkerOutputDto.siblingConstDriftWarnings.
     public string[] SiblingConstDriftWarnings { get; set; }
 
     public WorkerUnchangedMethod[] UnchangedMethods { get; set; }
@@ -39,6 +36,5 @@ internal sealed class WorkerOutput
     public bool HasAccessorDelegates { get; set; }
 
     // True when shim bodies rewrite added-field accesses to HotReloadAddedFieldStore.
-    // Keep in sync with TransformWorkerOutputDto.hasAddedFieldRewrites.
     public bool HasAddedFieldRewrites { get; set; }
 }

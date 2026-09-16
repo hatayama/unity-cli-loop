@@ -15,7 +15,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-// Keep in sync with TransformWorkerDtos.cs TransformWorkerIntroducedTypeReuseDto.
 internal sealed class WorkerIntroducedTypeReuse
 {
     public string MetadataName { get; set; }
