@@ -2,12 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
-
-using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -22,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// body lives in an assembly of its own, so it can only reach that field if the run publicizes
     /// the retained artifact the same way it publicizes a script assembly.
     /// </remarks>
-    public class HotReloadIntroducedTypeBodyEditE2ETests
+    public class HotReloadIntroducedTypeBodyEditE2ETests : HotReloadIntroducedTypeE2ETestBase
     {
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
         private const string CallerBodyAnchor = "return host.Value();";
@@ -35,24 +32,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string EditedExpression = "_seed * 2";
         private const string NoExtraMembers = "";
 
-        private HotReloadDomainTestScope _scope;
-
-        [SetUp]
-        public void SetUp()
-        {
-            _scope = new HotReloadDomainTestScope();
-            HotReloadAutoRefreshHold.SyncToActiveChanges();
-        }
-
-        // Why reverting here as well: a run of this class patches a method of an artifact assembly
-        // that only lives while the run's scope is open, so leaving the patch active would fail
-        // the first later test that reaches that assembly.
-        [TearDown]
-        public void TearDown()
-        {
-            _scope.Dispose();
-            HotReloadAutoRefreshHold.SyncToActiveChanges();
-        }
+        // The member the removal test introduces first and drops afterwards.
+        private const string RemovableMember =
+            "        public int Twice()\n"
+            + "        {\n"
+            + "            return _seed * 2;\n"
+            + "        }\n"
+            + "\n";
 
         /// <summary>
         /// Verifies that editing only an ordinary method body of an already introduced type patches
@@ -170,19 +156,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that adding a member to an already introduced type still asks for a compile: the
+        /// Verifies that removing a member from an already introduced type asks for a compile: the
         /// type row fails with the changed-declaration reason, which names the type and lists the
-        /// declaration difference that made the reload refuse it.
+        /// removal that made the reload refuse it. The retained assembly still holds the member, so
+        /// a caller compiled against it would keep finding a definition the source no longer has.
         /// </summary>
         [Test]
-        public async Task Run_IntroducedTypeDeclarationChanged_FailsAndAsksForACompile()
+        public async Task Run_IntroducedTypeMemberRemoved_FailsAndAsksForACompile()
         {
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
             await RunInIntroducedTypeDomainAsync(async readArtifact =>
             {
-                await RunReloadAsync(hostPath, callerPath, CreateIntroducingEdits(hostPath, callerPath));
+                await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducingEditsWithTwoMembers(hostPath, callerPath));
                 AssertComputedValue(
                     readArtifact(),
                     IntroducedSeed,
@@ -191,14 +181,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadOrchestratorResult changed = await RunReloadAsync(
                     hostPath,
                     callerPath,
-                    CreateDeclarationChangedEdits(hostPath, callerPath));
+                    CreateMemberRemovedEdits(hostPath, callerPath));
 
                 HotReloadIntroducedTypeOutcome outcome = FindIntroducedTypeOutcome(changed);
                 Assert.That(
                     outcome.Kind,
                     Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed),
-                    "Adding a member to an introduced type changes its declaration, which needs a "
-                    + "compile.\n"
+                    "Removing a member from an introduced type changes its declaration, which needs "
+                    + "a compile.\n"
                     + DescribeOutcomes(changed));
                 Assert.That(
                     outcome.Reason,
@@ -212,74 +202,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + DescribeOutcomes(changed));
                 Assert.That(
                     outcome.Reason,
-                    Does.Contain("added:"),
-                    "The differences must name the added member.\n"
+                    Does.Contain("removed:"),
+                    "The differences must name the removed member.\n"
                     + DescribeOutcomes(changed));
             });
-        }
-
-        // Why one helper owns both scopes: every reload of a run has to see the same domain and the
-        // same captured artifact, and the artifact assembly only lives while the scopes are open.
-        private static async Task RunInIntroducedTypeDomainAsync(
-            Func<Func<HotReloadIntroducedTypeArtifact>, Task> runReloads)
-        {
-            HotReloadIntroducedTypeArtifact artifact = null;
-
-            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
-            {
-                using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
-                    CreateArtifactCapturingDependencies(
-                        collaborators,
-                        prepared =>
-                        {
-                            if (prepared != null)
-                            {
-                                artifact = prepared;
-                            }
-                        })))
-                {
-                    await runReloads(() => artifact);
-                }
-            }
-        }
-
-        private static Task<HotReloadOrchestratorResult> RunReloadAsync(
-            string hostPath,
-            string callerPath,
-            Dictionary<string, string> edits)
-        {
-            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                new[] { hostPath, callerPath },
-                contentPathOverride: null,
-                CancellationToken.None,
-                edits);
-        }
-
-        private static HotReloadResponse BuildResponse(HotReloadOrchestratorResult result)
-        {
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
-        }
-
-        // Why the preparation stage is the only one wrapped: the test reads the edited body back
-        // through the artifact assembly, and the prepared artifact is the only handle on it.
-        private static HotReloadGroupProcessorDependencies CreateArtifactCapturingDependencies(
-            HotReloadGroupStageCollaborators collaborators,
-            Action<HotReloadIntroducedTypeArtifact> captureArtifact)
-        {
-            return HotReloadGroupProcessorDependencies.Create(
-                files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
-                async (files, input, ct) =>
-                {
-                    HotReloadIntroducedTypePreparationResult preparation =
-                        await HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct);
-                    captureArtifact(preparation.Prepared?.Artifact);
-                    return preparation;
-                },
-                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
-                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
-                (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
-                    collaborators, context, compileResult, entriesToPatch),
-                HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
         }
 
         private static void AssertComputedValue(
@@ -357,28 +283,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return count;
         }
 
-        private static int CountFailures(HotReloadOrchestratorResult result)
-        {
-            int count = 0;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
-                {
-                    count++;
-                }
-            }
-
-            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
-            {
-                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
         private static void AssertCallerIsPatched(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -393,23 +297,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("The caller edited against the introduced type must be patched.\n"
                 + DescribeOutcomes(result));
-        }
-
-        private static string DescribeOutcomes(HotReloadOrchestratorResult result)
-        {
-            string description = "Methods:";
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                description += "\n  " + outcome.Kind + " " + outcome.Method + " " + outcome.Reason;
-            }
-
-            description += "\nIntroducedTypes:";
-            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
-            {
-                description += "\n  " + outcome.Kind + " " + outcome.MetadataName + " " + outcome.Reason;
-            }
-
-            return description;
         }
 
         private static Dictionary<string, string> CreateIntroducingEdits(string hostPath, string callerPath)
@@ -456,25 +343,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        // The declaration of the introduced type with one member more than the retained assembly
-        // holds, which is the change a reload cannot apply without a compile.
-        private static Dictionary<string, string> CreateDeclarationChangedEdits(
+        // The declaration the removal is measured against: the introduced type with a second
+        // member, so the reload that drops it has something the retained assembly still holds.
+        private static Dictionary<string, string> CreateIntroducingEditsWithTwoMembers(
             string hostPath,
             string callerPath)
         {
-            string extraMember =
-                "        public int Twice()\n"
-                + "        {\n"
-                + "            return _seed * 2;\n"
-                + "        }\n"
-                + "\n";
             return new Dictionary<string, string>
             {
                 [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
-                    "IntroducedTypeDeclarationChangedHost.cs",
-                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, extraMember)),
+                    "IntroducedTypeTwoMemberHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, RemovableMember)),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
-                    "IntroducedTypeDeclarationChangedCaller.cs",
+                    "IntroducedTypeTwoMemberCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The same declaration with the second member gone, which is the change a reload cannot
+        // apply without a compile: the member stays in the assembly the domain runs the type from.
+        private static Dictionary<string, string> CreateMemberRemovedEdits(
+            string hostPath,
+            string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeMemberRemovedHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, NoExtraMembers)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeMemberRemovedCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
             };
         }
@@ -513,12 +411,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
         }
 
-        private static string FixturePath(string fileName)
-        {
-            string path = Path.GetFullPath(
-                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fileName));
-            Assert.That(File.Exists(path), Is.True, "Fixture missing: " + path);
-            return path;
-        }
     }
 }
