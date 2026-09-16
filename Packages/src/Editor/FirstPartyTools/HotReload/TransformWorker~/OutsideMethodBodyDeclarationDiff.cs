@@ -119,14 +119,14 @@ internal static class OutsideMethodBodyDeclarationDiff
     private static MemberMaps TryBuildMemberMaps(CompilationUnitSyntax root)
     {
         MemberMaps maps = new MemberMaps();
-        maps.Methods = WorkerSyntaxIndex.BuildSyntaxMethodMapOrNull(root);
-        maps.Fields = WorkerSyntaxIndex.BuildSyntaxFieldMapOrNull(root);
-        maps.Properties = WorkerSyntaxIndex.BuildSyntaxPropertyMapOrNull(root);
-        maps.Indexers = WorkerSyntaxIndex.BuildSyntaxIndexerMapOrNull(root);
-        maps.Constructors = WorkerSyntaxIndex.BuildSyntaxConstructorMapOrNull(root);
-        maps.Operators = WorkerSyntaxIndex.BuildSyntaxOperatorMapOrNull(root);
-        maps.Events = WorkerSyntaxIndex.BuildSyntaxEventMapOrNull(root);
-        maps.EventFields = WorkerSyntaxIndex.BuildSyntaxEventFieldMapOrNull(root);
+        maps.Methods = WorkerSyntaxMemberMaps.BuildSyntaxMethodMapOrNull(root);
+        maps.Fields = WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(root);
+        maps.Properties = WorkerSyntaxMemberMaps.BuildSyntaxPropertyMapOrNull(root);
+        maps.Indexers = WorkerSyntaxMemberMaps.BuildSyntaxIndexerMapOrNull(root);
+        maps.Constructors = WorkerSyntaxMemberMaps.BuildSyntaxConstructorMapOrNull(root);
+        maps.Operators = WorkerSyntaxMemberMaps.BuildSyntaxOperatorMapOrNull(root);
+        maps.Events = WorkerSyntaxMemberMaps.BuildSyntaxEventMapOrNull(root);
+        maps.EventFields = WorkerSyntaxMemberMaps.BuildSyntaxEventFieldMapOrNull(root);
         if (maps.Methods == null
             || maps.Fields == null
             || maps.Properties == null
