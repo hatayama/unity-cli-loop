@@ -709,8 +709,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a field added to a compiled type whose initializer reads a public static member
         /// of a type the artifact serves is emittable, because that member is already live. The
         /// retained type is body-edited in the same run so its declaration stays in the tree,
-        /// which is what makes the initializer read a source symbol. Only a member no assembly
-        /// holds yet makes an initializer unemittable.
+        /// which is what makes the initializer read a source symbol. A public static member an
+        /// artifact already holds is not a same-file addition, so the read is emittable.
         /// </summary>
         [Test]
         public async Task Transform_AddedFieldInitializerReadsARetainedTypesStaticMember_ReportsTheAddedField()
