@@ -112,11 +112,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Calls an added method whose shim failed to compile; the caller was left unpatched. "
             + "Fix the compile error in the added method (see the Failed row in this response) and reload again, or run 'uloop compile'.";
 
-        // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in
-        // TransformWorker~/AddedMethodSkipReasons.cs.
-        public const string UnavailableAddedCallSkipReason =
-            "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
-
         public const string SignatureChangedGateSkipReasonFormat =
             "The return type of '{0}' changed, but this hot reload does not patch every compiled call site of the old method. Applying it would leave those call sites on the old version. Run 'uloop compile'.";
 

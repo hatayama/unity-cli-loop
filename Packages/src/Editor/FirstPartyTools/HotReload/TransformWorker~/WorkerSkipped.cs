@@ -23,7 +23,7 @@ internal sealed class WorkerSkipped
 
     public string Method { get; set; }
 
-    public string Reason { get; set; }
+    public WorkerReason Reason { get; set; }
 
     public string MethodKey { get; set; }
 

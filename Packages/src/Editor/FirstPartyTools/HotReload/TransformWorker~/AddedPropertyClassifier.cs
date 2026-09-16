@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
 /// Classifies properties missing from a compiled type before accessor skips and body emission.
@@ -89,7 +90,7 @@ internal static class AddedPropertyClassifier
         if (candidate.Reason != null || IsExcluded(input, candidate.GetterKey, candidate.SetterKey))
         {
             candidate.Binding.UnavailableReason = candidate.Reason
-                ?? AddedPropertySkipReasons.UnavailableAddedProperty;
+                ?? WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty);
             addedPropertyCatalog.Register(candidate.Binding);
             AppendSkippedAccessors(candidate.Binding, skipped);
             return;
@@ -162,11 +163,11 @@ internal static class AddedPropertyClassifier
         bool isAuto = IsAutoProperty(declaration);
         string getterKey = BuildGetterKey(typeState.TypeSymbol, symbol);
         string setterKey = BuildSetterKey(typeState.TypeSymbol, symbol);
-        string reason = AddedPropertySkipEvaluator.EvaluateCompiledMemberKindChangeReason(compiledType, symbol.Name);
+        WorkerReason reason = AddedPropertySkipEvaluator.EvaluateCompiledMemberKindChangeReason(compiledType, symbol.Name);
         if (reason == null)
         {
             reason = symbol.GetMethod == null
-                ? AddedPropertySkipReasons.SetOnly
+                ? WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertySetOnly)
                 : AddedPropertySkipEvaluator.EvaluateDeclarationSkipReason(symbol, declaration, typeState.TypeSymbol);
         }
 
@@ -341,6 +342,6 @@ internal static class AddedPropertyClassifier
 
         public string SetterKey { get; set; }
 
-        public string Reason { get; set; }
+        public WorkerReason Reason { get; set; }
     }
 }

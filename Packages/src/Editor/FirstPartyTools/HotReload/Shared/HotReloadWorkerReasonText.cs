@@ -8,8 +8,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// worker reason is worded: the worker sends a code and the values the sentence needs, so a
     /// wording change never has to be mirrored across the process boundary.
     /// </summary>
-    internal static class HotReloadWorkerReasonText
+    internal static partial class HotReloadWorkerReasonText
     {
+        // The "compile it properly" call to action the skip sentences end with, and the phrase
+        // that introduces a rejected accessor rewrite. They are shared because several sentences
+        // end the same way, not because they carry meaning of their own.
+        private const string CompileCallToAction = "Run 'uloop compile'.";
+
+        private const string CompileCallToActionToAddIt = "Run 'uloop compile' to add it.";
+
+        private const string CompileCallToActionToAddThem = "Run 'uloop compile' to add them.";
+
+        private const string AccessorRewriteUnavailableSeparator = " Accessor rewrite unavailable: ";
+
         private static readonly Dictionary<HotReloadWorkerReasonCode, ReasonTemplate> Templates =
             BuildTemplates();
 
@@ -68,77 +79,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<HotReloadWorkerReasonCode, ReasonTemplate> templates =
                 new Dictionary<HotReloadWorkerReasonCode, ReasonTemplate>();
 
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeSymbolUnresolved,
-                Plain("Could not resolve a declared type symbol.", 0));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeGeneric,
-                Plain("Generic introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypePartial,
-                Plain("Partial introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeRecord,
-                Plain("Record introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeNonPublic,
-                Plain("Non-public introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeRefLike,
-                Plain("Ref-like introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeUnsafe,
-                Plain("Unsafe introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeUnityObject,
-                Plain("Unity object introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeSerializable,
-                Plain("Serializable introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeModuleInitializer,
-                Plain("Module initializer introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeUnsupported,
-                Plain("Unsupported introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeConstValueUnverifiable,
-                Plain("Const value cannot be verified: {0} referenced by {1}", 2));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeConstChanged,
-                Plain("Changed const requires a compile: {0} referenced by {1}", 2));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeDelegate,
-                Plain("Delegate introduced type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeNested,
-                Plain("Nested type requires a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeNestedDeclaration,
-                Plain("Nested declaration inside an introduced type requires a compile: {0}/{1}", 2));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeChanged,
-                Plain("Changed introduced type requires a compile: {0}", 1));
-
-            // The one sentence whose value is written by the worker rather than here: the same
-            // artifact error is also returned as a fatal transform message, so it stays a single
-            // sentence owned by the artifact map instead of being split into codes twice.
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeArtifactUnusable,
-                Plain("Introduced types require a compile: {0}", 1));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeInputsUnreadable,
-                Plain(
-                    "Introduced types require a compile: the target assembly or its references could not be read.",
-                    0));
-            templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeIdentityMismatch,
-                Plain(
-                    "Introduced types require a compile: the target assembly identity does not match the request.",
-                    0));
-            templates.Add(
-                HotReloadWorkerReasonCode.EditorIsolatedAddedMethodCaller,
-                Plain(HotReloadConstants.IsolatedAddedMethodCallerSkipReason, 0));
+            AddMethodTransformTemplates(templates);
+            AddAddedMemberTemplates(templates);
+            AddAccessorTemplates(templates);
+            AddIntroducedTypeTemplates(templates);
 
             return templates;
         }
@@ -146,6 +90,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static ReasonTemplate Plain(string text, int placeholderCount)
         {
             return new ReasonTemplate(text, placeholderCount, false, false, string.Empty, string.Empty);
+        }
+
+        // A reason that reads on its own but appends a detail when it has one.
+        private static ReasonTemplate Composing(
+            string text,
+            int placeholderCount,
+            string detailSeparator,
+            string detailSuffix)
+        {
+            return new ReasonTemplate(text, placeholderCount, true, false, detailSeparator, detailSuffix);
+        }
+
+        // A reason that is incomplete without its detail.
+        private static ReasonTemplate RequiringDetail(
+            string text,
+            int placeholderCount,
+            string detailSeparator,
+            string detailSuffix)
+        {
+            return new ReasonTemplate(text, placeholderCount, true, true, detailSeparator, detailSuffix);
         }
 
         /// <summary>

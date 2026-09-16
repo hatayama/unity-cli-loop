@@ -99,6 +99,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        /// <summary>
+        /// Rejects a skipped row the Editor could not word: the row's sentence is built from its
+        /// reason code, so a row without one would report a skip with no explanation at all.
+        /// </summary>
+        internal bool TryValidateSkippedRows(
+            TransformWorkerOutputDto output,
+            out string errorMessage)
+        {
+            if (output.skipped == null)
+            {
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in output.skipped)
+            {
+                if (skipped == null)
+                {
+                    errorMessage = "Transform worker output must not contain a null skipped row.";
+                    return false;
+                }
+
+                if (skipped.reason == null)
+                {
+                    errorMessage = "A skipped row must carry the reason it was skipped.";
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
         internal bool TryValidateRequiredPreparationOutput(
             TransformWorkerInputDto input,
             TransformWorkerOutputDto output,

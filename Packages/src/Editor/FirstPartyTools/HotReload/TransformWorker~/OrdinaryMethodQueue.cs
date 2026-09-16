@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class OrdinaryMethodQueue
 {
@@ -233,7 +234,7 @@ internal static class OrdinaryMethodQueue
         {
             SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
-            Reason = AddedMethodSkipReasons.InterfaceMember
+            Reason = WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodInterfaceMember)
         });
         if (isAddedMethod)
         {
@@ -293,7 +294,7 @@ internal static class OrdinaryMethodQueue
     {
         SyntaxNode methodBodyNode =
             (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
-        string addedSkip = isAddedMethod
+        WorkerReason addedSkip = isAddedMethod
             ? MethodTransformDecider.EvaluateAddedMethodSkipReason(methodSymbol, methodDeclaration)
             : null;
         MethodTransformDecision decision = addedSkip != null
@@ -453,7 +454,7 @@ internal static class OrdinaryMethodQueue
             {
                 SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
-                Reason = AddedMethodSkipReasons.TypeNotIntroduced
+                Reason = WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced)
             });
         }
     }

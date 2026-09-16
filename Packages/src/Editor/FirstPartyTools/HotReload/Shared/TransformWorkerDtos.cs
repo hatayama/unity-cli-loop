@@ -322,7 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string sourceProjectRelativePath;
 
         public string method;
-        public string reason;
+        public TransformWorkerReasonDto reason;
         // Wire key of the skipped method. Why: the isolation-retry closure must add this in
         // the same format as calledAddedMethodKey and ExcludedAddedMethodKeys; `method` is the
         // display label and would not match the next hop.

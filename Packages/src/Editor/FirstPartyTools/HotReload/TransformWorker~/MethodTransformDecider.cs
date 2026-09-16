@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class MethodTransformDecider
 {
@@ -27,7 +28,7 @@ internal static class MethodTransformDecider
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType)
     {
-        string hardSkip = EvaluateHardSkipReason(
+        WorkerReason hardSkip = EvaluateHardSkipReason(
             typeDeclaration,
             typeSymbol,
             methodDeclaration,
@@ -39,15 +40,15 @@ internal static class MethodTransformDecider
 
         if (bodyNode == null)
         {
-            return MethodTransformDecision.Skip(MethodTransformSkipReasons.NoBody);
+            return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformNoBody));
         }
 
         if (ContainsBaseExpression(bodyNode))
         {
-            return MethodTransformDecision.Skip(MethodTransformSkipReasons.BaseMemberCall);
+            return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseMemberCall));
         }
 
-        string eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
+        WorkerReason eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
             bodyNode,
             semanticModel,
             compiledType);
@@ -71,7 +72,8 @@ internal static class MethodTransformDecider
         }
 
         // Condition (a): only the private-access skip reasons are eligible for accessor rewrite.
-        string rescuableSkipReason = BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
+        HotReloadWorkerReasonCode? rescuableSkipCode =
+            BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
 
         if (!AccessorEligibility.TryBuildPlan(
                 semanticModel,
@@ -79,12 +81,12 @@ internal static class MethodTransformDecider
                 typeSymbol,
                 bodyNode,
                 out AccessorPlan feasibilityPlan,
-                out string accessorRejectReason))
+                out WorkerReason accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
-                rescuableSkipReason == null
-                    ? EventAccessorRules.AccessorRewriteUnavailableReasonPrefix + accessorRejectReason
-                    : rescuableSkipReason + MethodTransformSkipReasons.AccessorRewriteUnavailableInfix + accessorRejectReason);
+                WorkerReason.Composite(
+                    rescuableSkipCode ?? HotReloadWorkerReasonCode.EventAccessorRewriteUnavailable,
+                    accessorRejectReason));
         }
 
         // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
@@ -98,22 +100,24 @@ internal static class MethodTransformDecider
     }
 
     // Null when the body needs accessors only for its event uses: there is no skip to rescue.
-    private static string BuildAccessorRescueReason(bool closureInaccessible, bool asyncIteratorInaccessible)
+    private static HotReloadWorkerReasonCode? BuildAccessorRescueReason(
+        bool closureInaccessible,
+        bool asyncIteratorInaccessible)
     {
         if (closureInaccessible)
         {
-            return MethodTransformSkipReasons.ClosureInaccessibleAccess;
+            return HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess;
         }
 
         if (asyncIteratorInaccessible)
         {
-            return MethodTransformSkipReasons.AsyncIteratorInaccessibleAccess;
+            return HotReloadWorkerReasonCode.MethodTransformAsyncIteratorInaccessibleAccess;
         }
 
         return null;
     }
 
-    internal static string EvaluateHardSkipReason(
+    internal static WorkerReason EvaluateHardSkipReason(
         TypeDeclarationSyntax typeDeclaration,
         INamedTypeSymbol typeSymbol,
         MethodDeclarationSyntax methodDeclaration,
@@ -126,19 +130,19 @@ internal static class MethodTransformDecider
         {
             if (declaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
             {
-                return MethodTransformSkipReasons.PartialType;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformPartialType);
             }
         }
 
         if (typeSymbol.TypeKind == TypeKind.Struct || typeSymbol.IsValueType)
         {
-            return MethodTransformSkipReasons.StructHost;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformStructHost);
         }
 
         bool hasTypeParameters = methodDeclaration != null && methodDeclaration.TypeParameterList != null;
         if (typeSymbol.IsGenericType || methodSymbol.IsGenericMethod || hasTypeParameters)
         {
-            return MethodTransformSkipReasons.GenericMethodOrType;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType);
         }
 
         // Explicit interface implementations have dotted metadata names (e.g. IFoo.Bar) that are
@@ -146,7 +150,7 @@ internal static class MethodTransformDecider
         // matcher (Cecil MethodDefinition.Name). They are skipped with an explicit reason.
         if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            return MethodTransformSkipReasons.ExplicitInterfaceImplementation;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
         }
 
         return null;
@@ -253,32 +257,31 @@ internal static class MethodTransformDecider
                 typeSymbol,
                 methodBodyNode,
                 out AccessorPlan feasibilityPlan,
-                out string accessorRejectReason))
+                out WorkerReason accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
-                AddedMethodSkipReasons.InaccessibleAccessNoRewrite
-                + MethodTransformSkipReasons.AccessorRewriteUnavailableInfix
-                + accessorRejectReason
-                + " " + CompileCallToAction.Plain);
+                WorkerReason.Composite(
+                    HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite,
+                    accessorRejectReason));
         }
 
         bool usesDelegation = feasibilityPlan.Entries.Count > 0;
         return MethodTransformDecision.AddedMethod(usesDelegation);
     }
 
-    internal static string EvaluateAddedMethodSkipReason(
+    internal static WorkerReason EvaluateAddedMethodSkipReason(
         IMethodSymbol methodSymbol,
         MethodDeclarationSyntax methodDeclaration)
     {
         if (methodSymbol.IsAbstract || methodSymbol.IsVirtual || methodSymbol.IsOverride)
         {
-            return AddedMethodSkipReasons.VirtualOrAbstract;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodVirtualOrAbstract);
         }
 
         bool hasTypeParameters = methodDeclaration != null && methodDeclaration.TypeParameterList != null;
         if (methodSymbol.IsGenericMethod || hasTypeParameters)
         {
-            return AddedMethodSkipReasons.Generic;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodGeneric);
         }
 
         return null;

@@ -47,14 +47,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             VibeLogger.ClearMemoryLogs();
         }
 
-        // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/AddedMethodSkipReasons.cs.
-        // That type lives in the Unity-ignored worker process and is not visible here.
+        // Keep in sync with the AddedMethodUnavailableAddedCall template in
+        // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.cs.
+        // The literal is spelled out here so a template edit fails this test instead of silently
+        // changing what a skipped caller reports.
         private const string UnavailableAddedCallSkipReason =
             "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
-        // Keep in sync with EvaluateHardSkipReason in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/MethodTransformDecider.cs.
+        // Keep in sync with the MethodTransformGenericMethodOrType template in
+        // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.cs.
         private const string ExpectedGenericMethodSkipReason =
             "Generic methods and methods inside generic types cannot be safely patched with Harmony. Run 'uloop compile'.";
 
@@ -5066,7 +5067,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Mid()",
                     methodKey = "Host::Mid()",
-                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                    },
                     calledAddedMethodKey = "Host::Broken()"
                 },
                 new TransformWorkerSkippedDto
@@ -5074,7 +5078,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Outer()",
                     methodKey = "Host::Outer()",
-                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                    },
                     calledAddedMethodKey = "Host::Mid()"
                 }
             };
@@ -5105,7 +5112,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Mid()",
                     methodKey = "Host::Mid()",
-                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                    },
                     calledAddedMethodKey = "Host::Broken()"
                 },
                 new TransformWorkerSkippedDto
@@ -5113,7 +5123,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Outer()",
                     methodKey = "Host::Outer()",
-                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                    },
                     calledAddedMethodKey = "Host::Mid()"
                 }
             };
@@ -5126,8 +5139,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(2));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(HotReloadConstants.UnavailableAddedCallSkipReason));
-            Assert.That(outcomes[1].Reason, Is.EqualTo(HotReloadConstants.UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[1].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
         }
 
         /// <summary>
@@ -5144,7 +5157,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Caller()",
                     methodKey = "Host::Caller()",
-                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    reason = new TransformWorkerReasonDto
+                    {
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                    },
                     calledAddedMethodKey = "Host::Unrelated()"
                 }
             };
@@ -5157,7 +5173,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(1));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(HotReloadConstants.UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
         }
 
         /// <summary>

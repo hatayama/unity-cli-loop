@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string simpleName = ExtractSimpleMethodName(row.method);
                 if (MatchesUnresolvedName(simpleName, unresolvedName))
                 {
-                    return row.reason;
+                    return HotReloadWorkerReasonText.Render(row.reason);
                 }
             }
 
