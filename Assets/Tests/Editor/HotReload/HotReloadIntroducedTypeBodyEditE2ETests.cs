@@ -31,6 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload." + IntroducedTypeSimpleName;
         private const int IntroducedSeed = 5;
         private const int EditedComputedValue = IntroducedSeed * 2;
+        private const string SeedExpression = "_seed";
+        private const string EditedExpression = "_seed * 2";
+        private const string NoExtraMembers = "";
 
         private HotReloadDomainTestScope _scope;
 
@@ -62,6 +65,164 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult first = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducingEdits(hostPath, callerPath));
+
+                AssertCallerIsPatched(first);
+                AssertComputedValue(
+                    readArtifact(),
+                    IntroducedSeed,
+                    "Precondition: the retained assembly must run the body the first reload compiled.");
+
+                HotReloadOrchestratorResult second = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateBodyEditedEdits(hostPath, callerPath));
+
+                Assert.That(
+                    CountFailures(second),
+                    Is.EqualTo(0),
+                    "A body-only edit of an introduced type must not fail the reload.\n"
+                    + DescribeOutcomes(second));
+                Assert.That(
+                    CountPatchedIntroducedMethods(second),
+                    Is.EqualTo(1),
+                    "The edited body of the introduced type must be reported as patched.\n"
+                    + DescribeOutcomes(second));
+
+                HotReloadResponse response = BuildResponse(second);
+                AssertBoundOneDeclaration(response);
+                Assert.That(
+                    response.Message,
+                    Does.Contain("bound 1 introduced type"),
+                    "The message must say the declaration came from an assembly already held.");
+                Assert.That(
+                    response.Message,
+                    Does.Contain("2 method body(ies) were patched"),
+                    "The message must count every body this reload patched: the edited body of "
+                    + "the introduced type and the caller edited against it.");
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain("no method body needed patching"),
+                    "A reload that patched a body must not claim none needed patching.");
+
+                AssertComputedValue(
+                    readArtifact(),
+                    EditedComputedValue,
+                    "A call into the retained assembly must run the edited body.");
+            });
+        }
+
+        /// <summary>
+        /// Verifies that restoring an edited body of an already introduced type back to the source the
+        /// introducing reload compiled removes the patch the previous reload installed: the type is
+        /// still reported AlreadyActive, no body of the introduced type is reported as patched, and a
+        /// reflection call on the retained type returns the value the introducing reload compiled.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeMethodBodyRestored_RevertsThePatchOnTheRetainedArtifact()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateIntroducingEdits(hostPath, callerPath));
+                AssertComputedValue(
+                    readArtifact(),
+                    IntroducedSeed,
+                    "Precondition: the retained assembly must run the body the first reload compiled.");
+
+                await RunReloadAsync(hostPath, callerPath, CreateBodyEditedEdits(hostPath, callerPath));
+                AssertComputedValue(
+                    readArtifact(),
+                    EditedComputedValue,
+                    "Precondition: the second reload must have patched the edited body.");
+
+                HotReloadOrchestratorResult third = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateRestoredEdits(hostPath, callerPath));
+
+                Assert.That(
+                    CountFailures(third),
+                    Is.EqualTo(0),
+                    "Restoring the body of an introduced type must not fail the reload.\n"
+                    + DescribeOutcomes(third));
+                Assert.That(
+                    CountPatchedIntroducedMethods(third),
+                    Is.EqualTo(0),
+                    "A body that matches the retained assembly must not be reported as patched.\n"
+                    + DescribeOutcomes(third));
+                AssertBoundOneDeclaration(BuildResponse(third));
+
+                AssertComputedValue(
+                    readArtifact(),
+                    IntroducedSeed,
+                    "A restored body must leave the retained assembly running its own code again, "
+                    + "which means the patch the previous reload installed has to be reverted.");
+            });
+        }
+
+        /// <summary>
+        /// Verifies that adding a member to an already introduced type still asks for a compile: the
+        /// type row fails with the changed-declaration reason, which names the type and lists the
+        /// declaration difference that made the reload refuse it.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeDeclarationChanged_FailsAndAsksForACompile()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateIntroducingEdits(hostPath, callerPath));
+                AssertComputedValue(
+                    readArtifact(),
+                    IntroducedSeed,
+                    "Precondition: the retained assembly must run the body the first reload compiled.");
+
+                HotReloadOrchestratorResult changed = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateDeclarationChangedEdits(hostPath, callerPath));
+
+                HotReloadIntroducedTypeOutcome outcome = FindIntroducedTypeOutcome(changed);
+                Assert.That(
+                    outcome.Kind,
+                    Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed),
+                    "Adding a member to an introduced type changes its declaration, which needs a "
+                    + "compile.\n"
+                    + DescribeOutcomes(changed));
+                Assert.That(
+                    outcome.Reason,
+                    Does.StartWith("Changed introduced type requires a compile: " + IntroducedTypeMetadataName),
+                    "The reason must name the type whose declaration changed.\n"
+                    + DescribeOutcomes(changed));
+                Assert.That(
+                    outcome.Reason,
+                    Does.Contain("Declaration differences: "),
+                    "The reason must hand over the differences the comparison found.\n"
+                    + DescribeOutcomes(changed));
+                Assert.That(
+                    outcome.Reason,
+                    Does.Contain("added:"),
+                    "The differences must name the added member.\n"
+                    + DescribeOutcomes(changed));
+            });
+        }
+
+        // Why one helper owns both scopes: every reload of a run has to see the same domain and the
+        // same captured artifact, and the artifact assembly only lives while the scopes are open.
+        private static async Task RunInIntroducedTypeDomainAsync(
+            Func<Func<HotReloadIntroducedTypeArtifact>, Task> runReloads)
+        {
             HotReloadIntroducedTypeArtifact artifact = null;
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
@@ -77,74 +238,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             }
                         })))
                 {
-                    HotReloadOrchestratorResult first =
-                        await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                            new[] { hostPath, callerPath },
-                            contentPathOverride: null,
-                            CancellationToken.None,
-                            CreateIntroducingEdits(hostPath, callerPath));
-
-                    AssertCallerIsPatched(first);
-                    Assert.That(artifact, Is.Not.Null, "The first reload had to introduce the type.");
-                    Assert.That(
-                        ReadComputedValue(artifact),
-                        Is.EqualTo(IntroducedSeed),
-                        "Precondition: the retained assembly must run the body the first reload compiled.");
-
-                    HotReloadOrchestratorResult second =
-                        await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                            new[] { hostPath, callerPath },
-                            contentPathOverride: null,
-                            CancellationToken.None,
-                            CreateBodyEditedEdits(hostPath, callerPath));
-
-                    Assert.That(
-                        CountFailures(second),
-                        Is.EqualTo(0),
-                        "A body-only edit of an introduced type must not fail the reload.\n"
-                        + DescribeOutcomes(second));
-                    Assert.That(
-                        CountPatchedIntroducedMethods(second),
-                        Is.EqualTo(1),
-                        "The edited body of the introduced type must be reported as patched.\n"
-                        + DescribeOutcomes(second));
-
-                    HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
-                        HotReloadCompositionRoot.Services,
-                        second,
-                        null);
-                    Assert.That(
-                        response.IntroducedTypes.Count,
-                        Is.EqualTo(1),
-                        "The second reload bound one declaration from the retained artifact.");
-                    Assert.That(
-                        response.IntroducedTypes[0].Kind,
-                        Is.EqualTo("AlreadyActive"),
-                        "A declaration bound from a retained artifact was not introduced by this run.");
-                    Assert.That(
-                        response.IntroducedTypes[0].TypeName,
-                        Is.EqualTo(IntroducedTypeMetadataName),
-                        "The type row must name the declaration the reload bound.");
-                    Assert.That(
-                        response.Message,
-                        Does.Contain("bound 1 introduced type"),
-                        "The message must say the declaration came from an assembly already held.");
-                    Assert.That(
-                        response.Message,
-                        Does.Contain("2 method body(ies) were patched"),
-                        "The message must count every body this reload patched: the edited body of "
-                        + "the introduced type and the caller edited against it.");
-                    Assert.That(
-                        response.Message,
-                        Does.Not.Contain("no method body needed patching"),
-                        "A reload that patched a body must not claim none needed patching.");
-
-                    Assert.That(
-                        ReadComputedValue(artifact),
-                        Is.EqualTo(EditedComputedValue),
-                        "A call into the retained assembly must run the edited body.");
+                    await runReloads(() => artifact);
                 }
             }
+        }
+
+        private static Task<HotReloadOrchestratorResult> RunReloadAsync(
+            string hostPath,
+            string callerPath,
+            Dictionary<string, string> edits)
+        {
+            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                edits);
+        }
+
+        private static HotReloadResponse BuildResponse(HotReloadOrchestratorResult result)
+        {
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
         }
 
         // Why the preparation stage is the only one wrapped: the test reads the edited body back
@@ -167,6 +280,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
                     collaborators, context, compileResult, entriesToPatch),
                 HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);
+        }
+
+        private static void AssertComputedValue(
+            HotReloadIntroducedTypeArtifact artifact,
+            int expected,
+            string because)
+        {
+            Assert.That(artifact, Is.Not.Null, "A reload had to introduce the type before this check.");
+            Assert.That(ReadComputedValue(artifact), Is.EqualTo(expected), because);
+        }
+
+        private static void AssertBoundOneDeclaration(HotReloadResponse response)
+        {
+            Assert.That(
+                response.IntroducedTypes.Count,
+                Is.EqualTo(1),
+                "The reload bound one declaration from the retained artifact.");
+            Assert.That(
+                response.IntroducedTypes[0].Kind,
+                Is.EqualTo("AlreadyActive"),
+                "A declaration bound from a retained artifact was not introduced by this run.");
+            Assert.That(
+                response.IntroducedTypes[0].TypeName,
+                Is.EqualTo(IntroducedTypeMetadataName),
+                "The type row must name the declaration the reload bound.");
+        }
+
+        private static HotReloadIntroducedTypeOutcome FindIntroducedTypeOutcome(
+            HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
+            {
+                if (outcome.MetadataName == IntroducedTypeMetadataName)
+                {
+                    return outcome;
+                }
+            }
+
+            Assert.Fail("The reload must report a row for " + IntroducedTypeMetadataName + ".\n"
+                + DescribeOutcomes(result));
+            return null;
         }
 
         private static int ReadComputedValue(HotReloadIntroducedTypeArtifact artifact)
@@ -264,7 +418,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeBodyEditHost.cs",
-                    InsertIntroducedType(File.ReadAllText(hostPath), IntroducedSeed.ToString())),
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, NoExtraMembers)),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeBodyEditCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
@@ -279,16 +433,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeBodyEditedHost.cs",
-                    InsertIntroducedType(File.ReadAllText(hostPath), "_seed * 2")),
+                    InsertIntroducedType(File.ReadAllText(hostPath), EditedExpression, NoExtraMembers)),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeBodyEditedCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
             };
         }
 
+        // Why distinct file names for the same source as the introducing reload: the run has to be
+        // told about an edit, and reusing the first reload's path would let a cached read decide
+        // the answer instead of the body comparison this test is about.
+        private static Dictionary<string, string> CreateRestoredEdits(string hostPath, string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeBodyRestoredHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, NoExtraMembers)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeBodyRestoredCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The declaration of the introduced type with one member more than the retained assembly
+        // holds, which is the change a reload cannot apply without a compile.
+        private static Dictionary<string, string> CreateDeclarationChangedEdits(
+            string hostPath,
+            string callerPath)
+        {
+            string extraMember =
+                "        public int Twice()\n"
+                + "        {\n"
+                + "            return _seed * 2;\n"
+                + "        }\n"
+                + "\n";
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeDeclarationChangedHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, extraMember)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeDeclarationChangedCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
         // Why NoInlining: the test reads the patched body back through a reflection call, and the
         // declaration must stay byte-identical between the two reloads apart from the body itself.
-        private static string InsertIntroducedType(string hostSource, string computedExpression)
+        private static string InsertIntroducedType(
+            string hostSource,
+            string computedExpression,
+            string extraMembers)
         {
             Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
             string introduced =
@@ -296,6 +492,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "    {\n"
                 + "        private readonly int _seed = " + IntroducedSeed.ToString() + ";\n"
                 + "\n"
+                + extraMembers
                 + "        [System.Runtime.CompilerServices.MethodImpl(\n"
                 + "            System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]\n"
                 + "        public int Compute()\n"
