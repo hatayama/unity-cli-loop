@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 
 using HarmonyLib;
 
@@ -102,9 +103,132 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // Why full path (not file name, as the optional shim assemblies use): an artifact assembly
-        // is never publicized, so no second copy of it exists, and two artifacts of one run can
-        // share a file name while being different assemblies.
+        /// <summary>
+        /// Adds a publicized copy of each retained introduced-type assembly to a reference list,
+        /// keeping one entry per file so a compilation never holds the same assembly identity twice.
+        /// </summary>
+        /// <remarks>
+        /// Why publicized and not the raw image: a shim compiled for an edited body of a type one
+        /// of these assemblies holds reads that type's private members, and the shim is an assembly
+        /// of its own. Why the artifact directories join the resolver search dirs: an artifact
+        /// references its target assembly and the other artifacts of the domain, and Cecil has to
+        /// resolve those while rewriting or the write fails with AssemblyResolutionException.
+        /// </remarks>
+        internal static void AppendPublicizedIntroducedTypeArtifactReferences(
+            List<string> references,
+            IReadOnlyList<HotReloadTypeHome> artifactHomes,
+            IReadOnlyCollection<string> resolverSearchDirectories)
+        {
+            Debug.Assert(references != null, "references must not be null.");
+            Debug.Assert(resolverSearchDirectories != null, "resolverSearchDirectories must not be null.");
+
+            if (artifactHomes == null || artifactHomes.Count == 0)
+            {
+                return;
+            }
+
+            IReadOnlyCollection<string> searchDirectories = CollectArtifactSearchDirectories(
+                artifactHomes,
+                resolverSearchDirectories);
+            foreach (HotReloadTypeHome artifactHome in artifactHomes)
+            {
+                if (artifactHome == null || !File.Exists(artifactHome.DllPath))
+                {
+                    continue;
+                }
+
+                AppendIfMissingByFullPath(
+                    references,
+                    ReferencePublicizer.GetOrCreatePublicizedCopy(artifactHome, searchDirectories));
+            }
+        }
+
+        /// <summary>
+        /// Resolves one home per introduced-type assembly the shim of this run may bind against:
+        /// the artifacts this domain already retains, plus the artifact this run prepared.
+        /// </summary>
+        /// <remarks>
+        /// Why the prepared artifact is handed in separately: nothing has activated it yet, so the
+        /// domain resolves its name to a project assembly that does not exist, and a shim that
+        /// cannot see the types this run is introducing fails to compile the bodies using them.
+        /// </remarks>
+        internal static List<HotReloadTypeHome> ResolveIntroducedTypeArtifactHomes(
+            HotReloadDomain domain,
+            string projectRoot,
+            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts,
+            HotReloadIntroducedTypeArtifact preparedArtifact)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+
+            List<HotReloadTypeHome> homes = new List<HotReloadTypeHome>();
+            AppendRetainedArtifactHomes(homes, domain, projectRoot, introducedTypeArtifacts);
+            if (preparedArtifact != null)
+            {
+                homes.Add(
+                    HotReloadTypeHome.RetainedArtifact(
+                        new AssemblyName(preparedArtifact.AssemblyFullName).Name,
+                        preparedArtifact.DllPath,
+                        preparedArtifact.Assembly));
+            }
+
+            return homes;
+        }
+
+        private static void AppendRetainedArtifactHomes(
+            List<HotReloadTypeHome> homes,
+            HotReloadDomain domain,
+            string projectRoot,
+            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
+        {
+            if (introducedTypeArtifacts == null)
+            {
+                return;
+            }
+
+            foreach (TransformWorkerIntroducedTypeArtifactDto artifact in introducedTypeArtifacts)
+            {
+                if (artifact == null || string.IsNullOrEmpty(artifact.assemblyFullName))
+                {
+                    continue;
+                }
+
+                HotReloadTypeHome home = domain.ResolveTypeHome(
+                    projectRoot,
+                    new AssemblyName(artifact.assemblyFullName).Name);
+                if (home.Kind == HotReloadTypeHomeKind.RetainedArtifact)
+                {
+                    homes.Add(home);
+                }
+            }
+        }
+
+        private static IReadOnlyCollection<string> CollectArtifactSearchDirectories(
+            IReadOnlyList<HotReloadTypeHome> artifactHomes,
+            IReadOnlyCollection<string> resolverSearchDirectories)
+        {
+            HashSet<string> directories = new HashSet<string>(resolverSearchDirectories, StringComparer.Ordinal);
+            foreach (HotReloadTypeHome artifactHome in artifactHomes)
+            {
+                if (artifactHome == null)
+                {
+                    continue;
+                }
+
+                string directory = Path.GetDirectoryName(Path.GetFullPath(artifactHome.DllPath));
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    directories.Add(directory);
+                }
+            }
+
+            return directories;
+        }
+
+        // Why full path (not file name, as the optional shim assemblies use): the publicized copy
+        // of an artifact is named after the assembly and its Mvid, so file names alone cannot tell
+        // two artifacts of one run apart, and a raw image and its publicized copy would both pass
+        // a file-name check while being the same assembly identity twice.
         private static void AppendIfMissingByFullPath(List<string> references, string fullPath)
         {
             foreach (string reference in references)
@@ -226,7 +350,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTypeHome targetHome,
             bool includeHarmonyReference,
             bool includeAddedFieldStoreReference,
-            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
+            IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes)
         {
             Debug.Assert(targetHome != null, "targetHome must not be null.");
 
@@ -241,7 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         targetHome,
                         includeHarmonyReference,
                         includeAddedFieldStoreReference,
-                        introducedTypeArtifacts),
+                        introducedTypeArtifactHomes),
                     null);
             }
             catch (AssemblyResolutionException resolutionException)
@@ -254,8 +378,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Publicize ScriptAssemblies references; leave engine/system DLLs untouched. Never include
-        /// the original (non-publicized) target assembly. Harmony is added when the worker
+        /// Publicize ScriptAssemblies references and retained introduced-type artifacts; leave
+        /// engine/system DLLs untouched. Never include the original (non-publicized) target
+        /// assembly or the raw image of an artifact. Harmony is added when the worker
         /// emitted a delegation entry or accessor delegates (addedMethod entries can need them).
         /// The added-field store assembly is added when the worker rewrote added-field accesses.
         /// </summary>
@@ -264,7 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTypeHome targetHome,
             bool includeHarmonyReference,
             bool includeAddedFieldStoreReference,
-            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
+            IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string scriptAssembliesDirectory = Path.GetFullPath(
@@ -287,7 +412,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 includeAddedFieldStoreReference);
             // Why here: the shim binds against the retained types the worker bound against, and a
             // shim that cannot see them fails to compile the bodies that use them.
-            AppendIntroducedTypeArtifactReferences(references, introducedTypeArtifacts);
+            AppendPublicizedIntroducedTypeArtifactReferences(
+                references,
+                introducedTypeArtifactHomes,
+                resolverSearchDirectories);
 
             if (compilationAssembly.allReferences == null)
             {

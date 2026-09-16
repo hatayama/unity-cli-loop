@@ -95,12 +95,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // aborting the peel, so the remaining unchanged methods still get reverted.
         // Returns how many Revert calls actually removed a live patch.
         internal int RevertUnchangedPatches(
-            HotReloadTypeHome home,
+            HotReloadTypeHome fileHome,
+            HotReloadEntryHomeResolver homeResolver,
             TransformWorkerUnchangedMethodDto[] unchangedMethods,
             List<HotReloadMethodOutcome> outcomes,
             string assemblyResolvePath)
         {
-            Debug.Assert(home != null, "home must not be null.");
+            Debug.Assert(fileHome != null, "fileHome must not be null.");
+            Debug.Assert(homeResolver != null, "homeResolver must not be null.");
             Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
 
@@ -119,8 +121,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why pass unchanged.genericArity: Caller(int) and Caller<T>(int) share name
                 // and parameters. Arity 0 would resolve the generic unchanged row to the
                 // non-generic sibling and peel its live patch.
+                // Why the row decides the home: a method of a type an artifact serves is patched
+                // on that artifact, so the leftover patch to peel is only findable there.
                 HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
-                    home,
+                    homeResolver.Resolve(fileHome, unchanged.homeAssemblyName),
                     unchanged.typeMetadataName,
                     unchanged.methodName,
                     unchanged.parameterTypeFullNames,
@@ -160,6 +164,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadGroupFile> files,
             HotReloadWorkerRowsByFile rows)
         {
+            Debug.Assert(files != null, "files must not be null.");
+            Debug.Assert(files.Count > 0, "A group run must have at least one file.");
+
+            HotReloadEntryHomeResolver homeResolver =
+                new HotReloadEntryHomeResolver(_domain, files[0].ProjectRoot);
             foreach (HotReloadGroupFile file in files)
             {
                 IReadOnlyList<TransformWorkerUnchangedMethodDto> fileUnchanged =
@@ -173,6 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 file.RevertedUnchangedCount = RevertUnchangedPatches(
                     file.Home,
+                    homeResolver,
                     unchangedMethods,
                     file.Sinks.Outcomes,
                     file.AssemblyResolvePath);

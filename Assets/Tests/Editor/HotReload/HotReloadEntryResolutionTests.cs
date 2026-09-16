@@ -25,18 +25,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static Assembly ShimAssembly => typeof(HotReloadHandwrittenShims).Assembly;
 
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _scope.Dispose();
+        }
+
         // The test assembly stands in for the patch target, so its ScriptAssemblies image is the
         // home the preflight resolves existing methods against.
         private static HotReloadTypeHome TestAssemblyHome
         {
             get
             {
-                string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-                string dllPath =
-                    Path.Combine(projectRoot, "Library/ScriptAssemblies", TestAssemblyName + ".dll");
+                string dllPath = Path.Combine(
+                    ResolveProjectRoot(), "Library/ScriptAssemblies", TestAssemblyName + ".dll");
                 return HotReloadTypeHome.ScriptAssemblies(TestAssemblyName, dllPath);
             }
         }
+
+        // The rows these tests build name no home assembly, so every one of them resolves to the
+        // file's own home and the resolver never has to look an artifact up in the domain.
+        private static HotReloadEntryHomeResolver FileHomeResolver =>
+            new HotReloadEntryHomeResolver(
+                new HotReloadDomainTestAccess().Domain,
+                ResolveProjectRoot());
 
         /// <summary>
         /// What: every entry of a file resolving leaves the result all-resolved, with one resolved
@@ -59,6 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
+                FileHomeResolver,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -91,6 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
+                FileHomeResolver,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -136,6 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
+                FileHomeResolver,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -146,6 +169,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.ResolvedEntries[0].IsAddedMethod, Is.True);
             Assert.That(result.ResolvedEntries[0].OriginalMethod, Is.Null);
             Assert.That(result.ResolvedEntries[0].ShimMethod, Is.Not.Null);
+        }
+
+        private static string ResolveProjectRoot()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         }
 
         private static TransformWorkerEntryDto BuildExistingMethodEntry(

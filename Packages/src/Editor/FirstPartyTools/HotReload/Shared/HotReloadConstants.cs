@@ -10,6 +10,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HarmonyId = "io.github.hatayama.uloop.hot-reload";
 
         public const string ScriptAssembliesRelativeDirectory = "Library/ScriptAssemblies";
+
+        // Where one domain's introduced-type artifact assemblies are written, one directory per
+        // session and artifact below it. Shared with the publicizer, which accepts an image from
+        // here as well as one from ScriptAssemblies.
+        public const string IntroducedTypeArtifactsRelativeDirectory = "Library/UloopHotReload/IntroducedTypes";
         public const string CompiledAssemblyExtension = ".dll";
 
         // Publicized reference copies are keyed by assembly name + Mvid so a recompiled assembly
@@ -279,6 +284,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AlreadyActiveIntroducedTypesOnlyApplyMessageFormat =
             "Hot reload bound {0} introduced type(s) this domain already holds; no method body "
             + "needed patching.";
+
+        // Format: how many declarations were bound from a retained assembly, and how many method
+        // bodies this run patched. Why not "of them": a body-only edit of a retained type patches
+        // the callers in the same group too, so the count is not a subset of the type rows.
+        public const string AlreadyActiveIntroducedTypesPatchedApplyMessageFormat =
+            "Hot reload bound {0} introduced type(s) this domain already holds; {1} method "
+            + "body(ies) were patched.";
 
         // Format: how many type rows the response carries. Appended to a message that already
         // reports what the methods did.

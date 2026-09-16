@@ -53,10 +53,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Returns the path of a cached publicized copy of <paramref name="home"/>'s image,
         /// writing it on first use. Only a publicizable home is accepted, and its image must sit
-        /// under <c>Library/ScriptAssemblies/</c> — engine and system assemblies must not be
-        /// rewritten. <paramref name="resolverSearchDirectories"/> are extra Cecil search dirs
-        /// derived by the caller from compilation references (Unity Editor layout must not be
-        /// hardcoded).
+        /// under <c>Library/ScriptAssemblies/</c> or <c>Library/UloopHotReload/IntroducedTypes/</c>
+        /// — engine and system assemblies must not be rewritten.
+        /// <paramref name="resolverSearchDirectories"/> are extra Cecil search dirs derived by the
+        /// caller from compilation references (Unity Editor layout must not be hardcoded).
         /// </summary>
         public static string GetOrCreatePublicizedCopy(
             HotReloadTypeHome home,
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string fullSourceDllPath = Path.GetFullPath(home.DllPath);
             Debug.Assert(File.Exists(fullSourceDllPath), "home.DllPath must point to an existing DLL.");
-            AssertIsScriptAssemblyPath(fullSourceDllPath);
+            AssertIsPublicizableSourcePath(fullSourceDllPath);
 
             // InMemory: the source DLL is the currently loaded script assembly; keep no file handle.
             // A search-path resolver is required so Cecil can satisfy assembly refs while rewriting
@@ -177,23 +177,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static void AssertIsScriptAssemblyPath(string fullSourceDllPath)
+        // Why two directories and not one: a shim compiled for an edited body of a type an
+        // earlier reload introduced has to read that type's private members, and the image that
+        // holds it is the retained artifact rather than a compiled script assembly.
+        private static void AssertIsPublicizableSourcePath(string fullSourceDllPath)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string scriptAssembliesDirectory = Path.GetFullPath(
-                Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
 
-            string normalizedSource = NormalizePathForComparison(fullSourceDllPath);
-            string normalizedDirectory = NormalizePathForComparison(scriptAssembliesDirectory);
-            // Windows paths are case-insensitive; separators are normalized to '/' above.
+            // Windows paths are case-insensitive; separators are normalized to '/' below.
             StringComparison comparison = Application.platform == RuntimePlatform.WindowsEditor
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
-            bool underScriptAssemblies = normalizedSource.StartsWith(normalizedDirectory + "/", comparison);
+            string normalizedSource = NormalizePathForComparison(fullSourceDllPath);
+            bool underAcceptedDirectory = IsUnderProjectDirectory(
+                    normalizedSource,
+                    projectRoot,
+                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                    comparison)
+                || IsUnderProjectDirectory(
+                    normalizedSource,
+                    projectRoot,
+                    HotReloadConstants.IntroducedTypeArtifactsRelativeDirectory,
+                    comparison);
 
             Debug.Assert(
-                underScriptAssemblies,
-                "ReferencePublicizer only accepts DLLs under Library/ScriptAssemblies/.");
+                underAcceptedDirectory,
+                "ReferencePublicizer only accepts DLLs under Library/ScriptAssemblies/ or "
+                + "Library/UloopHotReload/IntroducedTypes/.");
+        }
+
+        private static bool IsUnderProjectDirectory(
+            string normalizedSourcePath,
+            string projectRoot,
+            string relativeDirectory,
+            StringComparison comparison)
+        {
+            string normalizedDirectory = NormalizePathForComparison(
+                Path.GetFullPath(Path.Combine(projectRoot, relativeDirectory)));
+            return normalizedSourcePath.StartsWith(normalizedDirectory + "/", comparison);
         }
 
         private static string ResolvePublicizedRefsDirectory()

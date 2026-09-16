@@ -794,6 +794,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// Verifies that a run which both patched the body of a retained declaration and added a
+        /// method to a compiled type reports the addition as an addition, instead of counting it
+        /// among the patched bodies of the bound declaration.
+        /// </summary>
+        [Test]
+        public void Build_BodyEditedDeclarationBesideAnAddedMethod_DoesNotCountTheAdditionAsPatched()
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                // Why captured here: this test builds the run's outcomes itself instead of driving
+                // the orchestrator, and the response normalizes the file of every row against the
+                // package roots the orchestrator would have captured.
+                HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
+
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new[]
+                    {
+                        HotReloadMethodOutcome.Patched(PatchedMethodLabel, HostFileName),
+                        HotReloadMethodOutcome.Added(AddedMethodLabel, HostFileName)
+                    },
+                    Array.Empty<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    introducedTypes: new[]
+                    {
+                        HotReloadIntroducedTypeOutcome.AlreadyActive(
+                            IntroducedTypeMetadataName,
+                            RetainedAssemblyName,
+                            HostFileName,
+                            bodyEdited: true)
+                    });
+
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                    HotReloadCompositionRoot.Services,
+                    result,
+                    null);
+
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Added: 1."
+                        + " IntroducedTypes=1."),
+                    "An added method is not a patched body, so the bound-declaration wording must "
+                    + "not report it as one and must not hide the addition.");
+            }
+        }
+
         private static string FixturePath(string fileName)
         {
             string path = Path.GetFullPath(
@@ -808,5 +856,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string IntroducedTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileIntroducedValue";
+
+        private const string RetainedAssemblyName = "Example.Retained";
+
+        private const string PatchedMethodLabel =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileIntroducedValue"
+            + ".Compute()";
+
+        private const string AddedMethodLabel =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost"
+            + ".Added()";
     }
 }

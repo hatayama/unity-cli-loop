@@ -17,13 +17,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why bindFailures is passed in: one shim assembly serves every file of a group, so its
         // accessor binders run once for the group instead of once per file.
         internal static Result ResolveEntries(
-            HotReloadTypeHome home,
+            HotReloadTypeHome fileHome,
+            HotReloadEntryHomeResolver homeResolver,
             string filePath,
             Assembly shimAssembly,
             TransformWorkerEntryDto[] entriesToPatch,
             Dictionary<string, string> bindFailures)
         {
-            Debug.Assert(home != null, "home must not be null.");
+            Debug.Assert(fileHome != null, "fileHome must not be null.");
+            Debug.Assert(homeResolver != null, "homeResolver must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
             Debug.Assert(shimAssembly != null, "shimAssembly must not be null.");
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
@@ -34,7 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ResolvedEntryOutcome entryOutcome = TryResolveEntry(
                     entriesToPatch[index],
-                    home,
+                    fileHome,
+                    homeResolver,
                     shimAssembly,
                     bindFailures,
                     filePath);
@@ -104,7 +107,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static ResolvedEntryOutcome TryResolveEntry(
             TransformWorkerEntryDto entry,
-            HotReloadTypeHome home,
+            HotReloadTypeHome fileHome,
+            HotReloadEntryHomeResolver homeResolver,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
             string filePath)
@@ -118,7 +122,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return TryResolveExistingMethod(
                 entry,
                 methodLabel,
-                home,
+                fileHome,
+                homeResolver,
                 shimAssembly,
                 bindFailures,
                 filePath);
@@ -158,7 +163,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static ResolvedEntryOutcome TryResolveExistingMethod(
             TransformWorkerEntryDto entry,
             string methodLabel,
-            HotReloadTypeHome home,
+            HotReloadTypeHome fileHome,
+            HotReloadEntryHomeResolver homeResolver,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
             string filePath)
@@ -174,6 +180,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
+            // Why the row decides the home: the method an entry replaces can live in an
+            // introduced-type artifact this domain retains rather than in the assembly the
+            // edited file belongs to, and only the row knows which.
+            HotReloadTypeHome home = homeResolver.Resolve(fileHome, entry.homeAssemblyName);
             HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
                 home,
                 entry.typeMetadataName,
