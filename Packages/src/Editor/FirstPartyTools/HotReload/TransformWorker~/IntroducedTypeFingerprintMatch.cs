@@ -105,20 +105,28 @@ internal sealed class IntroducedTypeFingerprintMatch
 
     /// <summary>
     /// The keys the fingerprint gives the declaration's ordinary methods, which is the set of
-    /// members a body edit can be patched on. Built with the same builder the fingerprint uses,
-    /// so the two never disagree about how a key is spelled.
+    /// members a body edit can be patched on. Built along the path the fingerprint builds its own
+    /// keys on, so the two never disagree about how a key is spelled.
     /// </summary>
     internal static ISet<string> CollectOrdinaryMethodKeys(
         BaseTypeDeclarationSyntax declaration,
         string typeMetadataName)
     {
         HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal);
-        foreach (MemberDeclarationSyntax member in IntroducedTypeMemberRegions.CollectMembers(declaration))
+        IReadOnlyList<MemberDeclarationSyntax> members = IntroducedTypeMemberRegions.CollectMembers(declaration);
+        for (int index = 0; index < members.Count; index++)
         {
-            if (member is MethodDeclarationSyntax method)
+            // Why the trivia is stripped first: a key builder keeps a comment written inside a
+            // parameter type, and the fingerprint recorded its keys from a stripped declaration.
+            // The same builder on an unstripped one spells the same method differently, which
+            // would read an edited body as a member the reload cannot patch.
+            MemberDeclarationSyntax member = IntroducedTypeMemberRegions.StripTrivia(members[index]);
+            if (!(member is MethodDeclarationSyntax))
             {
-                keys.Add(WorkerSyntaxIndex.BuildSyntaxMethodKey(typeMetadataName, method));
+                continue;
             }
+
+            keys.Add(IntroducedTypeMemberRegions.BuildMemberKey(member, typeMetadataName, index));
         }
 
         return keys;

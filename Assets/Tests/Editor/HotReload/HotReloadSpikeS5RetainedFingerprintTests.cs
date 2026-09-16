@@ -113,6 +113,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             + "    }\n"
             + "}\n";
 
+        // A parameter type written with a comment inside it. The fingerprint strips trivia before
+        // it names a member, so the key it records carries no comment; anything that names the
+        // same method from the raw declaration has to strip it too.
+        private const string CommentedParameterSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public class Retained\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "\n"
+            + "        public static int Twice(System./* note */Int32 extra)\n"
+            + "        {\n"
+            + "            return Value * 2 + extra;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+        private const string CommentedParameterBodyEditedSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public class Retained\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "\n"
+            + "        public static int Twice(System./* note */Int32 extra)\n"
+            + "        {\n"
+            + "            return Value * 3 + extra;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
         private const string DeclarationEditedSource =
             "namespace Example\n"
             + "{\n"
@@ -195,6 +226,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                 Is.Empty);
             Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
             Assert.That(file.introducedTypeReuses[0].metadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.True);
+        }
+
+        /// <summary>What: a body-only edit of a method whose parameter type is written with a
+        /// comment inside it still reuses the active type, because the keys the reload compares
+        /// are normalized the same way the recorded fingerprint normalized them.</summary>
+        [Test]
+        public async Task Plan_BodyOnlyEditOfACommentedParameterMethod_ReusesTheActiveType()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateAsync("SpikeS5Comment", CommentedParameterSource);
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, CommentedParameterBodyEditedSource);
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
             Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.True);
         }
 
