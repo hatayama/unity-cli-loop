@@ -85,7 +85,7 @@ internal static class IntroducedTypeDeclarationVerifier
             IntroducedTypeFingerprintMatch match = IntroducedTypeFingerprintMatch.Classify(
                 record.DeclarationFingerprint,
                 fingerprint,
-                IntroducedTypeFingerprintMatch.CollectOrdinaryMethodKeys(declaration, metadataName));
+                IntroducedTypeDeclarationMemberIndex.Build(declaration, metadataName));
             verdicts.Add(new RetainedDeclarationVerdict(declaration, metadataName, match, record));
         }
 

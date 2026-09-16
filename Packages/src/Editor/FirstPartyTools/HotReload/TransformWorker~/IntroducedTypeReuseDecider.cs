@@ -33,7 +33,7 @@ internal static class IntroducedTypeReuseDecider
         IntroducedTypeFingerprintMatch match = IntroducedTypeFingerprintMatch.Classify(
             activeFingerprint,
             declarationFingerprint,
-            IntroducedTypeFingerprintMatch.CollectOrdinaryMethodKeys(declaration, metadataName));
+            IntroducedTypeDeclarationMemberIndex.Build(declaration, metadataName));
         if (match.Kind == IntroducedTypeFingerprintMatchKind.OtherBodiesChanged)
         {
             unit.IntroducedTypeDiagnostics.Add(
@@ -60,14 +60,16 @@ internal static class IntroducedTypeReuseDecider
         }
 
         // Why recorded: the run binds this declaration from the active artifact, and without a
-        // record the reload could not tell that from a run that never saw the declaration.
+        // record the reload could not tell that from a run that never saw the declaration. Added
+        // members need no mark of their own here: the transform stage reads them off the artifact
+        // the same way it reads them off a compiled type.
         unit.IntroducedTypeReuses.Add(
             new WorkerIntroducedTypeReuse
             {
                 MetadataName = metadataName,
                 OriginalAssemblyName = targetAssemblyName ?? string.Empty,
                 OriginalAssemblyMvid = targetAssemblyMvid ?? string.Empty,
-                BodyEdited = match.Kind == IntroducedTypeFingerprintMatchKind.MethodBodiesOnly
+                BodyEdited = match.ChangedMethodSyntaxKeys.Count > 0
             });
         return true;
     }

@@ -39,16 +39,7 @@ internal static class IntroducedTypeFingerprint
         string definesHash = ComputeHash(BuildDefinesInput(defineSymbols));
 
         string typeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol);
-        List<string> keys = new List<string>();
-        for (int index = 0; index < memberNodes.Count; index++)
-        {
-            keys.Add(IntroducedTypeMemberRegions.BuildMemberKey(
-                IntroducedTypeMemberRegions.StripTrivia(memberNodes[index]),
-                typeMetadataName,
-                index));
-        }
-
-        DisambiguateKeys(keys);
+        IReadOnlyList<string> keys = CollectOrderedMemberKeys(memberNodes, typeMetadataName);
 
         List<HotReloadIntroducedTypeMemberFingerprint> members =
             new List<HotReloadIntroducedTypeMemberFingerprint>(memberNodes.Count);
@@ -59,10 +50,38 @@ internal static class IntroducedTypeFingerprint
 
         // Sorting the members by key drops the order they were declared in, and that order is
         // observable: it decides implicit enum values and the sequence field initializers run in.
-        string memberOrderHash = ComputeHash(BuildKeyOrderInput(keys));
+        string memberOrderHash = ComputeMemberOrderHash(keys);
         members.Sort(CompareMemberKeys);
 
         return new HotReloadIntroducedTypeFingerprint(headerHash, definesHash, memberOrderHash, members);
+    }
+
+    /// <summary>
+    /// The keys of a declaration's members in the order they are declared in, spelled and
+    /// numbered the way Compute records them. Anything that compares an order against a recorded
+    /// one reads it from here, so no caller builds a member key a second way.
+    /// </summary>
+    internal static IReadOnlyList<string> CollectOrderedMemberKeys(
+        IReadOnlyList<MemberDeclarationSyntax> memberNodes,
+        string typeMetadataName)
+    {
+        List<string> keys = new List<string>(memberNodes.Count);
+        for (int index = 0; index < memberNodes.Count; index++)
+        {
+            keys.Add(IntroducedTypeMemberRegions.BuildMemberKey(
+                IntroducedTypeMemberRegions.StripTrivia(memberNodes[index]),
+                typeMetadataName,
+                index));
+        }
+
+        DisambiguateKeys(keys);
+        return keys;
+    }
+
+    /// <summary>The value a fingerprint records the declared member order under.</summary>
+    internal static string ComputeMemberOrderHash(IReadOnlyList<string> keys)
+    {
+        return ComputeHash(BuildKeyOrderInput(keys));
     }
 
     private static int CompareMemberKeys(

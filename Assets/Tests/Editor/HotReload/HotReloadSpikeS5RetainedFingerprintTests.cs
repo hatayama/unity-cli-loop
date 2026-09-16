@@ -166,6 +166,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             + "    }\n"
             + "}\n";
 
+        // The members the member-addition tests build a retained declaration out of. Spelling
+        // them one by one keeps each test to the members it actually differs by, which is what
+        // the fingerprint compares.
+        private const string TwiceMember =
+            "        public static int Twice()\n"
+            + "        {\n"
+            + "            return Value * 2;\n"
+            + "        }\n"
+            + "\n";
+
+        private const string TwiceBodyEditedMember =
+            "        public static int Twice()\n"
+            + "        {\n"
+            + "            return Value * 3;\n"
+            + "        }\n"
+            + "\n";
+
+        private const string NumberMember =
+            "        public int Number\n"
+            + "        {\n"
+            + "            get { return Value + 1; }\n"
+            + "        }\n"
+            + "\n";
+
+        private const string NumberBodyEditedMember =
+            "        public int Number\n"
+            + "        {\n"
+            + "            get { return Value + 2; }\n"
+            + "        }\n"
+            + "\n";
+
+        private const string AddedMethodMember =
+            "        public static int Extra()\n"
+            + "        {\n"
+            + "            return Value * 4;\n"
+            + "        }\n"
+            + "\n";
+
+        private const string AddedFieldMember =
+            "        private int extra;\n"
+            + "\n";
+
+        private const string AddedPropertyMember =
+            "        public int Extra\n"
+            + "        {\n"
+            + "            get { return 1; }\n"
+            + "        }\n"
+            + "\n";
+
+        private const string AddedConstructorMember =
+            "        public Retained()\n"
+            + "        {\n"
+            + "        }\n"
+            + "\n";
+
         /// <summary>What: editing only a method body of a retained introduced type leaves the
         /// fingerprint comparison at body-only and names exactly that member.</summary>
         [Test]
@@ -312,6 +367,257 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                 Is.EqualTo(
                     "Changed introduced type requires a compile: " + RetainedTypeMetadataName
                     + " Declaration differences: record."));
+        }
+
+        /// <summary>What: adding an ordinary method to a retained introduced type reuses the
+        /// active type instead of asking for a compile, and reports no body edit.</summary>
+        [Test]
+        public async Task Plan_AddedOrdinaryMethod_ReusesTheActiveTypeWithoutABodyEdit()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddMethod",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + NumberMember + AddedMethodMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].metadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.False);
+        }
+
+        /// <summary>What: adding an ordinary method while also editing an existing method body
+        /// reuses the active type and reports the body edit, so both are applied in one
+        /// reload.</summary>
+        [Test]
+        public async Task Plan_AddedOrdinaryMethodWithAnEditedBody_ReusesTheActiveTypeAndReportsTheBodyEdit()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddMethodAndBody",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceBodyEditedMember + NumberMember + AddedMethodMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.True);
+        }
+
+        /// <summary>What: adding a field to a retained introduced type reuses the active type,
+        /// because the added-field store holds it rather than the artifact.</summary>
+        [Test]
+        public async Task Plan_AddedField_ReusesTheActiveType()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddField",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + NumberMember + AddedFieldMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.False);
+        }
+
+        /// <summary>What: adding a property to a retained introduced type reuses the active
+        /// type, because its accessors are added members like an added method.</summary>
+        [Test]
+        public async Task Plan_AddedProperty_ReusesTheActiveType()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddProperty",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + NumberMember + AddedPropertyMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.False);
+        }
+
+        /// <summary>What: adding a constructor still asks for a compile, because only ordinary
+        /// methods, fields and properties can be added to a retained type.</summary>
+        [Test]
+        public async Task Plan_AddedConstructor_RequiresACompile()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddCtor",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(AddedConstructorMember + TwiceMember + NumberMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
+            Assert.That(reason, Does.Contain("added:"));
+        }
+
+        /// <summary>What: adding a method while editing a property accessor body asks for a
+        /// compile and names the accessor, because the artifact can only host ordinary method
+        /// bodies.</summary>
+        [Test]
+        public async Task Plan_AddedMethodWithAnEditedPropertyBody_RequiresACompile()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddMethodAndProperty",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + NumberBodyEditedMember + AddedMethodMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed member body of introduced type requires a compile: "
+                    + RetainedTypeMetadataName));
+            Assert.That(reason, Does.Contain("Number"));
+        }
+
+        /// <summary>What: removing a member from a retained introduced type asks for a compile
+        /// and names the removal, because the artifact still holds it.</summary>
+        [Test]
+        public async Task Plan_RemovedMethod_RequiresACompile()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5RemoveMethod",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, BuildRetainedSource(NumberMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
+            Assert.That(reason, Does.Contain("removed:"));
+        }
+
+        /// <summary>What: reordering existing members without adding any still asks for a
+        /// compile, because member order decides things the artifact already fixed.</summary>
+        [Test]
+        public async Task Plan_ReorderedMembers_RequiresACompile()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5Reorder",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, BuildRetainedSource(NumberMember + TwiceMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
+            Assert.That(reason, Does.Contain("order"));
+        }
+
+        /// <summary>What: a method added between two existing members reuses the active type,
+        /// because the order the recorded members keep among themselves is unchanged.</summary>
+        [Test]
+        public async Task Plan_MethodAddedBetweenExistingMembers_ReusesTheActiveType()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddBetween",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + AddedMethodMember + NumberMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.False);
+        }
+
+        /// <summary>What: adding a method while also reordering the existing members asks for a
+        /// compile, because the order difference is more than the insertion explains.</summary>
+        [Test]
+        public async Task Plan_AddedMethodWithReorderedMembers_RequiresACompile()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddAndReorder",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(NumberMember + TwiceMember + AddedMethodMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
+            Assert.That(reason, Does.Contain("order"));
+        }
+
+        /// <summary>
+        /// Writes a retained declaration out of the members a test cares about, so each test
+        /// spells only what differs from the recorded declaration.
+        /// </summary>
+        private static string BuildRetainedSource(string members)
+        {
+            return "namespace Example\n"
+                + "{\n"
+                + "    public class Retained\n"
+                + "    {\n"
+                + "        public static int Value = 1;\n"
+                + "\n"
+                + members
+                + "    }\n"
+                + "}\n";
         }
 
         /// <summary>
