@@ -369,6 +369,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the membership evidence of a file absent from the compiled source list is readable
+        /// back as recorded, so a later reload can re-check the assembly it belongs to without
+        /// capturing the evidence again.
+        /// </summary>
+        [Test]
+        public void NewSourceMembershipEvidence_IsReadableBackForTheFileItWasRecordedFor()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CreateMembershipEvidence(FileOne);
+
+            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, evidence);
+
+            Assert.That(
+                _access.Domain.TryGetNewSourceMembershipEvidence(FileOne),
+                Is.SameAs(evidence));
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
+        }
+
+        /// <summary>
+        /// What: clearing a file's applied source drops its membership evidence with it and leaves
+        /// another file's evidence in place. The evidence only means anything alongside the applied
+        /// record, so a file that is no longer applied must not keep answering for its assembly.
+        /// </summary>
+        [Test]
+        public void ClearAppliedSource_DropsTheMembershipEvidenceOfThatFileOnly()
+        {
+            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
+
+            _access.Domain.ClearAppliedSource(FileOne);
+
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Not.Null);
+        }
+
+        /// <summary>
         /// What: a full revert empties every domain-scoped store, each checked on its own line so a
         /// single missed store cannot hide behind the others.
         /// </summary>
@@ -392,6 +427,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(HotReloadInvocationRegistry.GetCount(AddedMethodKey), Is.EqualTo(0));
             Assert.That(_access.Domain.TryGetAppliedSource(FileOne), Is.Null);
             Assert.That(_access.Domain.TryGetAppliedSource(FileTwo), Is.Null);
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
             Assert.That(
                 _access.Domain.TryGetSupersededReplacement(SupersededMethodKey, out string _),
                 Is.False);
@@ -410,7 +447,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadInvocationRegistry.Increment(AddedMethodKey);
             _access.Domain.RecordAppliedSource(FileOne, "hash", true);
             _access.Domain.RecordAppliedSource(FileTwo, "other-hash", false);
+            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
             _access.RecordSupersededSignature(FileOne, SupersededMethodKey, "Superseded(int)");
+        }
+
+        // The evidence a file absent from the compiled source list carries: what it was resolved
+        // against, so a later reload can tell the same assembly from a different one.
+        private static HotReloadNewSourceMembershipEvidence CreateMembershipEvidence(string projectRelativePath)
+        {
+            return new HotReloadNewSourceMembershipEvidence(
+                projectRelativePath,
+                ProjectAssemblyName,
+                "Library/ScriptAssemblies/" + ProjectAssemblyName + ".dll",
+                "domain-evidence-mvid",
+                "Assets/Tests/Editor/HotReload/DomainFixture.asmdef",
+                Array.Empty<HotReloadNewSourceMembershipBoundary>());
         }
 
         /// <summary>
