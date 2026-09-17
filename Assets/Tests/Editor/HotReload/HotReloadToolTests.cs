@@ -1312,11 +1312,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a skipped-only run uses the no-patch message that also names AlreadyActive, and
+        /// What: a skipped-only run reports that nothing from the requested file was applied, and
         /// carries the skipped method in Warnings.
         /// </summary>
         [Test]
-        public void BuildApplyResponse_SkippedOnly_KeepsExistingSkippedMessage()
+        public void BuildApplyResponse_SkippedOnly_SaysNothingFromRequestedFilesApplied()
         {
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 new List<HotReloadMethodOutcome>
@@ -1333,7 +1333,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
+                    HotReloadConstants.RequestedFilesAllSkippedMessage
                     + " 1 warning(s). See Warnings."));
         }
 
@@ -1422,7 +1422,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 skippedOnly.Message,
                 Is.EqualTo(
-                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
+                    HotReloadConstants.RequestedFilesAllSkippedMessage
                     + " 2 warning(s). See Warnings. "
                     + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
 
@@ -1865,6 +1865,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
                     + " 1 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: a run whose requested file was all Skipped reports that nothing from it was
+        /// applied, names the sibling re-apply separately, and recommends a compile.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RequestedFileAllSkippedWithSiblingAdded_SaysNothingFromRequestedFilesApplied()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.M", "reason", "Assets/Requested.cs"),
+                        HotReloadMethodOutcome.Added("S.N", "Assets/Sibling.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    reappliedSiblingPaths: new[] { "Assets/Sibling.cs" }));
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    HotReloadConstants.RequestedFilesAllSkippedMessage
+                    + " Also re-applied siblings: Added=1."));
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(HotReloadConstants.RequestedFilesAllSkippedRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// What: the same all-Skipped run without a sibling re-apply omits the sibling clause.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RequestedFileAllSkippedWithoutSiblings_OmitsTheSiblingClause()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.M", "reason", "Assets/Requested.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0));
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(HotReloadConstants.RequestedFilesAllSkippedMessage));
+            Assert.That(response.Message, Does.Not.Contain("Also re-applied"));
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(HotReloadConstants.RequestedFilesAllSkippedRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// What: a run that bound an introduced type keeps the type message and no next action,
+        /// even though the only method outcome of the requested file was Skipped.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RequestedFileAllSkippedBesideABoundIntroducedType_KeepsTheTypeMessage()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.M", "reason", "Assets/Requested.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    introducedTypes: new[]
+                    {
+                        HotReloadIntroducedTypeOutcome.AlreadyActive(
+                            "Example.Introduced",
+                            "RetainedAssembly",
+                            "Assets/Requested.cs",
+                            bodyEdited: false)
+                    }));
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    string.Format(
+                        HotReloadConstants.AlreadyActiveIntroducedTypesOnlyApplyMessageFormat,
+                        1)));
+            Assert.That(response.RecommendedNextAction, Is.Empty);
         }
 
         private static Func<HotReloadChangedFileAggregationResult> CreateNoChangedFilesDetector()

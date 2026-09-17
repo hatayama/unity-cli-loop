@@ -365,6 +365,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =
             "Hot reload finished with no methods patched. See Warnings for Skipped reasons and Methods for AlreadyActive reasons.";
 
+        // Why it names the requested files: a run that also re-applies a sibling file reports
+        // Patched or Added rows for that sibling, and a summary counting them reads as if the
+        // edits the caller asked for had been applied.
+        public const string RequestedFilesAllSkippedMessage =
+            "Nothing from the requested file(s) was applied: every method there was Skipped (see Warnings for the reasons). Run 'uloop compile' to apply these edits.";
+
         // Format: leftover patches peeled because source matched compiled IL again.
         public const string StalePatchesRevertedMessageFormat =
             "{0} stale patch(es) were reverted so those methods run the compiled IL again.";
@@ -429,6 +435,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
+
+        public const string RequestedFilesAllSkippedRecommendedNextAction =
+            "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings).";
 
         // Why one sentence in one place: the same rule has to reach the caller from the skill, the
         // docs, and every selection response, and two wordings of it read as two rules.
