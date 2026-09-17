@@ -132,6 +132,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "CS1061"
         };
 
+        // A name the shim cannot bind can be a type another assembly's reload introduced: CS0234
+        // for a namespace member, CS0246 for an unqualified type name, CS0103 for a name used
+        // without a qualifier at all.
+        private static readonly string[] IntroducedTypeVisibilityDiagnosticCodes =
+        {
+            "CS0234",
+            "CS0246",
+            "CS0103"
+        };
+
         /// <summary>
         /// Appends " (line N)" only when the diagnostic's #line-mapped file refers to the user's
         /// project-relative path. Scaffold-path errors keep the bare message.
@@ -166,6 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string message = string.Join("\n", errors);
             bool hasMissingUsingDiagnostic = false;
             bool hasMissingMemberDiagnostic = false;
+            bool hasIntroducedTypeVisibilityDiagnostic = false;
             for (int index = 0; index < errors.Count; index++)
             {
                 string error = errors[index];
@@ -178,6 +189,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     hasMissingMemberDiagnostic = true;
                 }
+
+                if (ErrorStartsWithAnyDiagnosticCode(error, IntroducedTypeVisibilityDiagnosticCodes))
+                {
+                    hasIntroducedTypeVisibilityDiagnostic = true;
+                }
             }
 
             if (hasMissingUsingDiagnostic)
@@ -188,6 +204,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (hasMissingMemberDiagnostic)
             {
                 message += "\n" + HotReloadConstants.NewMemberCompileHint;
+            }
+
+            // Appended last and once, whatever mix of diagnostics asked for it, so the reader
+            // reaches the assembly boundary only after the hints about the file they edited.
+            if (hasIntroducedTypeVisibilityDiagnostic)
+            {
+                message += HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint;
             }
 
             return message;

@@ -172,6 +172,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
 
+        // Why a sentence of its own: a type this reload introduced lives in the shim assembly of
+        // the group that declared it, so another assembly's shim cannot see it however the using
+        // directives read. The missing-using and new-member hints both point the reader at the
+        // edited file instead, which is not where the answer is.
+        public const string IntroducedTypeOtherAssemblyCompileHint =
+            " If the missing type was introduced by this reload into a different assembly, it is "
+            + "visible only inside that assembly until 'uloop compile' makes it a compiled type.";
+
         // Why a separate line after Compose: CS1061/CS0117/CS0103 name the missing member, but
         // not that this same run skipped it (generic add, etc.). Agents otherwise treat the
         // compile error as the root cause.

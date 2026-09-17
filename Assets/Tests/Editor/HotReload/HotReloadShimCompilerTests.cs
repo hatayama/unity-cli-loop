@@ -114,5 +114,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(usingHintIndex, Is.GreaterThanOrEqualTo(0));
             Assert.That(newMemberHintIndex, Is.GreaterThan(usingHintIndex));
         }
+
+        /// <summary>
+        /// What: a missing namespace member (CS0234) appends the hint that says a type introduced
+        /// into another assembly by this reload is not visible from here yet.
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_WhenCs0234_AppendsTheOtherAssemblyIntroducedTypeHint()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS0234: The type or namespace name 'Added' does not exist in the namespace 'Sample'"
+                });
+
+            Assert.That(message, Does.Contain("CS0234"));
+            Assert.That(
+                message,
+                Does.Contain(HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint));
+        }
+
+        /// <summary>
+        /// What: diagnostics that ask for both existing hints keep those hints in their order and
+        /// pick up the other-assembly hint exactly once, after them.
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_WhenCs0246AndCs0103Together_KeepsExistingHintOrderAndAppendsTheOtherAssemblyHintOnce()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS0246: The type or namespace name 'Added' could not be found",
+                    "CS0103: The name 'Added' does not exist in the current context"
+                });
+
+            int usingHintIndex = message.IndexOf(
+                HotReloadConstants.MissingUsingCompileHint,
+                StringComparison.Ordinal);
+            int newMemberHintIndex = message.IndexOf(
+                HotReloadConstants.NewMemberCompileHint,
+                StringComparison.Ordinal);
+            int otherAssemblyHintIndex = message.IndexOf(
+                HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint,
+                StringComparison.Ordinal);
+            Assert.That(usingHintIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(newMemberHintIndex, Is.GreaterThan(usingHintIndex));
+            Assert.That(otherAssemblyHintIndex, Is.GreaterThan(newMemberHintIndex));
+            Assert.That(
+                CountOccurrences(message, HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint),
+                Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a missing member of a known type (CS0117) says nothing about another assembly, so
+        /// it keeps the hints it had.
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_WhenCs0117Only_DoesNotAppendTheOtherAssemblyHint()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS0117: 'Sample' does not contain a definition for 'Added'"
+                });
+
+            Assert.That(message, Does.Contain(HotReloadConstants.NewMemberCompileHint));
+            Assert.That(
+                message,
+                Does.Not.Contain(HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint));
+        }
+
+        /// <summary>
+        /// Counts how many times one hint appears in a composed message, so a test can pin that a
+        /// hint several diagnostics ask for is still written once.
+        /// </summary>
+        private static int CountOccurrences(string text, string value)
+        {
+            int count = 0;
+            int index = text.IndexOf(value, StringComparison.Ordinal);
+            while (index >= 0)
+            {
+                count++;
+                index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal);
+            }
+
+            return count;
+        }
     }
 }
