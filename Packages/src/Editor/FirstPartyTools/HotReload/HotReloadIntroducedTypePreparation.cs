@@ -89,7 +89,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadIntroducedTypeCompileFailureOutcomes.Build(
                         compileResult,
                         descriptors,
-                        transformInput.targetAssemblyName),
+                        transformInput.targetAssemblyName,
+                        HotReloadActiveAddedMemberNames.Collect(
+                            collaborators.Domain.DescribeAddedMembers(),
+                            collaborators.Domain.DescribeAddedFields())),
                     alreadyActiveTypes,
                     notices);
             }

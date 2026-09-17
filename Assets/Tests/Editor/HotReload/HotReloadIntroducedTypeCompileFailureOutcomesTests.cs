@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using NUnit.Framework;
@@ -26,7 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
-                "TargetAssembly");
+                "TargetAssembly",
+                Array.Empty<string>());
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Kind, Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed));
@@ -65,7 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.First", "Assets/First.cs"),
                     CreateDescriptor("Example.Second", "Assets/Second.cs")
                 },
-                "TargetAssembly");
+                "TargetAssembly",
+                Array.Empty<string>());
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -99,7 +102,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
-                "TargetAssembly");
+                "TargetAssembly",
+                Array.Empty<string>());
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -129,7 +133,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.First", "Assets/First.cs"),
                     CreateDescriptor("Example.Companion", "Assets/First.cs")
                 },
-                "TargetAssembly");
+                "TargetAssembly",
+                Array.Empty<string>());
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -153,10 +158,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
-                "TargetAssembly");
+                "TargetAssembly",
+                Array.Empty<string>());
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Is.EqualTo(Prefix + "CS0246: missing type"));
+        }
+
+        /// <summary>
+        /// Verifies that a declaration the compiler never blamed is still reported as not
+        /// compiled, so a type of a failed batch never disappears from the response.
+        /// </summary>
+        [Test]
+        public void Build_DescriptorWithoutDiagnostics_ReportsItAsNotCompiled()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic("Assets/First.cs", "CS0246: missing type", 1, 1)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[]
+                {
+                    CreateDescriptor("Example.First", "Assets/First.cs"),
+                    CreateDescriptor("Example.Second", "Assets/Second.cs")
+                },
+                "TargetAssembly",
+                Array.Empty<string>());
+
+            Assert.That(rows, Has.Count.EqualTo(2));
+            Assert.That(rows[1].Kind, Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed));
+            Assert.That(rows[1].MetadataName, Is.EqualTo("Example.Second"));
+            Assert.That(rows[1].OwnerProjectRelativePath, Is.EqualTo("Assets/Second.cs"));
+            Assert.That(
+                rows[1].Reason,
+                Is.EqualTo(
+                    "Not compiled: another declaration in the same introduced-type batch failed to "
+                    + "compile, so this type was not introduced. Fix the failed file and rerun."));
+        }
+
+        /// <summary>
+        /// Verifies that a missing-member diagnostic naming a member hot reload added earlier
+        /// explains that an introduced type cannot see it, instead of reading as a typo.
+        /// </summary>
+        [Test]
+        public void Build_DiagnosticNamesAnActiveAddedMember_AppendsTheAddedMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS1061: 'Widget' does not contain a definition for 'Clear' and no accessible extension method",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new[] { "Clear" });
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Reason,
+                Does.EndWith(
+                    "One or more of the missing members were added by hot reload (Added rows) and "
+                    + "are not visible to the compilation of an introduced type, which compiles "
+                    + "against the compiled assemblies only. Run 'uloop compile' to make the added "
+                    + "members compiled, then rerun."));
+        }
+
+        /// <summary>
+        /// Verifies that a missing-member diagnostic naming no added member leaves the reason as
+        /// the compiler wrote it, so an ordinary typo is not explained away.
+        /// </summary>
+        [Test]
+        public void Build_DiagnosticNamesNoActiveAddedMember_LeavesTheReasonAlone()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS1061: 'Widget' does not contain a definition for 'Clear' and no accessible extension method",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new[] { "Other" });
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Not.Contain("added by hot reload"));
         }
 
         private static HotReloadIntroducedTypeDescriptor CreateDescriptor(
