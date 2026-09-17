@@ -44,7 +44,7 @@ automatically — pass it with `--files`.
 `--files` or `--revert-all`. Every kind of change is static Editor state, so after a domain
 reload it authoritatively reports zero. Each `Active` row's `InvocationCount` counts calls
 into the patched body since the patch was applied — a reachability signal only while the code
-is being driven (`references/troubleshooting.md`).
+is being driven.
 
 ## How It Works
 
@@ -56,22 +56,23 @@ one file can call a member added in another edited file of the same assembly. Re
 a real edit replaces the patch; an unchanged file reports `AlreadyActive` and changes nothing
 unless a sibling of the same assembly is in the reload, in which case it is re-applied so every
 active patch binds to the newest shim. With a compile-time baseline only bodies that actually
-changed are patched (`UnchangedTotal` counts the rest). Details:
-`references/mechanism-and-lifecycle.md`.
+changed are patched (`UnchangedTotal` counts the rest).
 
 ## Scope in Brief
 
-- Patched: ordinary method bodies and property getters with a body.
+- Patched: ordinary method bodies and property getters with a body (getters of an
+  introduced type still need a compile).
 - Added members: new methods, fields, and supported properties apply as `Added` rows
   (see the scope reference for the property shapes still skipped), visible to edited code in the same reload
-  within the same assembly (pass the declaring file and its callers together), and vanish
+  within the same assembly (pass the declaring file and its callers together), but not to a
+  type introduced in that reload (its compilation sees compiled members only), and vanish
   on any compile or domain reload (an Editor-session illusion).
 - New types: a top-level `public` class, struct, enum, or interface declared in an edited file
   is introduced by that reload and reported in `IntroducedTypes`. Every other shape (nested,
   `partial`, generic, `record`, non-public, `ref struct`, `unsafe`, `UnityEngine.Object`,
   `[Serializable]`, module initializer) is refused with a `Warnings` line naming the reason.
   Use from another assembly or from files outside the reload, reflection, serialization, and
-  Unity message discovery still need `uloop compile`. See `references/introduced-types.md`.
+  Unity message discovery still need `uloop compile`.
 - Signature changes (return type, rename, parameters) follow the added-member rules: a
   return-type change is `Skipped` unless every live compiled caller of the old signature is
   patched by this reload or an earlier one, while a rename or parameter change applies and
@@ -82,8 +83,6 @@ changed are patched (`UnchangedTotal` counts the rest). Details:
   detectable).
 - A reload applies each file all-or-nothing: any `Failed` method leaves that file unapplied,
   while other files still apply; a `Failed` type leaves all files of its assembly unapplied.
-
-Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-limits.md`.
 
 ## Workflow
 
@@ -96,7 +95,7 @@ remains.
 One-shot methods (`Awake`, `Start`, initialization helpers) patch successfully but show
 no effect on the call that already ran; the response marks them with `LifecycleNote`.
 For values you expect to tune while playing, expose a static property getter instead of
-a `const`.
+a `const` (in a compiled type; an introduced type's getter is not patchable).
 
 ## Reference Guides
 
