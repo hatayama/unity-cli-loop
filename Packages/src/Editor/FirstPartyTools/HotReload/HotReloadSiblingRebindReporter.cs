@@ -38,8 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     path,
                     firstFile.ProjectRoot,
                     contentPathOverrideByFile));
-            IReadOnlyList<(string ProjectRelativePath, string WorkerSourcePath)> filesToInclude =
-                rebind.FilesToInclude;
+            IReadOnlyList<(string ProjectRelativePath, string WorkerSourcePath,
+                HotReloadNewSourceMembershipEvidence Evidence)> filesToInclude = rebind.FilesToInclude;
             for (int index = 0; index < filesToInclude.Count; index++)
             {
                 filesOfGroup.Add(
@@ -47,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         firstFile,
                         filesToInclude[index].ProjectRelativePath,
                         filesToInclude[index].WorkerSourcePath,
-                        new HotReloadFileSinks(run.SiblingDerivedWarnings, run.OneShotCallerNoteCandidates)));
+                        new HotReloadFileSinks(run.SiblingDerivedWarnings, run.OneShotCallerNoteCandidates),
+                        filesToInclude[index].Evidence));
             }
 
             AddChangedSinceApplyWarnings(firstFile, rebind);

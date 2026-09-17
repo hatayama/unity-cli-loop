@@ -140,7 +140,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 addedFieldNames: file.ClearedAddedFieldNames,
                 sourceContentSha256: file.FileOutput != null ? file.FileOutput.sourceContentSha256 : null,
                 revertedUnchangedCount: file.RevertedUnchangedCount,
-                introducedTypes: sinks.IntroducedTypes);
+                introducedTypes: sinks.IntroducedTypes,
+                newSourceMembershipEvidence: file.NewSourceMembershipEvidence);
         }
 
         /// <summary>
@@ -188,7 +189,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sourceContentSha256: file.FileOutput.sourceContentSha256,
                 addedConstNames: applied ? file.AddedConstNames : null,
                 revertedUnchangedCount: file.RevertedUnchangedCount,
-                introducedTypes: sinks.IntroducedTypes);
+                introducedTypes: sinks.IntroducedTypes,
+                newSourceMembershipEvidence: file.NewSourceMembershipEvidence);
         }
 
         private int ApplyResolvedEntries(

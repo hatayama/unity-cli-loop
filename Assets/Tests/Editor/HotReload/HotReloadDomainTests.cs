@@ -34,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ProjectAssemblyName = "DomainTypeHomeFixtureAssembly";
         private const string ArtifactDllPath = "domain-artifact.dll";
 
+        private const string IntroducedOwnerPath = "Assets/DomainIntroduced.cs";
+
         private HotReloadDomainTestAccess _access;
 
         private HotReloadDomainTestScope _scope;
@@ -369,6 +371,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the membership evidence of a file absent from the compiled source list is readable
+        /// back as recorded, so a later reload can re-check the assembly it belongs to without
+        /// capturing the evidence again.
+        /// </summary>
+        [Test]
+        public void NewSourceMembershipEvidence_IsReadableBackForTheFileItWasRecordedFor()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CreateMembershipEvidence(FileOne);
+
+            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, evidence);
+
+            Assert.That(
+                _access.Domain.TryGetNewSourceMembershipEvidence(FileOne),
+                Is.SameAs(evidence));
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
+        }
+
+        /// <summary>
+        /// What: clearing a file's applied source drops its membership evidence with it and leaves
+        /// another file's evidence in place. The evidence only means anything alongside the applied
+        /// record, so a file that is no longer applied must not keep answering for its assembly.
+        /// </summary>
+        [Test]
+        public void ClearAppliedSource_DropsTheMembershipEvidenceOfThatFileOnly()
+        {
+            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
+
+            _access.Domain.ClearAppliedSource(FileOne);
+
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Not.Null);
+        }
+
+        /// <summary>
         /// What: a full revert empties every domain-scoped store, each checked on its own line so a
         /// single missed store cannot hide behind the others.
         /// </summary>
@@ -392,6 +429,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(HotReloadInvocationRegistry.GetCount(AddedMethodKey), Is.EqualTo(0));
             Assert.That(_access.Domain.TryGetAppliedSource(FileOne), Is.Null);
             Assert.That(_access.Domain.TryGetAppliedSource(FileTwo), Is.Null);
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
             Assert.That(
                 _access.Domain.TryGetSupersededReplacement(SupersededMethodKey, out string _),
                 Is.False);
@@ -410,7 +449,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadInvocationRegistry.Increment(AddedMethodKey);
             _access.Domain.RecordAppliedSource(FileOne, "hash", true);
             _access.Domain.RecordAppliedSource(FileTwo, "other-hash", false);
+            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
             _access.RecordSupersededSignature(FileOne, SupersededMethodKey, "Superseded(int)");
+        }
+
+        // The evidence a file absent from the compiled source list carries: what it was resolved
+        // against, so a later reload can tell the same assembly from a different one.
+        private static HotReloadNewSourceMembershipEvidence CreateMembershipEvidence(string projectRelativePath)
+        {
+            return new HotReloadNewSourceMembershipEvidence(
+                projectRelativePath,
+                ProjectAssemblyName,
+                "Library/ScriptAssemblies/" + ProjectAssemblyName + ".dll",
+                "domain-evidence-mvid",
+                "Assets/Tests/Editor/HotReload/DomainFixture.asmdef",
+                Array.Empty<HotReloadNewSourceMembershipBoundary>());
         }
 
         /// <summary>
@@ -452,6 +506,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(home.DllPath, Is.EqualTo(artifact.DllPath));
         }
 
+        /// <summary>
+        /// What: the pause point side is told a project-relative path declares an introduced type,
+        /// so it can explain why that file has no compiled line map instead of failing blankly.
+        /// </summary>
+        [Test]
+        public void IsIntroducedTypeSourceFile_WithTheOwnerProjectRelativePath_ReturnsTrue()
+        {
+            ActivateArtifact();
+
+            Assert.That(
+                HotReloadPausePointCoordination.HotReloadSide.IsIntroducedTypeSourceFile(IntroducedOwnerPath),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: the same file named by its absolute path is recognized too, because the pause
+        /// point tool asks with whatever path the caller passed on the command line.
+        /// </summary>
+        [Test]
+        public void IsIntroducedTypeSourceFile_WithTheOwnerAbsolutePath_ReturnsTrue()
+        {
+            ActivateArtifact();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."))
+                .Replace('\\', '/');
+
+            Assert.That(
+                HotReloadPausePointCoordination.HotReloadSide.IsIntroducedTypeSourceFile(
+                    projectRoot + "/" + IntroducedOwnerPath),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: a file no active descriptor owns is not reported as an introduced-type source, so
+        /// an ordinary compiled file keeps the normal resolve failure guidance.
+        /// </summary>
+        [Test]
+        public void IsIntroducedTypeSourceFile_WithAnotherFile_ReturnsFalse()
+        {
+            ActivateArtifact();
+
+            Assert.That(
+                HotReloadPausePointCoordination.HotReloadSide.IsIntroducedTypeSourceFile(FileOne),
+                Is.False);
+        }
+
         private HotReloadIntroducedTypeArtifact ActivateArtifact()
         {
             HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
@@ -464,7 +563,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "OriginalAssembly",
                         "original-mvid",
                         "Example.Introduced",
-                        "Assets/DomainIntroduced.cs",
+                        IntroducedOwnerPath,
                         "domain-fingerprint",
                         "public class Introduced { }")
                 });

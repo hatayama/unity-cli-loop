@@ -317,8 +317,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "cannot be rewritten. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
-                NoArgs,
-                "Uses an added field that hot reload cannot emit. Run 'uloop compile'.");
+                new[] { "_score" },
+                "Uses added field '_score' in a way hot reload cannot emit. Run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AddedFieldCoalesceAssignment,
+                new[] { "_score" },
+                "'??=' on added field '_score' cannot be rewritten. "
+                + "Write 'if (_score == null) { _score = ...; }' instead, or run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged,
                 new[] { "_score" },

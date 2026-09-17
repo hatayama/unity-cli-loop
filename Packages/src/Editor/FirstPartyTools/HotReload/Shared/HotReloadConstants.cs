@@ -227,6 +227,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The target assembly is not currently loaded in this AppDomain. Ensure the code path "
             + "that loads it has run, then retry.";
 
+        // Format: file name, assembly name. Used instead of the warning below when the file
+        // declares a type hot reload introduced: such a type is only in a byte-loaded artifact,
+        // never in a compiled assembly, so no compile of this project could have produced the
+        // baseline the other wording asks the reader to establish. Why the last sentence: the
+        // file may also hold a compiled type, and that one is still patched in full.
+        public const string IntroducedTypeSourceNoBaselineWarningFormat =
+            "{0} declares a type hot reload introduced (assembly {1}), so it has no compiled "
+            + "baseline until 'uloop compile'. This is expected: hot reload tracks the introduced "
+            + "type from its own recorded declaration. Any other type in this file has no baseline "
+            + "either and is patched in full.";
+
         // Format: file name, assembly name. Emitted per file when PDB-validated snapshot is absent.
         public const string NoVerifiedSourceSnapshotWarningFormat =
             "No verified source snapshot for {0} (assembly {1}); patching all methods. "
@@ -387,6 +398,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // exist in CompilationPipeline.GetAssemblies().
         public const string CompilationAssemblyNotFoundReasonFormat =
             "Resolved assembly '{0}' was not found in the compilation pipeline. Unity resolves files under a not-yet-imported .asmdef to a predefined assembly, so a brand-new .asmdef or a brand-new script cannot be hot-reloaded. Run 'uloop compile' first.";
+
+        // Format: resolved assembly name. Used when the name is one of Unity's predefined
+        // assemblies, which exist only once a script has been compiled into them, so the
+        // .asmdef wording above would send the reader looking for a file that is not there.
+        public const string PredefinedAssemblyNotCompiledReasonFormat =
+            "Resolved assembly '{0}' does not exist yet: no script has been compiled into it, so there is no assembly to patch. Hot reload can only introduce types into an assembly that already exists. Run 'uloop compile' once; later scripts in this assembly can then be hot-reloaded.";
 
         // Format: resolved assembly name, project-relative script path. Used when the script
         // has no imported .asmdef but an ancestor directory already has one on disk.

@@ -452,6 +452,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a body edit of a type a retained artifact serves reports no skip row for the
+        /// type's constructor, because the assembly the domain loaded already runs it and this
+        /// edit never touched it. Without the suppression every reload of such a file told the
+        /// reader to run 'uloop compile' over a member they had not changed.
+        /// </summary>
+        [Test]
+        public async Task Transform_RetainedDeclarationHasAConstructor_ReportsNoSkipRowForIt()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "ConstructorNotReported",
+                    WithConstructor(ArtifactBackedSource),
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, WithConstructor(ArtifactBackedBodyEditedSource));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            // Why the patched row is asserted too: a run that reported nothing at all for the type
+            // would have no constructor row either, and that is a different failure.
+            Assert.That(FindEntries(result, "Twice").Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(FindSkippedCodes(result, ".ctor"), Is.Empty, DescribeRows(result));
+        }
+
+        /// <summary>
         /// What: a source whose bodies match the artifact again leaves nothing to patch, because
         /// the declaration is taken out of the binding tree the way an unedited retained type is.
         /// </summary>
@@ -846,6 +875,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string WithEscapedTypeName(string source)
         {
             return source.Replace("public class Retained", "public class @Retained", StringComparison.Ordinal);
+        }
+
+        // The same declaration with an explicit constructor, which is a member kind hot reload
+        // cannot patch and so reports - the row a body edit of a retained type must not produce.
+        private static string WithConstructor(string source)
+        {
+            return source.Replace(
+                "        public static int Value = 1;\n",
+                "        public static int Value = 1;\n\n        public Retained()\n        {\n        }\n",
+                StringComparison.Ordinal);
         }
 
         // The same declaration with a property whose getter has a body, which the artifact serves

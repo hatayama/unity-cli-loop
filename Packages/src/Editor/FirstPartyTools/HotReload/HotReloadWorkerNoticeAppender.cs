@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<TransformWorkerSkippedDto> fileSkipped,
             int patchCandidateRowCountForFile,
             string snapshotSource,
+            bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName,
             string assemblyResolvePath,
@@ -35,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput,
                 patchCandidateRowCountForFile,
                 snapshotSource,
+                declaresIntroducedType,
                 projectRelativePath,
                 assemblyName,
                 warnings);
@@ -73,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerFileOutputDto fileOutput,
             int patchCandidateRowCountForFile,
             string snapshotSource,
+            bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName,
             List<string> warnings)
@@ -80,10 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (snapshotSource == null && patchCandidateRowCountForFile >= 1)
             {
                 warnings.Add(
-                    string.Format(
-                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
+                    ChooseMissingBaselineWarning(declaresIntroducedType, projectRelativePath, assemblyName));
             }
 
             if (fileOutput.baselineDisabledByDuplicateKeys)
@@ -94,6 +94,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Path.GetFileName(projectRelativePath),
                         assemblyName));
             }
+        }
+
+        /// <summary>
+        /// The sentence that explains why this file has no verified snapshot. A file declaring a
+        /// type hot reload introduced gets its own: for it a missing baseline is the normal state
+        /// rather than something a compile has yet to establish.
+        /// </summary>
+        private static string ChooseMissingBaselineWarning(
+            bool declaresIntroducedType,
+            string projectRelativePath,
+            string assemblyName)
+        {
+            return string.Format(
+                declaresIntroducedType
+                    ? HotReloadConstants.IntroducedTypeSourceNoBaselineWarningFormat
+                    : HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
+                Path.GetFileName(projectRelativePath),
+                assemblyName);
         }
 
         private static void AppendSkippedOutcomes(

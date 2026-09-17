@@ -21,6 +21,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string SourceContentSha256 { get; }
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
+        /// <summary>
+        /// What proved this file belongs to the assembly it was patched into, for a file the
+        /// last compile did not list. Null for every file the compiler already accounts for.
+        /// </summary>
+        public HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence { get; }
+
         public HotReloadFileProcessResult(
             List<HotReloadMethodOutcome> outcomes,
             List<string> warnings,
@@ -33,7 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string sourceContentSha256 = null,
             string[] addedConstNames = null,
             int revertedUnchangedCount = 0,
-            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null)
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -47,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AddedConstNames = addedConstNames ?? Array.Empty<string>();
             RevertedUnchangedCount = revertedUnchangedCount;
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
+            NewSourceMembershipEvidence = newSourceMembershipEvidence;
         }
     }
 }

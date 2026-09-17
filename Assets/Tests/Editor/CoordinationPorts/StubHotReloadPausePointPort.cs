@@ -30,6 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public System.Func<string, IReadOnlyList<string>> AddedFieldsForType { get; set; }
 
+        /// <summary>Files answered as introduced-type declarations. Null falls through to <see cref="Inner"/>.</summary>
+        public HashSet<string> IntroducedTypeSourceFiles { get; set; }
+
         public MethodBase GetActiveShimForMethod(MethodBase method)
         {
             return ActiveShimForMethod != null
@@ -80,6 +83,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return AddedFieldsForType != null
                 ? AddedFieldsForType(typeFullName)
                 : Inner?.GetAddedFieldsForType(typeFullName);
+        }
+
+        public bool IsIntroducedTypeSourceFile(string file)
+        {
+            if (IntroducedTypeSourceFiles != null)
+            {
+                return IntroducedTypeSourceFiles.Contains(file);
+            }
+
+            return Inner != null && Inner.IsIntroducedTypeSourceFile(file);
         }
     }
 }

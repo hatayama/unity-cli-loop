@@ -392,9 +392,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "get_Doubled"), Is.Null);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
-            Assert.That(
-                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
-                Does.Contain("Uses an added property that hot reload cannot emit."));
+            string callerReason = FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(callerReason, Does.Contain("Uses an added property that hot reload cannot emit."));
+
+            // The exclusion records this very sentence as the property's own unavailable reason,
+            // so composing it onto itself would say the same thing twice.
+            Assert.That(callerReason, Does.Not.Contain("The property body was refused because: "));
         }
 
         /// <summary>
@@ -419,6 +422,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
                 Does.Contain("Uses an added property that hot reload cannot emit."));
+        }
+
+        /// <summary>
+        /// What: when an added property's accessor is refused because it uses '??=' on an added
+        /// field, the caller that reads the property keeps that cause in its own reason, so the
+        /// field name and the operator survive instead of collapsing into the generic sentence.
+        /// </summary>
+        [Test]
+        public async Task Isolation_AddedPropertyAccessorRefusedByCoalesce_KeepsTheFieldNameInTheCallerReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyCoalesceAccessor.cs",
+                "public string AddedCache;\n\n"
+                + "        public int Cached\n        {\n"
+                + "            get { AddedCache ??= \"x\"; return AddedCache.Length; }\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Cached + value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string callerReason = FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(
+                callerReason,
+                Does.Contain("Uses an added property that hot reload cannot emit."),
+                FormatSkipped(result.Output.skipped));
+            Assert.That(callerReason, Does.Contain("The property body was refused because: "));
+            Assert.That(
+                callerReason,
+                Does.Contain("'??=' on added field 'AddedCache' cannot be rewritten."));
+        }
+
+        /// <summary>
+        /// What: when an added property reads another added property whose accessor was refused,
+        /// the caller two steps away still names the field and the operator. The cause travels
+        /// through a chain of added properties, so the guard against composing the generic
+        /// sentence onto itself must not drop a detail an intermediate property already carries.
+        /// </summary>
+        [Test]
+        public async Task Isolation_AddedPropertyChainRefusedByCoalesce_KeepsTheFieldNameInTheCallerReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyCoalesceChain.cs",
+                "public string AddedCache;\n\n"
+                + "        public int AddedInner\n        {\n"
+                + "            get { AddedCache ??= \"x\"; return AddedCache.Length; }\n        }\n\n"
+                + "        public int AddedOuter => AddedInner;",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedOuter + value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string callerReason = FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(
+                callerReason,
+                Does.Contain("Uses an added property that hot reload cannot emit."),
+                FormatSkipped(result.Output.skipped));
+            Assert.That(
+                callerReason,
+                Does.Contain("The property body was refused because: "),
+                FormatSkipped(result.Output.skipped));
+            Assert.That(
+                callerReason,
+                Does.Contain("'??=' on added field 'AddedCache' cannot be rewritten."),
+                FormatSkipped(result.Output.skipped));
         }
 
         /// <summary>

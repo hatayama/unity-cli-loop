@@ -31,6 +31,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, (string Hash, bool IsFullyApplied)> _appliedSourceByPath =
             new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
 
+        // Why it is keyed by the platform's path comparer rather than Ordinal: a file absent from
+        // the compiled source list is looked up again from a later run's spelling of the path,
+        // which on Windows can differ in case only.
+        private readonly Dictionary<string, HotReloadNewSourceMembershipEvidence> _newSourceMembershipEvidenceByPath =
+            new Dictionary<string, HotReloadNewSourceMembershipEvidence>(
+                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
+
         internal HotReloadDomain(
             HotReloadIntroducedTypeRegistry introducedTypes,
             HotReloadIntroducedTypeAssemblyResolver introducedTypeResolver)
@@ -482,11 +489,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return entry;
         }
 
+        // Why the evidence is kept per file rather than recomputed: a file outside the last
+        // compiled source list has no assembly Unity vouches for, so the only thing that can say
+        // it still belongs to the assembly it was applied into is what the first reload verified.
+        internal void RecordNewSourceMembershipEvidence(
+            string projectRelativePath,
+            HotReloadNewSourceMembershipEvidence evidence)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(evidence != null, "evidence must not be null.");
+
+            _newSourceMembershipEvidenceByPath[projectRelativePath] = evidence;
+        }
+
+        internal HotReloadNewSourceMembershipEvidence TryGetNewSourceMembershipEvidence(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+
+            if (!_newSourceMembershipEvidenceByPath.TryGetValue(
+                    projectRelativePath,
+                    out HotReloadNewSourceMembershipEvidence evidence))
+            {
+                return null;
+            }
+
+            return evidence;
+        }
+
+        // Why the evidence is dropped here rather than through its own method: it only means
+        // anything alongside the applied record, so the two share one lifetime.
         internal void ClearAppliedSource(string projectRelativePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
 
             _appliedSourceByPath.Remove(projectRelativePath);
+            _newSourceMembershipEvidenceByPath.Remove(projectRelativePath);
         }
 
         /// <summary>
@@ -515,6 +552,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _generationsByPath.Clear();
             _appliedSourceByPath.Clear();
+            _newSourceMembershipEvidenceByPath.Clear();
             AddedFieldValues.Clear();
             Invocations.Clear();
             return revertedMethods;

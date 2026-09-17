@@ -32,6 +32,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string EditedExpression = "_seed * 2";
         private const string NoExtraMembers = "";
 
+        // A constructor the introduced type declares, which hot reload cannot patch and therefore
+        // reports. Kept out of the other reloads' declaration so only this test's fixture carries
+        // it, and the fingerprints the existing tests compare stay what they were.
+        private const string DeclaredConstructor =
+            "        public " + IntroducedTypeSimpleName + "()\n"
+            + "        {\n"
+            + "        }\n"
+            + "\n";
+
         // The member the removal test introduces first and drops afterwards.
         private const string RemovableMember =
             "        public int Twice()\n"
@@ -152,6 +161,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     IntroducedSeed,
                     "A restored body must leave the retained assembly running its own code again, "
                     + "which means the patch the previous reload installed has to be reverted.");
+            });
+        }
+
+        /// <summary>
+        /// Verifies that a body edit of an already introduced type whose declaration has a
+        /// constructor reports nothing about that constructor. The row used to appear on every
+        /// reload of such a file and told the reader to compile a member they had not touched.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeWithConstructorBodyEdited_ReportsNoConstructorRow()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducingEditsWithConstructor(hostPath, callerPath));
+                AssertComputedValue(
+                    readArtifact(),
+                    IntroducedSeed,
+                    "Precondition: the retained assembly must run the body the first reload compiled.");
+
+                HotReloadOrchestratorResult second = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateBodyEditedEditsWithConstructor(hostPath, callerPath));
+
+                Assert.That(
+                    CountPatchedIntroducedMethods(second),
+                    Is.EqualTo(1),
+                    "Precondition: the edited body must still be patched.\n"
+                    + DescribeOutcomes(second));
+                Assert.That(
+                    FindSkippedConstructorMethods(second),
+                    Is.Empty,
+                    "The constructor of a type the domain already runs from an artifact was never "
+                    + "edited, so no row may ask the reader to compile it.\n"
+                    + DescribeOutcomes(second));
             });
         }
 
@@ -283,6 +333,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return count;
         }
 
+        private static List<string> FindSkippedConstructorMethods(HotReloadOrchestratorResult result)
+        {
+            List<string> found = new List<string>();
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method != null
+                    && outcome.Method.Contains(IntroducedTypeSimpleName + "..ctor", StringComparison.Ordinal))
+                {
+                    found.Add(outcome.Method);
+                }
+            }
+
+            return found;
+        }
+
         private static void AssertCallerIsPatched(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -339,6 +405,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, NoExtraMembers)),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "IntroducedTypeBodyRestoredCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The introduced type declared with a constructor, so the reload that follows can be asked
+        // what it reports about a member the retained assembly already runs.
+        private static Dictionary<string, string> CreateIntroducingEditsWithConstructor(
+            string hostPath,
+            string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeCtorHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, DeclaredConstructor)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeCtorCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The same declaration with only the body of Compute() edited, which leaves the constructor
+        // byte-identical to the one the introducing reload compiled.
+        private static Dictionary<string, string> CreateBodyEditedEditsWithConstructor(
+            string hostPath,
+            string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeCtorEditedHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath), EditedExpression, DeclaredConstructor)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeCtorEditedCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
             };
         }

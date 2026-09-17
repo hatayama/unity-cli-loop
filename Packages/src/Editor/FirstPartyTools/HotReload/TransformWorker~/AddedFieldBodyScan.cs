@@ -77,10 +77,16 @@ internal static class AddedFieldBodyScan
         return false;
     }
 
-    internal static bool BodyHasUnsupportedAddedFieldCompound(
+    // Reports the first assignment to an added field that neither the simple-assignment rewrite
+    // nor a supported compound one covers, together with the field it writes and the operator it
+    // used. Why only the first: the caller reports one sentence, and the earliest such assignment
+    // is the one a reader has to change before anything downstream of it can be judged.
+    internal static bool TryFindUnsupportedAddedFieldCompound(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        out string fieldName,
+        out SyntaxKind assignmentKind)
     {
         foreach (AssignmentExpressionSyntax assignment in bodyNode.DescendantNodesAndSelf()
             .OfType<AssignmentExpressionSyntax>())
@@ -91,12 +97,19 @@ internal static class AddedFieldBodyScan
                 continue;
             }
 
-            if (IsStoreAddedField(semanticModel, assignment.Left, addedFieldCatalog))
+            if (!IsStoreAddedField(semanticModel, assignment.Left, addedFieldCatalog))
             {
-                return true;
+                continue;
             }
+
+            IFieldSymbol field = TryGetFieldSymbol(semanticModel, assignment.Left);
+            fieldName = field != null ? field.Name : assignment.Left.ToString();
+            assignmentKind = assignment.Kind();
+            return true;
         }
 
+        fieldName = null;
+        assignmentKind = SyntaxKind.None;
         return false;
     }
 

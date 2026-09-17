@@ -772,6 +772,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 exemptions);
         }
 
+        /// <summary>
+        /// What: the evidence a new source was applied under reaches the domain when the run
+        /// records its applied sources, so a later reload can re-check the file's assembly.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_FileResultCarriesEvidence_RecordsItForThatPath()
+        {
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                autoRefreshHeldAtStart: false);
+            HotReloadNewSourceMembershipEvidence evidence = CreateChangedMembershipEvidence();
+
+            run.Add(CoverageCallerPath, CreateAppliedResult(evidence));
+            run.RecordAppliedSourceHashes();
+
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
+                Is.SameAs(evidence));
+        }
+
+        /// <summary>
+        /// What: a later result for the same file that carries no evidence leaves the recorded one
+        /// in place. A result can end before its target is resolved, and erasing the evidence then
+        /// would strand a new source that an earlier run already proved belongs to the assembly.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_LaterResultWithoutEvidence_KeepsTheRecordedOne()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CreateChangedMembershipEvidence();
+            HotReloadRunAccumulator first = new HotReloadRunAccumulator(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                autoRefreshHeldAtStart: false);
+            first.Add(CoverageCallerPath, CreateAppliedResult(evidence));
+            first.RecordAppliedSourceHashes();
+
+            HotReloadRunAccumulator second = new HotReloadRunAccumulator(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                autoRefreshHeldAtStart: false);
+            second.Add(CoverageCallerPath, CreateAppliedResult(null));
+            second.RecordAppliedSourceHashes();
+
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
+                Is.SameAs(evidence));
+        }
+
+        // A fully applied single-method result for the caller path: the shape the run stages an
+        // applied-source record from.
+        private static HotReloadFileProcessResult CreateAppliedResult(
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
+        {
+            return new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome> { HotReloadMethodOutcome.Patched(CallerKey, CoverageCallerPath) },
+                new List<string>(),
+                patchedCount: 1,
+                sourceContentSha256: "applied-source-hash",
+                newSourceMembershipEvidence: newSourceMembershipEvidence);
+        }
+
         private static HotReloadGroupCompileResult CreateCompile(params TransformWorkerEntryDto[] entries)
         {
             return HotReloadGroupCompileResult.ReadyWithMethods(

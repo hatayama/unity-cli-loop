@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<TransformWorkerSkippedDto>(),
                 0,
                 null,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -59,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<TransformWorkerSkippedDto>(),
                 0,
                 null,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -67,6 +69,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(outcomes, Is.Empty);
             Assert.That(warnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a file that declares a type hot reload already introduced is told its missing
+        /// baseline is expected, instead of being warned that all methods are being patched. Such
+        /// a file has no compiled baseline until 'uloop compile', so the generic warning read as
+        /// a fault on every reload of it.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenFileDeclaresAnIntroducedType_ExplainsTheMissingBaseline()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                null,
+                true,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings);
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Broken.cs declares a type hot reload introduced (assembly Some.Assembly), so "
+                    + "it has no compiled baseline until 'uloop compile'. This is expected: hot "
+                    + "reload tracks the introduced type from its own recorded declaration. Any "
+                    + "other type in this file has no baseline either and is patched in full."));
+        }
+
+        /// <summary>
+        /// What: a file that introduces a type in this very run gets the same explanation, because
+        /// the reason it has no baseline is identical to a file whose type is already introduced.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenFileIntroducesATypeInThisRun_ExplainsTheMissingBaseline()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                null,
+                true,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings);
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain("declares a type hot reload introduced"));
+            Assert.That(warnings[0], Does.Not.Contain("patching all methods"));
+        }
+
+        /// <summary>
+        /// What: a file with no introduced type of its own keeps the original missing-baseline
+        /// warning, because there a baseline really is what edited-method detection is missing.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenFileHasNoIntroducedType_KeepsTheNoSnapshotWarning()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                null,
+                false,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings);
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain("patching all methods"));
         }
 
         private static TransformWorkerFileOutputDto CreateFileOutput(string[] parseErrors)
