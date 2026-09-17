@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hitWhenParseResult);
             if (captureSettingsError != null)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     captureSettingsError,
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Fix the rejected capture argument described in Message and re-run; uloop enable-pause-point --help lists the accepted values.");
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string modeError = PausePointEnableValidation.ValidateEnableMode(parameters);
             if (modeError != null)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     modeError,
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Re-run with either --id alone, or --file and --line together.");
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (parameters.TimeoutSeconds <= 0)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     "TimeoutSeconds must be greater than zero.",
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Re-run with --timeout-seconds set to a positive integer.");
@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string idError = PausePointEnableValidation.ValidateId(parameters.Id);
             if (idError != null)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     idError,
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Pass --id with the id returned by enable-pause-point, or use --all to clear every marker.");
@@ -208,7 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (CompilationPipeline.codeOptimization == CodeOptimization.Release)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     SourcePausePointConstants.ReleaseCodeOptimizationRejectionMessage,
                     SourcePausePointConstants.ErrorCodeReleaseCodeOptimization,
                     SourcePausePointConstants.ReleaseCodeOptimizationRecommendedNextAction);
@@ -268,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
                 {
-                    return CreateValidationFailure(
+                    return PausePointFailureResponse.Create(
                         shimResolution.ErrorMessage,
                         SourcePausePointConstants.ErrorCodeResolveFailed,
                         "Pick a line with an executable statement inside the edited method body.");
@@ -288,58 +288,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.File, parameters.Line, parameters.Method, snapshotTiming);
             if (!resolveResult.Success)
             {
-                bool hasActiveHotReloadPatches = shimLookup != null;
-                // Why a different next-action: resolve failure leaves ResolvedMethod and
-                // ResolvedLineText empty, so the generic "compile then retry" text hides
-                // the more likely cause — a line number taken from the edited file.
-                string recommendedNextAction = hasActiveHotReloadPatches
-                    ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
-                    : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
-                IReadOnlyList<string> compiledSourceLinesOrNull = null;
-                IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans =
-                    Array.Empty<SourcePausePointNearbyCompiledMethod>();
-                bool requestedLineReadOk = false;
-                string requestedLineEditedText = string.Empty;
-                // Why skip snapshot/edited-line IO without patches: Candidate is omitted on that
-                // path, so those reads would change the historical no-patch failure for no gain.
-                if (hasActiveHotReloadPatches)
-                {
-                    string compiledSnapshotSource = PausePointCompiledSourceReader.LoadSnapshotOrEmpty(parameters.File);
-                    compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
-                        ? null
-                        : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
-                    namedCompiledMethodSpans = SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(
-                        parameters.File);
-                    (requestedLineReadOk, requestedLineEditedText) =
-                        PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
-                            parameters.File,
-                            parameters.Line);
-                }
-
-                string message = PausePointEnableWarnings.BuildResolveFailureMessage(
-                    resolveResult.ErrorMessage,
-                    resolveResult.NearbyCompiledMethods,
-                    hasActiveHotReloadPatches,
-                    parameters.Line,
-                    requestedLineReadOk,
-                    requestedLineEditedText,
-                    compiledSourceLinesOrNull,
-                    namedCompiledMethodSpans);
-
-                PausePointResponse response = CreateValidationFailure(
-                    message,
-                    SourcePausePointConstants.ErrorCodeResolveFailed,
-                    recommendedNextAction);
-                List<string> resolveFailureWarnings = new List<string>();
-                PausePointEnableWarningList.AddIfNotEmpty(
-                    resolveFailureWarnings,
-                    PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                        patchedMethodPdbUnavailableWarning,
-                        PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                            hasActiveHotReloadPatches,
-                            parameters.File)));
-                PausePointEnableWarningList.Assign(response, resolveFailureWarnings);
-                return response;
+                return PausePointResolveFailureResponse.Create(
+                    parameters,
+                    normalizedFile,
+                    hasActiveHotReloadPatches: shimLookup != null,
+                    resolveResult,
+                    patchedMethodPdbUnavailableWarning);
             }
 
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(
@@ -582,21 +536,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildSourcePausePointId(string file, int line)
         {
             return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
-        }
-
-        private static PausePointResponse CreateValidationFailure(
-            string message,
-            string errorCode,
-            string recommendedNextAction)
-        {
-            return new PausePointResponse
-            {
-                Success = false,
-                Message = message,
-                ErrorCode = errorCode,
-                RecommendedNextAction = recommendedNextAction,
-                EditorState = PausePointEditorState.FromSnapshot(UloopPausePointRegistry.CaptureEditorState()),
-            };
         }
     }
 }

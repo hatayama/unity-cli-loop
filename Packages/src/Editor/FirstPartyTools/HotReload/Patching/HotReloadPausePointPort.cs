@@ -59,5 +59,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return _domain.GetAddedFieldsForType(typeFullName);
         }
+
+        // Why the same path matching as the shim lookup: the pause point tool passes whatever
+        // path the caller typed, and a descriptor only ever records the project-relative one.
+        public bool IsIntroducedTypeSourceFile(string file)
+        {
+            if (string.IsNullOrEmpty(file))
+            {
+                return false;
+            }
+
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors =
+                _domain.IntroducedTypes.DescribeActive();
+            for (int index = 0; index < descriptors.Count; index++)
+            {
+                string ownerProjectRelativePath = descriptors[index].OwnerProjectRelativePath;
+                if (string.IsNullOrEmpty(ownerProjectRelativePath))
+                {
+                    continue;
+                }
+
+                if (HotReloadSourcePathNormalizer.PathsReferToSameFile(file, ownerProjectRelativePath))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

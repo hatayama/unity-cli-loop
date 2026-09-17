@@ -266,6 +266,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
             + "troubleshooting reference for specific failure patterns.";
 
+        // Why a failure text of its own: such a file has no compiled line map at all, so the
+        // generic advice to fix the path or recompute the line points at causes that cannot apply.
+        // Format: the file as the caller passed it.
+        public const string IntroducedTypeResolveFailureMessageFormat =
+            "'{0}' declares a type hot reload introduced without a compile, so it has no compiled "
+            + "line map to resolve --line against. Pause points can bind only to methods hot reload "
+            + "has patched in this file.";
+
+        // Why a warning rather than the failure text: the file also holds compiled types, so the
+        // general guidance still applies and only the lines inside the introduced type differ.
+        // Format: the file as the caller passed it.
+        public const string IntroducedTypeInFileWarningFormat =
+            "'{0}' also declares a type hot reload introduced without a compile; lines inside that "
+            + "type have no compiled line map, and a pause point binds there only to a method hot "
+            + "reload has patched.";
+
+        public const string IntroducedTypeResolveFailureNextAction =
+            "Edit the target method body and run 'uloop hot-reload --files <this file>' so the method "
+            + "is reported Patched, then enable the pause point again on a line inside that method. "
+            + "Or run 'uloop compile' to compile the type and use the normal path.";
+
         // Format: method filter, requested line.
         public const string NoMethodNamedWithSequencePointMessageFormat =
             "No method named '{0}' with a sequence point on or after line {1} was found.";

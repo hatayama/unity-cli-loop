@@ -34,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ProjectAssemblyName = "DomainTypeHomeFixtureAssembly";
         private const string ArtifactDllPath = "domain-artifact.dll";
 
+        private const string IntroducedOwnerPath = "Assets/DomainIntroduced.cs";
+
         private HotReloadDomainTestAccess _access;
 
         private HotReloadDomainTestScope _scope;
@@ -504,6 +506,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(home.DllPath, Is.EqualTo(artifact.DllPath));
         }
 
+        /// <summary>
+        /// What: the pause point side is told a project-relative path declares an introduced type,
+        /// so it can explain why that file has no compiled line map instead of failing blankly.
+        /// </summary>
+        [Test]
+        public void IsIntroducedTypeSourceFile_WithTheOwnerProjectRelativePath_ReturnsTrue()
+        {
+            ActivateArtifact();
+
+            Assert.That(
+                HotReloadPausePointCoordination.HotReloadSide.IsIntroducedTypeSourceFile(IntroducedOwnerPath),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: the same file named by its absolute path is recognized too, because the pause
+        /// point tool asks with whatever path the caller passed on the command line.
+        /// </summary>
+        [Test]
+        public void IsIntroducedTypeSourceFile_WithTheOwnerAbsolutePath_ReturnsTrue()
+        {
+            ActivateArtifact();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."))
+                .Replace('\\', '/');
+
+            Assert.That(
+                HotReloadPausePointCoordination.HotReloadSide.IsIntroducedTypeSourceFile(
+                    projectRoot + "/" + IntroducedOwnerPath),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: a file no active descriptor owns is not reported as an introduced-type source, so
+        /// an ordinary compiled file keeps the normal resolve failure guidance.
+        /// </summary>
+        [Test]
+        public void IsIntroducedTypeSourceFile_WithAnotherFile_ReturnsFalse()
+        {
+            ActivateArtifact();
+
+            Assert.That(
+                HotReloadPausePointCoordination.HotReloadSide.IsIntroducedTypeSourceFile(FileOne),
+                Is.False);
+        }
+
         private HotReloadIntroducedTypeArtifact ActivateArtifact()
         {
             HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
@@ -516,7 +563,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "OriginalAssembly",
                         "original-mvid",
                         "Example.Introduced",
-                        "Assets/DomainIntroduced.cs",
+                        IntroducedOwnerPath,
                         "domain-fingerprint",
                         "public class Introduced { }")
                 });

@@ -62,5 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// across every file, or empty when none.
         /// </summary>
         IReadOnlyList<string> GetAddedFieldsForType(string typeFullName);
+
+        /// <summary>
+        /// Argument is a forward-slash path (absolute or project-relative); returns true when that
+        /// file declares a type hot reload introduced without a compile, so the file has no
+        /// compiled line map of its own.
+        /// </summary>
+        bool IsIntroducedTypeSourceFile(string file);
     }
 }
