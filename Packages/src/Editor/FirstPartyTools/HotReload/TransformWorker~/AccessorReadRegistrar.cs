@@ -48,7 +48,7 @@ internal static class AccessorReadRegistrar
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
             rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape);
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape, methodSymbol.Name);
             return false;
         }
 

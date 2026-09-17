@@ -181,7 +181,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
-                Plain("inaccessible method group (non-invocation) has no accessor rewrite shape.", 0));
+                Plain(
+                    "inaccessible method group '{0}' (non-invocation) has no accessor rewrite shape.",
+                    1));
         }
     }
 }

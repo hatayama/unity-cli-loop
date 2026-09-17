@@ -594,8 +594,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "are not rewritten.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
-                NoArgs,
-                "inaccessible method group (non-invocation) has no accessor rewrite shape.");
+                new[] { "Helper" },
+                "inaccessible method group 'Helper' (non-invocation) has no accessor rewrite shape.");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeSymbolUnresolved,
                 new string[0],
