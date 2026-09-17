@@ -109,16 +109,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies an identifier diagnostic is left to the existing hints even when an introduced
-        /// type shares the name.
+        /// Verifies an identifier diagnostic whose name is an active introduced type gets the
+        /// introduced-type explanation, which is what referring to such a type by its simple name
+        /// produces, rather than the generic misspelling hint.
         /// </summary>
         [Test]
-        public void TryBuild_WhenErrorCodeIsIdentifierNotFound_ProducesNothing()
+        public void TryBuild_WhenIdentifierNotFoundNamesAnActiveIntroducedType_ExplainsTheIntroducedType()
         {
             bool built = IntroducedTypeDiagnosticHint.TryBuild(
                 "CS0103",
                 "The name 'Widget' does not exist in the current context",
                 new List<string> { "Example.Widget" },
+                out string hint,
+                out List<string> suggestions);
+
+            Assert.That(built, Is.True);
+            Assert.That(hint, Is.EqualTo(SingleMatchHint));
+            Assert.That(
+                suggestions,
+                Is.EqualTo(new[] { SingleMatchReflectionSuggestion, CompileSuggestion }));
+        }
+
+        /// <summary>
+        /// Verifies an identifier diagnostic that no active introduced type is named after is left
+        /// to the existing hints, so a plain misspelling still reads as one.
+        /// </summary>
+        [Test]
+        public void TryBuild_WhenIdentifierNotFoundMatchesNoIntroducedType_ProducesNothing()
+        {
+            bool built = IntroducedTypeDiagnosticHint.TryBuild(
+                "CS0103",
+                "The name 'Widget' does not exist in the current context",
+                new List<string> { "Example.Gadget" },
                 out string hint,
                 out List<string> suggestions);
 

@@ -12,6 +12,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string TypeOrNamespaceNotFoundErrorCode = "CS0246";
         private const string NamespaceMemberNotFoundErrorCode = "CS0234";
 
+        // An introduced type referred to by its simple name is reported as an unknown identifier
+        // rather than an unknown type, because the compiler has no such name in scope at all.
+        private const string NameNotInContextErrorCode = "CS0103";
+
         private const string CompileSuggestion =
             "Run 'uloop compile' when the type is final, then reference it directly";
 
@@ -65,7 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool IsMissingTypeErrorCode(string errorCode)
         {
             return string.Equals(errorCode, TypeOrNamespaceNotFoundErrorCode, StringComparison.Ordinal)
-                || string.Equals(errorCode, NamespaceMemberNotFoundErrorCode, StringComparison.Ordinal);
+                || string.Equals(errorCode, NamespaceMemberNotFoundErrorCode, StringComparison.Ordinal)
+                || string.Equals(errorCode, NameNotInContextErrorCode, StringComparison.Ordinal);
         }
 
         private static List<string> CollectMatches(
