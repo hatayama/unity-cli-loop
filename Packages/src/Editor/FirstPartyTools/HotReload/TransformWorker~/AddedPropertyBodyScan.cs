@@ -105,12 +105,13 @@ internal static class AddedPropertyBodyScan
         {
             // The reason the accessor was refused is the only thing that tells a reader what to
             // change, so it is carried through instead of being replaced by the generic sentence.
-            // Why the same code is not composed onto itself: a property excluded by key carries
-            // this very reason, and nesting it would say the same thing twice.
+            // Why the same code is passed on as it stands rather than composed onto itself: it
+            // already says this sentence, and nesting it would say it twice. Rebuilding it here
+            // instead would drop the detail a chain of added properties carried up to this point.
             if (binding.UnavailableReason.Code
                 == HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty)
             {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty);
+                return binding.UnavailableReason;
             }
 
             return WorkerReason.Composite(
