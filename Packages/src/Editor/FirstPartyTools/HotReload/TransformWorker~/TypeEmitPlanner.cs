@@ -106,6 +106,10 @@ internal static class TypeEmitPlanner
                 Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
                 Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
                 baseline.GetUnsupportedMemberBaselineMaps();
+
+            // Adopt sets the home assembly only for a type a retained artifact serves; a type the
+            // patch target itself holds is resolved by FindCompiledType and leaves it null.
+            bool servedByRetainedArtifact = typeState.HomeAssemblyName != null;
             UnsupportedMemberSkipCollector.AppendUnsupportedMemberKindSkips(
                 sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
@@ -117,7 +121,8 @@ internal static class TypeEmitPlanner
                 snapshotEventMap,
                 plainCurrentConstructorMap,
                 plainCurrentOperatorMap,
-                plainCurrentEventMap);
+                plainCurrentEventMap,
+                servedByRetainedArtifact);
 
             QueueTypeMethods(
                 typeState,

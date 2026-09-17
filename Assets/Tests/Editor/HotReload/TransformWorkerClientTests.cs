@@ -1916,6 +1916,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a compiled type with no verified baseline still reports its constructor as
+        /// Skipped. The suppression that quiets this row for a type a retained artifact serves
+        /// must not reach a type the patch target itself holds, where nothing says the
+        /// constructor on disk is the one the loaded assembly already runs.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_CompiledTypeWithoutBaseline_StillSkipsCtor()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                ResolveUnsupportedKindFixturePath(),
+                ResolveUnsupportedKindFixtureProjectRelativePath(),
+                snapshotSource: null);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedContains(
+                result,
+                ".ctor()",
+                ExpectedUnsupportedMemberKindSkipReason);
+        }
+
+        /// <summary>
         /// What: editing one type's static constructor reports that .cctor as Skipped and omits
         /// an unedited static constructor on a sibling type in the same file.
         /// </summary>

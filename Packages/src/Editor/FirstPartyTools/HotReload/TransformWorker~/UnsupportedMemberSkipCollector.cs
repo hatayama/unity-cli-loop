@@ -248,8 +248,18 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
         Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap,
         Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
-        Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap)
+        Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap,
+        bool servedByRetainedArtifact)
     {
+        // A type a retained artifact serves runs the constructors, operators and event accessors
+        // the artifact was built from, and hot reload only ever applies body edits to such a type,
+        // so none of them can have changed. Reporting them would tell the reader to compile a
+        // member they never touched, on every reload of the file.
+        if (servedByRetainedArtifact)
+        {
+            return;
+        }
+
         int firstAppendedIndex = skipped.Count;
         AppendConstructorSkips(
             typeDeclaration,
