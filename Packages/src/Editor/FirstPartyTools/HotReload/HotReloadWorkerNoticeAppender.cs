@@ -79,11 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (snapshotSource == null && patchCandidateRowCountForFile >= 1)
             {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
+                warnings.Add(ChooseMissingBaselineWarning(fileOutput, projectRelativePath, assemblyName));
             }
 
             if (fileOutput.baselineDisabledByDuplicateKeys)
@@ -94,6 +90,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Path.GetFileName(projectRelativePath),
                         assemblyName));
             }
+        }
+
+        /// <summary>
+        /// The sentence that explains why this file has no verified snapshot. A file declaring a
+        /// type hot reload introduced gets its own: for it a missing baseline is the normal state
+        /// rather than something a compile has yet to establish.
+        /// </summary>
+        private static string ChooseMissingBaselineWarning(
+            TransformWorkerFileOutputDto fileOutput,
+            string projectRelativePath,
+            string assemblyName)
+        {
+            bool declaresIntroducedType =
+                (fileOutput.introducedTypeReuses != null && fileOutput.introducedTypeReuses.Length > 0)
+                || (fileOutput.introducedTypes != null && fileOutput.introducedTypes.Length > 0);
+
+            return string.Format(
+                declaresIntroducedType
+                    ? HotReloadConstants.IntroducedTypeSourceNoBaselineWarningFormat
+                    : HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
+                Path.GetFileName(projectRelativePath),
+                assemblyName);
         }
 
         private static void AppendSkippedOutcomes(
