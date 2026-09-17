@@ -448,6 +448,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
 
+        // Why this replaces whatever next action the run chose: those all read "run 'uloop
+        // compile'", and during play that is the one thing --compile-on-skip auto declined to do,
+        // so the reader has to be told the choice was theirs and how to make it.
+        public const string CompileFallbackHeldForPlayModeRecommendedNextAction =
+            "Some edits stayed unapplied (see Warnings). No compile ran because the Editor is in Play Mode and a compile would stop the Play session. Rerun with --compile-on-skip on to compile anyway, or run 'uloop compile'.";
+
         public const string RequestedFilesAllSkippedRecommendedNextAction =
             "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings).";
 
