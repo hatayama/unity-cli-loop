@@ -91,6 +91,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies a CS0234 that names a namespace segment of an active introduced type explains
+        /// that type, because a qualified reference fails on the first unresolved segment.
+        /// </summary>
+        [Test]
+        public void TryBuild_WhenNamespaceSegmentOfAnIntroducedTypeIsMissing_ExplainsTheIntroducedType()
+        {
+            bool built = IntroducedTypeDiagnosticHint.TryBuild(
+                "CS0234",
+                "The type or namespace name 'Generation' does not exist in the namespace 'Example' (are you missing an assembly reference?)",
+                new List<string> { "Example.Generation.Widget" },
+                out string hint,
+                out List<string> suggestions);
+
+            Assert.That(built, Is.True);
+            Assert.That(
+                hint,
+                Does.StartWith("'Generation' is a hot-reload introduced type (Example.Generation.Widget)."));
+            Assert.That(
+                suggestions,
+                Is.EqualTo(new[]
+                {
+                    "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Generation.Widget\") and drive it through reflection",
+                    CompileSuggestion
+                }));
+        }
+
+        /// <summary>
+        /// Verifies a namespace segment that no introduced type sits under leaves the generic hint
+        /// in place instead of naming an unrelated type.
+        /// </summary>
+        [Test]
+        public void TryBuild_WhenNamespaceSegmentMatchesNoIntroducedType_LeavesTheGenericHint()
+        {
+            bool built = IntroducedTypeDiagnosticHint.TryBuild(
+                "CS0234",
+                "The type or namespace name 'Generation' does not exist in the namespace 'Example' (are you missing an assembly reference?)",
+                new List<string> { "Example.Other.Widget" },
+                out string hint,
+                out List<string> suggestions);
+
+            Assert.That(built, Is.False);
+            Assert.That(hint, Is.Empty);
+            Assert.That(suggestions, Is.Null);
+        }
+
+        /// <summary>
         /// Verifies no explanation is produced when this domain holds no active introduced type.
         /// </summary>
         [Test]
