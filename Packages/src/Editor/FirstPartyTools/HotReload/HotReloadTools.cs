@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
+using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -29,6 +30,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// When true, lists the active changes (patched methods, added members, introduced types) without applying or reverting anything.
         /// </summary>
         public bool Status { get; set; }
+
+        /// <summary>
+        /// When the apply run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), whether the CLI runs a compile in the same command: auto (default) does so in Edit Mode only and never stops a Play session, on always, off never. Ignored by --status and --revert-all.
+        /// </summary>
+        public HotReloadCompileOnSkip CompileOnSkip { get; set; } = HotReloadCompileOnSkip.auto;
     }
 
     /// <summary>
@@ -144,6 +150,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return !string.IsNullOrEmpty(RecommendedNextAction);
         }
 
+        /// <summary>
+        /// Whether the CLI should run a compile after this run: NotNeeded, Requested, HeldForPlayMode
+        /// (edits stayed unapplied but the Editor is in Play Mode and --compile-on-skip is auto), or
+        /// Disabled (--compile-on-skip off). Always written; --status, --revert-all and validation
+        /// failures answer NotNeeded.
+        /// </summary>
+        public string CompileFallback { get; set; } =
+            HotReloadCompileFallbackDecision.NotNeeded.ToString();
+
         public bool ShouldSerializeErrorCode()
         {
             return !string.IsNullOrEmpty(ErrorCode);
@@ -234,6 +249,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 services,
                 result,
                 selection.ScanLimitWarnings);
+            // isPlaying is read here because the switch above put this path on the main thread.
+            ApplyCompileFallbackDecision(
+                response,
+                result,
+                parameters.CompileOnSkip,
+                EditorApplication.isPlaying);
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
             {
                 response.Message = selection.SelectionMessage + " " + response.Message;
@@ -279,6 +300,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadCompositionRoot.Services,
                 result,
                 additionalWarnings);
+        }
+
+        // Records the compile-fallback decision on an apply response. isPlaying is passed in because
+        // the decision must not depend on Editor state when tests build responses off the main
+        // thread.
+        internal static void ApplyCompileFallbackDecision(
+            HotReloadResponse response,
+            HotReloadOrchestratorResult result,
+            HotReloadCompileOnSkip option,
+            bool isPlaying)
+        {
+            HotReloadCompileFallbackDecision decision = HotReloadCompileFallbackDecider.Decide(
+                option,
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result),
+                isPlaying);
+            response.CompileFallback = decision.ToString();
+            // Why only this decision touches the next action: the others either run the compile
+            // (the CLI then replaces the next action itself) or leave the run's own advice correct.
+            if (decision != HotReloadCompileFallbackDecision.HeldForPlayMode)
+            {
+                return;
+            }
+
+            // Why append and not replace: the run's own advice names what to do about the
+            // partially applied or failed edits, and losing it would leave the caller with only
+            // the reason no compile ran.
+            string existingNextAction = response.RecommendedNextAction;
+            response.RecommendedNextAction = string.IsNullOrEmpty(existingNextAction)
+                ? HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction
+                : existingNextAction
+                    + " "
+                    + HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction;
         }
 
         private static HotReloadResponse CreateValidationFailure(

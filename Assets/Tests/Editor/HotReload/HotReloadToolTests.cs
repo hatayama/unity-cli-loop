@@ -1989,6 +1989,167 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response.RecommendedNextAction, Is.Empty);
         }
 
+        /// <summary>
+        /// What: a run that skipped an edit outside Play Mode asks the CLI for a compile and leaves
+        /// the run's own next action alone.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_SkippedInEditMode_RequestsTheCompileAndKeepsTheNextAction()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(CreateSkippedResult());
+            string nextActionBefore = response.RecommendedNextAction;
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.auto,
+                isPlaying: false);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("Requested"));
+            Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
+        }
+
+        /// <summary>
+        /// What: the same run during play holds the compile back and appends the reason to the
+        /// run's own next action instead of replacing it, because a compile would end the Play
+        /// session but the advice about the unapplied edits still applies.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_SkippedDuringPlay_HoldsTheCompileAndSaysWhy()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(CreateSkippedResult());
+            string nextActionBefore = response.RecommendedNextAction;
+            Assert.That(nextActionBefore, Is.Not.Empty);
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.auto,
+                isPlaying: true);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
+            Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
+            Assert.That(
+                response.RecommendedNextAction,
+                Does.EndWith(HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// What: a held compile still reports the reason when the run itself recommended nothing,
+        /// so the caller is never left without a next action.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_HeldWithNoExistingNextAction_ReportsOnlyTheReason()
+        {
+            HotReloadResponse response = new() { RecommendedNextAction = string.Empty };
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.auto,
+                isPlaying: true);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// What: --compile-on-skip off reports that the fallback was turned off and leaves the
+        /// run's own next action alone.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_SkippedWithFallbackOff_ReportsDisabled()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(CreateSkippedResult());
+            string nextActionBefore = response.RecommendedNextAction;
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.off,
+                isPlaying: false);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("Disabled"));
+            Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
+        }
+
+        /// <summary>
+        /// What: a run that applied every edit needs no compile even during play.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_EverythingApplied_ReportsNotNeeded()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("A.Foo()", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                result,
+                HotReloadCompileOnSkip.auto,
+                isPlaying: true);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("NotNeeded"));
+        }
+
+        /// <summary>
+        /// What: --status writes the field too, so a caller never has to tell "no compile needed"
+        /// from "this package does not report it".
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_WritesNotNeededCompileFallback()
+        {
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+
+            JObject serialized = JObject.FromObject(response);
+            Assert.That(serialized.ContainsKey("CompileFallback"), Is.True);
+            Assert.That(serialized["CompileFallback"].ToString(), Is.EqualTo("NotNeeded"));
+        }
+
+        /// <summary>
+        /// What: a refused parameter combination writes the field too, since no run happened that
+        /// could have left an edit unapplied.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ValidationFailure_WritesNotNeededCompileFallback()
+        {
+            HotReloadTool tool = new HotReloadTool();
+            JObject parameters = new JObject
+            {
+                ["Status"] = true,
+                ["Files"] = new JArray("Assets/Scripts/Player.cs")
+            };
+
+            UnityCliLoopToolResponse baseResponse =
+                await tool.ExecuteAsync(parameters, CancellationToken.None);
+            HotReloadResponse response = baseResponse as HotReloadResponse;
+
+            Assert.That(response, Is.Not.Null);
+            JObject serialized = JObject.FromObject(response);
+            Assert.That(serialized.ContainsKey("CompileFallback"), Is.True);
+            Assert.That(serialized["CompileFallback"].ToString(), Is.EqualTo("NotNeeded"));
+        }
+
+        // One skipped method: the smallest run that leaves a requested edit unapplied.
+        private static HotReloadOrchestratorResult CreateSkippedResult()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("A.Foo()", "reason", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+        }
+
         private static Func<HotReloadChangedFileAggregationResult> CreateNoChangedFilesDetector()
         {
             return () => new HotReloadChangedFileAggregationResult(
