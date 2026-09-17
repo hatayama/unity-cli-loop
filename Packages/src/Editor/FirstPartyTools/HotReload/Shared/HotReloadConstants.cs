@@ -405,10 +405,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string PredefinedAssemblyNotCompiledReasonFormat =
             "Resolved assembly '{0}' does not exist yet: no script has been compiled into it, so there is no assembly to patch. Hot reload can only introduce types into an assembly that already exists. Run 'uloop compile' once; later scripts in this assembly can then be hot-reloaded.";
 
-        // Format: resolved assembly name, project-relative script path. Used when the script
-        // has no imported .asmdef but an ancestor directory already has one on disk.
+        // Format: resolved assembly name, project-relative script path, project-relative
+        // .asmdef path. Used when the script has no imported .asmdef but an ancestor directory
+        // already has one on disk. Why the resolved name comes last: it is a predefined name
+        // Unity falls back to while the .asmdef is unimported, and leading with it reads as a
+        // contradiction with the .asmdef the reader has to import.
         public const string UnimportedAsmdefCompilationAssemblyNotFoundReasonFormat =
-            "Resolved assembly '{0}' was not found in the compilation pipeline. '{1}' sits under a .asmdef that Unity has not imported yet, so hot reload cannot target it. Run 'uloop compile' first.";
+            "'{1}' sits under '{2}', which Unity has not imported yet, so no compilation assembly exists for it (Unity currently maps the file to the predefined assembly '{0}'). Run 'uloop compile' first; hot reload can target the file once the .asmdef is imported.";
 
         // Why "declarations or methods": a run can fail on a refused type declaration alone, and
         // Methods is then empty, so a next action naming only methods would send the reader to a

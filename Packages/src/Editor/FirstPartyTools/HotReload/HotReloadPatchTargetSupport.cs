@@ -61,15 +61,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why gate on compilationAssembly == null: the unimported-asmdef flag is only
             // consumed on that branch, and walking ancestor directories on every successful
             // resolve (including loose Assembly-CSharp scripts) is wasted disk I/O.
-            bool hasUnimportedAsmdefOnDisk = compilationAssembly == null
+            string unimportedAsmdefPath = compilationAssembly == null
                 && string.IsNullOrEmpty(
                     CompilationPipeline.GetAssemblyDefinitionFilePathFromScriptPath(projectRelativePath))
-                && HotReloadAssemblyResolutionDiagnostics.AncestorDirectoryContainsAsmdef(assemblyResolvePath);
+                ? HotReloadAssemblyResolutionDiagnostics.FindAncestorAsmdefProjectRelativePath(assemblyResolvePath)
+                : null;
             string resolutionFailureReason = HotReloadAssemblyResolutionDiagnostics.TryGetAssemblyResolutionFailureReason(
                 assemblyName,
                 compilationAssembly,
                 projectRelativePath,
-                hasUnimportedAsmdefOnDisk);
+                unimportedAsmdefPath);
             if (resolutionFailureReason != null)
             {
                 outcomes.Add(
