@@ -307,10 +307,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string statementText = source.Substring(pos, stmtEnd - pos + 1).TrimEnd()
                 .Replace("\r\n", "\n")
                 .Replace('\r', '\n');
+            // Two statements can share one original line: a block inside an expression statement
+            // ends the fragment at its closing brace, and a line may simply hold two statements.
+            // Continuing on the same body line instead of breaking after every fragment keeps the
+            // body line count equal to the snippet line count, which is what #line relies on.
+            if (BuilderHasTextOnCurrentLine(result))
+            {
+                result.TopLevelBodyBuilder.Append(' ');
+            }
+
             result.TopLevelBodyBuilder.Append(statementText);
-            result.TopLevelBodyBuilder.Append('\n');
-            result.NextBodyLineNumber1Based = originalLineNumber1Based + CountLinesInText(statementText);
+            result.NextBodyLineNumber1Based = originalLineNumber1Based + CountLinesInText(statementText) - 1;
             return new SourceTopLevelStep(stmtEnd + 1, nextBraceDepth);
+        }
+
+        // Whether the body line the previous fragment wrote is still open for more text.
+        private static bool BuilderHasTextOnCurrentLine(SourceShapeResult result)
+        {
+            StringBuilder builder = result.TopLevelBodyBuilder;
+            return builder.Length > 0 && builder[builder.Length - 1] != '\n';
         }
 
         private static void PadTopLevelBodyBuilderToOriginalLine(
@@ -484,6 +499,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class SourceShapeResult
     {
         public List<string> UsingDirectives { get; } = new List<string>();
+        // The body line the last written fragment ended on; the next fragment of that
+        // same original line continues it instead of starting a new line.
         public int NextBodyLineNumber1Based { get; set; } = 1;
         public HashSet<string> AliasedNames { get; } = new HashSet<string>(System.StringComparer.Ordinal);
         public bool HasNamespaceDeclaration { get; set; }
