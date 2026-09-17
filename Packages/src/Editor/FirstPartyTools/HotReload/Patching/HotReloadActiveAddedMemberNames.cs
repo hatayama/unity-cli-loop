@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadActiveAddedMemberNames
     {
-        private const string MethodKeySeparator = "::";
+        private static readonly char[] MemberSeparators = { '.', ':' };
 
         public static HashSet<string> Collect(
             IReadOnlyList<HotReloadAddedMemberInfo> members,
@@ -42,22 +42,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return names;
         }
 
-        // A method key spells a member as '<Type>::<Name>(<parameters>)'. An added property is
-        // recorded as its accessor methods, so the property name is registered as well: a member
-        // the source reaches through the property is quoted by the compiler under that name.
+        // The ledger spells an added member as the display label
+        // '<Namespace>.<Type>.<Name>`<arity>(<parameters>)', while a worker key spells the same
+        // member as '<Type>::<Name>(<parameters>)'. Both are reduced to the bare name a compiler
+        // diagnostic quotes. An added property is recorded as its accessor methods, so the
+        // property name is registered as well: a diagnostic about the property quotes that name.
         private static void AddMemberName(HashSet<string> names, string methodKey)
         {
-            int separatorIndex = methodKey.IndexOf(MethodKeySeparator, StringComparison.Ordinal);
-            if (separatorIndex < 0)
+            int parameterStart = methodKey.IndexOf('(');
+            string qualified = parameterStart < 0 ? methodKey : methodKey.Substring(0, parameterStart);
+            int arityStart = qualified.IndexOf('`');
+            if (arityStart >= 0)
             {
-                return;
+                qualified = qualified.Substring(0, arityStart);
             }
 
-            int nameStart = separatorIndex + MethodKeySeparator.Length;
-            int parameterStart = methodKey.IndexOf('(', nameStart);
-            string name = parameterStart < 0
-                ? methodKey.Substring(nameStart)
-                : methodKey.Substring(nameStart, parameterStart - nameStart);
+            int separatorIndex = qualified.LastIndexOfAny(MemberSeparators);
+            string name = separatorIndex < 0 ? qualified : qualified.Substring(separatorIndex + 1);
             if (name.Length == 0)
             {
                 return;

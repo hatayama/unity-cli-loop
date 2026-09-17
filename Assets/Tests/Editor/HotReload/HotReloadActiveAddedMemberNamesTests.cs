@@ -13,11 +13,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadActiveAddedMemberNamesTests
     {
         /// <summary>
-        /// Verifies that an added method is collected under the bare member name a compiler
-        /// diagnostic quotes, without its declaring type or its parameter list.
+        /// Verifies that an added method recorded under the display label the ledger uses is
+        /// collected as the bare member name a compiler diagnostic quotes.
         /// </summary>
         [Test]
-        public void Collect_AddedMethod_HoldsTheBareMemberName()
+        public void Collect_AddedMethodLabel_HoldsTheBareMemberName()
+        {
+            HashSet<string> names = HotReloadActiveAddedMemberNames.Collect(
+                new[] { new HotReloadAddedMemberInfo("Ns.Widget.Clear(System.Int32)", "Assets/Widget.cs", null) },
+                new HotReloadAddedFieldDescription[0]);
+
+            Assert.That(names, Is.EquivalentTo(new[] { "Clear" }));
+        }
+
+        /// <summary>
+        /// Verifies that the worker spelling of the same member, which separates the type with
+        /// '::', is reduced to the same bare name.
+        /// </summary>
+        [Test]
+        public void Collect_AddedMethodWorkerKey_HoldsTheBareMemberName()
         {
             HashSet<string> names = HotReloadActiveAddedMemberNames.Collect(
                 new[] { new HotReloadAddedMemberInfo("Ns.Widget::Clear()", "Assets/Widget.cs", null) },
@@ -34,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Collect_AddedPropertyAccessor_HoldsTheAccessorAndThePropertyName()
         {
             HashSet<string> names = HotReloadActiveAddedMemberNames.Collect(
-                new[] { new HotReloadAddedMemberInfo("Ns.Widget::get_Count()", "Assets/Widget.cs", null) },
+                new[] { new HotReloadAddedMemberInfo("Ns.Widget.get_Count()", "Assets/Widget.cs", null) },
                 new HotReloadAddedFieldDescription[0]);
 
             Assert.That(names, Is.EquivalentTo(new[] { "get_Count", "Count" }));
