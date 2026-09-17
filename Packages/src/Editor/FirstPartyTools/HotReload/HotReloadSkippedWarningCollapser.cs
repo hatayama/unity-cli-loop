@@ -9,6 +9,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadSkippedWarningCollapser
     {
+        // Measured against a run that skipped 42 methods for one reason: every name in one line
+        // made a single warning of about 2,900 characters, which a reader scrolls past rather
+        // than reads. Five names say what kind of member was skipped; Methods carries the rest.
+        private const int MAX_LISTED_METHOD_NAMES = 5;
+
         public static void Append(
             List<string> warnings,
             IReadOnlyList<HotReloadMethodOutcome> methods)
@@ -47,8 +52,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             HotReloadConstants.SkippedMethodsCollapsedWarningFormat,
                             methodNames.Count,
                             reason,
-                            string.Join(", ", methodNames)));
+                            BuildMethodNameList(methodNames)));
             }
+        }
+
+        /// <summary>
+        /// Names the first few skipped methods and counts the rest, so one warning stays readable
+        /// however many methods share a reason.
+        /// </summary>
+        private static string BuildMethodNameList(List<string> methodNames)
+        {
+            if (methodNames.Count <= MAX_LISTED_METHOD_NAMES)
+            {
+                return string.Join(", ", methodNames);
+            }
+
+            List<string> listedNames = methodNames.GetRange(0, MAX_LISTED_METHOD_NAMES);
+            int remainingCount = methodNames.Count - MAX_LISTED_METHOD_NAMES;
+            return string.Join(", ", listedNames)
+                + string.Format(HotReloadConstants.SkippedMethodsRemainderFormat, remainingCount);
         }
     }
 }

@@ -388,6 +388,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string SkippedMethodsCollapsedWarningFormat = "Skipped {0} methods: {1} ({2})";
 
+        // How a collapsed warning ends when it names only the first few of the methods that share
+        // one reason. Points at Methods, which carries a row for every skipped method.
+        public const string SkippedMethodsRemainderFormat = ", +{0} more (see Methods)";
+
         public const string VibeLogWorkerHostStarted = "hot_reload_worker_started";
         public const string VibeLogWorkerHostRestarted = "hot_reload_worker_restarted";
         public const string VibeLogWorkerHostShutdown = "hot_reload_worker_shutdown";

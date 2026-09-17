@@ -1721,6 +1721,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when more methods share one reason than a warning lists, the line names the first
+        /// five and counts the rest instead of spelling every name.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_ManySkippedWithOneReason_ListsFiveNamesAndCountsTheRest()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("A.M1()", "reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.M2()", "reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.M3()", "reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.M4()", "reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.M5()", "reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.M6()", "reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.M7()", "reason", "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Skipped 7 methods: reason (A.M1(), A.M2(), A.M3(), A.M4(), A.M5(), +2 more (see Methods))"
+                    }));
+        }
+
+        /// <summary>
         /// What: an all-AlreadyActive run serializes Kind as AlreadyActive and uses the dedicated
         /// no-change message, without counting those rows in PatchedTotal.
         /// </summary>
