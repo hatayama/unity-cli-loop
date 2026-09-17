@@ -388,6 +388,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string CompilationAssemblyNotFoundReasonFormat =
             "Resolved assembly '{0}' was not found in the compilation pipeline. Unity resolves files under a not-yet-imported .asmdef to a predefined assembly, so a brand-new .asmdef or a brand-new script cannot be hot-reloaded. Run 'uloop compile' first.";
 
+        // Format: resolved assembly name. Used when the name is one of Unity's predefined
+        // assemblies, which exist only once a script has been compiled into them, so the
+        // .asmdef wording above would send the reader looking for a file that is not there.
+        public const string PredefinedAssemblyNotCompiledReasonFormat =
+            "Resolved assembly '{0}' does not exist yet: no script has been compiled into it, so there is no assembly to patch. Hot reload can only introduce types into an assembly that already exists. Run 'uloop compile' once; later scripts in this assembly can then be hot-reloaded.";
+
         // Format: resolved assembly name, project-relative script path. Used when the script
         // has no imported .asmdef but an ancestor directory already has one on disk.
         public const string UnimportedAsmdefCompilationAssemblyNotFoundReasonFormat =

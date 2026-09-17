@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AddedFieldDoubleEvalReceiver,
         AddedFieldValueTypeMemberWrite,
         AddedFieldUnavailableAddedField,
+        AddedFieldCoalesceAssignment,
         AddedFieldFieldTypeChanged,
         AddedFieldFieldModifiersChanged,
         AddedFieldMemberKindChanged,

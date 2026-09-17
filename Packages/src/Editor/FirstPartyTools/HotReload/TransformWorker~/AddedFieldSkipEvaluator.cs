@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -32,9 +33,25 @@ internal static class AddedFieldSkipEvaluator
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldRefOutIn);
         }
 
-        if (AddedFieldBodyScan.BodyHasUnsupportedAddedFieldCompound(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldBodyScan.TryFindUnsupportedAddedFieldCompound(
+                bodyNode,
+                semanticModel,
+                addedFieldCatalog,
+                out string compoundFieldName,
+                out SyntaxKind compoundKind))
         {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField);
+            // '??=' gets its own sentence because the rewrite that works is not obvious from the
+            // general one: an explicit null guard around a simple assignment does apply.
+            if (compoundKind == SyntaxKind.CoalesceAssignmentExpression)
+            {
+                return WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedFieldCoalesceAssignment,
+                    compoundFieldName);
+            }
+
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
+                compoundFieldName);
         }
 
         if (AddedFieldBodyScan.BodyHasNonNumericAddedFieldIncrement(bodyNode, semanticModel, addedFieldCatalog))
