@@ -288,56 +288,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.File, parameters.Line, parameters.Method, snapshotTiming);
             if (!resolveResult.Success)
             {
-                bool hasActiveHotReloadPatches = shimLookup != null;
-                // Why a different next-action: resolve failure leaves ResolvedMethod and
-                // ResolvedLineText empty, so the generic "compile then retry" text hides
-                // the more likely cause — a line number taken from the edited file.
-                string recommendedNextAction = hasActiveHotReloadPatches
-                    ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
-                    : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
-                IReadOnlyList<string> compiledSourceLinesOrNull = null;
-                IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans =
-                    Array.Empty<SourcePausePointNearbyCompiledMethod>();
-                bool requestedLineReadOk = false;
-                string requestedLineEditedText = string.Empty;
-                // Why skip snapshot/edited-line IO without patches: Candidate is omitted on that
-                // path, so those reads would change the historical no-patch failure for no gain.
-                if (hasActiveHotReloadPatches)
+                // Why before everything else on this path: the reads below all go to a compiled
+                // source this file does not have, so their warnings would point the caller at a
+                // line map that cannot exist instead of at the one way to bind here.
+                bool declaresIntroducedType =
+                    HotReloadPausePointCoordination.HotReloadSide?.IsIntroducedTypeSourceFile(normalizedFile) == true;
+                if (declaresIntroducedType)
                 {
-                    string compiledSnapshotSource = PausePointCompiledSourceReader.LoadSnapshotOrEmpty(parameters.File);
-                    compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
-                        ? null
-                        : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
-                    namedCompiledMethodSpans = SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(
-                        parameters.File);
-                    (requestedLineReadOk, requestedLineEditedText) =
-                        PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
-                            parameters.File,
-                            parameters.Line);
+                    return CreateIntroducedTypeResolveFailure(parameters, resolveResult);
                 }
 
-                string message = PausePointEnableWarnings.BuildResolveFailureMessage(
-                    resolveResult.ErrorMessage,
-                    resolveResult.NearbyCompiledMethods,
-                    hasActiveHotReloadPatches,
+                PausePointResolveFailureText failureText = PausePointResolveFailureTextBuilder.Build(
+                    parameters.File,
                     parameters.Line,
-                    requestedLineReadOk,
-                    requestedLineEditedText,
-                    compiledSourceLinesOrNull,
-                    namedCompiledMethodSpans);
-
+                    hasActiveHotReloadPatches: shimLookup != null,
+                    resolveResult,
+                    patchedMethodPdbUnavailableWarning);
                 PausePointResponse response = CreateValidationFailure(
-                    message,
+                    failureText.Message,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
-                    recommendedNextAction);
+                    failureText.RecommendedNextAction);
                 List<string> resolveFailureWarnings = new List<string>();
-                PausePointEnableWarningList.AddIfNotEmpty(
-                    resolveFailureWarnings,
-                    PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                        patchedMethodPdbUnavailableWarning,
-                        PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                            hasActiveHotReloadPatches,
-                            parameters.File)));
+                PausePointEnableWarningList.AddIfNotEmpty(resolveFailureWarnings, failureText.Warning);
                 PausePointEnableWarningList.Assign(response, resolveFailureWarnings);
                 return response;
             }
@@ -582,6 +554,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildSourcePausePointId(string file, int line)
         {
             return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
+        }
+
+        // Keeps the resolver's own sentence so the caller still sees which line failed, under a
+        // first line that says why no line in this file can resolve yet.
+        private static PausePointResponse CreateIntroducedTypeResolveFailure(
+            EnablePausePointSchema parameters,
+            SourcePausePointResolveResult resolveResult)
+        {
+            string message = string.Format(
+                    SourcePausePointConstants.IntroducedTypeResolveFailureMessageFormat,
+                    parameters.File)
+                + "\n"
+                + resolveResult.ErrorMessage;
+            return CreateValidationFailure(
+                message,
+                SourcePausePointConstants.ErrorCodeResolveFailed,
+                SourcePausePointConstants.IntroducedTypeResolveFailureNextAction);
         }
 
         private static PausePointResponse CreateValidationFailure(
