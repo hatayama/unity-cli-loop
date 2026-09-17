@@ -1922,6 +1922,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(HotReloadConstants.RequestedFilesAllSkippedRecommendedNextAction));
         }
 
+        /// <summary>
+        /// What: a run that bound an introduced type keeps the type message and no next action,
+        /// even though the only method outcome of the requested file was Skipped.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RequestedFileAllSkippedBesideABoundIntroducedType_KeepsTheTypeMessage()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.M", "reason", "Assets/Requested.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    introducedTypes: new[]
+                    {
+                        HotReloadIntroducedTypeOutcome.AlreadyActive(
+                            "Example.Introduced",
+                            "RetainedAssembly",
+                            "Assets/Requested.cs",
+                            bodyEdited: false)
+                    }));
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    string.Format(
+                        HotReloadConstants.AlreadyActiveIntroducedTypesOnlyApplyMessageFormat,
+                        1)));
+            Assert.That(response.RecommendedNextAction, Is.Empty);
+        }
+
         private static Func<HotReloadChangedFileAggregationResult> CreateNoChangedFilesDetector()
         {
             return () => new HotReloadChangedFileAggregationResult(
