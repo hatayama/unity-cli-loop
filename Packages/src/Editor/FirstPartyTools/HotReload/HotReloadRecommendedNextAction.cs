@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Chooses RecommendedNextAction for hot-reload apply responses that include Failed outcomes.
+    /// Chooses RecommendedNextAction for hot-reload apply responses.
     /// </summary>
     internal static class HotReloadRecommendedNextAction
     {
@@ -11,7 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hasFailure,
             int patchedTotal,
             int addedCount,
-            int introducedTypeCount)
+            int introducedTypeCount,
+            bool allRequestedSkipped)
         {
             Debug.Assert(patchedTotal >= 0, "patchedTotal must not be negative.");
             Debug.Assert(addedCount >= 0, "addedCount must not be negative.");
@@ -19,7 +20,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!hasFailure)
             {
-                return string.Empty;
+                // Why a next action without a failure: every method of the requested files was
+                // Skipped, so the run answers Success while none of the asked-for edits are live.
+                return allRequestedSkipped
+                    ? HotReloadConstants.RequestedFilesAllSkippedRecommendedNextAction
+                    : string.Empty;
             }
 
             // Why the types count toward a partial apply: a type this run introduced stays

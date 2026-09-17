@@ -64,14 +64,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why before the pause-point extras: this warning is cleared by compile, so it must
             // count toward the single-compile resolution suffix instead of suppressing it.
+            Func<string, string> toProjectRelativeScriptPath =
+                path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                    services.PackageRootCapture,
+                    path);
             HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
                 warnings,
                 result.Methods,
                 HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
                 HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot,
-                path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
-                    services.PackageRootCapture,
-                    path),
+                toProjectRelativeScriptPath,
                 result.ReappliedSiblingPaths);
 
             // Why before the count snapshot: a Skipped method is applied by 'uloop compile' like
@@ -112,13 +114,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 result.AutoRefreshHoldSceneRefreshWarning);
+            bool allRequestedSkipped = HotReloadRequestedFileOutcomeSummary.AreAllRequestedOutcomesSkipped(
+                result.Methods,
+                result.ReappliedSiblingPaths,
+                toProjectRelativeScriptPath);
             string message = BuildApplyMessage(
                 result,
                 hasFailure,
                 hasMethodFailure,
                 warnings.Count,
                 appendCompileResolution: orchestratorWarningCount >= 2
-                    && orchestratorWarningCount == warningCountBeforeHold);
+                    && orchestratorWarningCount == warningCountBeforeHold,
+                allRequestedSkipped);
             return new HotReloadResponse
             {
                 Success = !hasFailure,
@@ -141,7 +148,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     hasFailure,
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
-                    HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes))
+                    HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes),
+                    allRequestedSkipped)
             };
         }
 
@@ -197,7 +205,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hasFailure,
             bool hasMethodFailure,
             int warningCount,
-            bool appendCompileResolution)
+            bool appendCompileResolution,
+            bool allRequestedSkipped)
         {
             // Why asked first: the file a run introduces a type into usually holds untouched
             // methods as well, and every message below would then report the methods only.
@@ -223,7 +232,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     appendCompileResolution);
             }
 
-            string message = BuildApplyOutcomeMessage(result, hasFailure);
+            string message = BuildApplyOutcomeMessage(result, hasFailure, allRequestedSkipped);
             message = AppendUnchangedAndLifecycleNotes(message, result);
             message = HotReloadIntroducedTypeResponseSection.AppendTypeSummary(
                 message,
@@ -240,7 +249,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string BuildApplyOutcomeMessage(
             HotReloadOrchestratorResult result,
-            bool hasFailure)
+            bool hasFailure,
+            bool allRequestedSkipped)
         {
             int addedCount = CountAddedOutcomes(result);
             if (hasFailure)
@@ -263,6 +273,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     result.Methods.Count);
             }
 
+            // Why before the "no methods patched" message: a sibling re-apply raises PatchedTotal,
+            // so that message would not be reached and the run would report an applied reload.
+            if (allRequestedSkipped)
+            {
+                return AppendStaleSummary(BuildRequestedFilesAllSkippedMessage(addedCount), result);
+            }
+
             if (result.PatchedTotal == 0 && addedCount == 0)
             {
                 return AppendStaleSummary(
@@ -278,6 +295,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return AppendStaleSummary(message, result);
+        }
+
+        // Why the sibling clause is separate: the Added rows of this run belong to a file the
+        // caller did not ask about, so naming them keeps the counts readable without claiming
+        // the requested edits were applied.
+        private static string BuildRequestedFilesAllSkippedMessage(int addedCount)
+        {
+            if (addedCount == 0)
+            {
+                return HotReloadConstants.RequestedFilesAllSkippedMessage;
+            }
+
+            return HotReloadConstants.RequestedFilesAllSkippedMessage
+                + " Also re-applied siblings: Added=" + addedCount + ".";
         }
 
         // Why in the summary: ActivePatchTotal counts stale patches, so without this the totals
