@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
         private Func<CompileSchema, string, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
         private Func<ValidationResult> _validateCompilationState;
+        private Func<PreparationResult> _determinePreparationAction;
         private Func<(bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActivePersistedPausePointCount, int ActiveHotReloadChangeCount)>
             _capturePlayModeStopWarningInputs;
 
@@ -44,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
             _executeCompilationAsync = ExecuteCompilationWithDefaultServiceAsync;
             _validateCompilationState = () => new CompilationStateValidationService().ValidateCompilationState();
+            _determinePreparationAction = () => new PlayModeCompilationPreparationService().DeterminePreparationAction();
             _capturePlayModeStopWarningInputs = CaptureLivePlayModeStopWarningInputs;
         }
 
@@ -64,6 +66,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             _validateCompilationState = validateCompilationState ??
                 throw new ArgumentNullException(nameof(validateCompilationState));
+        }
+
+        /// <summary>
+        /// Replaces the Play Mode preparation decision so tests can exercise what compile answers
+        /// when preparation refuses, without putting the Editor into Play Mode.
+        /// </summary>
+        internal void SetPlayModePreparationForTesting(Func<PreparationResult> determinePreparationAction)
+        {
+            _determinePreparationAction = determinePreparationAction ??
+                throw new ArgumentNullException(nameof(determinePreparationAction));
         }
 
         /// <summary>
@@ -116,8 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MarkPendingCompileRequestIfNeeded(request, utcNow, correlationId);
 
             // 1. Play Mode preparation check
-            PlayModeCompilationPreparationService preparationService = new();
-            PreparationResult preparation = preparationService.DeterminePreparationAction();
+            PreparationResult preparation = _determinePreparationAction();
 
             if (!preparation.CanProceed)
             {
@@ -131,7 +142,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errorCount: 1,
                     warningCount: 0,
                     errors: new[] { new CompileIssue(preparation.ErrorMessage, "", 0) },
-                    warnings: Array.Empty<CompileIssue>());
+                    warnings: Array.Empty<CompileIssue>())
+                {
+                    // The refusal names the Unity setting that caused it, which leaves the reader
+                    // to find the command that leaves Play Mode; naming it here saves that step.
+                    NextActions = new[] { CompileErrorNextActionsConstants.PlayModeStopNextAction }
+                };
                 CompileResponse persistedResponse =
                     StorePreControllerResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
@@ -144,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Stopping Play Mode before compile.",
                     BuildCompileLogContext(request),
                     correlationId);
-                preparationService.StopPlayMode();
+                new PlayModeCompilationPreparationService().StopPlayMode();
                 bool exited = await WaitForPlayModeExitAsync(ct).ConfigureAwait(false);
                 // Why switch back: the poll loop uses ConfigureAwait(false), but subsequent
                 // validation and compile orchestration call Unity Editor APIs.

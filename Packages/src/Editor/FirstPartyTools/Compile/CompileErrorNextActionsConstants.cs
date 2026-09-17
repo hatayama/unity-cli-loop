@@ -5,6 +5,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class CompileErrorNextActionsConstants
     {
+        public const string PlayModeStopNextAction =
+            "Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.";
+
         public const string LanguageVersionPinnedNextActionFormat =
             "error {0}: the project's C# language version is pinned by the Unity Editor version, so raising the language version is not actionable here. Rewrite without the '{1}' feature so the code compiles under C# {2}.";
 
