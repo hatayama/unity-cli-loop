@@ -102,8 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 warnings[0],
                 Is.EqualTo(
                     "Broken.cs declares a type hot reload introduced (assembly Some.Assembly), so "
-                    + "it has no compiled baseline until 'uloop compile'; edited members are "
-                    + "detected from the retained declaration instead. This is expected."));
+                    + "it has no compiled baseline until 'uloop compile'. This is expected: hot "
+                    + "reload tracks the introduced type from its own recorded declaration. Any "
+                    + "other type in this file has no baseline either and is patched in full."));
         }
 
         /// <summary>

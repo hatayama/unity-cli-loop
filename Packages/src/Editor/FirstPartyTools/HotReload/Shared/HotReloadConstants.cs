@@ -230,11 +230,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: file name, assembly name. Used instead of the warning below when the file
         // declares a type hot reload introduced: such a type is only in a byte-loaded artifact,
         // never in a compiled assembly, so no compile of this project could have produced the
-        // baseline the other wording asks the reader to establish.
+        // baseline the other wording asks the reader to establish. Why the last sentence: the
+        // file may also hold a compiled type, and that one is still patched in full.
         public const string IntroducedTypeSourceNoBaselineWarningFormat =
             "{0} declares a type hot reload introduced (assembly {1}), so it has no compiled "
-            + "baseline until 'uloop compile'; edited members are detected from the retained "
-            + "declaration instead. This is expected.";
+            + "baseline until 'uloop compile'. This is expected: hot reload tracks the introduced "
+            + "type from its own recorded declaration. Any other type in this file has no baseline "
+            + "either and is patched in full.";
 
         // Format: file name, assembly name. Emitted per file when PDB-validated snapshot is absent.
         public const string NoVerifiedSourceSnapshotWarningFormat =
