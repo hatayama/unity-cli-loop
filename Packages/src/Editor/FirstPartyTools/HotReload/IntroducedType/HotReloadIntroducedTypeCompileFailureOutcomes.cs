@@ -31,6 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private const string MissingStaticMemberErrorCode = "CS0117:";
 
+        private static readonly string[] MissingMemberErrorCodes =
+        {
+            MissingMemberErrorCode,
+            MissingStaticMemberErrorCode
+        };
+
         public static List<HotReloadIntroducedTypeOutcome> Build(
             HotReloadIntroducedTypeCompilerResult compileResult,
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
@@ -198,12 +204,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (string message in messages)
             {
-                if (!IsMissingMemberDiagnostic(message))
+                if (!TryFindMissingMemberDiagnosticCode(message, out int searchStart))
                 {
                     continue;
                 }
 
-                string member = FindSecondQuotedToken(message);
+                string member = FindSecondQuotedToken(message, searchStart);
                 if (member != null && Contains(activeAddedMemberNames, member))
                 {
                     return true;
@@ -213,17 +219,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static bool IsMissingMemberDiagnostic(string message)
+        // Why the position is reported: the message carries the owner path in front of the
+        // diagnostic, and an apostrophe in that path would otherwise be read as the first quoted
+        // token of the diagnostic itself.
+        private static bool TryFindMissingMemberDiagnosticCode(string message, out int searchStart)
         {
-            return message.IndexOf(MissingMemberErrorCode, StringComparison.Ordinal) >= 0
-                || message.IndexOf(MissingStaticMemberErrorCode, StringComparison.Ordinal) >= 0;
+            foreach (string code in MissingMemberErrorCodes)
+            {
+                int index = message.IndexOf(code, StringComparison.Ordinal);
+                if (index >= 0)
+                {
+                    searchStart = index + code.Length;
+                    return true;
+                }
+            }
+
+            searchStart = 0;
+            return false;
         }
 
         // The missing member is the second quoted token of these diagnostics; the first one names
         // the type that does not hold it.
-        private static string FindSecondQuotedToken(string message)
+        private static string FindSecondQuotedToken(string message, int searchStart)
         {
-            int firstOpen = message.IndexOf('\'');
+            int firstOpen = message.IndexOf('\'', searchStart);
             if (firstOpen < 0)
             {
                 return null;

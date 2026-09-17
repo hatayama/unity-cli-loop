@@ -55,6 +55,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a setter accessor is reduced the same way as a getter, so a diagnostic
+        /// about a write-only property is recognized too.
+        /// </summary>
+        [Test]
+        public void Collect_AddedPropertySetter_HoldsTheAccessorAndThePropertyName()
+        {
+            HashSet<string> names = HotReloadActiveAddedMemberNames.Collect(
+                new[] { new HotReloadAddedMemberInfo("Ns.Widget.set_Count(System.Int32)", "Assets/Widget.cs", null) },
+                new HotReloadAddedFieldDescription[0]);
+
+            Assert.That(names, Is.EquivalentTo(new[] { "set_Count", "Count" }));
+        }
+
+        /// <summary>
         /// Verifies that an added field is collected under its field name.
         /// </summary>
         [Test]

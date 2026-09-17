@@ -262,6 +262,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(rows[0].Reason, Does.Not.Contain("added by hot reload"));
         }
 
+        /// <summary>
+        /// Verifies that an owner path holding an apostrophe does not swallow the quoted member
+        /// name, so the added-member hint still reaches the reader.
+        /// </summary>
+        [Test]
+        public void Build_OwnerPathHoldsAnApostrophe_StillAppendsTheAddedMemberHint()
+        {
+            const string ownerPath = "Assets/Player's/First.cs";
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        ownerPath,
+                        "CS1061: 'Widget' does not contain a definition for 'Clear' and no accessible extension method",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", ownerPath) },
+                "TargetAssembly",
+                new[] { "Clear" });
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
+        }
+
+        /// <summary>
+        /// Verifies that a missing static member diagnostic naming an added member is explained
+        /// the same way as the instance-member one.
+        /// </summary>
+        [Test]
+        public void Build_StaticMemberDiagnosticNamesAnActiveAddedMember_AppendsTheAddedMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS0117: 'Widget' does not contain a definition for 'Reset'",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new[] { "Reset" });
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
+        }
+
+        /// <summary>
+        /// Verifies that a diagnostic of another error code is left alone even when its second
+        /// quoted token happens to name an added member.
+        /// </summary>
+        [Test]
+        public void Build_UnrelatedErrorCodeQuotesAnAddedMemberName_LeavesTheReasonAlone()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS0122: 'Widget' declares 'Clear' with a protection level that hides it",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new[] { "Clear" });
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Not.Contain("added by hot reload"));
+        }
+
         private static HotReloadIntroducedTypeDescriptor CreateDescriptor(
             string metadataName,
             string ownerProjectRelativePath)
