@@ -30,6 +30,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedMethodExpression = "Extra()";
         private const string NoAddedMembers = "";
 
+        private const string HostValueAnchor = "        public int Value()";
+        private const string CompiledTypeAddedMethodName = "AddedForIntroducedType";
+        private const string InvisibleAddedMemberTypeName = "HotReloadAddedMemberInvisibleIntroducedValue";
+        private const string AddedMemberInvisibleHint =
+            "One or more of the missing members were added by hot reload (Added rows) and are not "
+            + "visible to the compilation of an introduced type, which compiles against the "
+            + "compiled assemblies only. Run 'uloop compile' to make the added members compiled, "
+            + "then rerun.";
+
+        // The method the first reload adds to a compiled type. It exists only in that reload's
+        // shim, never in the assembly on disk the introduced-type compilation reads.
+        private static readonly string CompiledTypeAddedMember =
+            "        public int " + CompiledTypeAddedMethodName + "()\n"
+            + "        {\n"
+            + "            return 41;\n"
+            + "        }\n"
+            + "\n";
+
         // The members the second reload adds: an ordinary method that reads the compiled private
         // field, the added field itself, and an auto-property whose accessors have to arrive as
         // added methods of their own. Why the method writes and reads the property rather than
@@ -216,6 +234,117 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "The patched caller must run the member added to the introduced type.\n"
                     + DescribeOutcomes(crossFile));
             });
+        }
+
+        /// <summary>
+        /// What: a type introduced by this reload whose body calls a member an earlier reload
+        /// added to a compiled type fails to compile, and the failure explains that an introduced
+        /// type cannot see a hot-reload addition instead of leaving the bare compiler error.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeUsesAMemberAddedToACompiledType_FailsWithTheAddedMemberHint()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult addition = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateCompiledTypeAdditionEdits(hostPath, callerPath));
+                AssertOutcome(addition, HotReloadMethodOutcomeKind.Added, CompiledTypeAddedMethodName);
+
+                HotReloadOrchestratorResult introduced = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducedTypeUsingTheAddedMemberEdits(hostPath, callerPath));
+
+                string reason = FindIntroducedTypeFailureReason(introduced);
+                Assert.That(
+                    reason,
+                    Does.Contain("CS1061"),
+                    "The compilation of the introduced type must report the member as missing.\n"
+                    + DescribeOutcomes(introduced));
+                Assert.That(
+                    reason,
+                    Does.EndWith(AddedMemberInvisibleHint),
+                    "The failure must explain why the added member is invisible here.\n"
+                    + DescribeOutcomes(introduced));
+            });
+        }
+
+        private static string FindIntroducedTypeFailureReason(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
+            {
+                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed)
+                {
+                    return outcome.Reason;
+                }
+            }
+
+            Assert.Fail("No introduced type failed.\n" + DescribeOutcomes(result));
+            return null;
+        }
+
+        private static Dictionary<string, string> CreateCompiledTypeAdditionEdits(
+            string hostPath,
+            string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "AddedMemberInvisibleAdditionHost.cs",
+                    InsertCompiledTypeMember(File.ReadAllText(hostPath))),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "AddedMemberInvisibleAdditionCaller.cs",
+                    File.ReadAllText(callerPath))
+            };
+        }
+
+        // The addition stays declared so it is still active, and a new type declared beside it
+        // calls it - which only the shim of the previous reload can answer.
+        private static Dictionary<string, string> CreateIntroducedTypeUsingTheAddedMemberEdits(
+            string hostPath,
+            string callerPath)
+        {
+            string hostSource = InsertTypeUsingTheAddedMember(
+                InsertCompiledTypeMember(File.ReadAllText(hostPath)));
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "AddedMemberInvisibleIntroducingHost.cs",
+                    hostSource),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "AddedMemberInvisibleIntroducingCaller.cs",
+                    File.ReadAllText(callerPath))
+            };
+        }
+
+        private static string InsertCompiledTypeMember(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostValueAnchor), "Precondition: host value anchor must exist.");
+            return hostSource.Replace(
+                HostValueAnchor,
+                CompiledTypeAddedMember + HostValueAnchor,
+                StringComparison.Ordinal);
+        }
+
+        private static string InsertTypeUsingTheAddedMember(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced =
+                "    public sealed class " + InvisibleAddedMemberTypeName + "\n"
+                + "    {\n"
+                + "        public int Compute()\n"
+                + "        {\n"
+                + "            return new HotReloadCrossFileAddedMemberHost()."
+                + CompiledTypeAddedMethodName + "();\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
         }
 
         private static void AssertTypeIsStillActive(HotReloadOrchestratorResult result)

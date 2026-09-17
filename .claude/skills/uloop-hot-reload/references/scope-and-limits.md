@@ -57,6 +57,10 @@ resolved type has any — their values live in the hot-reload shim and are not v
 to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
 names fail with CS1061). Read them from a patched method body instead.
 
+A type introduced in the same reload cannot use added members of a compiled type: its
+artifact is compiled against the compiled assemblies, so such a reference fails with
+CS1061/CS0117 and needs a compile (issue #2695).
+
 Added members are an Editor-session illusion. Any real compile or domain reload
 drops them all: added methods disappear from the ledger and added-field values are
 discarded — they do not migrate into the compiled field's initializer semantics.

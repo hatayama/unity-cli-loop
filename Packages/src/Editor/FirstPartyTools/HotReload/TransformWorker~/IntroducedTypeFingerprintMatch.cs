@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // How a declaration compares against the fingerprint recorded for the artifact this domain
@@ -112,7 +113,7 @@ internal sealed class IntroducedTypeFingerprintMatch
 
             // A removal, a changed signature, a changed header or a changed define set: the
             // artifact no longer describes the declaration, and no added member explains it.
-            return ReportDeclarationChanged(comparison);
+            return ReportDeclarationChanged(comparison, recorded, memberIndex);
         }
 
         // The added-member machinery holds ordinary methods, fields and properties. A constructor,
@@ -121,13 +122,13 @@ internal sealed class IntroducedTypeFingerprintMatch
         {
             if (memberIndex.FindMemberKind(addedMemberKey) == IntroducedTypeMemberKind.Other)
             {
-                return ReportDeclarationChanged(comparison);
+                return ReportDeclarationChanged(comparison, recorded, memberIndex);
             }
         }
 
         if (orderChanged && !IsOrderExplainedByAdditions(recorded, memberIndex, addedMemberKeys))
         {
-            return ReportDeclarationChanged(comparison);
+            return ReportDeclarationChanged(comparison, recorded, memberIndex);
         }
 
         SplitChangedBodyKeys(
@@ -226,13 +227,76 @@ internal sealed class IntroducedTypeFingerprintMatch
         }
     }
 
+    // Why the comparison is filtered rather than reported as it stands: a reader told that an
+    // addition this reload already applied is part of why a compile is required takes the addition
+    // back out, which is the one edit that cannot help. Only the differences that actually block
+    // the reload are named; the applicable additions are counted so they are not mistaken for a
+    // silent omission either.
     private static IntroducedTypeFingerprintMatch ReportDeclarationChanged(
-        HotReloadIntroducedTypeFingerprintComparison comparison)
+        HotReloadIntroducedTypeFingerprintComparison comparison,
+        HotReloadIntroducedTypeFingerprint recorded,
+        IntroducedTypeDeclarationMemberIndex memberIndex)
     {
+        bool orderExplained = IsOrderExplainedByAllAdditions(comparison, recorded, memberIndex);
+        List<string> blocking = new List<string>();
+        int omittedAdditions = 0;
+        foreach (string detail in comparison.Details)
+        {
+            if (detail.StartsWith(AddedDetailPrefix, StringComparison.Ordinal)
+                && memberIndex.FindMemberKind(detail.Substring(AddedDetailPrefix.Length))
+                    != IntroducedTypeMemberKind.Other)
+            {
+                omittedAdditions++;
+                continue;
+            }
+
+            if (orderExplained && string.Equals(detail, OrderDetail, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            blocking.Add(detail);
+        }
+
+        if (omittedAdditions > 0)
+        {
+            blocking.Add(omittedAdditions + " applicable addition(s) omitted");
+        }
+
+        Debug.Assert(
+            blocking.Count > 0,
+            "A declaration reported as changed must name at least one blocking difference.");
+
         return new IntroducedTypeFingerprintMatch(
             IntroducedTypeFingerprintMatchKind.DeclarationChanged,
             NoKeys,
             NoKeys,
-            comparison.Details);
+            blocking);
+    }
+
+    // Evaluated once over every added key, Other kinds included: an insertion explains the order
+    // difference only when dropping all of the added members leaves the recorded order.
+    private static bool IsOrderExplainedByAllAdditions(
+        HotReloadIntroducedTypeFingerprintComparison comparison,
+        HotReloadIntroducedTypeFingerprint recorded,
+        IntroducedTypeDeclarationMemberIndex memberIndex)
+    {
+        List<string> allAddedKeys = new List<string>();
+        bool orderChanged = false;
+        foreach (string detail in comparison.Details)
+        {
+            if (detail.StartsWith(AddedDetailPrefix, StringComparison.Ordinal))
+            {
+                allAddedKeys.Add(detail.Substring(AddedDetailPrefix.Length));
+                continue;
+            }
+
+            if (string.Equals(detail, OrderDetail, StringComparison.Ordinal))
+            {
+                orderChanged = true;
+            }
+        }
+
+        return orderChanged && IsOrderExplainedByAdditions(recorded, memberIndex, allAddedKeys);
     }
 }

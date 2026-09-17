@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assembly-CSharp",
                 null,
                 MissingHotReloadScriptPath,
-                false);
+                null);
 
             Assert.That(
                 reason,
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Some.Custom.Assembly",
                 null,
                 MissingHotReloadScriptPath,
-                false);
+                null);
 
             Assert.That(
                 reason,
@@ -94,12 +94,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assembly-CSharp",
                 null,
                 MissingHotReloadScriptPath,
-                true);
+                "Assets/Tests/Editor/HotReload/UnityCLILoop.Tests.Editor.HotReload.asmdef");
 
             Assert.That(
                 reason,
                 Is.EqualTo(
-                    "Resolved assembly 'Assembly-CSharp' was not found in the compilation pipeline. 'Assets/Tests/Editor/HotReload/UncompiledNewScript.cs' sits under a .asmdef that Unity has not imported yet, so hot reload cannot target it. Run 'uloop compile' first."));
+                    "'Assets/Tests/Editor/HotReload/UncompiledNewScript.cs' sits under 'Assets/Tests/Editor/HotReload/UnityCLILoop.Tests.Editor.HotReload.asmdef', which Unity has not imported yet, so no compilation assembly exists for it (Unity currently maps the file to the predefined assembly 'Assembly-CSharp'). Run 'uloop compile' first; hot reload can target the file once the .asmdef is imported."));
         }
 
         /// <summary>
@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadTestAssemblyName,
                 compilationAssembly,
                 MissingHotReloadScriptPath,
-                false);
+                null);
 
             Assert.That(reason, Is.Null);
         }
@@ -135,22 +135,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadTestAssemblyName,
                 compilationAssembly,
                 ExistingHotReloadScriptPath,
-                false);
+                null);
 
             Assert.That(reason, Is.Null);
         }
 
         /// <summary>
-        /// What: an on-disk .asmdef in the script's ancestor directory is detected without
+        /// What: an on-disk .asmdef in the script's ancestor directory is reported by its
+        /// project-relative path, so the reason text can name the file to import, without
         /// creating or importing any new assets.
         /// </summary>
         [Test]
-        public void AncestorDirectoryContainsAsmdef_WhenAncestorHasAsmdef_ReturnsTrue()
+        public void FindAncestorAsmdefProjectRelativePath_WhenAncestorHasAsmdef_ReturnsItsProjectRelativePath()
         {
             Assert.That(
-                HotReloadAssemblyResolutionDiagnostics.AncestorDirectoryContainsAsmdef(
+                HotReloadAssemblyResolutionDiagnostics.FindAncestorAsmdefProjectRelativePath(
                     "Assets/Tests/Editor/HotReload/NotExist.cs"),
-                Is.True);
+                Is.EqualTo("Assets/Tests/Editor/HotReload/UnityCLILoop.Tests.Editor.HotReload.asmdef"));
         }
 
         /// <summary>
@@ -158,12 +159,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// is not reported as an unimported-asmdef case.
         /// </summary>
         [Test]
-        public void AncestorDirectoryContainsAsmdef_WhenNoAncestorHasAsmdef_ReturnsFalse()
+        public void FindAncestorAsmdefProjectRelativePath_WhenNoAncestorHasAsmdef_ReturnsNull()
         {
             Assert.That(
-                HotReloadAssemblyResolutionDiagnostics.AncestorDirectoryContainsAsmdef(
+                HotReloadAssemblyResolutionDiagnostics.FindAncestorAsmdefProjectRelativePath(
                     "Assets/RegressionHarness/HotReload/NotExist.cs"),
-                Is.False);
+                Is.Null);
         }
 
         /// <summary>
@@ -186,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadTestAssemblyName,
                 compilationAssembly,
                 ExistingHotReloadScriptPath,
-                false);
+                null);
 
             Assert.That(reason, Is.Null);
         }

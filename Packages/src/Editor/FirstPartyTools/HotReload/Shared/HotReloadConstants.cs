@@ -365,6 +365,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =
             "Hot reload finished with no methods patched. See Warnings for Skipped reasons and Methods for AlreadyActive reasons.";
 
+        // Why it names the requested files: a run that also re-applies a sibling file reports
+        // Patched or Added rows for that sibling, and a summary counting them reads as if the
+        // edits the caller asked for had been applied.
+        public const string RequestedFilesAllSkippedMessage =
+            "Nothing from the requested file(s) was applied: every method there was Skipped (see Warnings for the reasons). Run 'uloop compile' to apply these edits.";
+
         // Format: leftover patches peeled because source matched compiled IL again.
         public const string StalePatchesRevertedMessageFormat =
             "{0} stale patch(es) were reverted so those methods run the compiled IL again.";
@@ -405,10 +411,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string PredefinedAssemblyNotCompiledReasonFormat =
             "Resolved assembly '{0}' does not exist yet: no script has been compiled into it, so there is no assembly to patch. Hot reload can only introduce types into an assembly that already exists. Run 'uloop compile' once; later scripts in this assembly can then be hot-reloaded.";
 
-        // Format: resolved assembly name, project-relative script path. Used when the script
-        // has no imported .asmdef but an ancestor directory already has one on disk.
+        // Format: resolved assembly name, project-relative script path, project-relative
+        // .asmdef path. Used when the script has no imported .asmdef but an ancestor directory
+        // already has one on disk. Why the resolved name comes last: it is a predefined name
+        // Unity falls back to while the .asmdef is unimported, and leading with it reads as a
+        // contradiction with the .asmdef the reader has to import.
         public const string UnimportedAsmdefCompilationAssemblyNotFoundReasonFormat =
-            "Resolved assembly '{0}' was not found in the compilation pipeline. '{1}' sits under a .asmdef that Unity has not imported yet, so hot reload cannot target it. Run 'uloop compile' first.";
+            "'{1}' sits under '{2}', which Unity has not imported yet, so no compilation assembly exists for it (Unity currently maps the file to the predefined assembly '{0}'). Run 'uloop compile' first; hot reload can target the file once the .asmdef is imported.";
 
         // Why "declarations or methods": a run can fail on a refused type declaration alone, and
         // Methods is then empty, so a next action naming only methods would send the reader to a
@@ -426,6 +435,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
+
+        public const string RequestedFilesAllSkippedRecommendedNextAction =
+            "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings).";
 
         // Why one sentence in one place: the same rule has to reach the caller from the skill, the
         // docs, and every selection response, and two wordings of it read as two rules.

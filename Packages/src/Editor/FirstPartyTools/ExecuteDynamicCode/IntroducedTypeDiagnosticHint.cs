@@ -86,12 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (!string.Equals(ExtractSimpleName(metadataName), name, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (!IsInNamespace(metadataName, namespaceName))
+                if (!MatchesSimpleName(metadataName, name, namespaceName)
+                    && !MatchesNamespaceSegment(metadataName, name, namespaceName))
                 {
                     continue;
                 }
@@ -102,6 +98,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return matches;
+        }
+
+        private static bool MatchesSimpleName(string metadataName, string name, string namespaceName)
+        {
+            return string.Equals(ExtractSimpleName(metadataName), name, StringComparison.Ordinal)
+                && IsInNamespace(metadataName, namespaceName);
+        }
+
+        // Why a namespace segment counts as a match: a qualified reference to an introduced type
+        // fails on the first segment the compiler cannot resolve, so the reported name is one of
+        // the type's namespaces rather than the type itself.
+        private static bool MatchesNamespaceSegment(string metadataName, string name, string namespaceName)
+        {
+            if (string.IsNullOrEmpty(namespaceName))
+            {
+                return false;
+            }
+
+            return metadataName.StartsWith(namespaceName + "." + name + ".", StringComparison.Ordinal);
         }
 
         private static string ExtractSimpleName(string metadataName)

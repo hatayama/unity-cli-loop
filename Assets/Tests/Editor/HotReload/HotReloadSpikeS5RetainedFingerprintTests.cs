@@ -604,10 +604,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
         }
 
         /// <summary>What: removing one member while adding another asks for a compile and names
-        /// both, because the removal is refused on its own account rather than by the order the
-        /// insertion shifts.</summary>
+        /// the removal only, counting the addition the reload could have applied, so the reader
+        /// does not read the addition as the reason and take it back out.</summary>
         [Test]
-        public async Task Plan_RemovedMethodWithAnAddedMethod_RequiresACompileAndNamesBoth()
+        public async Task Plan_RemovedMethodWithAnAddedMethod_RequiresACompileAndNamesOnlyTheRemoval()
         {
             HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
                 "SpikeS5RemoveAndAdd",
@@ -627,7 +627,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                     "Changed introduced type requires a compile: " + RetainedTypeMetadataName
                     + " Declaration differences: "));
             Assert.That(reason, Does.Contain("removed:"));
+            Assert.That(reason, Does.Not.Contain("added:"));
+            Assert.That(reason, Does.Contain("1 applicable addition(s) omitted"));
+        }
+
+        /// <summary>What: adding a constructor ahead of the existing members asks for a compile and
+        /// names the constructor only, leaving out the order difference the insertion itself
+        /// explains.</summary>
+        [Test]
+        public async Task Plan_AddedConstructorBeforeExistingMembers_RequiresACompileAndOmitsTheExplainedOrder()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5AddCtorFirst",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(AddedConstructorMember + TwiceMember + NumberMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
             Assert.That(reason, Does.Contain("added:"));
+            Assert.That(reason, Does.Not.Contain("order"));
+            Assert.That(reason, Does.Not.Contain("omitted"));
         }
 
         /// <summary>
