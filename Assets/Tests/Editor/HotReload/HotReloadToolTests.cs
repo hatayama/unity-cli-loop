@@ -2010,13 +2010,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: the same run during play holds the compile back and says so in the next action,
-        /// because a compile would end the Play session.
+        /// What: the same run during play holds the compile back and appends the reason to the
+        /// run's own next action instead of replacing it, because a compile would end the Play
+        /// session but the advice about the unapplied edits still applies.
         /// </summary>
         [Test]
         public void ApplyCompileFallbackDecision_SkippedDuringPlay_HoldsTheCompileAndSaysWhy()
         {
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(CreateSkippedResult());
+            string nextActionBefore = response.RecommendedNextAction;
+            Assert.That(nextActionBefore, Is.Not.Empty);
 
             HotReloadTool.ApplyCompileFallbackDecision(
                 response,
@@ -2025,6 +2028,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 isPlaying: true);
 
             Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
+            Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
+            Assert.That(
+                response.RecommendedNextAction,
+                Does.EndWith(HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// What: a held compile still reports the reason when the run itself recommended nothing,
+        /// so the caller is never left without a next action.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_HeldWithNoExistingNextAction_ReportsOnlyTheReason()
+        {
+            HotReloadResponse response = new() { RecommendedNextAction = string.Empty };
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.auto,
+                isPlaying: true);
+
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction));

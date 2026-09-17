@@ -316,13 +316,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadCompileFallbackDecider.HasUnappliedEdit(result),
                 isPlaying);
             response.CompileFallback = decision.ToString();
-            // Why only this decision rewrites the next action: the others either run the compile
+            // Why only this decision touches the next action: the others either run the compile
             // (the CLI then replaces the next action itself) or leave the run's own advice correct.
-            if (decision == HotReloadCompileFallbackDecision.HeldForPlayMode)
+            if (decision != HotReloadCompileFallbackDecision.HeldForPlayMode)
             {
-                response.RecommendedNextAction =
-                    HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction;
+                return;
             }
+
+            // Why append and not replace: the run's own advice names what to do about the
+            // partially applied or failed edits, and losing it would leave the caller with only
+            // the reason no compile ran.
+            string existingNextAction = response.RecommendedNextAction;
+            response.RecommendedNextAction = string.IsNullOrEmpty(existingNextAction)
+                ? HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction
+                : existingNextAction
+                    + " "
+                    + HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction;
         }
 
         private static HotReloadResponse CreateValidationFailure(
