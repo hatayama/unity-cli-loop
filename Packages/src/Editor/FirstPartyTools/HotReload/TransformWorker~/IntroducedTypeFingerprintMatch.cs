@@ -23,7 +23,15 @@ internal sealed class IntroducedTypeFingerprintMatch
 {
     private const string AddedDetailPrefix = "added:";
 
+    private const string RemovedDetailPrefix = "removed:";
+
+    // How IntroducedTypeMemberRegions spells the key of an enum member, which is the one member
+    // kind whose edit is known to move the header hash as well.
+    private const string EnumMemberKeyPrefix = "enum:";
+
     private const string OrderDetail = "order";
+
+    private const string HeaderDetail = "header";
 
     private static readonly string[] NoKeys = new string[0];
 
@@ -237,7 +245,25 @@ internal sealed class IntroducedTypeFingerprintMatch
         HotReloadIntroducedTypeFingerprint recorded,
         IntroducedTypeDeclarationMemberIndex memberIndex)
     {
-        bool orderExplained = IsOrderExplainedByAllAdditions(comparison, recorded, memberIndex);
+        // Order is a hash of the recorded key list, so a removal cannot be taken back out of it
+        // the way an addition can be taken out of the declaration: whether the members that are
+        // left kept their recorded order is not decidable. Naming it anyway would not change what
+        // the reader does, because the removal itself already blocks the reload.
+        bool hasRemoval = HasDetailWithPrefix(comparison, RemovedDetailPrefix);
+
+        // An enum member that appears or disappears always moves both hashes: the separating comma
+        // between members belongs to no member node, so it counts as header, and the key list it
+        // joins counts as order. Both are the added or removed member restated, and the member is
+        // named already. A base-type change made in the same edit hides behind this, which costs
+        // the reader nothing: the addition or removal asks for a compile either way.
+        bool hasEnumMemberEdit =
+            HasDetailWithPrefix(comparison, AddedDetailPrefix + EnumMemberKeyPrefix)
+            || HasDetailWithPrefix(comparison, RemovedDetailPrefix + EnumMemberKeyPrefix);
+        bool omitOrder =
+            IsOrderExplainedByAllAdditions(comparison, recorded, memberIndex)
+            || hasRemoval
+            || hasEnumMemberEdit;
+        bool omitHeader = hasEnumMemberEdit;
         List<string> blocking = new List<string>();
         int omittedAdditions = 0;
         foreach (string detail in comparison.Details)
@@ -250,7 +276,12 @@ internal sealed class IntroducedTypeFingerprintMatch
                 continue;
             }
 
-            if (orderExplained && string.Equals(detail, OrderDetail, StringComparison.Ordinal))
+            if (omitOrder && string.Equals(detail, OrderDetail, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (omitHeader && string.Equals(detail, HeaderDetail, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -272,6 +303,21 @@ internal sealed class IntroducedTypeFingerprintMatch
             NoKeys,
             NoKeys,
             blocking);
+    }
+
+    private static bool HasDetailWithPrefix(
+        HotReloadIntroducedTypeFingerprintComparison comparison,
+        string prefix)
+    {
+        foreach (string detail in comparison.Details)
+        {
+            if (detail.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Evaluated once over every added key, Other kinds included: an insertion explains the order

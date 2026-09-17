@@ -221,6 +221,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             + "        }\n"
             + "\n";
 
+        // The retained type written as an enum, so a test can describe what adding a member at
+        // the tail of an enum does to the fingerprint of a type that has no method members at all.
+        private const string RetainedEnumSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public enum Retained\n"
+            + "    {\n"
+            + "        First,\n"
+            + "        Second\n"
+            + "    }\n"
+            + "}\n";
+
+        private const string RetainedEnumTailAddedSource =
+            "namespace Example\n"
+            + "{\n"
+            + "    public enum Retained\n"
+            + "    {\n"
+            + "        First,\n"
+            + "        Second,\n"
+            + "        Third\n"
+            + "    }\n"
+            + "}\n";
+
         /// <summary>What: editing only a method body of a retained introduced type leaves the
         /// fingerprint comparison at body-only and names exactly that member.</summary>
         [Test]
@@ -657,6 +680,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             Assert.That(reason, Does.Contain("added:"));
             Assert.That(reason, Does.Not.Contain("order"));
             Assert.That(reason, Does.Not.Contain("omitted"));
+        }
+
+        /// <summary>What: removing a member asks for a compile and names the removal only, leaving
+        /// out the order difference the removal itself causes, which no edit short of putting the
+        /// member back could clear.</summary>
+        [Test]
+        public async Task Plan_RemovedMethod_RequiresACompileAndOmitsTheOrderTheRemovalExplains()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5RemoveOnly",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, BuildRetainedSource(TwiceMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
+            Assert.That(reason, Does.Contain("removed:"));
+            Assert.That(reason, Does.Not.Contain("order"), reason);
+        }
+
+        /// <summary>What: adding a member at the tail of an enum asks for a compile and names the
+        /// added member only, leaving out the header and order differences that the added member
+        /// itself accounts for.</summary>
+        [Test]
+        public async Task Plan_EnumTailAddition_RequiresACompileAndNamesOnlyTheAddedMember()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5EnumTailAdd",
+                RetainedEnumSource);
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, RetainedEnumTailAddedSource);
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed introduced type requires a compile: " + RetainedTypeMetadataName
+                    + " Declaration differences: "));
+            Assert.That(reason, Does.Contain("added:enum:Third"));
+            Assert.That(reason, Does.Not.Contain("header"), reason);
+            Assert.That(reason, Does.Not.Contain("order"), reason);
+            Assert.That(reason, Does.Not.Contain("omitted"), reason);
         }
 
         /// <summary>
