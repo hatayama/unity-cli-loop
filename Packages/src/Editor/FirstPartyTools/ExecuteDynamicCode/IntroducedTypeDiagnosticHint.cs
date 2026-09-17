@@ -143,11 +143,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (matches.Count == 1)
             {
-                return $"'{name}' is a hot-reload introduced type ({matches[0]}). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type.";
+                return $"'{name}' is a hot-reload introduced type ({matches[0]}). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type.";
             }
 
             string candidateList = string.Join(", ", matches);
-            return $"'{name}' matches these hot-reload introduced types: {candidateList}. execute-dynamic-code compiles against the compiled assemblies only, so none of them is visible here until it is compiled. Pick the one you mean and use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
+            return $"'{name}' matches these hot-reload introduced types: {candidateList}. execute-dynamic-code compiles against the compiled assemblies only, so none of them is visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Pick the one you mean and use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
         }
 
         private static List<string> BuildSuggestions(List<string> matches)
