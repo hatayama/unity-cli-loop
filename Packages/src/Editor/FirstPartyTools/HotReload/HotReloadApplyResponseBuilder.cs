@@ -114,14 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 result.AutoRefreshHoldSceneRefreshWarning);
-            // Why the types gate it: a run that introduced or bound a declaration applied part of
-            // what the requested files hold, and the type message reports that instead, so
-            // claiming nothing from those files was applied would contradict it.
-            bool allRequestedSkipped = result.IntroducedTypes.Count == 0
-                && HotReloadRequestedFileOutcomeSummary.AreAllRequestedOutcomesSkipped(
-                    result.Methods,
-                    result.ReappliedSiblingPaths,
-                    toProjectRelativeScriptPath);
+            bool allRequestedSkipped = DecideAllRequestedSkipped(result, toProjectRelativeScriptPath);
             string message = BuildApplyMessage(
                 result,
                 hasFailure,
@@ -155,6 +148,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes),
                     allRequestedSkipped)
             };
+        }
+
+        // Why the types gate it: a run that introduced or bound a declaration applied part of
+        // what the requested files hold, and the type message reports that instead, so claiming
+        // nothing from those files was applied would contradict it.
+        private static bool DecideAllRequestedSkipped(
+            HotReloadOrchestratorResult result,
+            Func<string, string> toProjectRelativeScriptPath)
+        {
+            if (result.IntroducedTypes.Count > 0)
+            {
+                return false;
+            }
+
+            return HotReloadRequestedFileOutcomeSummary.AreAllRequestedOutcomesSkipped(
+                result.Methods,
+                result.ReappliedSiblingPaths,
+                toProjectRelativeScriptPath);
         }
 
         private static void AppendRetargetLineDriftWarnings(List<string> warnings)
