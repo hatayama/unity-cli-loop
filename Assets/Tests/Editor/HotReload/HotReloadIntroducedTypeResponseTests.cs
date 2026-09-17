@@ -3,6 +3,8 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Newtonsoft.Json.Linq;
+
 using NUnit.Framework;
 
 using UnityEngine;
@@ -306,11 +308,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that a reload which introduces no type keeps both type fields off the wire, so
-        /// the response shape of the vast majority of reloads does not change.
+        /// Verifies that a reload which introduces no type still writes both type fields, so a
+        /// reader can tell "this run introduced none" from "this response does not report it".
         /// </summary>
         [Test]
-        public async Task Build_RunIntroducesNoType_OmitsBothTypeFieldsFromTheWire()
+        public async Task Build_RunIntroducesNoType_EmitsEmptyTypeListAndZeroTotalOnTheWire()
         {
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
@@ -323,14 +325,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CancellationToken.None);
                 HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
 
+                Assert.That(response.IntroducedTypes.Count, Is.EqualTo(0));
+                Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(0));
+                JObject serialized = JObject.FromObject(response);
                 Assert.That(
-                    response.ShouldSerializeIntroducedTypes(),
-                    Is.False,
-                    "A reload with no type row must not serialize an empty list.");
+                    serialized.ContainsKey("IntroducedTypes"),
+                    Is.True,
+                    "A reload with no type row must still serialize the empty list.");
                 Assert.That(
-                    response.ShouldSerializeActiveIntroducedTypeTotal(),
-                    Is.False,
-                    "A domain holding no introduced type must not serialize a zero total.");
+                    serialized.ContainsKey("ActiveIntroducedTypeTotal"),
+                    Is.True,
+                    "A domain holding no introduced type must still serialize the zero total.");
             }
         }
 

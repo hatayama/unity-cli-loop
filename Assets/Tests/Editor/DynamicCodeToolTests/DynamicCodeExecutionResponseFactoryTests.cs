@@ -495,7 +495,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(
                     response.Diagnostics[0].Hint,
                     Is.EqualTo(
-                        "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
+                        "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
                 Assert.That(
                     response.Diagnostics[0].Suggestions,
                     Is.EqualTo(new[]

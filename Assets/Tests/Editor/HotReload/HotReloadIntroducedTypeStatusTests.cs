@@ -63,10 +63,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: --status omits both type fields when this domain holds no introduced type.
+        /// What: --status reports an empty type list and a zero total, both on the wire, when this
+        /// domain holds no introduced type.
         /// </summary>
         [Test]
-        public void ExecuteStatus_WithNoActiveIntroducedType_OmitsBothTypeFields()
+        public void ExecuteStatus_WithNoActiveIntroducedType_EmitsEmptyTypeListAndZeroTotal()
         {
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
@@ -74,8 +75,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteStatus();
 
                 Assert.That(response.IntroducedTypes.Count, Is.EqualTo(0));
-                Assert.That(response.ShouldSerializeIntroducedTypes(), Is.False);
-                Assert.That(response.ShouldSerializeActiveIntroducedTypeTotal(), Is.False);
+                Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(0));
+                JObject serialized = JObject.FromObject(response);
+                Assert.That(serialized.ContainsKey("IntroducedTypes"), Is.True);
+                Assert.That(serialized.ContainsKey("ActiveIntroducedTypeTotal"), Is.True);
             }
         }
 
@@ -110,10 +113,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: --revert-all keeps its plain message when this domain holds no introduced type.
+        /// What: --revert-all keeps its plain message and still reports an empty type list and a
+        /// zero total when this domain holds no introduced type.
         /// </summary>
         [Test]
-        public void ExecuteRevertAll_WithNoActiveIntroducedType_KeepsThePlainMessage()
+        public void ExecuteRevertAll_WithNoActiveIntroducedType_KeepsThePlainMessageAndEmitsEmptyTypeListAndZeroTotal()
         {
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
@@ -121,8 +125,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
 
                 Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
-                Assert.That(response.ShouldSerializeActiveIntroducedTypeTotal(), Is.False);
-                Assert.That(response.ShouldSerializeIntroducedTypes(), Is.False);
+                Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(0));
+                Assert.That(response.IntroducedTypes.Count, Is.EqualTo(0));
+                JObject serialized = JObject.FromObject(response);
+                Assert.That(serialized.ContainsKey("IntroducedTypes"), Is.True);
+                Assert.That(serialized.ContainsKey("ActiveIntroducedTypeTotal"), Is.True);
             }
         }
 

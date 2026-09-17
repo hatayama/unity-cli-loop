@@ -137,6 +137,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: when Play Mode preparation refuses the compile, the answer carries the command
+        /// that leaves Play Mode as its next action.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WhenPlayModePreparationRefuses_ReturnsTheStopPlayModeNextAction()
+        {
+            const string refusalMessage = "refused";
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetPlayModePreparationForTesting(() => PreparationResult.CannotProceed(refusalMessage));
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                {
+                    throw new InvalidOperationException("a refused preparation must not start compilation");
+                });
+
+                CompileResponse response = await useCase.CompileAsync(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = false,
+                        RequestId = "compile_play_mode_refusal",
+                        ForceRecompile = false,
+                        ReloadExternalSceneChanges = true
+                    },
+                    CancellationToken.None);
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.Errors[0].Message, Is.EqualTo(refusalMessage));
+                Assert.That(response.NextActions.Length, Is.EqualTo(1));
+                Assert.That(
+                    response.NextActions[0],
+                    Is.EqualTo(CompileErrorNextActionsConstants.PlayModeStopNextAction));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
+        /// <summary>
         /// What: a validation failure after Play was active still returns and stores the Play-stop Warning.
         /// </summary>
         [Test]

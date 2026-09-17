@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     public sealed class IntroducedTypeDiagnosticHintTests
     {
         private const string SingleMatchHint =
-            "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type.";
+            "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type.";
 
         private const string SingleMatchReflectionSuggestion =
             "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Widget\") and drive it through reflection";
@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.That(built, Is.True);
             Assert.That(hint, Is.EqualTo(SingleMatchHint));
+            Assert.That(hint, Does.Contain("not visible through reflection"));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[] { SingleMatchReflectionSuggestion, CompileSuggestion }));
@@ -80,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 hint,
                 Is.EqualTo(
-                    "'Widget' is a hot-reload introduced type (Example.Outer+Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
+                    "'Widget' is a hot-reload introduced type (Example.Outer+Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[]
@@ -250,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 hint,
                 Is.EqualTo(
-                    "'Widget' matches these hot-reload introduced types: Example.Widget, Other.Widget. execute-dynamic-code compiles against the compiled assemblies only, so none of them is visible here until it is compiled. Pick the one you mean and use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
+                    "'Widget' matches these hot-reload introduced types: Example.Widget, Other.Widget. execute-dynamic-code compiles against the compiled assemblies only, so none of them is visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Pick the one you mean and use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[]
