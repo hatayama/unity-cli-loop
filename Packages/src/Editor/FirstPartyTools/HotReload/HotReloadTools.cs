@@ -89,14 +89,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// The type declarations of this run, reported apart from the methods because a type is
-        /// not a patched body. On --status, the types this domain holds.
+        /// not a patched body. On --status, the types this domain holds. Always written, empty
+        /// when there is none, so a reader can tell "no introduced type" from a field this
+        /// version of the response does not carry.
         /// </summary>
         public IReadOnlyList<HotReloadIntroducedTypeResult> IntroducedTypes { get; set; } =
             Array.Empty<HotReloadIntroducedTypeResult>();
 
         /// <summary>
         /// How many introduced types this domain holds, counted as types and not as the artifact
-        /// assemblies that carry them.
+        /// assemblies that carry them. Always written, zero when there is none.
         /// </summary>
         public int ActiveIntroducedTypeTotal { get; set; }
 
@@ -155,18 +157,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeDroppedByPlayModeEntryCount()
         {
             return DroppedByPlayModeEntryCount > 0;
-        }
-
-        // Why omit empty: the vast majority of reloads introduce no type, and their response
-        // shape must not grow two fields that only ever say "none".
-        public bool ShouldSerializeIntroducedTypes()
-        {
-            return IntroducedTypes != null && IntroducedTypes.Count > 0;
-        }
-
-        public bool ShouldSerializeActiveIntroducedTypeTotal()
-        {
-            return ActiveIntroducedTypeTotal > 0;
         }
     }
 
