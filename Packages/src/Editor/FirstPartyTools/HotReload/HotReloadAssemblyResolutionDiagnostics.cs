@@ -31,12 +31,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         projectRelativePath);
                 }
 
+                // Why after the .asmdef branch: Unity maps a script under a not-yet-imported
+                // .asmdef onto a predefined assembly too, so deciding on the name first would
+                // hide the .asmdef the reader actually has to import.
+                if (IsPredefinedAssemblyName(assemblyName))
+                {
+                    return string.Format(
+                        HotReloadConstants.PredefinedAssemblyNotCompiledReasonFormat,
+                        assemblyName);
+                }
+
                 return string.Format(
                     HotReloadConstants.CompilationAssemblyNotFoundReasonFormat,
                     assemblyName);
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Whether Unity creates this assembly itself rather than an .asmdef declaring it.
+        /// </summary>
+        internal static bool IsPredefinedAssemblyName(string assemblyName)
+        {
+            return string.Equals(assemblyName, "Assembly-CSharp", StringComparison.Ordinal)
+                || string.Equals(assemblyName, "Assembly-CSharp-Editor", StringComparison.Ordinal)
+                || string.Equals(assemblyName, "Assembly-CSharp-firstpass", StringComparison.Ordinal)
+                || string.Equals(assemblyName, "Assembly-CSharp-Editor-firstpass", StringComparison.Ordinal);
         }
 
         // Why disk scan instead of CompilationPipeline: GetAssemblyDefinitionFilePathFromScriptPath

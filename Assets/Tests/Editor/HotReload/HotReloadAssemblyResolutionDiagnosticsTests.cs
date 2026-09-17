@@ -43,11 +43,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a resolved assembly that is absent from CompilationPipeline gets the
-        /// compile-first reason that names the fallback predefined-assembly behavior.
+        /// What: a predefined assembly that no script has been compiled into yet is explained as
+        /// an assembly that does not exist, not as a not-yet-imported .asmdef, because a project
+        /// whose first script is being hot-reloaded has no .asmdef anywhere.
         /// </summary>
         [Test]
-        public void TryGetAssemblyResolutionFailureReason_WhenCompilationAssemblyIsNull_ReturnsNotFoundReason()
+        public void TryGetAssemblyResolutionFailureReason_WhenPredefinedAssemblyWasNeverCompiled_ReturnsNotCompiledReason()
         {
             string reason = HotReloadAssemblyResolutionDiagnostics.TryGetAssemblyResolutionFailureReason(
                 "Assembly-CSharp",
@@ -58,12 +59,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 reason,
                 Is.EqualTo(
-                    "Resolved assembly 'Assembly-CSharp' was not found in the compilation pipeline. Unity resolves files under a not-yet-imported .asmdef to a predefined assembly, so a brand-new .asmdef or a brand-new script cannot be hot-reloaded. Run 'uloop compile' first."));
+                    "Resolved assembly 'Assembly-CSharp' does not exist yet: no script has been compiled into it, so there is no assembly to patch. Hot reload can only introduce types into an assembly that already exists. Run 'uloop compile' once; later scripts in this assembly can then be hot-reloaded."));
+        }
+
+        /// <summary>
+        /// What: an assembly name that is not one of Unity's predefined ones keeps the original
+        /// reason, because such a name can only come from an .asmdef and the pipeline fallback
+        /// is what the reader has to know about.
+        /// </summary>
+        [Test]
+        public void TryGetAssemblyResolutionFailureReason_WhenNonPredefinedAssemblyIsMissing_ReturnsNotFoundReason()
+        {
+            string reason = HotReloadAssemblyResolutionDiagnostics.TryGetAssemblyResolutionFailureReason(
+                "Some.Custom.Assembly",
+                null,
+                MissingHotReloadScriptPath,
+                false);
+
+            Assert.That(
+                reason,
+                Is.EqualTo(
+                    "Resolved assembly 'Some.Custom.Assembly' was not found in the compilation pipeline. Unity resolves files under a not-yet-imported .asmdef to a predefined assembly, so a brand-new .asmdef or a brand-new script cannot be hot-reloaded. Run 'uloop compile' first."));
         }
 
         /// <summary>
         /// What: a missing compilation assembly under an on-disk .asmdef that Unity has not
-        /// imported yet gets the more specific unimported-asmdef reason.
+        /// imported yet gets the more specific unimported-asmdef reason, even though the name
+        /// Unity resolved for it is a predefined one.
         /// </summary>
         [Test]
         public void TryGetAssemblyResolutionFailureReason_WhenUnimportedAsmdefOnDisk_ReturnsSpecificReason()

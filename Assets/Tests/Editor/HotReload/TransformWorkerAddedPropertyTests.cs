@@ -392,9 +392,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "get_Doubled"), Is.Null);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
-            Assert.That(
-                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
-                Does.Contain("Uses an added property that hot reload cannot emit."));
+            string callerReason = FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(callerReason, Does.Contain("Uses an added property that hot reload cannot emit."));
+
+            // The exclusion records this very sentence as the property's own unavailable reason,
+            // so composing it onto itself would say the same thing twice.
+            Assert.That(callerReason, Does.Not.Contain("The property body was refused because: "));
         }
 
         /// <summary>
