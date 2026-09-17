@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -25,6 +26,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         // A path no compiled assembly lists, so resolving a line in it always fails.
         private const string IntroducedTypeFilePath = "Assets/DoesNotExist/IntroducedOwner.cs";
+
+        private const int IntroducedTypeRequestedLine = 10;
+
+        // Past the end of the fixture, so the compiled line map of that file cannot resolve it.
+        private const int UnresolvableFixtureLine = 9999;
 
         private const string ExpectedArmingNextActionForJump =
             "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
@@ -450,6 +456,106 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
             }
+        }
+
+        /// <summary>
+        /// What: a file that declares an introduced type but also holds compiled methods keeps the
+        /// general resolve guidance and only gains a warning about the introduced type, because
+        /// "this file has no compiled line map" is false for such a file.
+        /// </summary>
+        [Test]
+        public void Enable_WhenAnIntroducedTypeSharesTheFileWithCompiledMethods_KeepsTheGeneralResolveGuidance()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.IntroducedTypeSourceFiles = new HashSet<string> { FixtureFilePath };
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = UnresolvableFixtureLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+                Assert.That(
+                    response.Warnings,
+                    Does.Contain(
+                        string.Format(
+                            SourcePausePointConstants.IntroducedTypeInFileWarningFormat,
+                            FixtureFilePath)));
+            }
+        }
+
+        /// <summary>
+        /// What: the introduced-type explanation keeps the warning that the patched method has no
+        /// PDB, so the caller is not told to hot reload a method that is already patched.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheIntroducedTypeFileHasAPatchedMethodWithoutPdb_KeepsThePdbWarning()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.IntroducedTypeSourceFiles = new HashSet<string> { IntroducedTypeFilePath };
+                scope.Port.ShimLookupForFile = _ => CreatePdbUnavailableLookup(
+                    PdbUnavailableProbeMethod(),
+                    IntroducedTypeRequestedLine);
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = IntroducedTypeFilePath,
+                    Line = IntroducedTypeRequestedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.Message, Does.Contain("introduced without a compile"));
+                Assert.That(
+                    response.Warnings,
+                    Does.Contain(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
+                            "PausePointEnableGuidanceTests.PdbUnavailableProbe",
+                            IntroducedTypeRequestedLine)));
+            }
+        }
+
+        internal static int PdbUnavailableProbe()
+        {
+            return 1;
+        }
+
+        private static MethodBase PdbUnavailableProbeMethod()
+        {
+            return typeof(PausePointEnableGuidanceTests).GetMethod(
+                nameof(PdbUnavailableProbe),
+                BindingFlags.Static | BindingFlags.NonPublic);
+        }
+
+        // A lookup with no PDB bytes, which is what makes the shim resolver report the line as
+        // inside a patched method whose PDB is unavailable.
+        private static HotReloadShimFileLookup CreatePdbUnavailableLookup(MethodBase patchedMethod, int line)
+        {
+            HotReloadShimMethodLookup[] methods =
+            {
+                new HotReloadShimMethodLookup(
+                    patchedMethod,
+                    patchedMethod,
+                    false,
+                    line,
+                    line)
+            };
+            return new HotReloadShimFileLookup(
+                Array.Empty<byte>(),
+                null,
+                null,
+                methods);
         }
 
         private static int IndexOfWarning(IReadOnlyList<string> warnings, string expected)

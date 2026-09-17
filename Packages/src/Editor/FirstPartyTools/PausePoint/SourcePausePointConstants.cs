@@ -274,6 +274,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "line map to resolve --line against. Pause points can bind only to methods hot reload "
             + "has patched in this file.";
 
+        // Why a warning rather than the failure text: the file also holds compiled types, so the
+        // general guidance still applies and only the lines inside the introduced type differ.
+        // Format: the file as the caller passed it.
+        public const string IntroducedTypeInFileWarningFormat =
+            "'{0}' also declares a type hot reload introduced without a compile; lines inside that "
+            + "type have no compiled line map, and a pause point binds there only to a method hot "
+            + "reload has patched.";
+
         public const string IntroducedTypeResolveFailureNextAction =
             "Edit the target method body and run 'uloop hot-reload --files <this file>' so the method "
             + "is reported Patched, then enable the pause point again on a line inside that method. "

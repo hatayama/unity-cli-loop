@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hitWhenParseResult);
             if (captureSettingsError != null)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     captureSettingsError,
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Fix the rejected capture argument described in Message and re-run; uloop enable-pause-point --help lists the accepted values.");
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string modeError = PausePointEnableValidation.ValidateEnableMode(parameters);
             if (modeError != null)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     modeError,
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Re-run with either --id alone, or --file and --line together.");
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (parameters.TimeoutSeconds <= 0)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     "TimeoutSeconds must be greater than zero.",
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Re-run with --timeout-seconds set to a positive integer.");
@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string idError = PausePointEnableValidation.ValidateId(parameters.Id);
             if (idError != null)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     idError,
                     SourcePausePointConstants.ErrorCodeInvalidArgument,
                     "Pass --id with the id returned by enable-pause-point, or use --all to clear every marker.");
@@ -208,7 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (CompilationPipeline.codeOptimization == CodeOptimization.Release)
             {
-                return CreateValidationFailure(
+                return PausePointFailureResponse.Create(
                     SourcePausePointConstants.ReleaseCodeOptimizationRejectionMessage,
                     SourcePausePointConstants.ErrorCodeReleaseCodeOptimization,
                     SourcePausePointConstants.ReleaseCodeOptimizationRecommendedNextAction);
@@ -268,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
                 {
-                    return CreateValidationFailure(
+                    return PausePointFailureResponse.Create(
                         shimResolution.ErrorMessage,
                         SourcePausePointConstants.ErrorCodeResolveFailed,
                         "Pick a line with an executable statement inside the edited method body.");
@@ -288,30 +288,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.File, parameters.Line, parameters.Method, snapshotTiming);
             if (!resolveResult.Success)
             {
-                // Why before everything else on this path: the reads below all go to a compiled
-                // source this file does not have, so their warnings would point the caller at a
-                // line map that cannot exist instead of at the one way to bind here.
-                bool declaresIntroducedType =
-                    HotReloadPausePointCoordination.HotReloadSide?.IsIntroducedTypeSourceFile(normalizedFile) == true;
-                if (declaresIntroducedType)
-                {
-                    return CreateIntroducedTypeResolveFailure(parameters, resolveResult);
-                }
-
-                PausePointResolveFailureText failureText = PausePointResolveFailureTextBuilder.Build(
-                    parameters.File,
-                    parameters.Line,
+                return PausePointResolveFailureResponse.Create(
+                    parameters,
+                    normalizedFile,
                     hasActiveHotReloadPatches: shimLookup != null,
                     resolveResult,
                     patchedMethodPdbUnavailableWarning);
-                PausePointResponse response = CreateValidationFailure(
-                    failureText.Message,
-                    SourcePausePointConstants.ErrorCodeResolveFailed,
-                    failureText.RecommendedNextAction);
-                List<string> resolveFailureWarnings = new List<string>();
-                PausePointEnableWarningList.AddIfNotEmpty(resolveFailureWarnings, failureText.Warning);
-                PausePointEnableWarningList.Assign(response, resolveFailureWarnings);
-                return response;
             }
 
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(
@@ -554,38 +536,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildSourcePausePointId(string file, int line)
         {
             return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
-        }
-
-        // Keeps the resolver's own sentence so the caller still sees which line failed, under a
-        // first line that says why no line in this file can resolve yet.
-        private static PausePointResponse CreateIntroducedTypeResolveFailure(
-            EnablePausePointSchema parameters,
-            SourcePausePointResolveResult resolveResult)
-        {
-            string message = string.Format(
-                    SourcePausePointConstants.IntroducedTypeResolveFailureMessageFormat,
-                    parameters.File)
-                + "\n"
-                + resolveResult.ErrorMessage;
-            return CreateValidationFailure(
-                message,
-                SourcePausePointConstants.ErrorCodeResolveFailed,
-                SourcePausePointConstants.IntroducedTypeResolveFailureNextAction);
-        }
-
-        private static PausePointResponse CreateValidationFailure(
-            string message,
-            string errorCode,
-            string recommendedNextAction)
-        {
-            return new PausePointResponse
-            {
-                Success = false,
-                Message = message,
-                ErrorCode = errorCode,
-                RecommendedNextAction = recommendedNextAction,
-                EditorState = PausePointEditorState.FromSnapshot(UloopPausePointRegistry.CaptureEditorState()),
-            };
         }
     }
 }
