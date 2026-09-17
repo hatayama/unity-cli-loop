@@ -166,6 +166,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an unresolved type name (CS0246) on its own appends the other-assembly hint, so
+        /// the hint does not depend on another diagnostic being present.
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_WhenCs0246Only_AppendsTheOtherAssemblyIntroducedTypeHint()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS0246: The type or namespace name 'Added' could not be found"
+                });
+
+            Assert.That(
+                message,
+                Does.Contain(HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint));
+        }
+
+        /// <summary>
+        /// What: an unresolved simple name (CS0103) on its own appends the other-assembly hint, so
+        /// the hint does not depend on another diagnostic being present.
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_WhenCs0103Only_AppendsTheOtherAssemblyIntroducedTypeHint()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS0103: The name 'Added' does not exist in the current context"
+                });
+
+            Assert.That(
+                message,
+                Does.Contain(HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint));
+        }
+
+        /// <summary>
         /// What: a missing member of a known type (CS0117) says nothing about another assembly, so
         /// it keeps the hints it had.
         /// </summary>

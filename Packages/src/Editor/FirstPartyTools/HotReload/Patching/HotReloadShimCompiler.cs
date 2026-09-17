@@ -210,7 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // reaches the assembly boundary only after the hints about the file they edited.
             if (hasIntroducedTypeVisibilityDiagnostic)
             {
-                message += HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint;
+                message += "\n" + HotReloadConstants.IntroducedTypeOtherAssemblyCompileHint;
             }
 
             return message;
