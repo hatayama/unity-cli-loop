@@ -398,6 +398,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(wrappedLines[2], Is.EqualTo("return null;"));
         }
 
+        /// <summary>
+        /// Verifies a block inside a top-level expression statement keeps the following statements on their original lines.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenBlockAppearsInsideTopLevelExpressionStatement_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "int[] picked = new[] { 1, 2, 3 }.Where(v => { return v > 1; }).ToArray();\nint total = picked.Length;\nreturn total;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            string[] wrappedLines = GetWrappedUserSnippetLines(prepared.PreparedSource);
+            Assert.That(wrappedLines.Length, Is.EqualTo(3));
+            Assert.That(wrappedLines[1], Is.EqualTo("int total = picked.Length;"));
+            Assert.That(wrappedLines[2], Is.EqualTo("return total;"));
+        }
+
+        /// <summary>
+        /// Verifies two statements written on one line stay on that single line in the #line region.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenTwoStatementsShareOneLine_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "int a = 1; int b = 2;\nreturn a + b;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            string[] wrappedLines = GetWrappedUserSnippetLines(prepared.PreparedSource);
+            Assert.That(wrappedLines.Length, Is.EqualTo(2));
+            Assert.That(wrappedLines[0], Is.EqualTo("int a = 1; int b = 2;"));
+            Assert.That(wrappedLines[1], Is.EqualTo("return a + b;"));
+        }
+
+        /// <summary>
+        /// Verifies a multi-line block inside an expression statement keeps the trailing fragment on the block closing line.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenBlockInsideExpressionSpansLinesAndTailFollowsOnLastLine_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "int[] picked = new[] { 1, 2, 3 }.Where(v =>\n{\n    return v > 1;\n}).ToArray();\nreturn picked.Length;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            string[] wrappedLines = GetWrappedUserSnippetLines(prepared.PreparedSource);
+            Assert.That(wrappedLines.Length, Is.EqualTo(5));
+            Assert.That(wrappedLines[3], Does.EndWith(").ToArray();"));
+            Assert.That(wrappedLines[4], Is.EqualTo("return picked.Length;"));
+        }
+
         private static string[] GetWrappedUserSnippetLines(string preparedSource)
         {
             WrappedDynamicCodeUserSnippetExtractor.TryExtract(preparedSource, out string snippet);
