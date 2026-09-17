@@ -19,6 +19,7 @@ one unpatchable method never aborts the rest of the run.
 uloop hot-reload --files Assets/Scripts/Enemy.cs
 uloop hot-reload --files Assets/Scripts/Enemy.cs,Assets/Scripts/Boss.cs
 uloop hot-reload
+uloop hot-reload --files Assets/Scripts/Enemy.cs --compile-on-skip off
 uloop hot-reload --revert-all
 ```
 
@@ -37,6 +38,7 @@ automatically — pass it with `--files`.
 | `--files` | array | - | Project-relative `.cs` paths to hot-reload (method bodies, added members, and new top-level types). When omitted or empty on apply, selects compiled snapshot sources only — those whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; a file that has never been compiled is never selected and must be passed explicitly; run `uloop compile` first when no snapshot exists, or pass explicit paths when no changed source is found |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and added member and clear the ledger; introduced types stay loaded until the next domain reload. When set, `--files` is ignored |
 | `--status` | flag | - | Lists the currently active changes (patched methods, added members, and introduced types) without applying or reverting anything. |
+| `--compile-on-skip` | enum | `auto` | When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run `uloop compile` in the same command: `auto` only in Edit Mode (never stops a Play session), `on` always, `off` never. The response's `CompileFallback` says which; when the compile ran, `Compile` carries its result and `Success` is the compile's. |
 
 ## Status
 
@@ -60,29 +62,22 @@ changed are patched (`UnchangedTotal` counts the rest).
 
 ## Scope in Brief
 
-- Patched: ordinary method bodies and property getters with a body (getters of an
-  introduced type still need a compile).
-- Added members: new methods, fields, and supported properties apply as `Added` rows
-  (see the scope reference for the property shapes still skipped), visible to edited code in the same reload
-  within the same assembly (pass the declaring file and its callers together), but not to a
-  type introduced in that reload (its compilation sees compiled members only), and vanish
-  on any compile or domain reload (an Editor-session illusion).
-- New types: a top-level `public` class, struct, enum, or interface declared in an edited file
-  is introduced by that reload and reported in `IntroducedTypes`. Every other shape (nested,
-  `partial`, generic, `record`, non-public, `ref struct`, `unsafe`, `UnityEngine.Object`,
-  `[Serializable]`, module initializer) is refused with a `Warnings` line naming the reason.
-  Use from another assembly or from files outside the reload, reflection, serialization, and
-  Unity message discovery still need `uloop compile`.
-- Signature changes (return type, rename, parameters) follow the added-member rules: a
-  return-type change is `Skipped` unless every live compiled caller of the old signature is
-  patched by this reload or an earlier one, while a rename or parameter change applies and
-  warns about the call sites it leaves on the old signature.
-- Constructors, operators, compiled setter/init/indexer accessors, and event accessors
-  are `Skipped`; finalizers and interface members are silently not applied. `const` and
-  other outside-body edits never change runtime behavior (drift is warned where
-  detectable).
-- A reload applies each file all-or-nothing: any `Failed` method leaves that file unapplied,
-  while other files still apply; a `Failed` type leaves all files of its assembly unapplied.
+- Patched: ordinary method bodies and property getters with a body.
+- Added members: new methods, fields, and supported properties apply as `Added` rows,
+  visible to edited code of the same reload within the same assembly (pass the declaring
+  file and its callers together), and gone on any compile or domain reload.
+- New types: a top-level `public` class, struct, enum, or interface declared in an edited
+  file is introduced by that reload and listed in `IntroducedTypes`; every other shape is
+  refused with a `Warnings` line naming the reason. Use from another assembly or from files
+  outside the reload, reflection, serialization, and Unity message discovery still need
+  `uloop compile`.
+- Signature changes: a return-type change is `Skipped` unless this reload or an earlier one
+  patched every live compiled caller of the old signature; a rename or parameter change
+  applies as an added method and warns about the call sites left on the old signature.
+- Constructors, operators, compiled setter/init/indexer accessors, and event accessors are
+  `Skipped`; finalizers and interface members are silently not applied.
+- A reload applies each file all-or-nothing: a `Failed` method leaves that file unapplied,
+  a `Failed` type leaves every file of its assembly unapplied.
 
 ## Workflow
 

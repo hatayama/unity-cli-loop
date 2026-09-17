@@ -762,6 +762,16 @@
           "Status": {
             "type": "boolean",
             "description": "Lists the currently active changes (patched methods, added members, and introduced types) without applying or reverting anything."
+          },
+          "CompileOnSkip": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "on",
+              "off"
+            ],
+            "description": "When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run uloop compile in the same command: auto only in Edit Mode (never stops a Play session), on always, off never. The response's CompileFallback says which; when the compile ran, Compile carries its result and Success is the compile's.",
+            "default": "auto"
           }
         }
       }
