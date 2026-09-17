@@ -23,6 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int FixtureStatementLine = 12;
         private const int FixtureClosingBraceLine = 13;
 
+        // A path no compiled assembly lists, so resolving a line in it always fails.
+        private const string IntroducedTypeFilePath = "Assets/DoesNotExist/IntroducedOwner.cs";
+
         private const string ExpectedArmingNextActionForJump =
             "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
 
@@ -390,6 +393,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.Warning,
                 Does.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
+        }
+
+        /// <summary>
+        /// What: a file the hot-reload side reports as declaring an introduced type gets the
+        /// explanation that it has no compiled line map, instead of advice to fix the path or
+        /// recompute the line against a compiled source it does not have.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheFileDeclaresAnIntroducedType_ExplainsThereIsNoCompiledLineMap()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.IntroducedTypeSourceFiles = new HashSet<string> { IntroducedTypeFilePath };
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = IntroducedTypeFilePath,
+                    Line = 10,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.Message, Does.Contain("introduced without a compile"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.IntroducedTypeResolveFailureNextAction));
+            }
+        }
+
+        /// <summary>
+        /// What: a file the hot-reload side does not report as declaring an introduced type keeps
+        /// the general resolve-failure guidance, so the new explanation cannot swallow the old one.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheFileDeclaresNoIntroducedType_KeepsTheGeneralResolveGuidance()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.IntroducedTypeSourceFiles = new HashSet<string>();
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = IntroducedTypeFilePath,
+                    Line = 10,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.Message, Does.Not.Contain("introduced without a compile"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+            }
         }
 
         private static int IndexOfWarning(IReadOnlyList<string> warnings, string expected)
