@@ -80,8 +80,6 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 	if command == hotReloadCommandName {
 		return runHotReloadWithCompileFallback(ctx, connection, params, stdout, stderr)
 	}
-	// After the three waits and not among them: hot reload causes no domain reload of its own, so
-	// it runs on the plain path and only borrows the compile wait once its response asks for one.
 
 	result := runToolExecution(ctx, connection, command, params, stderr)
 	if len(result.result) > 0 {
