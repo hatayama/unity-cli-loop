@@ -31,8 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
         // Why staged (not recorded per file): duplicate paths in one run must still apply
         // twice; recording mid-run would short-circuit the second copy.
-        private readonly Dictionary<string, (string Hash, bool IsFullyApplied)> _appliedSourceHashByPath =
-            new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
+        private readonly Dictionary<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>
+            _appliedSourceHashByPath =
+                new Dictionary<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>(
+                    StringComparer.Ordinal);
         // Why captured at construction: the 0.5s Auto Refresh reconcile can arm the hold while the
         // run is still awaited, so the sync at the end of the run cannot tell a run that armed the
         // hold from one that merely found it armed. What the caller promised is "the first apply
@@ -88,7 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _appliedSourceHashByPath,
                 projectRelativePath,
                 fileResult.SourceContentSha256,
-                fileResult.Outcomes);
+                fileResult.Outcomes,
+                fileResult.NewSourceMembershipEvidence);
         }
 
         /// <summary>
@@ -105,12 +108,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Writes the staged applied-source hashes to the ledger. Call once after every file was added.</summary>
         public void RecordAppliedSourceHashes()
         {
-            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in _appliedSourceHashByPath)
+            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>
+                         pair in _appliedSourceHashByPath)
             {
                 _domain.RecordAppliedSource(
                     pair.Key,
                     pair.Value.Hash,
                     pair.Value.IsFullyApplied);
+
+                // Why a null evidence leaves the recorded one alone: a result that carries none is
+                // a file the compiler lists, or one that ended before its target was resolved.
+                // Overwriting with null would strand a new file that was applied in an earlier run.
+                if (pair.Value.Evidence != null)
+                {
+                    _domain.RecordNewSourceMembershipEvidence(pair.Key, pair.Value.Evidence);
+                }
             }
         }
 

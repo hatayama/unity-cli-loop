@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<TransformWorkerSkippedDto> fileSkipped,
             int patchCandidateRowCountForFile,
             string snapshotSource,
+            bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName,
             string assemblyResolvePath,
@@ -35,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput,
                 patchCandidateRowCountForFile,
                 snapshotSource,
+                declaresIntroducedType,
                 projectRelativePath,
                 assemblyName,
                 warnings);
@@ -73,13 +75,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerFileOutputDto fileOutput,
             int patchCandidateRowCountForFile,
             string snapshotSource,
+            bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName,
             List<string> warnings)
         {
             if (snapshotSource == null && patchCandidateRowCountForFile >= 1)
             {
-                warnings.Add(ChooseMissingBaselineWarning(fileOutput, projectRelativePath, assemblyName));
+                warnings.Add(
+                    ChooseMissingBaselineWarning(declaresIntroducedType, projectRelativePath, assemblyName));
             }
 
             if (fileOutput.baselineDisabledByDuplicateKeys)
@@ -98,14 +102,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// rather than something a compile has yet to establish.
         /// </summary>
         private static string ChooseMissingBaselineWarning(
-            TransformWorkerFileOutputDto fileOutput,
+            bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName)
         {
-            bool declaresIntroducedType =
-                (fileOutput.introducedTypeReuses != null && fileOutput.introducedTypeReuses.Length > 0)
-                || (fileOutput.introducedTypes != null && fileOutput.introducedTypes.Length > 0);
-
             return string.Format(
                 declaresIntroducedType
                     ? HotReloadConstants.IntroducedTypeSourceNoBaselineWarningFormat

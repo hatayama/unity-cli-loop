@@ -80,10 +80,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why last occurrence wins: duplicate paths in one run apply twice; only the last
         // qualifying hash is recorded so the next run short-circuits against what actually landed.
         internal static void StageAppliedSourceHash(
-            Dictionary<string, (string Hash, bool IsFullyApplied)> appliedSourceHashByPath,
+            Dictionary<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>
+                appliedSourceHashByPath,
             string projectRelativePath,
             string sourceContentSha256,
-            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+            IReadOnlyList<HotReloadMethodOutcome> outcomes,
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
         {
             Debug.Assert(appliedSourceHashByPath != null, "appliedSourceHashByPath must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
@@ -98,7 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            appliedSourceHashByPath[projectRelativePath] = record.Value;
+            appliedSourceHashByPath[projectRelativePath] =
+                (record.Value.Hash, record.Value.IsFullyApplied, newSourceMembershipEvidence);
         }
 
         // Why not record "everything that is not fully applied": deleting an added method and

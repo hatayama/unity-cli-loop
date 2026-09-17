@@ -49,11 +49,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
         }
 
+        // Why the evidence travels with a sibling: a file the compiled source list does not name
+        // is re-checked against it before the run reverts, and a sibling pulled in without it
+        // would be refused as a new source no one vouched for.
         internal static HotReloadGroupFile ForActiveSibling(
             HotReloadGroupFile template,
             string projectRelativePath,
             string workerSourcePath,
-            HotReloadFileSinks sinks)
+            HotReloadFileSinks sinks,
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
         {
             Debug.Assert(template != null, "template must not be null.");
             return new HotReloadGroupFile(
@@ -65,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 template.Home,
                 template.ProjectRoot,
                 sinks,
-                null);
+                newSourceMembershipEvidence);
         }
 
         // The path the caller asked to reload, used as the outcome file path.
@@ -94,6 +98,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Verified snapshot text of this file, or null when it has no baseline.
         internal string SnapshotSource { get; set; }
+
+        // Set by the preparation stage when this file declares a type hot reload introduces or
+        // already introduced. Why it is carried instead of read off the transform output: only
+        // the preparation run plans introduced types, so the transform run's rows are empty for
+        // every file and would answer no to a question the preparation already answered.
+        internal bool DeclaresIntroducedType { get; set; }
 
         // Patch labels already active for this file when the group's apply started. Snapshotted
         // because a run mutates the ledgers between files.

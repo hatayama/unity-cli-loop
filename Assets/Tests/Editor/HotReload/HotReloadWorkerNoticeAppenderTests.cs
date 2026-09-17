@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<TransformWorkerSkippedDto>(),
                 0,
                 null,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -59,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<TransformWorkerSkippedDto>(),
                 0,
                 null,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -80,17 +82,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
-            TransformWorkerFileOutputDto fileOutput = CreateFileOutput(Array.Empty<string>());
-            fileOutput.introducedTypeReuses = new[]
-            {
-                new TransformWorkerIntroducedTypeReuseDto { metadataName = "Example.Retained" }
-            };
-
             HotReloadWorkerNoticeAppender.AppendWorkerNotices(
-                fileOutput,
+                CreateFileOutput(Array.Empty<string>()),
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
                 null,
+                true,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -116,17 +113,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
-            TransformWorkerFileOutputDto fileOutput = CreateFileOutput(Array.Empty<string>());
-            fileOutput.introducedTypes = new[]
-            {
-                new TransformWorkerIntroducedTypeDto { metadataName = "Example.Fresh" }
-            };
-
             HotReloadWorkerNoticeAppender.AppendWorkerNotices(
-                fileOutput,
+                CreateFileOutput(Array.Empty<string>()),
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
                 null,
+                true,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -153,6 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
                 null,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,

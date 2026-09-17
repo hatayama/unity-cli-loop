@@ -36,6 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Introduced-type preparation failed: " + prepareResult.ErrorMessage);
             }
 
+            MarkFilesDeclaringIntroducedTypes(files, prepareResult.Output);
+
             // Why collected before the refusals are answered: one preparation covers every
             // declaration of the group, so what it observed about the declarations it did not
             // refuse is still true and a refusal that returned first would drop it.
@@ -282,6 +284,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         targetAssemblyName,
                         declaration.OwnerProjectRelativePath,
                         reason));
+            }
+        }
+
+        // Why marked here rather than where the warning is worded: this is the only run that
+        // plans introduced types, so it is the only place that can tell a file declaring one from
+        // a file whose missing baseline a compile would establish.
+        private static void MarkFilesDeclaringIntroducedTypes(
+            IReadOnlyList<HotReloadGroupFile> files,
+            TransformWorkerOutputDto output)
+        {
+            StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
+            foreach (TransformWorkerFileOutputDto fileOutput in output.files)
+            {
+                if (fileOutput.introducedTypes.Length == 0 && fileOutput.introducedTypeReuses.Length == 0)
+                {
+                    continue;
+                }
+
+                foreach (HotReloadGroupFile file in files)
+                {
+                    if (comparer.Equals(file.ProjectRelativePath, fileOutput.projectRelativePath))
+                    {
+                        file.DeclaresIntroducedType = true;
+                    }
+                }
             }
         }
 
