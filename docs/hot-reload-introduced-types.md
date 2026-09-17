@@ -130,6 +130,12 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
   added-member machinery a compiled type uses. Constructor / accessor / initializer bodies,
   member removals, signature changes, and additions of constructors, operators, events,
   indexers or nested types still require a compile.
+- A member added to an introduced type lives in the shim that reload compiled, so a later reload
+  has to bind it again. The file declaring the type does not have to be passed for that: as long
+  as its content is unchanged since it was applied, hot reload pulls it back in and says so in
+  `Warnings` with `Also re-applied N unchanged file(s)`. If its content did change, the reload
+  warns that the file `has active patches but its source changed since they were applied`
+  instead; pass that file along with the others to update it.
 
 ## File selection and new files
 
