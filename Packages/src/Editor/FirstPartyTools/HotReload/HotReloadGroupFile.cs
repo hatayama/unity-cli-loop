@@ -99,6 +99,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Verified snapshot text of this file, or null when it has no baseline.
         internal string SnapshotSource { get; set; }
 
+        // Set by the preparation stage when this file declares a type hot reload introduces or
+        // already introduced. Why it is carried instead of read off the transform output: only
+        // the preparation run plans introduced types, so the transform run's rows are empty for
+        // every file and would answer no to a question the preparation already answered.
+        internal bool DeclaresIntroducedType { get; set; }
+
         // Patch labels already active for this file when the group's apply started. Snapshotted
         // because a run mutates the ledgers between files.
         internal HashSet<string> SnapshotLabels { get; set; }
