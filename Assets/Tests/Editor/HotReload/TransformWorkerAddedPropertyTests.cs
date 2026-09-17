@@ -422,6 +422,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when an added property's accessor is refused because it uses '??=' on an added
+        /// field, the caller that reads the property keeps that cause in its own reason, so the
+        /// field name and the operator survive instead of collapsing into the generic sentence.
+        /// </summary>
+        [Test]
+        public async Task Isolation_AddedPropertyAccessorRefusedByCoalesce_KeepsTheFieldNameInTheCallerReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyCoalesceAccessor.cs",
+                "public string AddedCache;\n\n"
+                + "        public int Cached\n        {\n"
+                + "            get { AddedCache ??= \"x\"; return AddedCache.Length; }\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Cached + value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string callerReason = FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(
+                callerReason,
+                Does.Contain("Uses an added property that hot reload cannot emit."),
+                FormatSkipped(result.Output.skipped));
+            Assert.That(callerReason, Does.Contain("The property body was refused because: "));
+            Assert.That(
+                callerReason,
+                Does.Contain("'??=' on added field 'AddedCache' cannot be rewritten."));
+        }
+
+        /// <summary>
         /// An added bodied property with a baseline remains excluded from outside-body drift.
         /// </summary>
         [Test]

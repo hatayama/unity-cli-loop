@@ -111,7 +111,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
-                Plain("Uses an added field that hot reload cannot emit. " + CompileCallToAction, 0));
+                Plain("Uses added field '{0}' in a way hot reload cannot emit. " + CompileCallToAction, 1));
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedFieldCoalesceAssignment,
+                Plain(
+                    "'??=' on added field '{0}' cannot be rewritten. "
+                    + "Write 'if ({0} == null) { {0} = ...; }' instead, or run 'uloop compile'.",
+                    1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged,
                 Plain(
@@ -226,7 +232,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty,
-                Plain("Uses an added property that hot reload cannot emit. " + CompileCallToAction, 0));
+                Composing(
+                    "Uses an added property that hot reload cannot emit. " + CompileCallToAction,
+                    0,
+                    " The property body was refused because: ",
+                    ""));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyCompiledMemberKindChanged,
                 Plain(

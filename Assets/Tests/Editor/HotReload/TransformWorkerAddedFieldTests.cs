@@ -653,11 +653,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: '??=' on an added field stays skipped because the compound assignment is not
-        /// rewritable. The reason is the unavailable-added-field text, not the initializer one,
-        /// so the initializer reason must keep steering callers to the 'if (x == null)' form.
+        /// rewritable, and the reason names the field and the rewrite that works instead, so a
+        /// reader does not have to find which of several added fields the operator was used on.
         /// </summary>
         [Test]
-        public async Task Skip_CoalesceAssignmentOnAddedField_UsesUnavailableAddedFieldReason()
+        public async Task Skip_CoalesceAssignmentOnAddedField_NamesFieldAndSuggestsNullGuard()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
@@ -678,7 +678,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(
                 result,
                 nameof(HotReloadAddedMemberHost.ExistingCaller),
-                "Uses an added field that hot reload cannot emit.");
+                "'??=' on added field 'AddedCoalesceMap' cannot be rewritten. "
+                + "Write 'if (AddedCoalesceMap == null) { AddedCoalesceMap = ...; }' instead, "
+                + "or run 'uloop compile'.");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
         }
 

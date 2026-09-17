@@ -141,7 +141,9 @@ internal static class AddedFieldClassifier
         {
             if (ConstantLiteralFactory.TryCreateConstantLiteral(binding.ConstantValue, fieldSymbol.Type) == null)
             {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField);
+                return WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
+                    fieldSymbol.Name);
             }
 
             return null;
