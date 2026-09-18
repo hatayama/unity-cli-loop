@@ -188,6 +188,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a file that declares an introduced type keeps the introduced-type explanation
+        /// even when the PDB has no document for it, and gets only that one warning.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenAFileWithoutAPdbDocumentDeclaresAnIntroducedType_ExplainsTheIntroducedType()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                HotReloadSnapshotMissReason.NoDocumentInPdb,
+                true,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings);
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(warnings[0], Does.StartWith("Broken.cs declares a type hot reload introduced"));
+        }
+
+        /// <summary>
         /// What: a verified snapshot adds no missing-baseline warning even when the file has patch
         /// candidates.
         /// </summary>

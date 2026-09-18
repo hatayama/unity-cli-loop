@@ -64,6 +64,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.ErrorCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: two warnings that differ only by line are both kept, so the duplicate key is not
+        /// narrowed to the file and message.
+        /// </summary>
+        [Test]
+        public void CreateCompileResult_WithTheSameWarningOnTwoLines_KeepsBoth()
+        {
+            CompileResult result = CompileResultFactory.CreateCompileResult(
+                new[]
+                {
+                    WarningAtLine("Assets/A.cs", "CS0414: unused", 10),
+                    WarningAtLine("Assets/A.cs", "CS0414: unused", 11)
+                },
+                isForceCompile: false);
+
+            Assert.That(result.WarningCount, Is.EqualTo(2));
+            Assert.That(result.Warnings.Length, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: dropping duplicates keeps the first occurrence of each diagnostic in the order the
+        /// compiler reported them, in the combined list and in the error and warning lists.
+        /// </summary>
+        [Test]
+        public void CreateCompileResult_WithInterleavedDuplicates_KeepsFirstOccurrencesInOrder()
+        {
+            CompilerMessage first = Warning("Assets/A.cs", "CS0414: unused");
+            CompilerMessage second = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "CS0103: missing",
+                file = "Assets/B.cs",
+                line = 3,
+                column = 5
+            };
+            CompilerMessage third = Warning("Assets/C.cs", "CS0168: declared but never used");
+
+            CompileResult result = CompileResultFactory.CreateCompileResult(
+                new[] { first, second, first, third, second },
+                isForceCompile: false);
+
+            Assert.That(
+                result.Messages,
+                Is.EqualTo(new[] { first, second, third }));
+            Assert.That(result.Errors, Is.EqualTo(new[] { second }));
+            Assert.That(result.Warnings, Is.EqualTo(new[] { first, third }));
+        }
+
         private static CompilerMessage Warning(string file, string message)
         {
             return new CompilerMessage
@@ -72,6 +120,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message = message,
                 file = file,
                 line = 10,
+                column = 7
+            };
+        }
+
+        private static CompilerMessage WarningAtLine(string file, string message, int line)
+        {
+            return new CompilerMessage
+            {
+                type = CompilerMessageType.Warning,
+                message = message,
+                file = file,
+                line = line,
                 column = 7
             };
         }
