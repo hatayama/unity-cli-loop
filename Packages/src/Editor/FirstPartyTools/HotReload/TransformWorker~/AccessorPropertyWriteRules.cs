@@ -23,6 +23,7 @@ internal static class AccessorPropertyWriteRules
         AssignmentExpressionSyntax assignment,
         IPropertySymbol propertySymbol,
         AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -36,6 +37,16 @@ internal static class AccessorPropertyWriteRules
         bool getterInaccessible = needsGetter
             && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
         if (!setterInaccessible && !getterInaccessible)
+        {
+            return false;
+        }
+
+        // Returned before the shape gates and the setter registration: the added-property
+        // rewrite writes a static added property through its shim accessor, and a compiled
+        // setter delegate for a property the compiled type lacks could never bind.
+        if (propertySymbol.IsStatic
+            && addedMemberAccess != null
+            && addedMemberAccess.IsAddedProperty(propertySymbol))
         {
             return false;
         }

@@ -29,6 +29,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private int _privateSeed = 7;
 
+        private event Action PrivateChanged;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public bool HasPrivateChangedListeners()
+        {
+            return PrivateChanged != null;
+        }
+
         private const int PrivateConstThree = 3;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -96,6 +104,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ReadPrivateConst()
         {
             return PrivateConstThree;
+        }
+
+        private static int PrivateStaticSeedValue
+        {
+            get { return 5; }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private bool TryReadPrivateSeed(out int value)
+        {
+            value = _privateSeed;
+            return true;
         }
 
         public class NestedAddedFieldHost
