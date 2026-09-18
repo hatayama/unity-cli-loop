@@ -31,6 +31,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string SeedExpression = "_seed";
         private const string EditedExpression = "_seed * 2";
         private const string NoExtraMembers = "";
+        private const string IntroducedStructSimpleName = "HotReloadBodyEditIntroducedStruct";
+        private const string IntroducedStructMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload." + IntroducedStructSimpleName;
+        private const string IntroducedStructReturn = "5";
+        private const string EditedStructReturn = "10";
+        private const int IntroducedStructValue = 5;
+        private const string StructHostSkipReason =
+            "Struct (value type) methods are skipped; byref instance transplant is unverified.";
 
         // A constructor the introduced type declares, which hot reload cannot patch and therefore
         // reports. Kept out of the other reloads' declaration so only this test's fixture carries
@@ -258,6 +266,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// Verifies that editing a method body of an already introduced struct is skipped with the
+        /// struct-host reason instead of being patched: struct methods are never transplanted, even
+        /// on an introduced type, so the retained assembly keeps running the body the introducing
+        /// reload compiled.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedStructMethodBodyEdited_ReportsTheStructHostSkipRow()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateStructEdits(
+                    hostPath,
+                    callerPath,
+                    IntroducedStructReturn,
+                    "IntroducedStructHost.cs",
+                    "IntroducedStructCaller.cs"));
+                Assert.That(
+                    ReadStructValue(readArtifact()),
+                    Is.EqualTo(IntroducedStructValue),
+                    "Precondition: the retained assembly must run the body the first reload compiled.");
+
+                HotReloadOrchestratorResult edited = await RunReloadAsync(hostPath, callerPath, CreateStructEdits(
+                    hostPath,
+                    callerPath,
+                    EditedStructReturn,
+                    "IntroducedStructEditedHost.cs",
+                    "IntroducedStructEditedCaller.cs"));
+
+                HotReloadMethodOutcome structRow = FindStructComputeOutcome(edited);
+                Assert.That(
+                    structRow.Kind,
+                    Is.EqualTo(HotReloadMethodOutcomeKind.Skipped),
+                    "A method body of an introduced struct must be skipped, not patched.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    structRow.Reason,
+                    Does.Contain(StructHostSkipReason),
+                    "The skip must name the struct-host limit so the reader knows to compile.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    ReadStructValue(readArtifact()),
+                    Is.EqualTo(IntroducedStructValue),
+                    "A skipped struct body must leave the retained assembly running the original body.");
+            });
+        }
+
         private static void AssertComputedValue(
             HotReloadIntroducedTypeArtifact artifact,
             int expected,
@@ -363,6 +421,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("The caller edited against the introduced type must be patched.\n"
                 + DescribeOutcomes(result));
+        }
+
+        private static HotReloadMethodOutcome FindStructComputeOutcome(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method != null
+                    && outcome.Method.Contains(IntroducedStructSimpleName + ".Compute()", StringComparison.Ordinal))
+                {
+                    return outcome;
+                }
+            }
+
+            Assert.Fail("The reload must report a row for " + IntroducedStructSimpleName + ".Compute().\n"
+                + DescribeOutcomes(result));
+            return null;
+        }
+
+        private static int ReadStructValue(HotReloadIntroducedTypeArtifact artifact)
+        {
+            Assert.That(artifact, Is.Not.Null, "A reload had to introduce the struct before this check.");
+            Type introducedType = artifact.Assembly.GetType(IntroducedStructMetadataName, throwOnError: false);
+            Assert.That(introducedType, Is.Not.Null, "The artifact must hold " + IntroducedStructMetadataName + ".");
+
+            MethodInfo compute = introducedType.GetMethod("Compute", BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(compute, Is.Not.Null, "The introduced struct must declare Compute().");
+
+            return (int)compute.Invoke(Activator.CreateInstance(introducedType), Array.Empty<object>());
+        }
+
+        // Why the struct has no field: a struct field initializer needs a C# version Unity's
+        // compiler does not accept, and the edit only has to change a body.
+        private static Dictionary<string, string> CreateStructEdits(
+            string hostPath,
+            string callerPath,
+            string returnedValue,
+            string hostFileName,
+            string callerFileName)
+        {
+            string hostSource = File.ReadAllText(hostPath);
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced =
+                "    public struct " + IntroducedStructSimpleName + "\n"
+                + "    {\n"
+                + "        public int Compute()\n"
+                + "        {\n"
+                + "            return " + returnedValue + ";\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    hostFileName,
+                    hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    callerFileName,
+                    CallType(File.ReadAllText(callerPath), IntroducedStructSimpleName))
+            };
         }
 
         private static Dictionary<string, string> CreateIntroducingEdits(string hostPath, string callerPath)
@@ -504,10 +621,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string CallIntroducedType(string callerSource)
         {
+            return CallType(callerSource, IntroducedTypeSimpleName);
+        }
+
+        private static string CallType(string callerSource, string typeSimpleName)
+        {
             Assert.That(callerSource, Does.Contain(CallerBodyAnchor), "Precondition: caller body anchor must exist.");
             return callerSource.Replace(
                 CallerBodyAnchor,
-                "return new " + IntroducedTypeSimpleName + "().Compute() + host.Value();",
+                "return new " + typeSimpleName + "().Compute() + host.Value();",
                 StringComparison.Ordinal);
         }
 

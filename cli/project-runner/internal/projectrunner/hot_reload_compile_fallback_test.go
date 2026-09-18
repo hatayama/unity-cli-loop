@@ -16,7 +16,7 @@ import (
 func TestRunHotReloadRunsFallbackCompileAndAdoptsItsSuccess(t *testing.T) {
 	stdout, stderr, compileCalls, code := runHotReloadWithFakeCompile(
 		t,
-		`{"Success":false,"CompileFallback":"Requested","RecommendedNextAction":"Run 'uloop compile'"}`,
+		`{"Success":false,"CompileFallback":"Requested","RecommendedNextAction":"Run 'uloop compile'","Message":"Hot reload finished with one or more Failed outcomes."}`,
 		compileExecutionResult{result: json.RawMessage(`{"Success":true,"Message":"ok"}`), exitCode: 0},
 	)
 
@@ -43,6 +43,43 @@ func TestRunHotReloadRunsFallbackCompileAndAdoptsItsSuccess(t *testing.T) {
 	}
 	if _, present := fields["RecommendedNextAction"]; present {
 		t.Fatalf("RecommendedNextAction must be dropped once the compile succeeded: %s", stdout)
+	}
+	message := ""
+	if err := json.Unmarshal(fields["Message"], &message); err != nil {
+		t.Fatalf("Message must stay a string: %v\n%s", err, stdout)
+	}
+	if message != "Hot reload finished with one or more Failed outcomes. A compile then ran in this same command and succeeded; see CompileFallbackNote." {
+		t.Fatalf("Message must say the compile succeeded after the reload: %q", message)
+	}
+}
+
+// Verifies a hot-reload response whose Message is JSON null keeps it null when the fallback compile
+// succeeds, instead of becoming a Message that holds only the compile sentence.
+func TestInjectHotReloadCompileFallbackLeavesANullMessageNull(t *testing.T) {
+	merged, err := injectHotReloadCompileFallback(
+		json.RawMessage(`{"Success":false,"CompileFallback":"Requested","Message":null}`),
+		json.RawMessage(`{"Success":true}`))
+	if err != nil {
+		t.Fatalf("inject failed: %v", err)
+	}
+	fields := decodeSingleJSONObject(t, string(merged))
+	if string(fields["Message"]) != "null" {
+		t.Fatalf("a null Message must stay null: %s", merged)
+	}
+}
+
+// Verifies a hot-reload response without a Message gets none invented when the fallback compile
+// succeeds.
+func TestInjectHotReloadCompileFallbackLeavesAMissingMessageMissing(t *testing.T) {
+	merged, err := injectHotReloadCompileFallback(
+		json.RawMessage(`{"Success":false,"CompileFallback":"Requested"}`),
+		json.RawMessage(`{"Success":true}`))
+	if err != nil {
+		t.Fatalf("inject failed: %v", err)
+	}
+	fields := decodeSingleJSONObject(t, string(merged))
+	if _, present := fields["Message"]; present {
+		t.Fatalf("Message must not be invented: %s", merged)
 	}
 }
 
@@ -71,6 +108,51 @@ func TestRunHotReloadReportsFallbackCompileFailure(t *testing.T) {
 	}
 	if nextAction != "Fix the errors in Compile.Errors, then rerun 'uloop compile' or 'uloop hot-reload'." {
 		t.Fatalf("RecommendedNextAction mismatch: %q", nextAction)
+	}
+}
+
+// Verifies a failed fallback compile that reports its own next actions — such as a compile Unity
+// refused during Play Mode — promotes them, joined into one sentence, instead of pointing at
+// Compile.Errors; an empty list keeps the fixed advice.
+func TestInjectHotReloadCompileFallbackPromotesTheCompileNextActions(t *testing.T) {
+	cases := []struct {
+		name        string
+		compile     string
+		wantNextAct string
+	}{
+		{
+			name:        "one next action",
+			compile:     `{"Success":false,"NextActions":["Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'."]}`,
+			wantNextAct: "Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.",
+		},
+		{
+			name:        "several next actions",
+			compile:     `{"Success":false,"NextActions":["First step.","Second step."]}`,
+			wantNextAct: "First step. Second step.",
+		},
+		{
+			name:        "empty next actions",
+			compile:     `{"Success":false,"NextActions":[]}`,
+			wantNextAct: "Fix the errors in Compile.Errors, then rerun 'uloop compile' or 'uloop hot-reload'.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged, err := injectHotReloadCompileFallback(
+				json.RawMessage(`{"Success":true,"CompileFallback":"Requested"}`),
+				json.RawMessage(tc.compile))
+			if err != nil {
+				t.Fatalf("inject failed: %v", err)
+			}
+			fields := decodeSingleJSONObject(t, string(merged))
+			nextAction := ""
+			if err := json.Unmarshal(fields["RecommendedNextAction"], &nextAction); err != nil {
+				t.Fatalf("RecommendedNextAction must be a string: %v\n%s", err, merged)
+			}
+			if nextAction != tc.wantNextAct {
+				t.Fatalf("RecommendedNextAction mismatch: %q", nextAction)
+			}
+		})
 	}
 }
 

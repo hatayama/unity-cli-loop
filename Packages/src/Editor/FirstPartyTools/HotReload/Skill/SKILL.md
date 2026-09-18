@@ -38,7 +38,7 @@ automatically — pass it with `--files`.
 | `--files` | array | - | Project-relative `.cs` paths to hot-reload (method bodies, added members, and new top-level types). When omitted or empty on apply, selects compiled snapshot sources only — those whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; a file that has never been compiled is never selected and must be passed explicitly; run `uloop compile` first when no snapshot exists, or pass explicit paths when no changed source is found |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and added member and clear the ledger; introduced types stay loaded until the next domain reload. When set, `--files` is ignored |
 | `--status` | flag | - | Lists the currently active changes (patched methods, added members, and introduced types) without applying or reverting anything. |
-| `--compile-on-skip` | enum | `auto` | When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run `uloop compile` in the same command: `auto` only in Edit Mode (never stops a Play session), `on` always, `off` never. The response's `CompileFallback` says which; when the compile ran, `Compile` carries its result and `Success` is the compile's. |
+| `--compile-on-skip` | enum | `auto` | When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run `uloop compile` in the same command: `auto` only in Edit Mode (never stops a Play session), `on` always unless Unity holds compiles until Play ends, `off` never. The response's `CompileFallback` says which; when the compile ran, `Compile` carries its result and `Success` is the compile's. |
 
 ## Status
 
@@ -74,8 +74,8 @@ changed are patched (`UnchangedTotal` counts the rest).
 - Signature changes: a return-type change is `Skipped` unless this reload or an earlier one
   patched every live compiled caller of the old signature; a rename or parameter change
   applies as an added method and warns about the call sites left on the old signature.
-- Constructors, operators, compiled setter/init/indexer accessors, and event accessors are
-  `Skipped`; finalizers and interface members are silently not applied.
+- Constructors, operators, struct methods, compiled setter/init/indexer accessors, and event
+  accessors are `Skipped`; finalizers and interface members are silently not applied.
 - A reload applies each file all-or-nothing: a `Failed` method leaves that file unapplied,
   a `Failed` type leaves every file of its assembly unapplied.
 

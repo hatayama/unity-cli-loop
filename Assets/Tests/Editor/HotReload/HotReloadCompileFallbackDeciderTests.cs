@@ -14,25 +14,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         /// <summary>
         /// What: the decision for each option, with and without an unapplied edit, in and out of
-        /// Play Mode. Expected values are the names the response carries, because the decision
-        /// enum is internal and reaches the wire through its name.
+        /// Play Mode, and with the Editor allowing or refusing compiles during play. Expected
+        /// values are the names the response carries, because the decision enum is internal and
+        /// reaches the wire through its name.
         /// </summary>
-        [TestCase(HotReloadCompileOnSkip.auto, true, false, "Requested")]
-        [TestCase(HotReloadCompileOnSkip.auto, true, true, "HeldForPlayMode")]
-        [TestCase(HotReloadCompileOnSkip.auto, false, false, "NotNeeded")]
-        [TestCase(HotReloadCompileOnSkip.auto, false, true, "NotNeeded")]
-        [TestCase(HotReloadCompileOnSkip.on, true, true, "Requested")]
-        [TestCase(HotReloadCompileOnSkip.off, true, false, "Disabled")]
-        [TestCase(HotReloadCompileOnSkip.off, false, true, "NotNeeded")]
+        [TestCase(HotReloadCompileOnSkip.auto, true, false, false, "Requested")]
+        [TestCase(HotReloadCompileOnSkip.auto, true, true, false, "HeldForPlayMode")]
+        [TestCase(HotReloadCompileOnSkip.auto, true, true, true, "HeldForPlayMode")]
+        [TestCase(HotReloadCompileOnSkip.auto, false, false, false, "NotNeeded")]
+        [TestCase(HotReloadCompileOnSkip.auto, false, true, false, "NotNeeded")]
+        [TestCase(HotReloadCompileOnSkip.on, true, true, false, "Requested")]
+        [TestCase(HotReloadCompileOnSkip.on, true, false, true, "Requested")]
+        [TestCase(HotReloadCompileOnSkip.on, false, true, true, "NotNeeded")]
+        [TestCase(HotReloadCompileOnSkip.off, true, false, false, "Disabled")]
+        [TestCase(HotReloadCompileOnSkip.off, true, true, true, "Disabled")]
+        [TestCase(HotReloadCompileOnSkip.off, false, true, false, "NotNeeded")]
         public void Decide_OptionAndRunState_ChoosesTheFallback(
             HotReloadCompileOnSkip option,
             bool hasUnappliedEdit,
             bool isPlaying,
+            bool compileRefusedDuringPlay,
             string expected)
         {
             Assert.That(
-                HotReloadCompileFallbackDecider.Decide(option, hasUnappliedEdit, isPlaying).ToString(),
+                HotReloadCompileFallbackDecider.Decide(
+                    option,
+                    hasUnappliedEdit,
+                    isPlaying,
+                    compileRefusedDuringPlay).ToString(),
                 Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// What: --compile-on-skip on during play does not request a compile the Editor is set to
+        /// refuse, so the CLI does not run one that can only fail.
+        /// </summary>
+        [Test]
+        public void Decide_OnDuringPlayWhenTheEditorRefusesCompiles_ReturnsBlockedByPlayModeSetting()
+        {
+            Assert.That(
+                HotReloadCompileFallbackDecider.Decide(
+                    HotReloadCompileOnSkip.on,
+                    hasUnappliedEdit: true,
+                    isPlaying: true,
+                    compileRefusedDuringPlay: true).ToString(),
+                Is.EqualTo("BlockedByPlayModeSetting"));
+        }
+
+        /// <summary>
+        /// What: --compile-on-skip on during play still requests the compile when the Editor
+        /// compiles during play.
+        /// </summary>
+        [Test]
+        public void Decide_OnDuringPlayWhenTheEditorAllowsCompiles_ReturnsRequested()
+        {
+            Assert.That(
+                HotReloadCompileFallbackDecider.Decide(
+                    HotReloadCompileOnSkip.on,
+                    hasUnappliedEdit: true,
+                    isPlaying: true,
+                    compileRefusedDuringPlay: false).ToString(),
+                Is.EqualTo("Requested"));
         }
 
         /// <summary>

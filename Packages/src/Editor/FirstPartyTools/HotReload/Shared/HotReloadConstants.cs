@@ -96,6 +96,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "re-applying them, so its active patches are unchanged. Fix the refused declaration "
             + "and rerun, or run uloop compile to clear the run.";
 
+        // Why a third wording: a sibling whose every row was Skipped did not fail, and its
+        // earlier patches stay live, so the failed sentence would overstate what happened.
+        public const string ActiveSiblingRebindSkippedOnlyWarningFormat =
+            "'{0}' was pulled in to re-bind its active patches, but every method there was Skipped "
+            + "this time; see its rows for the reasons. Its earlier patches stay active until "
+            + "uloop compile clears the run.";
+
         public const string ActiveSiblingRebindFailedWarningFormat =
             "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "
             + "see its rows for which patches changed and run uloop compile to clear the run.";
@@ -466,6 +473,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // so the reader has to be told the choice was theirs and how to make it.
         public const string CompileFallbackHeldForPlayModeRecommendedNextAction =
             "No compile ran because the Editor is in Play Mode and a compile would stop the Play session; rerun with --compile-on-skip on to compile anyway.";
+
+        // The same Stop step the compile tool recommends when it refuses to compile during play
+        // (CompileErrorNextActionsConstants.PlayModeStopNextAction); restated here because a tool
+        // may not reference another tool's assembly.
+        public const string CompileFallbackRefusedDuringPlayRecommendedNextAction =
+            "No compile ran because the Editor is in Play Mode and Unity's 'Script Changes While Playing' is set to 'Recompile After Finished Playing'. Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.";
+
+        // Unity's EditorPrefs entry behind "Script Changes While Playing", and its value for
+        // "Recompile After Finished Playing", under which the compile tool refuses to run during
+        // play. Only that one value is named because it is the only one hot reload acts on.
+        public const string ScriptCompilationDuringPlayEditorPrefsKey = "ScriptCompilationDuringPlay";
+
+        public const int ScriptCompilationDuringPlayRecompileAfterFinishedPlaying = 1;
 
         public const string RequestedFilesAllSkippedRecommendedNextAction =
             "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings).";

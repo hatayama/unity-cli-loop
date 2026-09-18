@@ -1523,7 +1523,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 appliedWithSkipped.Message,
                 Is.EqualTo(
-                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1. "
                     + "3 warning(s). See Warnings. "
                     + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
@@ -1729,8 +1729,86 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1. "
                     + "1 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: an applied run that also skipped methods counts them right after Added, so the
+        /// summary line does not read as if every edit was applied.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AddedAndSkippedOutcomes_CountsSkippedAfterAdded()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Added("Type.AddedPing", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Skipped("Type.First", "reason", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Skipped("Type.Second", "reason", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Does.StartWith("Hot reload applied. PatchedTotal=0, ActivePatchTotal=1. Added: 1. Skipped: 2."));
+        }
+
+        /// <summary>
+        /// What: an applied run that re-applied a sibling's earlier changes says how many of the
+        /// Patched and Added rows came from those siblings, right after the counts they are part of,
+        /// so a reader who edited one method is not left wondering where the rest came from.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_SiblingRowsReapplied_SaysHowManyOfTheCountsCameFromSiblings()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Edited", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Patched("Sibling.Earlier", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Added("Sibling.AddedEarlier", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.Skip", "reason", "Assets/Sibling.cs")
+                },
+                new List<string>(),
+                patchedTotal: 2,
+                activePatchTotal: 2,
+                reappliedSiblingPaths: new[] { "Assets/Sibling.cs" });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    "Hot reload applied. PatchedTotal=2, ActivePatchTotal=2. Added: 1. "
+                    + "Of these, 2 re-applied changes from earlier reloads in sibling files. Skipped: 1."));
+        }
+
+        /// <summary>
+        /// What: a pulled-in sibling whose rows were all Skipped re-applied nothing, so the message
+        /// adds no re-applied count for it.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_SiblingRowsAllSkipped_AddsNoReappliedCount()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Edited", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.Skip", "reason", "Assets/Sibling.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { "Assets/Sibling.cs" });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Message, Does.Not.Contain("re-applied changes from earlier reloads"));
         }
 
         /// <summary>
@@ -2071,7 +2149,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
-                isPlaying: false);
+                isPlaying: false,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("Requested"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2093,7 +2172,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
-                isPlaying: true);
+                isPlaying: true,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
             Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
@@ -2115,11 +2195,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
-                isPlaying: true);
+                isPlaying: true,
+                compileRefusedDuringPlay: false);
 
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// What: a held compile during play, with the Editor set to refuse compiles until play
+        /// ends, points at stopping Play Mode instead of suggesting --compile-on-skip on, which
+        /// would run a compile the Editor refuses.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_HeldDuringPlayWhenTheEditorRefusesCompiles_PointsAtStoppingPlayMode()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(CreateSkippedResult());
+            string nextActionBefore = response.RecommendedNextAction;
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.auto,
+                isPlaying: true,
+                compileRefusedDuringPlay: true);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
+            Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
+            Assert.That(response.RecommendedNextAction, Does.Contain("control-play-mode --action Stop"));
+            Assert.That(response.RecommendedNextAction, Does.Not.Contain("--compile-on-skip on"));
+        }
+
+        /// <summary>
+        /// What: --compile-on-skip on during play, with the Editor set to refuse compiles until
+        /// play ends, reports the compile as blocked and points at stopping Play Mode, so the
+        /// CLI does not run a compile that can only be refused.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_OnDuringPlayWhenTheEditorRefusesCompiles_ReportsBlocked()
+        {
+            HotReloadResponse response = new() { RecommendedNextAction = string.Empty };
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.on,
+                isPlaying: true,
+                compileRefusedDuringPlay: true);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("BlockedByPlayModeSetting"));
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(HotReloadConstants.CompileFallbackRefusedDuringPlayRecommendedNextAction));
         }
 
         /// <summary>
@@ -2136,7 +2264,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.off,
-                isPlaying: false);
+                isPlaying: false,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("Disabled"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2162,7 +2291,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 result,
                 HotReloadCompileOnSkip.auto,
-                isPlaying: true);
+                isPlaying: true,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("NotNeeded"));
         }

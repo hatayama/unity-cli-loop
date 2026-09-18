@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -21,6 +22,7 @@ const (
 	hotReloadCompileFallbackNoteField      = "CompileFallbackNote"
 	hotReloadSuccessField                  = "Success"
 	hotReloadRecommendedNextActionField    = "RecommendedNextAction"
+	hotReloadMessageField                  = "Message"
 	hotReloadWarningsField                 = "Warnings"
 )
 
@@ -33,6 +35,9 @@ const (
 	// per-method rows.
 	hotReloadUnappliedInMethodReasons        = "Methods[].Reason"
 	hotReloadCompileFallbackFailedNextAction = "Fix the errors in Compile.Errors, then rerun 'uloop compile' or 'uloop hot-reload'."
+	// The reload's own Message describes only the reload, so without this suffix a reader who stops at
+	// Message sees failed outcomes even though the compile then applied every edit.
+	hotReloadCompileFallbackSucceededMessageSuffix = " A compile then ran in this same command and succeeded; see CompileFallbackNote."
 )
 
 // Test seam, same shape as the run-tests implicit compile.
@@ -110,7 +115,8 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 		return nil, errors.New("hot-reload response must be a JSON object")
 	}
 	compile := struct {
-		Success bool `json:"Success"`
+		Success     bool     `json:"Success"`
+		NextActions []string `json:"NextActions"`
 	}{}
 	if err := json.Unmarshal(compileRaw, &compile); err != nil {
 		return nil, err
@@ -126,18 +132,45 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 	fields[hotReloadCompileResultField] = compileRaw
 	fields[hotReloadSuccessField] = success
 
-	note, nextAction, err := hotReloadCompileFallbackAdvice(compile.Success, hotReloadUnappliedPointer(fields))
+	note, nextAction, err := hotReloadCompileFallbackAdvice(
+		compile.Success,
+		hotReloadUnappliedPointer(fields),
+		compile.NextActions)
 	if err != nil {
 		return nil, err
 	}
 	fields[hotReloadCompileFallbackNoteField] = note
-	if compile.Success {
-		// The reload's own next action says to run 'uloop compile', which this command just did.
-		delete(fields, hotReloadRecommendedNextActionField)
-	} else {
+	if !compile.Success {
 		fields[hotReloadRecommendedNextActionField] = nextAction
+		return json.Marshal(fields)
+	}
+	// The reload's own next action says to run 'uloop compile', which this command just did.
+	delete(fields, hotReloadRecommendedNextActionField)
+	if err := appendHotReloadCompileSucceededMessage(fields); err != nil {
+		return nil, err
 	}
 	return json.Marshal(fields)
+}
+
+// A Message that is missing or not a string is left alone: only an older or unexpected package
+// sends one, and inventing a Message would claim a reload summary the Editor never wrote.
+// Why the first byte is checked: decoding JSON null into a string succeeds and leaves it empty,
+// so the decode alone would turn a null Message into one that holds only the suffix.
+func appendHotReloadCompileSucceededMessage(fields map[string]json.RawMessage) error {
+	raw := fields[hotReloadMessageField]
+	if len(raw) == 0 || raw[0] != '"' {
+		return nil
+	}
+	message := ""
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return err
+	}
+	appended, err := json.Marshal(message + hotReloadCompileFallbackSucceededMessageSuffix)
+	if err != nil {
+		return err
+	}
+	fields[hotReloadMessageField] = appended
+	return nil
 }
 
 // hotReloadUnappliedPointer names the response field that explains the unapplied edits, so the
@@ -150,7 +183,11 @@ func hotReloadUnappliedPointer(fields map[string]json.RawMessage) string {
 	return hotReloadUnappliedInWarnings
 }
 
-func hotReloadCompileFallbackAdvice(compileSucceeded bool, unappliedPointer string) (json.RawMessage, json.RawMessage, error) {
+func hotReloadCompileFallbackAdvice(
+	compileSucceeded bool,
+	unappliedPointer string,
+	compileNextActions []string,
+) (json.RawMessage, json.RawMessage, error) {
 	if compileSucceeded {
 		note, err := json.Marshal(fmt.Sprintf(hotReloadCompileFallbackSucceededNoteFormat, unappliedPointer))
 		if err != nil {
@@ -162,9 +199,19 @@ func hotReloadCompileFallbackAdvice(compileSucceeded bool, unappliedPointer stri
 	if err != nil {
 		return nil, nil, err
 	}
-	nextAction, err := json.Marshal(hotReloadCompileFallbackFailedNextAction)
+	nextAction, err := json.Marshal(hotReloadCompileFallbackFailedNextActionText(compileNextActions))
 	if err != nil {
 		return nil, nil, err
 	}
 	return note, nextAction, nil
+}
+
+// A compile that refused to run (for example, in Play Mode under a setting that holds compiles)
+// reports no errors, so pointing at Compile.Errors would send the reader to an empty list; the
+// compile's own next actions say what actually unblocks it.
+func hotReloadCompileFallbackFailedNextActionText(compileNextActions []string) string {
+	if len(compileNextActions) == 0 {
+		return hotReloadCompileFallbackFailedNextAction
+	}
+	return strings.Join(compileNextActions, " ")
 }

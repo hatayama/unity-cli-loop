@@ -115,6 +115,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings,
                 result.AutoRefreshHoldSceneRefreshWarning);
             bool allRequestedSkipped = DecideAllRequestedSkipped(result, toProjectRelativeScriptPath);
+            int reappliedSiblingCount = HotReloadRequestedFileOutcomeSummary.CountReappliedSiblingOutcomes(
+                result.Methods,
+                result.ReappliedSiblingPaths,
+                toProjectRelativeScriptPath);
             string message = BuildApplyMessage(
                 result,
                 hasFailure,
@@ -122,7 +126,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.Count,
                 appendCompileResolution: orchestratorWarningCount >= 2
                     && orchestratorWarningCount == warningCountBeforeHold,
-                allRequestedSkipped);
+                allRequestedSkipped,
+                reappliedSiblingCount);
             return new HotReloadResponse
             {
                 Success = !hasFailure,
@@ -221,7 +226,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hasMethodFailure,
             int warningCount,
             bool appendCompileResolution,
-            bool allRequestedSkipped)
+            bool allRequestedSkipped,
+            int reappliedSiblingCount)
         {
             // Why asked first: the file a run introduces a type into usually holds untouched
             // methods as well, and every message below would then report the methods only.
@@ -247,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     appendCompileResolution);
             }
 
-            string message = BuildApplyOutcomeMessage(result, hasFailure, allRequestedSkipped);
+            string message = BuildApplyOutcomeMessage(result, hasFailure, allRequestedSkipped, reappliedSiblingCount);
             message = AppendUnchangedAndLifecycleNotes(message, result);
             message = HotReloadIntroducedTypeResponseSection.AppendTypeSummary(
                 message,
@@ -265,7 +271,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildApplyOutcomeMessage(
             HotReloadOrchestratorResult result,
             bool hasFailure,
-            bool allRequestedSkipped)
+            bool allRequestedSkipped,
+            int reappliedSiblingCount)
         {
             int addedCount = CountAddedOutcomes(result);
             if (hasFailure)
@@ -309,6 +316,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message += " Added: " + addedCount + ".";
             }
 
+            // Why: a sibling re-apply adds its earlier rows to both counts, so a reader who edited
+            // one method otherwise cannot tell why the counts are much larger than the edit.
+            if (reappliedSiblingCount > 0)
+            {
+                message += " Of these, " + reappliedSiblingCount
+                    + " re-applied changes from earlier reloads in sibling files.";
+            }
+
+            // Why counted here: the totals only count what was applied, so a run that skipped
+            // some of the edits otherwise reads as if every one of them took effect.
+            int skippedCount = CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Skipped);
+            if (skippedCount > 0)
+            {
+                message += " Skipped: " + skippedCount + ".";
+            }
+
             return AppendStaleSummary(message, result);
         }
 
@@ -330,7 +353,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // look inconsistent with the listed outcomes.
         private static string AppendStaleSummary(string message, HotReloadOrchestratorResult result)
         {
-            int staleCount = CountStaleOutcomes(result);
+            int staleCount = CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Stale);
             if (staleCount == 0)
             {
                 return message;
@@ -339,18 +362,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return message + " Stale=" + staleCount + ".";
         }
 
-        private static int CountStaleOutcomes(HotReloadOrchestratorResult result)
+        private static int CountOutcomesOfKind(HotReloadOrchestratorResult result, HotReloadMethodOutcomeKind kind)
         {
-            int staleCount = 0;
+            int count = 0;
             for (int index = 0; index < result.Methods.Count; index++)
             {
-                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Stale)
+                if (result.Methods[index].Kind == kind)
                 {
-                    staleCount++;
+                    count++;
                 }
             }
 
-            return staleCount;
+            return count;
         }
 
         private static string AppendUnchangedAndLifecycleNotes(
