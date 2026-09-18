@@ -76,6 +76,13 @@ internal static class RetainedDeclarationStage
         Dictionary<WorkerSourceUnit, List<RetainedDeclarationVerdict>> verdicts =
             IntroducedTypeDeclarationVerifier.FindRetainedDeclarations(
                 loadedUnits, verificationCompilation, input, targetAssembly, artifactMap);
+        string splitRefusal = RetainedTypeSignatureReferenceFinder.FindRefusal(
+            verdicts, verificationCompilation, input, targetAssembly, artifactMap);
+        if (splitRefusal != null)
+        {
+            return splitRefusal;
+        }
+
         List<string> bindingParseErrors = new List<string>();
         foreach (KeyValuePair<WorkerSourceUnit, List<RetainedDeclarationVerdict>> entry in verdicts)
         {
