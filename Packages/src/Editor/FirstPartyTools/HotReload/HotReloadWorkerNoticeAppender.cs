@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerFileOutputDto fileOutput,
             IReadOnlyList<TransformWorkerSkippedDto> fileSkipped,
             int patchCandidateRowCountForFile,
-            string snapshotSource,
+            HotReloadSnapshotMissReason snapshotMissReason,
             bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName,
@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendBaselineNotices(
                 fileOutput,
                 patchCandidateRowCountForFile,
-                snapshotSource,
+                snapshotMissReason,
                 declaresIntroducedType,
                 projectRelativePath,
                 assemblyName,
@@ -74,16 +74,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void AppendBaselineNotices(
             TransformWorkerFileOutputDto fileOutput,
             int patchCandidateRowCountForFile,
-            string snapshotSource,
+            HotReloadSnapshotMissReason snapshotMissReason,
             bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName,
             List<string> warnings)
         {
-            if (snapshotSource == null && patchCandidateRowCountForFile >= 1)
+            if (snapshotMissReason != HotReloadSnapshotMissReason.None && patchCandidateRowCountForFile >= 1)
             {
                 warnings.Add(
-                    ChooseMissingBaselineWarning(declaresIntroducedType, projectRelativePath, assemblyName));
+                    ChooseMissingBaselineWarning(
+                        snapshotMissReason,
+                        declaresIntroducedType,
+                        projectRelativePath,
+                        assemblyName));
             }
 
             if (fileOutput.baselineDisabledByDuplicateKeys)
@@ -99,19 +103,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// The sentence that explains why this file has no verified snapshot. A file declaring a
         /// type hot reload introduced gets its own: for it a missing baseline is the normal state
-        /// rather than something a compile has yet to establish.
+        /// rather than something a compile has yet to establish. So does a file with no compiled
+        /// method body, which the PDB never lists and so no compile can give a baseline.
         /// </summary>
         private static string ChooseMissingBaselineWarning(
+            HotReloadSnapshotMissReason snapshotMissReason,
             bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName)
         {
             return string.Format(
-                declaresIntroducedType
-                    ? HotReloadConstants.IntroducedTypeSourceNoBaselineWarningFormat
-                    : HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
+                ChooseMissingBaselineWarningFormat(snapshotMissReason, declaresIntroducedType),
                 Path.GetFileName(projectRelativePath),
                 assemblyName);
+        }
+
+        private static string ChooseMissingBaselineWarningFormat(
+            HotReloadSnapshotMissReason snapshotMissReason,
+            bool declaresIntroducedType)
+        {
+            if (declaresIntroducedType)
+            {
+                return HotReloadConstants.IntroducedTypeSourceNoBaselineWarningFormat;
+            }
+
+            return snapshotMissReason == HotReloadSnapshotMissReason.NoDocumentInPdb
+                ? HotReloadConstants.NoCompiledMethodBodyBaselineWarningFormat
+                : HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat;
         }
 
         private static void AppendSkippedOutcomes(

@@ -99,6 +99,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Verified snapshot text of this file, or null when it has no baseline.
         internal string SnapshotSource { get; set; }
 
+        // Why SnapshotSource is null, so the missing-baseline warning can tell a file a compile
+        // would fix from one no compile gives a baseline to. None while SnapshotSource is set.
+        internal HotReloadSnapshotMissReason SnapshotMissReason { get; set; }
+
         // Set by the preparation stage when this file declares a type hot reload introduces or
         // already introduced. Why it is carried instead of read off the transform output: only
         // the preparation run plans introduced types, so the transform run's rows are empty for
