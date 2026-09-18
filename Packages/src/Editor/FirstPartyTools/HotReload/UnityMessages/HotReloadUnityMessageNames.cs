@@ -70,10 +70,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "OnDrawGizmosSelected"
         };
 
+        // Why only the per-frame messages are gated: Unity stops delivering them to a component
+        // the moment it is disabled, and the proxy is a separate component that stays enabled, so
+        // forwarding them unconditionally would keep a disabled target ticking every frame. The
+        // event messages arrive when the event happens and are forwarded as they arrive.
+        private static readonly HashSet<string> GatedByTargetEnabledNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Update",
+            "LateUpdate",
+            "FixedUpdate",
+            "OnGUI"
+        };
+
         /// <summary>Whether a proxy component forwards this message to the live target.</summary>
         internal static bool IsForwarded(string methodName)
         {
             return methodName != null && ForwardedNames.Contains(methodName);
+        }
+
+        /// <summary>
+        /// Whether this message is forwarded only while the target itself is active and enabled.
+        /// </summary>
+        internal static bool IsGatedByTargetEnabled(string methodName)
+        {
+            return methodName != null && GatedByTargetEnabledNames.Contains(methodName);
         }
 
         /// <summary>Whether Unity's message dispatch knows this name at all.</summary>
