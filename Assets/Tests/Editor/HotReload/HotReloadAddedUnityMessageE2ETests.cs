@@ -77,6 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadMethodOutcome added = FindAdded(result, "Update");
             Assert.That(added.LifecycleNote, Is.EqualTo(HotReloadUnityMessageNotes.Forwarded));
+            Assert.That(added.LifecycleNote, Does.Not.Contain("runs once on each existing instance"));
             Assert.That(result.Warnings, Has.None.Contain("not invoked until"));
         }
 
@@ -93,6 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadMethodOutcome added = FindAdded(result, "Start");
             Assert.That(added.LifecycleNote, Is.EqualTo(HotReloadUnityMessageNotes.ForwardedStart));
+            Assert.That(added.LifecycleNote, Does.Contain("runs once on each existing instance"));
         }
 
         /// <summary>

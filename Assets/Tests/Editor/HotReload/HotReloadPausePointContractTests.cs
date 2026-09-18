@@ -392,6 +392,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ContractHitThenExpired.cs");
             string warnings = string.Join(" | ", apply.Warnings);
             Assert.That(warnings, Does.Not.Contain("Expired pause points were not re-targeted"), warnings);
+            // Leaving the marker out of the warning must not keep it in the owner ledger, or every
+            // later reload of the method would evaluate it again.
+            Assert.That(SourcePausePointPatcher.LogicalOwnerById.ContainsKey(enable.Id), Is.False);
+            Assert.That(SourcePausePointPatcher.RequestById.ContainsKey(enable.Id), Is.False);
         }
 
         /// <summary>
