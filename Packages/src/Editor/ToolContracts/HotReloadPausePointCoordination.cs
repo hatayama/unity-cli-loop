@@ -75,4 +75,47 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             Methods = methods;
         }
     }
+
+    /// <summary>
+    /// The method hot reload added that holds a source line, with the name parts a pause-point
+    /// --method filter is matched against.
+    /// </summary>
+    public sealed class HotReloadAddedMethodAtLine
+    {
+        /// <summary>
+        /// The added method's label as hot reload reports it (namespace, type and signature).
+        /// </summary>
+        public string Label { get; }
+
+        public string MethodName { get; }
+
+        /// <summary>
+        /// The short name of the declaring type, spelled as Type.Name spells it.
+        /// </summary>
+        public string DeclaringTypeName { get; }
+
+        /// <summary>
+        /// The short name of the type that encloses the declaring type, or null when the
+        /// declaring type is not nested.
+        /// </summary>
+        public string NestedOuterTypeName { get; }
+
+        public HotReloadAddedMethodAtLine(
+            string label,
+            string methodName,
+            string declaringTypeName,
+            string nestedOuterTypeName)
+        {
+            if (string.IsNullOrEmpty(label) || string.IsNullOrEmpty(methodName) || string.IsNullOrEmpty(declaringTypeName))
+            {
+                throw new System.ArgumentException(
+                    "An added method at a line needs its label, method name and declaring type name.");
+            }
+
+            Label = label;
+            MethodName = methodName;
+            DeclaringTypeName = declaringTypeName;
+            NestedOuterTypeName = nestedOuterTypeName;
+        }
+    }
 }

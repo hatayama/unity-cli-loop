@@ -107,7 +107,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 () => generation.RegisterAddedMethod(
                     AddedMethodKey,
                     GetAddedTarget(),
-                    FixtureProjectRelativePath));
+                    FixtureProjectRelativePath,
+                    "AddedMember",
+                    "FileGenerationContractFixture"));
             Assert.That(generation.AddedMemberCount, Is.EqualTo(0));
         }
 

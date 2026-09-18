@@ -232,7 +232,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FormatHotReloadOutcomes(result));
             IHotReloadPausePointPort port = HotReloadPausePointCoordination.HotReloadSide;
             Assert.That(port.GetShimLookupForFile(FixtureProjectRelativePath), Is.Null);
-            Assert.That(port.FindAddedMethodContainingLine(FixtureProjectRelativePath, compiledStatementLine), Does.Contain("AddedLead"));
+            HotReloadAddedMethodAtLine addedAtLine =
+                port.FindAddedMethodContainingLine(FixtureProjectRelativePath, compiledStatementLine);
+            Assert.That(addedAtLine.Label, Does.Contain("AddedLead"));
+            Assert.That(addedAtLine.MethodName, Is.EqualTo("AddedLead"));
+            Assert.That(addedAtLine.DeclaringTypeName, Is.EqualTo(nameof(HotReloadE2EFixture)));
+            Assert.That(addedAtLine.NestedOuterTypeName, Is.Null);
             Assert.That(port.HasActiveHotReloadChangesInFile(FixtureProjectRelativePath), Is.True);
 
             PausePointResponse withoutMethod = EnableContinuous(compiledStatementLine);

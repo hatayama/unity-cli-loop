@@ -78,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.RegisterShimMethod(
                 GetAddedTarget(),
                 new HotReloadShimMethodEntry(GetAddedTarget(), false, 1, 2));
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FileOne);
+            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FileOne, "AddedPing", "DomainHost");
             Assert.That(
                 _access.Domain.ListActiveAddedMethodKeys(FileOne),
                 Does.Contain(AddedMethodKey),

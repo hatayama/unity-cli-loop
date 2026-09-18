@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/FileGenerationFixture.cs";
         private const string AddedMethodKey = "FileGenerationFixture.AddedMember()";
+        private const string AddedMethodType = "FileGenerationFixture";
         private const string OtherAddedMethodKey = "FileGenerationFixture.OtherAddedMember()";
         private const string HostType = "Ns.Host";
         private const string CompiledAssemblyPath = "<PROJECT_ROOT>/Library/ScriptAssemblies/Fixture.dll";
@@ -82,8 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetShimTarget(), FixtureProjectRelativePath);
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath);
+            generation.RegisterAddedMethod(AddedMethodKey, GetShimTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
 
             List<HotReloadAddedMemberInfo> members = new List<HotReloadAddedMemberInfo>();
             generation.DescribeAddedMembers(members);
@@ -109,15 +110,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AddedMethodKey,
                 GetAddedTarget(),
                 FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
                 sourceStartLine: 20,
                 sourceEndLine: 24);
 
-            Assert.That(generation.FindAddedMethodContainingLine(20), Is.EqualTo(AddedMethodKey));
-            Assert.That(generation.FindAddedMethodContainingLine(22), Is.EqualTo(AddedMethodKey));
-            Assert.That(generation.FindAddedMethodContainingLine(24), Is.EqualTo(AddedMethodKey));
+            Assert.That(generation.FindAddedMethodContainingLine(20).Label, Is.EqualTo(AddedMethodKey));
+            Assert.That(generation.FindAddedMethodContainingLine(22).Label, Is.EqualTo(AddedMethodKey));
+            Assert.That(generation.FindAddedMethodContainingLine(24).Label, Is.EqualTo(AddedMethodKey));
             Assert.That(generation.FindAddedMethodContainingLine(19), Is.Null);
             Assert.That(generation.FindAddedMethodContainingLine(25), Is.Null);
             Assert.That(generation.BuildShimLookup(), Is.Null);
+        }
+
+        /// <summary>
+        /// What: the added method at a line carries its own name and its declaring type's short
+        /// names converted from the metadata name, so a nested type reads Inner with Outer as its
+        /// enclosing type and a top-level type drops its namespace.
+        /// </summary>
+        [Test]
+        public void FindAddedMethodContainingLine_ReportsShortTypeNamesFromTheMetadataName()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.RegisterAddedMethod(
+                "Ns.Outer/Inner.Step(System.Int32)",
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "Step",
+                NestedCecilType,
+                sourceStartLine: 10,
+                sourceEndLine: 12);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetShimTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                HostType,
+                sourceStartLine: 20,
+                sourceEndLine: 24);
+
+            HotReloadAddedMethodAtLine nested = generation.FindAddedMethodContainingLine(11);
+            HotReloadAddedMethodAtLine topLevel = generation.FindAddedMethodContainingLine(22);
+
+            Assert.That(nested.Label, Is.EqualTo("Ns.Outer/Inner.Step(System.Int32)"));
+            Assert.That(nested.MethodName, Is.EqualTo("Step"));
+            Assert.That(nested.DeclaringTypeName, Is.EqualTo("Inner"));
+            Assert.That(nested.NestedOuterTypeName, Is.EqualTo("Outer"));
+            Assert.That(topLevel.MethodName, Is.EqualTo("AddedMember"));
+            Assert.That(topLevel.DeclaringTypeName, Is.EqualTo("Host"));
+            Assert.That(topLevel.NestedOuterTypeName, Is.Null);
         }
 
         /// <summary>
@@ -134,6 +176,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AddedMethodKey,
                 GetAddedTarget(),
                 FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
                 compiledAssemblyPath: CompiledAssemblyPath);
 
             Assert.That(generation.BuildShimLookup(), Is.Null);
@@ -151,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath);
+            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
 
             Assert.That(generation.FindCompiledAssemblyLocation(), Is.Null);
             Assert.That(generation.HasActiveHotReloadChanges, Is.True);
@@ -161,6 +205,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 OtherAddedMethodKey,
                 GetAddedTarget(),
                 FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
                 compiledAssemblyPath: CompiledAssemblyPath);
             generation.BeginAddedMemberGeneration();
 
@@ -196,7 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath);
+            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
 
             Assert.That(generation.FindAddedMethodContainingLine(0), Is.Null);
             Assert.That(generation.FindAddedMethodContainingLine(1), Is.Null);
@@ -211,7 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath);
+            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
 
             Assert.That(generation.IsActiveMember(AddedMethodKey), Is.True);
             Assert.That(generation.IsActiveMember(OtherAddedMethodKey), Is.False);
@@ -227,7 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath);
+            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
             generation.ReplaceAddedFields(new[] { HostType + ".alpha" });
 
             generation.BeginAddedMemberGeneration();

@@ -118,7 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 scope.Port.ShimLookupForFile = file => null;
                 scope.Port.AddedMethodContainingLine = (file, line) =>
-                    line == HelperStepStatementLine ? "Ns.Owner.AddedStep()" : null;
+                    line == HelperStepStatementLine
+                        ? new HotReloadAddedMethodAtLine("Ns.Owner.AddedStep()", "AddedStep", "Owner", null)
+                        : null;
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
 
@@ -140,7 +142,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 scope.Port.ShimLookupForFile = file => null;
                 scope.Port.AddedMethodContainingLine = (file, line) =>
-                    line == HelperStepStatementLine ? "Ns.Owner.AddedStep()" : null;
+                    line == HelperStepStatementLine
+                        ? new HotReloadAddedMethodAtLine("Ns.Owner.AddedStep()", "AddedStep", "Owner", null)
+                        : null;
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "AddedStep");
 
@@ -165,12 +169,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 scope.Port.ShimLookupForFile = file => null;
                 scope.Port.AddedMethodContainingLine = (file, line) =>
-                    line == OwnerAdvanceStatementLine ? "Ns.Owner.Step()" : null;
+                    line == OwnerAdvanceStatementLine
+                        ? new HotReloadAddedMethodAtLine("Ns.Owner.Step()", "Step", "Owner", null)
+                        : null;
 
                 PausePointResponse response = EnableInAddedScopeFixture(OwnerAdvanceStatementLine, "Step");
 
                 AssertRefusedAsAddedMethod(response, OwnerAdvanceStatementLine, "Ns.Owner.Step()");
             }
+        }
+
+        /// <summary>
+        /// What: an edited line of an added Owner.Step whose number falls inside the compiled
+        /// Helper.Step span is refused under a bare --method Step, because that filter names both
+        /// methods, and the next action says to pass --method as Type.Method.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheMethodAlsoNamesTheAddedMethodHoldingTheLine_RefusesAsAmbiguous()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = file => null;
+                scope.Port.AddedMethodContainingLine = (file, line) =>
+                    line == HelperStepStatementLine ? AddedOwnerStep() : null;
+
+                PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.Message,
+                    Does.StartWith(
+                        "Line " + HelperStepStatementLine + " is inside '" + AddedOwnerStepLabel
+                        + "', which hot reload added"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.AmbiguousAddedMethodResolveFailureNextAction));
+                Assert.That(response.RecommendedNextAction, Does.Contain("Type.Method"));
+            }
+        }
+
+        /// <summary>
+        /// What: the same line arms the compiled Helper.Step when --method names it with its type,
+        /// because that filter no longer names the added Owner.Step.
+        /// </summary>
+        [Test]
+        public void Enable_WhenATypedMethodNamesOnlyTheCompiledMethod_ArmsBesideASameNamedAddedMethod()
+        {
+            const string typedFilter = "AddedMethodScopeHelper.Step";
+            SourcePausePointResolveResult expected =
+                SourcePausePointResolver.Resolve(AddedScopeFixtureFile, HelperStepStatementLine, typedFilter);
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = file => null;
+                scope.Port.AddedMethodContainingLine = (file, line) =>
+                    line == HelperStepStatementLine ? AddedOwnerStep() : null;
+
+                PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, typedFilter);
+
+                Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+                Assert.That(response.ResolvedMethod, Is.EqualTo(expected.Resolution.MethodDisplayName));
+                Assert.That(response.ResolvedLine, Is.EqualTo(HelperStepStatementLine));
+                Assert.That(response.LineBasis, Is.EqualTo("LastCompiledSource"));
+            }
+        }
+
+        /// <summary>
+        /// What: the added-method side of the filter check uses the declaring type's own short
+        /// name for a nested type, as the compiled resolver does, so Inner.Step names an added
+        /// Outer/Inner.Step and Outer.Step does not.
+        /// </summary>
+        [Test]
+        public void AddedMethodScope_NestedAddedMethod_MatchesItsOwnTypeShortNameOnly()
+        {
+            HotReloadAddedMethodAtLine nested = new HotReloadAddedMethodAtLine(
+                "Ns.Outer/Inner.Step(System.Int32)",
+                "Step",
+                "Inner",
+                "Outer");
+
+            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Step", nested), Is.True);
+            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Inner.Step", nested), Is.True);
+            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Outer.Step", nested), Is.False);
+            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Advance", nested), Is.False);
         }
 
         /// <summary>
@@ -193,6 +276,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(null, 99), Is.False);
             Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 15), Is.False);
             Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 16), Is.True);
+        }
+
+        // An added Owner.Step(int) whose edited lines overlap the compiled Helper.Step span.
+        private const string AddedOwnerStepLabel =
+            "io.github.hatayama.UnityCliLoop.Tests.SourcePausePointResolverFixtures.AddedMethodScopeOwner.Step(System.Int32)";
+
+        private static HotReloadAddedMethodAtLine AddedOwnerStep()
+        {
+            return new HotReloadAddedMethodAtLine(AddedOwnerStepLabel, "Step", "AddedMethodScopeOwner", null);
         }
 
         private static PausePointResponse EnableInAddedScopeFixture(int line, string method)

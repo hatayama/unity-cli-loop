@@ -1,5 +1,7 @@
 using System.Reflection;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -27,13 +29,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public string CompiledAssemblyPath { get; }
 
+        /// <summary>
+        /// The added method's own name and its declaring type in metadata form, or empty when the
+        /// registration did not carry them.
+        /// </summary>
+        public string MethodName { get; }
+
+        public string DeclaringTypeMetadataName { get; }
+
         public HotReloadAddedMemberInfo(
             string methodKey,
             string filePath,
             MethodInfo shimMethod,
             int sourceStartLine = 0,
             int sourceEndLine = 0,
-            string compiledAssemblyPath = null)
+            string compiledAssemblyPath = null,
+            string methodName = null,
+            string declaringTypeMetadataName = null)
         {
             MethodKey = methodKey ?? string.Empty;
             FilePath = filePath ?? string.Empty;
@@ -41,6 +53,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourceStartLine = sourceStartLine;
             SourceEndLine = sourceEndLine;
             CompiledAssemblyPath = compiledAssemblyPath ?? string.Empty;
+            MethodName = methodName ?? string.Empty;
+            DeclaringTypeMetadataName = declaringTypeMetadataName ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The name parts pause point matches its --method filter against, spelled as the compiled
+        /// resolver spells them.
+        /// </summary>
+        internal HotReloadAddedMethodAtLine ToAddedMethodAtLine()
+        {
+            (string declaringTypeName, string nestedOuterTypeName) =
+                new HotReloadMetadataTypeName(DeclaringTypeMetadataName).ToShortNestingNames();
+            return new HotReloadAddedMethodAtLine(MethodKey, MethodName, declaringTypeName, nestedOuterTypeName);
         }
 
         internal bool ContainsSourceLine(int line)

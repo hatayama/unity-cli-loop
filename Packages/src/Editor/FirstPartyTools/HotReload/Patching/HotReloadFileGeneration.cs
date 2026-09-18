@@ -109,12 +109,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string methodKey,
             MethodInfo shimMethod,
             string filePath,
+            string methodName,
+            string declaringTypeMetadataName,
             int sourceStartLine = 0,
             int sourceEndLine = 0,
             string compiledAssemblyPath = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
             Debug.Assert(shimMethod != null, "shimMethod must not be null.");
+            if (string.IsNullOrEmpty(methodName) || string.IsNullOrEmpty(declaringTypeMetadataName))
+            {
+                throw new ArgumentException(
+                    "An added method is registered with its own name and its declaring type's metadata name.");
+            }
+
             if (!HasAddedMemberGeneration)
             {
                 throw new InvalidOperationException(
@@ -128,7 +136,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     shimMethod,
                     sourceStartLine,
                     sourceEndLine,
-                    compiledAssemblyPath);
+                    compiledAssemblyPath,
+                    methodName,
+                    declaringTypeMetadataName);
         }
 
         /// <summary>
@@ -426,16 +436,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// The key of the added method whose source range holds the 1-based line, or null when no
-        /// added method of this file covers it.
+        /// The added method whose source range holds the 1-based line, or null when no added method
+        /// of this file covers it.
         /// </summary>
-        internal string FindAddedMethodContainingLine(int line)
+        internal HotReloadAddedMethodAtLine FindAddedMethodContainingLine(int line)
         {
             foreach (KeyValuePair<string, HotReloadAddedMemberInfo> pair in _addedMembersByMethodKey)
             {
                 if (pair.Value.ContainsSourceLine(line))
                 {
-                    return pair.Key;
+                    return pair.Value.ToAddedMethodAtLine();
                 }
             }
 

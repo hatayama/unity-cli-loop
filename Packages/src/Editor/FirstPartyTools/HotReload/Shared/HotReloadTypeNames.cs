@@ -42,6 +42,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Value.Replace('/', '.');
         }
 
+        /// <summary>
+        /// The short names Type.Name and a Cecil TypeDefinition.Name give the type and, when it is
+        /// nested, its enclosing type (null otherwise), the parts a pause-point --method filter
+        /// matches against.
+        /// </summary>
+        public (string DeclaringTypeName, string NestedOuterTypeName) ToShortNestingNames()
+        {
+            string[] nestingSegments = Value.Split('/');
+            string declaringTypeName = StripNamespace(nestingSegments[nestingSegments.Length - 1]);
+            string nestedOuterTypeName = nestingSegments.Length > 1
+                ? StripNamespace(nestingSegments[nestingSegments.Length - 2])
+                : null;
+            return (declaringTypeName, nestedOuterTypeName);
+        }
+
+        private static string StripNamespace(string typeName)
+        {
+            int lastDot = typeName.LastIndexOf('.');
+            return lastDot < 0 ? typeName : typeName.Substring(lastDot + 1);
+        }
+
         public bool Equals(HotReloadMetadataTypeName other)
         {
             return string.Equals(Value, other.Value, StringComparison.Ordinal);
