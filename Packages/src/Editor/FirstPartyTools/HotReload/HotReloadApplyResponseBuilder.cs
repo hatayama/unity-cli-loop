@@ -309,6 +309,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message += " Added: " + addedCount + ".";
             }
 
+            // Why counted here: the totals only count what was applied, so a run that skipped
+            // some of the edits otherwise reads as if every one of them took effect.
+            int skippedCount = CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Skipped);
+            if (skippedCount > 0)
+            {
+                message += " Skipped: " + skippedCount + ".";
+            }
+
             return AppendStaleSummary(message, result);
         }
 
@@ -330,7 +338,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // look inconsistent with the listed outcomes.
         private static string AppendStaleSummary(string message, HotReloadOrchestratorResult result)
         {
-            int staleCount = CountStaleOutcomes(result);
+            int staleCount = CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Stale);
             if (staleCount == 0)
             {
                 return message;
@@ -339,18 +347,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return message + " Stale=" + staleCount + ".";
         }
 
-        private static int CountStaleOutcomes(HotReloadOrchestratorResult result)
+        private static int CountOutcomesOfKind(HotReloadOrchestratorResult result, HotReloadMethodOutcomeKind kind)
         {
-            int staleCount = 0;
+            int count = 0;
             for (int index = 0; index < result.Methods.Count; index++)
             {
-                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Stale)
+                if (result.Methods[index].Kind == kind)
                 {
-                    staleCount++;
+                    count++;
                 }
             }
 
-            return staleCount;
+            return count;
         }
 
         private static string AppendUnchangedAndLifecycleNotes(

@@ -272,9 +272,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
                 new[] { "CS1503: Argument 1: cannot convert" },
                 "The added member's body could not be fully bound in the hot-reload compilation "
-                + "(CS1503: Argument 1: cannot convert), typically because another file in this reload "
-                + "declares a type that the compiled assembly also contains. Private-member access cannot "
-                + "be verified, so the member is skipped. Run 'uloop compile'.");
+                + "(CS1503: Argument 1: cannot convert); hot reload cannot verify a member it cannot bind, "
+                + "so it is skipped. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,
