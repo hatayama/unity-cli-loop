@@ -295,7 +295,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BrokenHostDeclaringAdded(),
                 callerSource);
 
-            FindOutcome(result, HotReloadMethodOutcomeKind.Failed, "Value");
+            AssertOnlyFailureIsBrokenHostValue(result);
             AssertIsolatedCallerSkip(result, "AddedRelay", FixturePath(CallerFileName));
             AssertIsolatedCallerSkip(result, "Call(", FixturePath(CallerFileName));
             AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Other");
@@ -336,7 +336,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         siblingSource)
                 });
 
-            FindOutcome(result, HotReloadMethodOutcomeKind.Failed, "Value");
+            AssertOnlyFailureIsBrokenHostValue(result);
             AssertIsolatedCallerSkip(result, "AddedMid", siblingPath);
             AssertIsolatedCallerSkip(result, "AddedOuter", siblingPath);
             AssertIsolatedCallerSkip(result, "ExistingCaller", siblingPath);
@@ -1164,6 +1164,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string hostSource = InsertHostMember(
                 "        public int Added()\n        {\n            return 41;\n        }\n\n");
             return ReplaceInSource(hostSource, "return 1;", "int broken = \"not an int\";\n            return broken;");
+        }
+
+        // Why exactly one row: an isolation that fell back to failing the whole group would add a
+        // file-level or shim-compile Failed row while every per-method assertion still held.
+        private static void AssertOnlyFailureIsBrokenHostValue(HotReloadOrchestratorResult result)
+        {
+            List<HotReloadMethodOutcome> failures = new List<HotReloadMethodOutcome>();
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    failures.Add(outcome);
+                }
+            }
+
+            Assert.That(failures.Count, Is.EqualTo(1), FormatOutcomes(result));
+            Assert.That(
+                failures[0].Method,
+                Does.Contain(nameof(HotReloadCrossFileAddedMemberHost) + ".Value("),
+                FormatOutcomes(result));
+            Assert.That(failures[0].FilePath, Is.EqualTo(FixturePath(HostFileName)));
         }
 
         private static void AssertIsolatedCallerSkip(
