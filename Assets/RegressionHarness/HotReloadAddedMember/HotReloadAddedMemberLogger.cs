@@ -6,10 +6,11 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
     // Update logs a baseline marker so the driver can add a field and a method in this
     // same file, rewrite existing ReadAdded/WriteAdded plus Update to use them, and
     // assert PlayMode output plus store persistence without a domain reload.
-    // Why existing Update (not a newly added Unity message): added messages are never
-    // discovered on the compiled type, so a new Update would not run. Why compiled
-    // ReadAdded/WriteAdded: execute-dynamic-code can only call methods that already
-    // exist; Harmony then forwards those patched bodies to the side table.
+    // Why existing Update (not a newly added Unity message): an added message reaches the
+    // engine only through the proxy component a reload attaches during Play Mode, and this
+    // harness is about the added-member path itself. Why compiled ReadAdded/WriteAdded:
+    // execute-dynamic-code can only call methods that already exist; Harmony then forwards
+    // those patched bodies to the side table.
     public sealed class HotReloadAddedMemberLogger : MonoBehaviour
     {
         private int _secret = 7;

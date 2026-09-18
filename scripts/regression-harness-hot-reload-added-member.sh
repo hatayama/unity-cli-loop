@@ -9,7 +9,8 @@ set -e
 # A second pass adds a method that reads a compiled private field and asserts
 # the PlayMode marker shows that value (no FieldAccessException).
 # Sed/cat must keep the edit in one file — added members are only visible to
-# edited bodies in that file. A newly added Unity message would not run.
+# edited bodies in that file. A newly added Unity message runs through a proxy
+# component instead, which this harness deliberately leaves out of scope.
 # See docs/regression-harness.md.
 #
 # Usage: sh scripts/regression-harness-hot-reload-added-member.sh [--project-path <path>]
