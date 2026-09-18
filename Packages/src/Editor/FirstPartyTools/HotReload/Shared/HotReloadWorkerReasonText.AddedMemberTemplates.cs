@@ -56,6 +56,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0,
                     AccessorRewriteUnavailableSeparator,
                     " " + CompileCallToAction));
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
+                Plain(
+                    "The added member's body could not be fully bound in the hot-reload compilation ({0}), "
+                    + "typically because another file in this reload declares a type that the compiled "
+                    + "assembly also contains. Private-member access cannot be verified, so the member is "
+                    + "skipped. " + CompileCallToAction,
+                    1));
 
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,

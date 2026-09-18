@@ -30,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AddedMethodTypeNotIntroduced,
         AddedMethodInterfaceMember,
         AddedMethodInaccessibleAccessNoRewrite,
+        AddedMethodBodyUnbound,
         AddedFieldStructHost,
         AddedFieldInitializerNotLiteralOrExternalStatic,
         AddedFieldFieldTypeNotExternallyVisible,

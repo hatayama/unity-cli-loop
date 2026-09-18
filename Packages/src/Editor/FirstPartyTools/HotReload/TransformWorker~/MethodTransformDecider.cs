@@ -246,6 +246,15 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.AddedMethod(true);
         }
 
+        Diagnostic bindingError = AddedMemberBindingGuard.FindFirstBindingError(semanticModel, methodBodyNode);
+        if (bindingError != null)
+        {
+            return MethodTransformDecision.Skip(
+                WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
+                    bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture)));
+        }
+
         if (!InaccessibleAccessScanner.SubtreeHasInaccessibleMemberAccess(semanticModel, new[] { methodBodyNode }))
         {
             return MethodTransformDecision.AddedMethod(false);
