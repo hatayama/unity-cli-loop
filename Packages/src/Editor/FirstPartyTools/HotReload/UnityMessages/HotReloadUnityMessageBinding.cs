@@ -40,10 +40,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "parameterTypes must match names.");
 
             TargetType = targetType;
-            _names = names;
-            _gated = gated;
-            _forwarders = forwarders;
-            _parameterTypes = parameterTypes;
+            // Copied, nested arrays included: the caller still holds the arrays it passed, and a
+            // binding that changed under Unity's message dispatch would be read half-updated.
+            _names = (string[])names.Clone();
+            _gated = (bool[])gated.Clone();
+            _forwarders = (Action<MonoBehaviour, object[]>[])forwarders.Clone();
+            _parameterTypes = new Type[parameterTypes.Length][];
+            for (int slot = 0; slot < parameterTypes.Length; slot++)
+            {
+                _parameterTypes[slot] = (Type[])parameterTypes[slot].Clone();
+            }
         }
 
         /// <summary>The component type whose added messages these slots belong to.</summary>
@@ -60,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>The message's parameters, without the shim's receiver parameter.</summary>
         internal Type[] GetParameterTypes(int slot)
         {
-            return _parameterTypes[slot];
+            return (Type[])_parameterTypes[slot].Clone();
         }
 
         /// <summary>

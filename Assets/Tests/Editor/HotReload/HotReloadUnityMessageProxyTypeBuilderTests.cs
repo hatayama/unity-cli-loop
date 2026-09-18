@@ -162,11 +162,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void ProxyMessage_TargetDestroyed_DoesNothing()
         {
             HotReloadUnityMessageProxyFixture target = CreateFixture();
-            Type proxyType = BuildProxyType("Update");
+            Collider collider = CreateGameObject("ProxyTypeBuilderTests_DestroyedCollider").AddComponent<SphereCollider>();
+            // A message the enabled gate never stops, so only the destroyed-target check can hold
+            // this call back.
+            Type proxyType = BuildProxyType("OnTriggerEnter");
             HotReloadUnityMessageProxy proxy = Attach(proxyType, target);
             UnityEngine.Object.DestroyImmediate(target);
 
-            Assert.DoesNotThrow(() => InvokeMessage(proxyType, proxy, "Update", null));
+            Assert.DoesNotThrow(() => InvokeMessage(proxyType, proxy, "OnTriggerEnter", new object[] { collider }));
+            Assert.That(target.TriggerCount, Is.EqualTo(0));
         }
 
         /// <summary>
