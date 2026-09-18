@@ -200,6 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AddedPropertyCompoundAssignment,
                 Plain(
                     "Compound assignment, increment, and decrement of an added property are skipped; the accessor shim cannot preserve the operation. "
+                    + "Rewrite it as a plain assignment statement ('X = X + 1;') to keep hot reloading. "
                     + CompileCallToActionToAddIt,
                     0));
             templates.Add(

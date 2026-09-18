@@ -57,6 +57,13 @@ already-introduced type is therefore `Failed`, not a replacement, and deleting t
 does not unload it either. Only `uloop compile` gets a changed or removed declaration into the
 Editor.
 
+An edit to an introduced type is also refused when that type appears in the member signatures
+of another type that an earlier reload retained and this edit leaves unchanged, because the
+change would split the type between the retained assembly and this edit. The refusal names that
+type. Editing it in the same reload (a method body change is enough) lets both bind from this
+edit, so the run applies; passing its file without editing it changes nothing. Otherwise run
+`uloop compile`.
+
 `--revert-all` reverts patches and added members but cannot unload an introduced type; the
 response says how many stayed. Auto Refresh stays held while any introduced type is active —
 `uloop compile` always releases it, `--revert-all` only when no introduced type remains.

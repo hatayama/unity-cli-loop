@@ -56,6 +56,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
+        // Refuses a line inside a method hot reload added. The compiled resolver is not asked,
+        // so there is no resolver sentence to keep.
+        internal static PausePointResponse CreateAddedMethodRefusal(
+            EnablePausePointSchema parameters,
+            string addedMethodName)
+        {
+            return PausePointFailureResponse.Create(
+                string.Format(
+                    SourcePausePointConstants.AddedMethodResolveFailureMessageFormat,
+                    parameters.Line,
+                    addedMethodName),
+                SourcePausePointConstants.ErrorCodeResolveFailed,
+                SourcePausePointConstants.AddedMethodResolveFailureNextAction);
+        }
+
         // Keeps the resolver's own sentence so the caller still sees which line failed, under a
         // first line that says why no line in this file can resolve yet. The pdb warning travels
         // along because "hot reload it and try again" hides the real cause when the method the

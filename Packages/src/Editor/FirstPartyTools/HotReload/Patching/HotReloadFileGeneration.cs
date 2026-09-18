@@ -105,7 +105,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _shimMethodsByMethod[originalMethod] = entry;
         }
 
-        internal void RegisterAddedMethod(string methodKey, MethodInfo shimMethod, string filePath)
+        internal void RegisterAddedMethod(
+            string methodKey,
+            MethodInfo shimMethod,
+            string filePath,
+            int sourceStartLine = 0,
+            int sourceEndLine = 0)
         {
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
             Debug.Assert(shimMethod != null, "shimMethod must not be null.");
@@ -116,7 +121,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _addedMembersByMethodKey[methodKey] =
-                new HotReloadAddedMemberInfo(methodKey, filePath ?? string.Empty, shimMethod);
+                new HotReloadAddedMemberInfo(
+                    methodKey,
+                    filePath ?? string.Empty,
+                    shimMethod,
+                    sourceStartLine,
+                    sourceEndLine);
         }
 
         /// <summary>
@@ -405,6 +415,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal IReadOnlyList<string> ListActiveAddedMethodKeys()
         {
             return new List<string>(_addedMembersByMethodKey.Keys);
+        }
+
+        /// <summary>
+        /// The key of the added method whose source range holds the 1-based line, or null when no
+        /// added method of this file covers it.
+        /// </summary>
+        internal string FindAddedMethodContainingLine(int line)
+        {
+            foreach (KeyValuePair<string, HotReloadAddedMemberInfo> pair in _addedMembersByMethodKey)
+            {
+                if (pair.Value.ContainsSourceLine(line))
+                {
+                    return pair.Key;
+                }
+            }
+
+            return null;
         }
 
         internal void DescribeAddedMembers(List<HotReloadAddedMemberInfo> members)
