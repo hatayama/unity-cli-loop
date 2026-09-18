@@ -1864,7 +1864,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: patching Awake itself emits the direct one-shot lifecycle note.
+        /// What: patching Awake itself emits the direct one-shot lifecycle note, including the sentence
+        /// that a hot-reloaded caller already runs the patched body.
         /// </summary>
         [Test]
         public async Task Run_WithAwakeMethod_EmitsDirectLifecycleNote()
@@ -1887,6 +1888,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 awakeEntry.lifecycleNote,
                 Does.Contain("Awake is a one-shot lifecycle method"));
+            Assert.That(
+                awakeEntry.lifecycleNote,
+                Does.Contain("A method hot reload added or patched that calls it runs the patched body."));
         }
 
         private const string ExpectedUnsupportedMemberKindSkipReason =
