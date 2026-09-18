@@ -27,7 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return BeginWith(
                 installed.EditorStateSnapshotCapture,
                 installed.TransformWorkerClient.Host,
-                buildDependencies);
+                buildDependencies,
+                new HotReloadApplicationPlayModeQuery());
         }
 
         /// <summary>Replaces the Editor state the new-source admission path reads.</summary>
@@ -36,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return BeginWith(
                 capture,
                 HotReloadCompositionRoot.Services.TransformWorkerClient.Host,
-                HotReloadGroupProcessorDependencies.CreateProduction);
+                HotReloadGroupProcessorDependencies.CreateProduction,
+                new HotReloadApplicationPlayModeQuery());
         }
 
         /// <summary>Replaces the run the tool applies through.</summary>
@@ -59,7 +61,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return BeginWith(
                 HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 host,
-                HotReloadGroupProcessorDependencies.CreateProduction);
+                HotReloadGroupProcessorDependencies.CreateProduction,
+                new HotReloadApplicationPlayModeQuery());
+        }
+
+        /// <summary>
+        /// Replaces the Play Mode the proxy attacher reads, so an EditMode test can watch the
+        /// installed forwarding do what it does while the Editor is playing.
+        /// </summary>
+        internal static IDisposable BeginWithPlayModeQuery(IHotReloadPlayModeQuery playModeQuery)
+        {
+            return BeginWith(
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
+                HotReloadCompositionRoot.Services.TransformWorkerClient.Host,
+                HotReloadGroupProcessorDependencies.CreateProduction,
+                playModeQuery);
         }
 
         /// <remarks>
@@ -73,7 +89,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             TransformWorkerHost transformWorkerHost,
             Func<HotReloadGroupStageCollaborators, HotReloadGroupProcessorDependencies>
-                buildDependencies)
+                buildDependencies,
+            IHotReloadPlayModeQuery playModeQuery)
         {
             HotReloadServices installed = HotReloadCompositionRoot.Services;
             // The capture is main-thread only, and a run inside the scope normalizes script paths
@@ -87,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     editorStateSnapshotCapture,
                     transformWorkerHost,
                     buildDependencies,
-                    new HotReloadApplicationPlayModeQuery()));
+                    playModeQuery));
         }
     }
 

@@ -830,7 +830,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         CreateDependenciesWithAfterGateAction(
                             collaborators,
                             () => editorState.Capture =
-                                () => new HotReloadEditorStateSnapshot(true, false, false))))
+                                () => new HotReloadEditorStateSnapshot(true, false, false)),
+                    new HotReloadApplicationPlayModeQuery()))
                 {
                     result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                         new[] { hostPath, callerPath },

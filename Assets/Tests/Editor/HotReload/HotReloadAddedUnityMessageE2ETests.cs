@@ -20,9 +20,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// the instances in the open scene.
     /// </summary>
     /// <remarks>
-    /// Why this builds its own forwarding instead of ticking the installed one: only a run in Play
-    /// Mode attaches proxies, and an EditMode test has to say so itself. The forwarding here reads
-    /// the same installed domain, so what a run wrote is what it reconciles.
+    /// Why the installed forwarding rather than one the test builds: the run and the revert are
+    /// what bind and clear it in production, and a forwarding of the test's own would keep passing
+    /// after those calls were deleted. Only the Play Mode the attacher reads is substituted, since
+    /// nothing attaches outside Play Mode and an EditMode test has to say it is playing.
     /// </remarks>
     public class HotReloadAddedUnityMessageE2ETests
     {
@@ -30,25 +31,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private readonly List<GameObject> _created = new List<GameObject>();
         private HotReloadDomainTestScope _scope;
-        private HotReloadUnityMessageForwarding _forwarding;
+        private IDisposable _playing;
 
         [SetUp]
         public void SetUp()
         {
             _scope = new HotReloadDomainTestScope();
-            HotReloadUnityMessageProxyAttacher attacher =
-                new HotReloadUnityMessageProxyAttacher(
-                    new HotReloadStubPlayModeQuery { IsPlaying = true },
-                    new HotReloadUnityMessageProxyTypeBuilder());
-            _forwarding = new HotReloadUnityMessageForwarding(
-                HotReloadCompositionRoot.Services.Domain,
-                attacher);
+            _playing = HotReloadServicesTestScope.BeginWithPlayModeQuery(
+                new HotReloadStubPlayModeQuery { IsPlaying = true });
         }
 
         [TearDown]
         public void TearDown()
         {
-            _forwarding.Clear();
+            // The proxies belong to the graph this scope installed, so they come off before it is
+            // put back; the domain scope only knows about the forwarding of its own graph.
+            Forwarding.Clear();
             foreach (GameObject gameObject in _created)
             {
                 if (gameObject != null)
@@ -58,9 +56,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             _created.Clear();
+            _playing.Dispose();
             _scope.Dispose();
             VibeLogger.ClearMemoryLogs();
         }
+
+        private static HotReloadUnityMessageForwarding Forwarding =>
+            HotReloadCompositionRoot.Services.UnityMessageForwarding;
 
         /// <summary>
         /// What: adding Update to a compiled MonoBehaviour reports the method as added and says it
@@ -88,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadAddedUnityMessageFixture target = CreateFixture();
             await RunWithAddedMemberAsync("AddedUnityMessageUpdate.cs", IncrementUpdateSource());
 
-            _forwarding.Tick();
+            Forwarding.Tick();
 
             HotReloadUnityMessageProxy[] proxies =
                 target.gameObject.GetComponents<HotReloadUnityMessageProxy>();
@@ -107,13 +109,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadAddedUnityMessageFixture target = CreateFixture();
             await RunWithAddedMemberAsync("AddedUnityMessageUpdate.cs", IncrementUpdateSource());
-            _forwarding.Tick();
+            Forwarding.Tick();
             InvokeMessage(SingleProxyOn(target), "Update");
 
             await RunWithAddedMemberAsync(
                 "AddedUnityMessageUpdateAgain.cs",
                 "        private void Update()\n        {\n            Counter += 10;\n        }");
-            _forwarding.Tick();
+            Forwarding.Tick();
             InvokeMessage(SingleProxyOn(target), "Update");
 
             Assert.That(target.Counter, Is.EqualTo(11));
@@ -131,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult result = await RunWithAddedMemberAsync(
                 "AddedUnityMessageAwake.cs",
                 "        private void Awake()\n        {\n        }");
-            _forwarding.Tick();
+            Forwarding.Tick();
 
             HotReloadMethodOutcome added = FindAdded(result, "Awake");
             Assert.That(added.LifecycleNote, Is.EqualTo(HotReloadUnityMessageNotes.NotForwarded));
@@ -151,14 +153,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadAddedUnityMessageFixture target = CreateFixture();
             await RunWithAddedMemberAsync("AddedUnityMessageUpdate.cs", IncrementUpdateSource());
-            _forwarding.Tick();
+            Forwarding.Tick();
             Assert.That(
                 target.gameObject.GetComponents<HotReloadUnityMessageProxy>().Length,
                 Is.EqualTo(1),
                 "Arrange: the tick must have attached the proxy.");
 
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
-            _forwarding.Tick();
+            Forwarding.Tick();
+
+            Assert.That(
+                target.gameObject.GetComponents<HotReloadUnityMessageProxy>(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a proxy the run cannot build is reported by that run, which only holds because the
+        /// run reconciles into its own warnings; the editor update reconciles with nowhere to report.
+        /// </summary>
+        [Test]
+        public async Task Run_WhenTheProxyCannotBeBuilt_ReportsItAsAWarningOfThatRun()
+        {
+            HotReloadOrchestratorResult result = await RunWithAddedMemberAsync(
+                "AddedUnityMessageUpdateTwice.cs",
+                IncrementUpdateSource()
+                    + "\n\n        private void Update(int steps)\n        {\n"
+                    + "            Counter += steps;\n        }");
+
+            Assert.That(result.Warnings, Has.Exactly(1).Contains("Unity message forwarding for"));
+        }
+
+        /// <summary>
+        /// What: reverting through the tool takes the proxies off in the same step, so a caller
+        /// that reverts and stops never leaves a component on the instances.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_ThroughTheTool_TakesTheProxyOffWithoutAnotherTick()
+        {
+            HotReloadAddedUnityMessageFixture target = CreateFixture();
+            await RunWithAddedMemberAsync("AddedUnityMessageUpdate.cs", IncrementUpdateSource());
+            Forwarding.Tick();
+            Assert.That(
+                target.gameObject.GetComponents<HotReloadUnityMessageProxy>().Length,
+                Is.EqualTo(1),
+                "Arrange: the tick must have attached the proxy.");
+
+            HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
 
             Assert.That(
                 target.gameObject.GetComponents<HotReloadUnityMessageProxy>(), Is.Empty);
