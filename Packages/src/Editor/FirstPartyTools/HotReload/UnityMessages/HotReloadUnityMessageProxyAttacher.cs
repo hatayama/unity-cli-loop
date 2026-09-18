@@ -141,10 +141,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (KeyValuePair<Type, Type> pair in _proxyTypeByTarget)
             {
+                // Inactive instances are included: a GameObject switched back on during Play Mode
+                // starts receiving messages without passing through this sweep again.
+#if UNITY_6000_4_OR_NEWER
+                UnityEngine.Object[] instances = UnityEngine.Object.FindObjectsByType(
+                    pair.Key,
+                    FindObjectsInactive.Include);
+#else
                 UnityEngine.Object[] instances = UnityEngine.Object.FindObjectsByType(
                     pair.Key,
                     FindObjectsInactive.Include,
                     FindObjectsSortMode.None);
+#endif
                 foreach (UnityEngine.Object instance in instances)
                 {
                     AttachIfMissing((MonoBehaviour)instance, pair.Key, pair.Value);
