@@ -445,11 +445,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: adding Update on a compiled MonoBehaviour-derived type keeps the entry and emits
-        /// the Unity-message warning.
+        /// What: adding Update on a compiled MonoBehaviour-derived type keeps the entry and says
+        /// nothing about it, because whether the engine reaches an added message is decided on the
+        /// Unity side, where the proxy that forwards it is built.
         /// </summary>
         [Test]
-        public async Task Warn_AddedUnityMessageOnMonoBehaviour_KeepsEntryAndEmitsWarning()
+        public async Task AddedUnityMessageOnMonoBehaviour_KeepsTheEntryWithoutAWorkerWarning()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -470,7 +471,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
-                Has.Some.Contain("Update").And.Contain("uloop compile"));
+                Has.None.Contain("uloop compile"));
         }
 
         /// <summary>

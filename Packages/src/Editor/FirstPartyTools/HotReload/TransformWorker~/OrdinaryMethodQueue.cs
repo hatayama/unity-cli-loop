@@ -370,10 +370,6 @@ internal static class OrdinaryMethodQueue
                 replacesCompiledMethod,
                 snapshotMethodMap,
                 plainCurrentMethodMap);
-            OrdinaryMethodShimTypes.AppendUnityMessageWarningIfNeeded(
-                typeState.TypeSymbol,
-                methodSymbol,
-                declarationDriftWarnings);
             TestAttributeNames.AppendAddedTestMethodWarningIfNeeded(
                 methodDeclaration,
                 typeState.TypeSymbol,
