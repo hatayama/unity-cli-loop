@@ -57,10 +57,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             string workerSourcePath,
             HotReloadFileSinks sinks,
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence,
+            HotReloadSiblingBaselineNotices siblingBaselineNotices)
         {
             Debug.Assert(template != null, "template must not be null.");
-            return new HotReloadGroupFile(
+            Debug.Assert(siblingBaselineNotices != null, "siblingBaselineNotices must not be null.");
+            HotReloadGroupFile sibling = new HotReloadGroupFile(
                 projectRelativePath,
                 workerSourcePath,
                 projectRelativePath,
@@ -70,7 +72,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 template.ProjectRoot,
                 sinks,
                 newSourceMembershipEvidence);
+            sibling.SiblingBaselineNotices = siblingBaselineNotices;
+            return sibling;
         }
+
+        // Where a re-applied sibling's missing-baseline notice goes instead of its own warnings;
+        // null for a file the caller passed, which keeps one warning per file.
+        internal HotReloadSiblingBaselineNotices SiblingBaselineNotices { get; private set; }
 
         // The path the caller asked to reload, used as the outcome file path.
         internal string AssemblyResolvePath { get; }

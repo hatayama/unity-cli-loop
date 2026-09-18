@@ -249,7 +249,9 @@ the baseline again is unpatched on that run — the compiled IL comes back,
 Without a baseline — for example before
 the first compile after installing or updating the package — every editable method in
 the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
-to establish the baseline.
+to establish the baseline. Files the reload only re-applied as siblings share one
+such line per reason, `N re-applied sibling file(s) ...: <files>`, instead of one
+line each.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor

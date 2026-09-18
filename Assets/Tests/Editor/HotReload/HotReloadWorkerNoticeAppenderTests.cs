@@ -37,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(outcomes.Count, Is.EqualTo(1));
             Assert.That(outcomes[0].Method, Is.EqualTo("(file)"));
@@ -65,7 +66,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(outcomes, Is.Empty);
             Assert.That(warnings, Is.Empty);
@@ -92,7 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
@@ -123,7 +126,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(warnings[0], Does.Contain("declares a type hot reload introduced"));
@@ -150,7 +154,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(warnings[0], Does.Contain("patching all methods"));
@@ -176,7 +181,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
@@ -207,7 +213,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(warnings[0], Does.StartWith("Broken.cs declares a type hot reload introduced"));
@@ -233,9 +240,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyName,
                 AssemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                null);
 
             Assert.That(warnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a re-applied sibling's missing baseline goes to the run's sibling summary instead
+        /// of a warning of its own.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_ForAReappliedSibling_RoutesTheMissingBaselineToTheSiblingSummary()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+            HotReloadSiblingBaselineNotices siblingBaselineNotices = new HotReloadSiblingBaselineNotices();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
+                false,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings,
+                siblingBaselineNotices);
+
+            Assert.That(warnings, Is.Empty);
+            List<string> summary = new List<string>();
+            siblingBaselineNotices.AppendTo(summary);
+            Assert.That(summary.Count, Is.EqualTo(1));
+            Assert.That(
+                summary[0],
+                Does.StartWith("1 re-applied sibling file(s) have no verified source snapshot"));
+            Assert.That(summary[0], Does.Contain(ProjectRelativePath));
         }
 
         private static TransformWorkerFileOutputDto CreateFileOutput(string[] parseErrors)

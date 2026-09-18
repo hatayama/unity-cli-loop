@@ -151,6 +151,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     third,
                     "UncompiledIntroducedOwner.cs",
                     "The re-applied file must be named, so the reader can tell which one it was.");
+                AssertWarningContaining(
+                    third,
+                    "1 re-applied sibling file(s) declare a type hot reload introduced",
+                    "The re-applied file's missing baseline must be reported in the sibling summary line.");
+                AssertNoWarningContaining(
+                    third,
+                    "UncompiledIntroducedOwner.cs declares a type hot reload introduced",
+                    "A file the reload only pulled back in must not get a baseline line of its own, "
+                    + "because it would repeat on every run until the next compile.");
                 Assert.That(
                     CallTheCaller(),
                     Is.EqualTo(EditedPingValue + (PongValue * PongFactor) + HostValue),

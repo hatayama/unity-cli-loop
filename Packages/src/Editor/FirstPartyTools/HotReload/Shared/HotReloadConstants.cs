@@ -276,6 +276,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "edited-method detection; patching all methods. This is expected for files that only "
             + "declare types without bodies.";
 
+        // Format: file count, comma-separated project-relative paths. The per-kind summaries of the
+        // three warnings above for files a run only re-applied; see HotReloadSiblingBaselineNotices.
+        public const string SiblingIntroducedTypeNoBaselineWarningFormat =
+            "{0} re-applied sibling file(s) declare a type hot reload introduced, so they have no "
+            + "compiled baseline until 'uloop compile': {1}. This is expected: hot reload tracks "
+            + "each introduced type from its own recorded declaration.";
+
+        public const string SiblingNoVerifiedSourceSnapshotWarningFormat =
+            "{0} re-applied sibling file(s) have no verified source snapshot, so all their methods "
+            + "are patched: {1}. Run uloop compile to establish a baseline for edited-method detection.";
+
+        public const string SiblingNoCompiledMethodBodyBaselineWarningFormat =
+            "{0} re-applied sibling file(s) have no compiled method body, so there is no baseline "
+            + "for edited-method detection and all their methods are patched: {1}. This is expected "
+            + "for files that only declare types without bodies.";
+
         // Format: file name, assembly name. Emitted when syntax-method key collision disables baseline.
         public const string BaselineDisabledByDuplicateKeysWarningFormat =
             "Baseline comparison disabled for {0} (assembly {1}): the file contains methods with "
