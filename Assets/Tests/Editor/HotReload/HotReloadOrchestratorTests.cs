@@ -4085,11 +4085,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: after an added method applies, a later run that only breaks that added body
-        /// leaves the registry entry in place when nothing else is applied.
+        /// What: after an added method applies, a later run that only breaks a sibling body in the
+        /// file that declares the added method leaves the registry entry in place when nothing
+        /// else is applied.
         /// </summary>
         [Test]
-        public async Task Run_BrokenAddedMethodAfterSuccess_ObservesRegistryWhenNothingElseApplies()
+        public async Task Run_BrokenSiblingOfAddedMethodAfterSuccess_ObservesRegistryWhenNothingElseApplies()
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -4102,7 +4103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
-                WriteEditedSource("BrokenAddedAfterSuccess2.cs", WithBrokenAddedPing(onDisk)),
+                WriteEditedSource("BrokenAddedAfterSuccess2.cs", WithBrokenSiblingOfAddedPing(onDisk)),
                 CancellationToken.None);
 
             int remaining = CountAddedMembersContaining("AddedPing");
@@ -4117,12 +4118,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: after an added method applies, a later run that breaks that added body while
-        /// also editing an unrelated method applies nothing from the file; the previous
-        /// added-member registry entry and patches stay.
+        /// What: after an added method applies, a later run whose added body does not bind is
+        /// refused by the worker before any shim is compiled: the added method and its caller are
+        /// Skipped with the worker's reasons, nothing fails, and the run deactivates the earlier
+        /// AddedPing registration with one warning naming it. A third run with the body fixed
+        /// registers AddedPing again and the caller returns the new value.
         /// </summary>
         [Test]
-        public async Task Run_BrokenAddedMethodAfterSuccess_KeepsRegistryWhenUnrelatedIsAtomicSkipped()
+        public async Task Run_UnboundAddedMethodAfterSuccess_DeactivatesItUntilTheBodyBindsAgain()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("UnboundAddedAfterSuccess1.cs", WithWorkingAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("UnboundAddedAfterSuccess2.cs", WithBrokenAddedPing(onDisk)),
+                CancellationToken.None);
+
+            Assert.That(
+                FindSkippedReason(second, "AddedPing"),
+                Does.StartWith("The added member's body could not be fully bound in the hot-reload compilation"));
+            Assert.That(
+                FindSkippedReason(second, nameof(HotReloadAddedMethodApplyFixture.ExistingCaller)),
+                Is.EqualTo("Calls an added method that hot reload cannot emit. Run 'uloop compile'."));
+            Assert.That(
+                CountOutcomeKind(second, HotReloadMethodOutcomeKind.Failed),
+                Is.EqualTo(0),
+                "No shim compile may fail when the worker refuses the body.\n" + FormatOutcomes(second));
+            Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(0));
+            AssertDeactivatedPatchesWarningsEqual(
+                second,
+                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+
+            string fixedBody = WithWorkingAddedPing(onDisk).Replace(
+                "            return value + 1;\n        }",
+                "            return value + 5;\n        }",
+                StringComparison.Ordinal);
+            HotReloadOrchestratorResult third = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("UnboundAddedAfterSuccess3.cs", fixedBody),
+                CancellationToken.None);
+
+            AssertHasAdded(third, "AddedPing");
+            Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
+            Assert.That(new HotReloadAddedMethodApplyFixture().ExistingCaller(3), Is.EqualTo(8));
+        }
+
+        /// <summary>
+        /// What: after an added method applies, a later run that breaks a sibling body in the file
+        /// that declares the added method while also editing an unrelated method fails only the
+        /// broken body and skips the rest of the file, the added method included, as file-atomic;
+        /// the previous added-member registry entry and patches stay and the unrelated method
+        /// keeps its old behavior.
+        /// </summary>
+        [Test]
+        public async Task Run_BrokenSiblingOfAddedMethodAfterSuccess_SkipsTheWholeFileAndKeepsRegistry()
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -4133,7 +4188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAdded(first, "AddedPing");
             Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
 
-            string later = WithBrokenAddedPing(onDisk).Replace(
+            string later = WithBrokenSiblingOfAddedPing(onDisk).Replace(
                 "        public int Unrelated(int value)\n        {\n            return value;\n        }",
                 "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
@@ -4142,8 +4197,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("BrokenAddedUnrelated2.cs", later),
                 CancellationToken.None);
 
-            AssertHasFailed(second, "AddedPing");
+            AssertHasFailed(second, nameof(HotReloadAddedMethodApplyFixture.ExistingCaller));
+            AssertHasAtomicFileSkip(second, "AddedPing");
             AssertHasAtomicFileSkip(second, nameof(HotReloadAddedMethodApplyFixture.Unrelated));
+            Assert.That(new HotReloadAddedMethodApplyFixture().Unrelated(3), Is.EqualTo(3));
             int remaining = CountAddedMembersContaining("AddedPing");
             Assert.That(
                 remaining,
@@ -4298,12 +4355,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: after two added methods apply, a later run that breaks both bodies while
-        /// editing an unrelated method applies nothing from the file; previous members stay
-        /// and no deactivated-patches warning is emitted.
+        /// What: after two added methods apply, a later run that breaks a sibling body in the file
+        /// that declares them while editing an unrelated method fails only the broken body and
+        /// skips both added methods and the unrelated method as file-atomic; previous members
+        /// stay, the unrelated method keeps its old behavior, and no deactivated-patches warning
+        /// is emitted.
         /// </summary>
         [Test]
-        public async Task Run_BrokenAddedMethodsAfterSuccess_KeepsRegistryAndSkipsUnrelated()
+        public async Task Run_BrokenSiblingOfAddedMethodsAfterSuccess_SkipsTheWholeFileAndKeepsRegistry()
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -4314,7 +4373,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAdded(first, "AddedPing");
             AssertHasAdded(first, "AddedPong");
 
-            string later = WithBrokenAddedPingAndPong(onDisk).Replace(
+            string later = WithBrokenSiblingOfAddedPingAndPong(onDisk).Replace(
                 "        public int Unrelated(int value)\n        {\n            return value;\n        }",
                 "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
@@ -4323,9 +4382,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("BrokenAddedMulti2.cs", later),
                 CancellationToken.None);
 
-            AssertHasFailed(second, "AddedPing");
-            AssertHasFailed(second, "AddedPong");
+            AssertHasFailed(second, nameof(HotReloadAddedMethodApplyFixture.ExistingCaller));
+            AssertHasAtomicFileSkip(second, "AddedPing");
+            AssertHasAtomicFileSkip(second, "AddedPong");
             AssertHasAtomicFileSkip(second, nameof(HotReloadAddedMethodApplyFixture.Unrelated));
+            Assert.That(new HotReloadAddedMethodApplyFixture().Unrelated(3), Is.EqualTo(3));
             Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
             Assert.That(CountAddedMembersContaining("AddedPong"), Is.EqualTo(1));
             AssertNoDeactivatedPatchesWarning(second);
@@ -6285,11 +6346,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a broken added-method body isolates that added method (and its callers) without
-        /// collapsing the file; an unrelated edited method is skipped because the file is atomic.
+        /// What: a broken sibling body in the file that declares an added method fails only that
+        /// body; the added method, its caller, and an unrelated edited method are all skipped as
+        /// file-atomic, nothing is registered, and the unrelated method keeps its old behavior.
         /// </summary>
         [Test]
-        public async Task Run_AddedMethodBodyFailure_IsolatesWithoutWipingFile()
+        public async Task Run_BrokenSiblingOfAddedMethod_SkipsTheWholeFile()
         {
             string hostPath = ResolveAddedMemberHostPath();
             string onDisk = File.ReadAllText(hostPath);
@@ -6304,8 +6366,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             edited = edited.Replace(
                 "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }",
                 "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
-                + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
+            edited = WithBrokenExistingFail(edited);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             string editedPath = WriteEditedSource("AddedMethodBodyFailure.cs", edited);
 
@@ -6315,114 +6378,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
+            AssertHasFailed(result, nameof(HotReloadAddedMemberHost.ExistingFail));
+            AssertHasAtomicFileSkip(result, "AddedPing");
+            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
             AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue));
             AssertNoPatchedOrAddedOutcomes(result);
-
-            bool addedFailed = false;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
-                    && outcome.Method.Contains("AddedPing"))
-                {
-                    addedFailed = true;
-                }
-            }
-
-            Assert.That(
-                addedFailed,
-                Is.True,
-                "AddedPing must isolate as a per-method Failed.\n" + FormatOutcomes(result));
-            AssertHasSkipped(
-                result,
-                nameof(HotReloadAddedMemberHost.ExistingCaller),
-                HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
+            Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(0));
 
             HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
             Assert.That(host.ExistingValue(), Is.EqualTo(1));
-        }
-
-        /// <summary>
-        /// What: when isolation excludes a failed added method A and its direct added caller B,
-        /// the retry worker skip for transitive caller C (C calls B, not A) appears in the
-        /// response as Skipped with IsolatedAddedMethodCallerSkipReason, while independent
-        /// edited method D is skipped because the file is atomic.
-        /// </summary>
-        [Test]
-        public async Task Run_IsolationRetry_ReportsTransitiveCallerOfExcludedAddedMethodAsSkipped()
-        {
-            string hostPath = ResolveAddedMemberHostPath();
-            string onDisk = File.ReadAllText(hostPath);
-            string edited = onDisk.Replace(
-                "        public int ExistingValue()\n        {\n            return 1;\n        }",
-                "        public int ExistingValue()\n        {\n            return 10;\n        }",
-                StringComparison.Ordinal);
-            edited = edited.Replace(
-                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
-                "        public int ExistingCaller(int value)\n        {\n            return AddedHealthy(value);\n        }",
-                StringComparison.Ordinal);
-            edited = edited.Replace(
-                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }",
-                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
-                + "        public int AddedBroken(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
-                + "        public int AddedHealthy(int value)\n        {\n            return AddedBroken(value);\n        }",
-                StringComparison.Ordinal);
-            Assert.That(edited, Is.Not.EqualTo(onDisk));
-            string editedPath = WriteEditedSource("IsolationRetryTransitiveCaller.cs", edited);
-
-            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                new[] { hostPath },
-                editedPath,
-                CancellationToken.None);
-
-            AssertNoFileLevelFailure(result);
-            Assert.That(
-                FindSkippedReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
-                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
-            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue));
-            AssertNoPatchedOrAddedOutcomes(result);
-        }
-
-        /// <summary>
-        /// What: a two-hop indirect caller chain of a failed added method is rewritten to
-        /// IsolatedAddedMethodCallerSkipReason on both hops.
-        /// </summary>
-        [Test]
-        public async Task Run_IsolationRetry_TwoHopIndirectCallers_UseIsolatedAddedMethodCallerSkipReason()
-        {
-            string hostPath = ResolveAddedMemberHostPath();
-            string onDisk = File.ReadAllText(hostPath);
-            string edited = onDisk.Replace(
-                "        public int ExistingValue()\n        {\n            return 1;\n        }",
-                "        public int ExistingValue()\n        {\n            return 10;\n        }",
-                StringComparison.Ordinal);
-            edited = edited.Replace(
-                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
-                "        public int ExistingCaller(int value)\n        {\n            return AddedOuter(value);\n        }",
-                StringComparison.Ordinal);
-            edited = edited.Replace(
-                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }",
-                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
-                + "        public int AddedBroken(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
-                + "        public int AddedMid(int value)\n        {\n            return AddedBroken(value);\n        }\n\n"
-                + "        public int AddedOuter(int value)\n        {\n            return AddedMid(value);\n        }",
-                StringComparison.Ordinal);
-            Assert.That(edited, Is.Not.EqualTo(onDisk));
-            string editedPath = WriteEditedSource("IsolationRetryTwoHopIndirectCallers.cs", edited);
-
-            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                new[] { hostPath },
-                editedPath,
-                CancellationToken.None);
-
-            AssertNoFileLevelFailure(result);
-            Assert.That(
-                FindSkippedReason(result, "AddedOuter"),
-                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
-            Assert.That(
-                FindSkippedReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
-                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
-            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue));
-            AssertNoPatchedOrAddedOutcomes(result);
         }
 
         /// <summary>
@@ -7152,6 +7116,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
         }
 
+        // Why the sibling and not the added body: the worker refuses an added body that does not
+        // bind before any shim is compiled, so only an error in an existing body of the same file
+        // still reaches the shim compile and the file-atomic refusal these tests cover.
+        private static string WithBrokenSiblingOfAddedPing(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            int broken = \"not an int\";\n            return broken + AddedPing(value);\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+        }
+
         private static string WithVirtualAddedPing(string onDisk)
         {
             return onDisk.Replace(
@@ -7171,13 +7147,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
         }
 
-        private static string WithBrokenAddedPingAndPong(string onDisk)
+        private static string WithBrokenSiblingOfAddedPingAndPong(string onDisk)
         {
             return onDisk.Replace(
                 "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
-                "        public int ExistingCaller(int value)\n        {\n            return AddedPong(value) + AddedPing(value);\n        }\n\n"
-                + "        public int AddedPong(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
-                + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            int broken = \"not an int\";\n            return broken + AddedPong(value) + AddedPing(value);\n        }\n\n"
+                + "        public int AddedPong(int value)\n        {\n            return value + 2;\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+        }
+
+        // Breaks the existing ExistingFail body so the shim compile fails in the file that
+        // declares the added methods while every added body still binds.
+        private static string WithBrokenExistingFail(string source)
+        {
+            string anchor = "        public int ExistingFail(int value)\n        {\n            return value;\n        }";
+            Assert.That(source, Does.Contain(anchor), "Precondition: ExistingFail anchor must exist.");
+            return source.Replace(
+                anchor,
+                "        public int ExistingFail(int value)\n        {\n            int broken = \"not an int\";\n            return broken;\n        }",
                 StringComparison.Ordinal);
         }
 
