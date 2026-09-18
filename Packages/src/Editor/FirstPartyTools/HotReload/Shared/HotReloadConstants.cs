@@ -273,9 +273,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string RetargetedPausePointIdDetailFormat =
             "{0} (now line {1}: {2})";
 
-        // Format: count of Methods entries that carry a LifecycleNote.
+        // Format: count of patched Methods entries that carry a LifecycleNote.
         public const string LifecycleNotesAggregatedMessageFormat =
             "{0} patched method(s) have one-shot lifecycle notes; see Methods[].LifecycleNote.";
+
+        // Format: count of added methods whose Unity message a hot-reload proxy delivers.
+        public const string ForwardedUnityMessagesAggregatedMessageFormat =
+            "{0} added Unity message(s) are delivered by a hot-reload proxy; see Methods[].LifecycleNote.";
 
         public const string AlreadyActiveReason =
             "Source is unchanged since the last applied hot reload; the existing patch stays active "

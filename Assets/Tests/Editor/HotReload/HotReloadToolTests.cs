@@ -1312,6 +1312,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the one-shot count covers patched rows only, and added messages a proxy delivers
+        /// are counted in a sentence of their own; a message left to the compiler is in neither.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithForwardedUnityMessages_CountsThemApartFromPatchedNotes()
+        {
+            const string oneShotNote =
+                "Awake is a one-shot lifecycle method; objects that already ran it will not run the "
+                + "patched body. It takes effect only for newly created objects.";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Awake", "Assets/A.cs", oneShotNote),
+                    HotReloadMethodOutcome.Added(
+                        "Type.Update",
+                        "Assets/A.cs",
+                        HotReloadUnityMessageNotes.Forwarded),
+                    HotReloadMethodOutcome.Added(
+                        "Type.Start",
+                        "Assets/A.cs",
+                        HotReloadUnityMessageNotes.ForwardedStart),
+                    HotReloadMethodOutcome.Added(
+                        "Type.OnEnable",
+                        "Assets/A.cs",
+                        HotReloadUnityMessageNotes.NotForwarded)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Does.Contain("1 patched method(s) have one-shot lifecycle notes"));
+            Assert.That(
+                response.Message,
+                Does.Contain("2 added Unity message(s) are delivered by a hot-reload proxy"));
+        }
+
+        /// <summary>
+        /// What: a run whose only notes are on forwarded added messages says nothing about
+        /// patched methods having one-shot notes.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithOnlyForwardedUnityMessages_OmitsThePatchedNoteCount()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Added(
+                        "Type.Update",
+                        "Assets/A.cs",
+                        HotReloadUnityMessageNotes.Forwarded)
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Message, Does.Not.Contain("one-shot lifecycle notes"));
+            Assert.That(
+                response.Message,
+                Does.Contain("1 added Unity message(s) are delivered by a hot-reload proxy"));
+        }
+
+        /// <summary>
         /// What: a skipped-only run reports that nothing from the requested file was applied, and
         /// carries the skipped method in Warnings.
         /// </summary>
