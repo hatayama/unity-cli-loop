@@ -63,9 +63,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return Classification.NotForwarded;
             }
 
+            if (!CanCarryParameters(parameters))
+            {
+                return Classification.NotForwarded;
+            }
+
             return HotReloadUnityMessageNames.IsForwarded(shim.Name)
                 ? Classification.Forwarded
                 : Classification.NotForwarded;
+        }
+
+        // The forwarded call travels through an object[], so a parameter that cannot live in one
+        // has to compile instead: boxing a managed pointer and casting to a by-ref or open generic
+        // type are both invalid IL, and the proxy would fail to verify rather than misbehave.
+        private static bool CanCarryParameters(ParameterInfo[] parameters)
+        {
+            for (int index = 1; index < parameters.Length; index++)
+            {
+                Type parameterType = parameters[index].ParameterType;
+                if (parameterType.IsByRef
+                    || parameterType.IsPointer
+                    || parameterType.ContainsGenericParameters)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

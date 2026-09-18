@@ -124,6 +124,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(targetType, Is.EqualTo(typeof(DetectorFixture)));
         }
 
+        /// <summary>
+        /// What: a message whose argument is passed by reference cannot travel through the proxy's
+        /// object array, so it is reported as a Unity message that is not forwarded.
+        /// </summary>
+        [Test]
+        public void Classify_MessageWithAByRefParameter_IsNotForwarded()
+        {
+            MethodInfo shim = ShimOf(typeof(ByRefShims), "OnTriggerEnter");
+
+            HotReloadUnityMessageDetector.Classification classification =
+                HotReloadUnityMessageDetector.Classify(shim, out Type targetType);
+
+            Assert.That(classification, Is.EqualTo(HotReloadUnityMessageDetector.Classification.NotForwarded));
+            Assert.That(targetType, Is.EqualTo(typeof(DetectorFixture)));
+        }
+
         private static MethodInfo ShimOf(Type host, string methodName)
         {
             MethodInfo shim = host.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
@@ -179,6 +195,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             public static int Update(DetectorFixture __uloopInstance)
             {
                 return 0;
+            }
+        }
+
+        /// <summary>Models an added method a user gave a Unity message name and a by-ref argument.</summary>
+        private static class ByRefShims
+        {
+            public static void OnTriggerEnter(DetectorFixture __uloopInstance, ref Collider other)
+            {
+                other = null;
             }
         }
     }
