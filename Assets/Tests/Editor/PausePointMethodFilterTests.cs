@@ -190,6 +190,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 15), Is.True);
             Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 16), Is.False);
             Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 11), Is.False);
+            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(null, 99), Is.False);
+            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 15), Is.False);
+            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 16), Is.True);
         }
 
         private static PausePointResponse EnableInAddedScopeFixture(int line, string method)

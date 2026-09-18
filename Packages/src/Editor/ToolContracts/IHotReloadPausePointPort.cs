@@ -35,6 +35,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         string FindAddedMethodContainingLine(string file, int line);
 
         /// <summary>
+        /// Argument is a forward-slash path (absolute or project-relative); returns whether hot
+        /// reload still has a live patch or an added method in that file, which is what makes
+        /// its edited lines differ from the last compiled line map.
+        /// </summary>
+        bool HasActiveHotReloadChangesInFile(string file);
+
+        /// <summary>
         /// Returns the PDB-checksum-verified compiled snapshot text for a project-relative source
         /// file, or null when no snapshot is available.
         /// </summary>

@@ -32,6 +32,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
+        /// <summary>
+        /// Reports whether a resolve rounded forward out of the span that scoped an added-method
+        /// line; a null span means no added method scoped the line, so nothing is out of scope.
+        /// </summary>
+        internal static bool IsResolvedLineOutsideScopeSpan(SourcePausePointCompiledMethodSpan span, int resolvedLine)
+        {
+            return span != null && !IsLineInsideSpan(span, resolvedLine);
+        }
+
         internal static bool IsLineInsideSpan(SourcePausePointCompiledMethodSpan span, int line)
         {
             return span.StartLine <= line && line <= span.EndLine;

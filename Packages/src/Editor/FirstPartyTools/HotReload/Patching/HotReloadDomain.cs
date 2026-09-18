@@ -462,6 +462,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return FindGenerationForRequestedPath(requestedPath)?.FindAddedMethodContainingLine(line);
         }
 
+        internal bool HasActiveHotReloadChangesInFile(string requestedPath)
+        {
+            return FindGenerationForRequestedPath(requestedPath)?.HasActiveHotReloadChanges == true;
+        }
+
         internal string LoadVerifiedSnapshotSourceForFile(string requestedPath)
         {
             return FindGenerationForRequestedPath(requestedPath)?.LoadVerifiedSnapshotSource();

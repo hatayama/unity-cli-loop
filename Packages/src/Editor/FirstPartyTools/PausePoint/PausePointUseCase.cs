@@ -199,6 +199,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
+        private static string FindAddedMethodContainingLineOrNull(string normalizedFile, int line)
+        {
+            return HotReloadPausePointCoordination.HotReloadSide?.FindAddedMethodContainingLine(
+                normalizedFile,
+                line);
+        }
+
+        // Why the port as well as the shim lookup: the lookup lists patched methods only, and
+        // a reload that only added methods moves edited lines off the compiled map just the same.
+        private static bool HasActiveHotReloadChanges(HotReloadShimFileLookup shimLookup, string normalizedFile)
+        {
+            return shimLookup != null
+                || HotReloadPausePointCoordination.HotReloadSide?.HasActiveHotReloadChangesInFile(normalizedFile) == true;
+        }
+
         // Resolves File:Line to a patch location via the Resolver, patches it via Harmony, then
         // arms the same registry state machine the Id path uses, keyed by the derived source id.
         private static PausePointResponse EnableBySourceLocation(
@@ -287,10 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // "on or after line N" would land on the next compiled method and arm the wrong code.
             // Asked separately from the shim lookup, which is null when the file has only added
             // methods and no patched ones.
-            string addedMethodName =
-                HotReloadPausePointCoordination.HotReloadSide?.FindAddedMethodContainingLine(
-                    normalizedFile,
-                    parameters.Line);
+            string addedMethodName = FindAddedMethodContainingLineOrNull(normalizedFile, parameters.Line);
             SourcePausePointCompiledMethodSpan addedLineCompiledSpan = null;
             if (addedMethodName != null)
             {
@@ -306,6 +318,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            bool hasActiveHotReloadChanges = HasActiveHotReloadChanges(shimLookup, normalizedFile);
             (SourcePausePointResolveResult resolveResult, string editedLineRemapWarning) =
                 PausePointEditedLineRemap.ResolveWithEditedLineRemap(
                     parameters.File, parameters.Line, parameters.Method, snapshotTiming);
@@ -314,15 +327,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return PausePointResolveFailureResponse.Create(
                     parameters,
                     normalizedFile,
-                    hasActiveHotReloadPatches: shimLookup != null,
+                    hasActiveHotReloadPatches: hasActiveHotReloadChanges,
                     resolveResult,
                     patchedMethodPdbUnavailableWarning);
             }
 
             // Why after resolving: rounding forward past the span end reaches another method of
             // the same name, which is the wrong code the refusal above exists to avoid.
-            if (addedLineCompiledSpan != null
-                && !PausePointAddedMethodScope.IsLineInsideSpan(
+            if (PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(
                     addedLineCompiledSpan,
                     resolveResult.Resolution.ResolvedLine))
             {
@@ -361,7 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchResult,
                 "LastCompiledSource",
                 retargetedToHotReloadPatch: false,
-                hasActiveHotReloadPatches: shimLookup != null,
+                hasActiveHotReloadPatches: hasActiveHotReloadChanges,
                 resolveResult.Resolution.NotCapturableVariables,
                 compiledMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
                 compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine,

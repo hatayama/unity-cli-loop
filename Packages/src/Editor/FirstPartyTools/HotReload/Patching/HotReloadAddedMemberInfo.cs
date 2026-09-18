@@ -21,18 +21,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public int SourceEndLine { get; }
 
+        /// <summary>
+        /// The compiled project assembly of the added method's file, or empty when an
+        /// introduced-type artifact serves its type and no compiled assembly does.
+        /// </summary>
+        public string CompiledAssemblyPath { get; }
+
         public HotReloadAddedMemberInfo(
             string methodKey,
             string filePath,
             MethodInfo shimMethod,
             int sourceStartLine = 0,
-            int sourceEndLine = 0)
+            int sourceEndLine = 0,
+            string compiledAssemblyPath = null)
         {
             MethodKey = methodKey ?? string.Empty;
             FilePath = filePath ?? string.Empty;
             ShimMethod = shimMethod;
             SourceStartLine = sourceStartLine;
             SourceEndLine = sourceEndLine;
+            CompiledAssemblyPath = compiledAssemblyPath ?? string.Empty;
         }
 
         internal bool ContainsSourceLine(int line)

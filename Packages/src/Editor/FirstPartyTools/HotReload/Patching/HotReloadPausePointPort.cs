@@ -35,6 +35,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.FindAddedMethodContainingLine(file, line);
         }
 
+        public bool HasActiveHotReloadChangesInFile(string file)
+        {
+            return _domain.HasActiveHotReloadChangesInFile(file);
+        }
+
         public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)
         {
             return _domain.LoadVerifiedSnapshotSourceForFile(projectRelativeFile);
