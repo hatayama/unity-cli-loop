@@ -141,6 +141,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                // A one-shot that hit already did all it was armed to do; its later expiry only
+                // closed the capture window, so warning that it "will not fire" is noise. A
+                // Continuous marker that hit would have kept firing, so it is still reported.
+                if (status.Mode == UloopPausePointCaptureMode.SingleShot && status.HitCount > 0)
+                {
+                    continue;
+                }
+
                 expiredIds.Add(pair.Key);
             }
 
