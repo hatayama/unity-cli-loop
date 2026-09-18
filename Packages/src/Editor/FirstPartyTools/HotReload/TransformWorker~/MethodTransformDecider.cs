@@ -26,7 +26,8 @@ internal static class MethodTransformDecider
         IMethodSymbol methodSymbol,
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
-        INamedTypeSymbol compiledType)
+        INamedTypeSymbol compiledType,
+        AddedMemberAccessLookup addedMemberAccess)
     {
         WorkerReason hardSkip = EvaluateHardSkipReason(
             typeDeclaration,
@@ -80,6 +81,7 @@ internal static class MethodTransformDecider
                 methodSymbol,
                 typeSymbol,
                 bodyNode,
+                addedMemberAccess,
                 out AccessorPlan feasibilityPlan,
                 out WorkerReason accessorRejectReason))
         {
@@ -239,7 +241,8 @@ internal static class MethodTransformDecider
         INamedTypeSymbol typeSymbol,
         SyntaxNode methodBodyNode,
         SemanticModel semanticModel,
-        MethodTransformDecision current)
+        MethodTransformDecision current,
+        AddedMemberAccessLookup addedMemberAccess)
     {
         // Checked before the delegation path: a closure that binds one private access still takes
         // that path, and an unbound call beside it would reach the shim unrewritten.
@@ -267,6 +270,7 @@ internal static class MethodTransformDecider
                 methodSymbol,
                 typeSymbol,
                 methodBodyNode,
+                addedMemberAccess,
                 out AccessorPlan feasibilityPlan,
                 out WorkerReason accessorRejectReason))
         {

@@ -22,11 +22,14 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 /// </summary>
 internal static class AccessorEligibility
 {
+    // addedMemberAccess is null when the body's added members are not rewritten directly (a
+    // property accessor body); then every inaccessible member goes through the plan.
     public static bool TryBuildPlan(
         SemanticModel semanticModel,
         IMethodSymbol methodSymbol,
         INamedTypeSymbol typeSymbol,
         SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess,
         out AccessorPlan plan,
         out WorkerReason rejectReason)
     {
@@ -57,7 +60,12 @@ internal static class AccessorEligibility
                 continue;
             }
 
-            if (!AccessorAccessRegistrar.TryRegisterInaccessibleAccess(semanticModel, node, built, out rejectReason))
+            if (!AccessorAccessRegistrar.TryRegisterInaccessibleAccess(
+                    semanticModel,
+                    node,
+                    built,
+                    addedMemberAccess,
+                    out rejectReason))
             {
                 if (rejectReason != null)
                 {

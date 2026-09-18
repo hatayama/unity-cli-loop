@@ -9,6 +9,7 @@ internal static class AccessorReadRegistrar
     internal static bool TryRegisterPropertyOrFieldRead(
         ISymbol symbol,
         AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -30,12 +31,7 @@ internal static class AccessorReadRegistrar
 
         if (symbol is IPropertySymbol propertySymbol)
         {
-            if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
-            {
-                return false;
-            }
-
-            return TryRegisterPropertyRead(propertySymbol, plan, out rejectReason);
+            return TryRegisterInaccessiblePropertyRead(propertySymbol, plan, addedMemberAccess, out rejectReason);
         }
 
         if (symbol is IEventSymbol eventSymbol)
@@ -64,6 +60,30 @@ internal static class AccessorReadRegistrar
         }
 
         return false;
+    }
+
+    private static bool TryRegisterInaccessiblePropertyRead(
+        IPropertySymbol propertySymbol,
+        AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
+    {
+        rejectReason = null;
+        if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
+        {
+            return false;
+        }
+
+        // The added-property rewrite reads a static added property through its shim accessor,
+        // a shape the compiled-member delegates do not have.
+        if (propertySymbol.IsStatic
+            && addedMemberAccess != null
+            && addedMemberAccess.IsAddedProperty(propertySymbol))
+        {
+            return false;
+        }
+
+        return TryRegisterPropertyRead(propertySymbol, plan, out rejectReason);
     }
 
     private static bool TryRegisterPropertyRead(

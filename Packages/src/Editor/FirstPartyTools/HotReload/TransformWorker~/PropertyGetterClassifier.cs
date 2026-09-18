@@ -76,7 +76,8 @@ internal static class PropertyGetterClassifier
             getterSymbol,
             getterBodyNode,
             semanticModel,
-            compiledType);
+            compiledType,
+            addedMemberAccess: null);
         if (decision.SkipReason != null)
         {
             skipped.Add(new WorkerSkipped
