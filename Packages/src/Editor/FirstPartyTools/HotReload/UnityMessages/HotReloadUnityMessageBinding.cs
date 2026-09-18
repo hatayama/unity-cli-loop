@@ -77,10 +77,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _gated[slot];
         }
 
+        /// <summary>
+        /// Whether a proxy type emitted for this binding would declare exactly the methods one
+        /// emitted for <paramref name="other"/> does: the same target, and slot by slot the same
+        /// message name, parameter types, and gate. Only the shims the slots call may differ.
+        /// </summary>
+        internal bool HasSameShape(HotReloadUnityMessageBinding other)
+        {
+            Debug.Assert(other != null, "other must not be null.");
+            if (TargetType != other.TargetType || Count != other.Count)
+            {
+                return false;
+            }
+
+            for (int slot = 0; slot < Count; slot++)
+            {
+                if (!HasSameSlotShape(other, slot))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         /// <summary>Calls the shim of this slot on <paramref name="target"/>.</summary>
         internal void Invoke(int slot, MonoBehaviour target, object[] args)
         {
             _forwarders[slot](target, args);
+        }
+
+        // The gate is compared along with the signature so that reusing a proxy type is decided on
+        // everything a slot carries apart from its shim, not on what the emitted IL happens to read.
+        private bool HasSameSlotShape(HotReloadUnityMessageBinding other, int slot)
+        {
+            if (_names[slot] != other._names[slot] || _gated[slot] != other._gated[slot])
+            {
+                return false;
+            }
+
+            Type[] mine = _parameterTypes[slot];
+            Type[] theirs = other._parameterTypes[slot];
+            if (mine.Length != theirs.Length)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < mine.Length; index++)
+            {
+                if (mine[index] != theirs[index])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

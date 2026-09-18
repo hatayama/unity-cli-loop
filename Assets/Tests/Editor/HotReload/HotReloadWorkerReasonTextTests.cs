@@ -269,6 +269,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "checks). Accessor rewrite unavailable: " + GenericMethodFragment
                 + " Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
+                new[] { "CS1503: Argument 1: cannot convert" },
+                "The added member's body could not be fully bound in the hot-reload compilation "
+                + "(CS1503: Argument 1: cannot convert), typically because another file in this reload "
+                + "declares a type that the compiled assembly also contains. Private-member access cannot "
+                + "be verified, so the member is skipped. Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,
                 "Added fields on struct types are skipped; the store requires a reference-type instance. "
@@ -314,7 +321,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 NoArgs,
                 "Writes to members of an added value-type field, and instance method calls on that field, "
-                + "cannot be rewritten. Run 'uloop compile'.");
+                + "cannot be rewritten. Copy the field into a local, change the local, and assign the whole "
+                + "value back. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
                 new[] { "_score" },
@@ -582,7 +590,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 NoArgs,
-                "inaccessible method calls with ref/out/in parameters are not rewritten.");
+                "inaccessible method calls with ref/out/in parameters are not rewritten; the call is "
+                + "refused whatever is passed, because the rewrite cannot forward ref/out/in parameters.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten,
                 NoArgs,

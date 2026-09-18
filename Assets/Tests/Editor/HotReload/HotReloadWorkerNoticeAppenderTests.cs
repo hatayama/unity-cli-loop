@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateFileOutput(new[] { ParseErrorText }),
                 Array.Empty<TransformWorkerSkippedDto>(),
                 0,
-                null,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
                 false,
                 ProjectRelativePath,
                 AssemblyName,
@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateFileOutput(Array.Empty<string>()),
                 Array.Empty<TransformWorkerSkippedDto>(),
                 0,
-                null,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
                 false,
                 ProjectRelativePath,
                 AssemblyName,
@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateFileOutput(Array.Empty<string>()),
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
-                null,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
                 true,
                 ProjectRelativePath,
                 AssemblyName,
@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateFileOutput(Array.Empty<string>()),
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
-                null,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
                 true,
                 ProjectRelativePath,
                 AssemblyName,
@@ -144,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateFileOutput(Array.Empty<string>()),
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
-                null,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
                 false,
                 ProjectRelativePath,
                 AssemblyName,
@@ -154,6 +154,88 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(warnings[0], Does.Contain("patching all methods"));
+        }
+
+        /// <summary>
+        /// What: a file the PDB lists no document for is told no compile gives it a baseline,
+        /// instead of being asked to run uloop compile, which would change nothing for it.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenThePdbHasNoDocumentForTheFile_SaysNoCompileGivesItABaseline()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                HotReloadSnapshotMissReason.NoDocumentInPdb,
+                false,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings);
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Broken.cs (assembly Some.Assembly) has no compiled method body, so there is no "
+                    + "baseline for edited-method detection; patching all methods. This is expected "
+                    + "for files that only declare types without bodies."));
+        }
+
+        /// <summary>
+        /// What: a file that declares an introduced type keeps the introduced-type explanation
+        /// even when the PDB has no document for it, and gets only that one warning.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenAFileWithoutAPdbDocumentDeclaresAnIntroducedType_ExplainsTheIntroducedType()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                HotReloadSnapshotMissReason.NoDocumentInPdb,
+                true,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings);
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(warnings[0], Does.StartWith("Broken.cs declares a type hot reload introduced"));
+        }
+
+        /// <summary>
+        /// What: a verified snapshot adds no missing-baseline warning even when the file has patch
+        /// candidates.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WithAVerifiedSnapshot_AddsNoMissingBaselineWarning()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                HotReloadSnapshotMissReason.None,
+                false,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings);
+
+            Assert.That(warnings, Is.Empty);
         }
 
         private static TransformWorkerFileOutputDto CreateFileOutput(string[] parseErrors)

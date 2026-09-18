@@ -4,6 +4,8 @@ using System.Reflection;
 
 using NUnit.Framework;
 
+using UnityEngine;
+
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -17,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixturePath = "Assets/Tests/Editor/HotReload/ForwardingFixture.cs";
         private const string SecondPath = "Assets/Tests/Editor/HotReload/ForwardingSecondFixture.cs";
 
+        private readonly List<GameObject> _created = new List<GameObject>();
         private HotReloadDomainTestScope _scope;
         private HotReloadDomainTestAccess _access;
         private HotReloadUnityMessageProxyAttacher _attacher;
@@ -37,6 +40,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TearDown()
         {
             _forwarding.Clear();
+            foreach (GameObject gameObject in _created)
+            {
+                if (gameObject != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(gameObject);
+                }
+            }
+
+            _created.Clear();
             _scope.Dispose();
         }
 
@@ -70,11 +82,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: re-applying the same method produces a new shim, and the proxy is rebuilt around
-        /// it even though the method key never changed.
+        /// What: re-applying the same method produces a new shim, and the proxy type already
+        /// attached is kept while its messages now reach the new shim, so an added Start does not
+        /// run again on a reload that left this type's messages as they were.
         /// </summary>
         [Test]
-        public void Reconcile_AfterTheSameMethodKeyGotANewShim_RebuildsTheProxyType()
+        public void Reconcile_AfterTheSameMethodKeyGotANewShim_KeepsTheProxyTypeAndForwardsToTheNewShim()
         {
             RegisterAdded(FixturePath, "Fixture.Update", ShimOf(typeof(HotReloadUnityMessageProxyFixtureShims), "Update"));
             _forwarding.Reconcile(null);
@@ -83,6 +96,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixturePath,
                 "Fixture.Update",
                 ShimOf(typeof(HotReloadUnityMessageDuplicateFixtureShims), "Update"));
+
+            _forwarding.Reconcile(null);
+
+            Type second = _attacher.FindProxyType(typeof(HotReloadUnityMessageProxyFixture));
+            Assert.That(second, Is.SameAs(first));
+            HotReloadUnityMessageProxyFixture target = CreateFixture();
+            InvokeMessage(Attach(second, target), "Update");
+            Assert.That(target.UpdateCount, Is.EqualTo(100), "The new shim adds 100; the first one adds 1.");
+        }
+
+        /// <summary>
+        /// What: a reload that adds another message to the same type rebuilds the proxy type,
+        /// because the proxy has to declare the new message for Unity to call it.
+        /// </summary>
+        [Test]
+        public void Reconcile_AfterTheMessageSetChanged_RebuildsTheProxyType()
+        {
+            RegisterAdded(FixturePath, "Fixture.Update", ShimOf(typeof(HotReloadUnityMessageProxyFixtureShims), "Update"));
+            _forwarding.Reconcile(null);
+            Type first = _attacher.FindProxyType(typeof(HotReloadUnityMessageProxyFixture));
+            RegisterAdded(FixturePath, "Fixture.Start", ShimOf(typeof(HotReloadUnityMessageProxyFixtureShims), "Start"));
 
             _forwarding.Reconcile(null);
 
@@ -184,6 +218,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _access.GetOrBeginAddedMemberGeneration(projectRelativePath)
                 .RegisterAddedMethod(methodKey, shim, projectRelativePath);
+        }
+
+        private HotReloadUnityMessageProxyFixture CreateFixture()
+        {
+            GameObject owner = new GameObject("ForwardingTests_Target");
+            _created.Add(owner);
+            return owner.AddComponent<HotReloadUnityMessageProxyFixture>();
+        }
+
+        private static HotReloadUnityMessageProxy Attach(Type proxyType, MonoBehaviour target)
+        {
+            using (HotReloadUnityMessageProxy.BeginPendingTarget(target))
+            {
+                return (HotReloadUnityMessageProxy)target.gameObject.AddComponent(proxyType);
+            }
+        }
+
+        private static void InvokeMessage(HotReloadUnityMessageProxy proxy, string messageName)
+        {
+            MethodInfo message = proxy.GetType().GetMethod(
+                messageName,
+                BindingFlags.Public | BindingFlags.Instance);
+            Assert.That(message, Is.Not.Null, "The generated proxy must declare " + messageName + ".");
+            message.Invoke(proxy, null);
         }
 
         private static MethodInfo ShimOf(Type host, string methodName)

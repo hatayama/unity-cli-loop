@@ -33,6 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string PredefinedEditorAssemblyName = "Assembly-CSharp-Editor";
         private const string PredefinedEditorFixtureProjectRelativePath =
             "Assets/RegressionHarness/AnnotatedScreenshotMismatch/Editor/AnnotatedScreenshotMismatchSceneBuilder.cs";
+        private const string BodylessFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadSnapshotBodylessFixture.cs";
 
         /// <summary>
         /// What: the portable PDB next to a script assembly carries a per-document checksum that matches the hash of the source file bytes, which the snapshot baseline validation relies on.
@@ -171,6 +173,113 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Directory.Delete(fakeRoot, recursive: true);
                 }
             }
+        }
+
+        /// <summary>
+        /// What: a file whose compiled form has no method body has no PDB document, and the miss is
+        /// reported as that rather than as a snapshot a compile has yet to write.
+        /// </summary>
+        [Test]
+        public void DescribeSnapshotMiss_ForAFileWithoutMethodBodies_ReportsNoDocumentInPdb()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                projectRoot,
+                BodylessFixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot));
+
+            Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoDocumentInPdb));
+        }
+
+        /// <summary>
+        /// What: a project root with no snapshot tree reports the missing snapshot file.
+        /// </summary>
+        [Test]
+        public void DescribeSnapshotMiss_WithoutASnapshotFile_ReportsNoSnapshotFile()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string emptyRoot = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-snapshot-empty-" + Guid.NewGuid().ToString("N"));
+
+            HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                emptyRoot,
+                FixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot));
+
+            Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoSnapshotFile));
+        }
+
+        /// <summary>
+        /// What: snapshot bytes that fail the PDB checksum report a hash mismatch.
+        /// </summary>
+        [Test]
+        public void DescribeSnapshotMiss_WhenSnapshotBytesTampered_ReportsHashMismatch()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string dllPath = TestAssemblyDllPath(projectRoot);
+            string fakeRoot = WriteTamperedSnapshotTree(projectRoot, dllPath);
+
+            try
+            {
+                HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                    fakeRoot,
+                    FixtureProjectRelativePath,
+                    dllPath);
+                Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.HashMismatch));
+            }
+            finally
+            {
+                Directory.Delete(fakeRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a verified snapshot is not a miss.
+        /// </summary>
+        [Test]
+        public void DescribeSnapshotMiss_ForAVerifiedSnapshot_ReportsNone()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                projectRoot,
+                FixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot));
+
+            Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.None));
+        }
+
+        private static string TestAssemblyDllPath(string projectRoot)
+        {
+            return Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                TestAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+        }
+
+        // Copies the fixture's real snapshot under a temporary root with its first byte flipped.
+        private static string WriteTamperedSnapshotTree(string projectRoot, string dllPath)
+        {
+            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string snapshotFileName =
+                HotReloadSourceSnapshotter.HashProjectRelativePath(FixtureProjectRelativePath) + ".cs";
+            string realSnapshotPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                TestAssemblyName + "-" + mvid,
+                snapshotFileName);
+            Assert.That(File.Exists(realSnapshotPath), Is.True, "Precondition: the real snapshot must exist.");
+
+            string fakeRoot = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-snapshot-miss-" + Guid.NewGuid().ToString("N"));
+            string fakeSnapshotDir = Path.Combine(
+                fakeRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                TestAssemblyName + "-" + mvid);
+            Directory.CreateDirectory(fakeSnapshotDir);
+            byte[] tampered = File.ReadAllBytes(realSnapshotPath);
+            tampered[0] = (byte)(tampered[0] ^ 0xFF);
+            File.WriteAllBytes(Path.Combine(fakeSnapshotDir, snapshotFileName), tampered);
+            return fakeRoot;
         }
 
         /// <summary>

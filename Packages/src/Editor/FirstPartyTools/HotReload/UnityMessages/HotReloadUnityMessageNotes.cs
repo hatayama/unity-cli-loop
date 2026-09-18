@@ -7,14 +7,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadUnityMessageNotes
     {
         /// <summary>
-        /// The note for a message a proxy delivers. It says what carries the call, what an added
-        /// Start does on instances that already exist, and how long any of it lasts.
+        /// The note for a message a proxy delivers: what carries the call and how long it lasts.
         /// </summary>
         internal const string Forwarded =
             "Unity message: forwarded to live instances by a hot-reload proxy component while Play "
-            + "Mode runs. An added Start runs once on each existing instance when the proxy "
-            + "attaches, and again if a later reload changes this type's added messages. Execution "
-            + "order relative to other components is not guaranteed. Gone on any compile or domain "
+            + "Mode runs. The proxy is rebuilt only when a later reload changes which messages this "
+            + "type adds or their signatures. Execution order relative to other components is not "
+            + "guaranteed. Gone on any compile or domain reload.";
+
+        /// <summary>
+        /// The note for an added Start. It is the only forwarded message that runs because the
+        /// proxy attaches, so only its row says what happens on instances that already exist.
+        /// </summary>
+        internal const string ForwardedStart =
+            "Unity message: forwarded to live instances by a hot-reload proxy component while Play "
+            + "Mode runs. The added Start runs once on each existing instance when the proxy "
+            + "attaches. The proxy is rebuilt (and the added Start runs again) only when a later "
+            + "reload changes which messages this type adds or their signatures. Execution order "
+            + "relative to other components is not guaranteed. Gone on any compile or domain "
             + "reload.";
 
         /// <summary>
@@ -31,5 +41,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal const string NotForwardedWarningFormat =
             "Added Unity messages not invoked until 'uloop compile': {0}";
+
+        /// <summary>Whether a row's note says a proxy delivers the message.</summary>
+        internal static bool IsForwarded(string lifecycleNote)
+        {
+            return lifecycleNote == Forwarded || lifecycleNote == ForwardedStart;
+        }
     }
 }

@@ -20,7 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly IHotReloadPlayModeQuery _playMode;
         private readonly HotReloadUnityMessageProxyTypeBuilder _builder;
-        private readonly Dictionary<Type, Type> _proxyTypeByTarget = new Dictionary<Type, Type>();
+        private readonly Dictionary<Type, BoundProxyType> _boundByTarget =
+            new Dictionary<Type, BoundProxyType>();
         private readonly List<OwnedProxy> _owned = new List<OwnedProxy>();
         private bool _suspended;
 
@@ -35,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>The target types a proxy is currently attached for.</summary>
-        internal IReadOnlyList<Type> BoundTargetTypes => new List<Type>(_proxyTypeByTarget.Keys);
+        internal IReadOnlyList<Type> BoundTargetTypes => new List<Type>(_boundByTarget.Keys);
 
         /// <summary>
         /// The proxy type currently built for <paramref name="targetType"/>, or null when the type
@@ -44,18 +45,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal Type FindProxyType(Type targetType)
         {
             Debug.Assert(targetType != null, "targetType must not be null.");
-            return _proxyTypeByTarget.TryGetValue(targetType, out Type proxyType) ? proxyType : null;
+            return _boundByTarget.TryGetValue(targetType, out BoundProxyType bound)
+                ? bound.ProxyType
+                : null;
         }
 
         /// <summary>
-        /// Starts attaching proxies for <paramref name="targetType"/>. A type bound already is
-        /// rebound to the new binding, and the proxies of the previous one go at the next tick.
+        /// Starts attaching proxies for <paramref name="targetType"/> under a newly built proxy
+        /// type. A type bound already gets the new type, and the proxies of the previous one go at
+        /// the next tick, so an added Start runs again on every instance.
         /// </summary>
         internal void Bind(Type targetType, HotReloadUnityMessageBinding binding)
         {
             Debug.Assert(targetType != null, "targetType must not be null.");
             Debug.Assert(binding != null, "binding must not be null.");
-            _proxyTypeByTarget[targetType] = _builder.Build(binding);
+            _boundByTarget[targetType] = new BoundProxyType(_builder.Build(binding), binding);
+        }
+
+        /// <summary>
+        /// Points the proxy type already built for <paramref name="targetType"/> at
+        /// <paramref name="binding"/> when it declares the same messages, and answers false, having
+        /// changed nothing, when the type is not bound or its messages differ.
+        /// </summary>
+        /// <remarks>
+        /// Why keep the type: the tick replaces a proxy only when its type changed, and replacing it
+        /// is an AddComponent that runs an added Start on every live instance again. A reload that
+        /// only produced new shims for the same messages must not reset the game that way.
+        /// </remarks>
+        internal bool TryRebind(Type targetType, HotReloadUnityMessageBinding binding)
+        {
+            Debug.Assert(targetType != null, "targetType must not be null.");
+            Debug.Assert(binding != null, "binding must not be null.");
+            if (!_boundByTarget.TryGetValue(targetType, out BoundProxyType bound)
+                || !bound.Binding.HasSameShape(binding))
+            {
+                return false;
+            }
+
+            _builder.Rebind(bound.ProxyType, binding);
+            _boundByTarget[targetType] = new BoundProxyType(bound.ProxyType, binding);
+            return true;
         }
 
         /// <summary>
@@ -65,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void Unbind(Type targetType)
         {
             Debug.Assert(targetType != null, "targetType must not be null.");
-            _proxyTypeByTarget.Remove(targetType);
+            _boundByTarget.Remove(targetType);
             for (int index = _owned.Count - 1; index >= 0; index--)
             {
                 if (_owned[index].TargetType != targetType)
@@ -87,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _owned.Clear();
-            _proxyTypeByTarget.Clear();
+            _boundByTarget.Clear();
         }
 
         /// <summary>Stops attaching until <see cref="Resume"/>, without forgetting the bindings.</summary>
@@ -143,13 +172,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            return _proxyTypeByTarget.TryGetValue(owned.TargetType, out Type proxyType)
-                && proxyType == owned.ProxyType;
+            return _boundByTarget.TryGetValue(owned.TargetType, out BoundProxyType bound)
+                && bound.ProxyType == owned.ProxyType;
         }
 
         private void AttachMissingProxies()
         {
-            foreach (KeyValuePair<Type, Type> pair in _proxyTypeByTarget)
+            foreach (KeyValuePair<Type, BoundProxyType> pair in _boundByTarget)
             {
                 // Inactive instances are included: a GameObject switched back on during Play Mode
                 // starts receiving messages without passing through this sweep again.
@@ -165,7 +194,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #endif
                 foreach (UnityEngine.Object instance in instances)
                 {
-                    AttachIfMissing((MonoBehaviour)instance, pair.Key, pair.Value);
+                    AttachIfMissing((MonoBehaviour)instance, pair.Key, pair.Value.ProxyType);
                 }
             }
         }
@@ -222,6 +251,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why DestroyImmediate: a tick runs on the editor's update, outside Unity's message
             // dispatch, and the deferred destroy of Object.Destroy never runs outside Play Mode.
             UnityEngine.Object.DestroyImmediate(owned.Proxy);
+        }
+
+        /// <summary>The proxy type a target type is bound to, and the binding it forwards through.</summary>
+        private readonly struct BoundProxyType
+        {
+            internal BoundProxyType(Type proxyType, HotReloadUnityMessageBinding binding)
+            {
+                Debug.Assert(proxyType != null, "proxyType must not be null.");
+                Debug.Assert(binding != null, "binding must not be null.");
+                ProxyType = proxyType;
+                Binding = binding;
+            }
+
+            internal Type ProxyType { get; }
+
+            internal HotReloadUnityMessageBinding Binding { get; }
         }
 
         private sealed class OwnedProxy

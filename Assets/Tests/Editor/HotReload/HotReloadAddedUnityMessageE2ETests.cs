@@ -77,7 +77,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadMethodOutcome added = FindAdded(result, "Update");
             Assert.That(added.LifecycleNote, Is.EqualTo(HotReloadUnityMessageNotes.Forwarded));
+            Assert.That(added.LifecycleNote, Does.Not.Contain("runs once on each existing instance"));
             Assert.That(result.Warnings, Has.None.Contain("not invoked until"));
+        }
+
+        /// <summary>
+        /// What: an added Start carries the note that says it runs once when the proxy attaches,
+        /// the one sentence the note on every other forwarded message leaves out.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedStart_ReportsTheNoteThatSaysItRunsWhenTheProxyAttaches()
+        {
+            HotReloadOrchestratorResult result = await RunWithAddedMemberAsync(
+                "AddedUnityMessageStartNote.cs",
+                "        private void Start()\n        {\n            Counter++;\n        }");
+
+            HotReloadMethodOutcome added = FindAdded(result, "Start");
+            Assert.That(added.LifecycleNote, Is.EqualTo(HotReloadUnityMessageNotes.ForwardedStart));
+            Assert.That(added.LifecycleNote, Does.Contain("runs once on each existing instance"));
         }
 
         /// <summary>
@@ -119,6 +136,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             InvokeMessage(SingleProxyOn(target), "Update");
 
             Assert.That(target.Counter, Is.EqualTo(11));
+        }
+
+        /// <summary>
+        /// What: a second run that applies the same added Start again with a new body keeps the
+        /// proxy component already on the instance, so no second AddComponent reruns Start. An
+        /// EditMode test never sees Unity call Start, so the component's identity is what shows it.
+        /// </summary>
+        [Test]
+        public async Task Tick_AfterTheAddedStartWasAppliedAgain_KeepsTheAttachedProxy()
+        {
+            HotReloadAddedUnityMessageFixture target = CreateFixture();
+            await RunWithAddedMemberAsync(
+                "AddedUnityMessageStart.cs",
+                "        private void Start()\n        {\n            Counter++;\n        }");
+            Forwarding.Tick();
+            HotReloadUnityMessageProxy first = SingleProxyOn(target);
+
+            await RunWithAddedMemberAsync(
+                "AddedUnityMessageStartAgain.cs",
+                "        private void Start()\n        {\n            Counter += 10;\n        }");
+            Forwarding.Tick();
+
+            HotReloadUnityMessageProxy second = SingleProxyOn(target);
+            Assert.That(second, Is.SameAs(first));
+            InvokeMessage(second, "Start");
+            Assert.That(target.Counter, Is.EqualTo(10));
         }
 
         /// <summary>

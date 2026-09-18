@@ -35,12 +35,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostScaledBodyAnchor = "return factor;";
         private const string CallerCallBodyAnchor = "return host.Value();";
         private const string CallerOtherBodyAnchor = "return 7;";
+        private const string CallerMemberAnchor = "        // Second editable member of this file";
         private const string CallerGatedCallBodyAnchor = "return host.Gated(1);";
         private const string CrossAssemblyBodyAnchor = "return 8;";
         private const string OtherExistingValueAnchor =
             "        public int ExistingValue()\n        {\n            return 1;\n        }";
         private const string OtherExistingValueEdited =
             "        public int ExistingValue()\n        {\n            return 2;\n        }";
+        private const string OtherExistingCallerAnchor =
+            "        public int ExistingCaller(int value)\n        {\n            return value;\n        }";
         private const string SiblingRebindFailedWarningNeedle =
             "pulled in to re-bind its active patches but this reload failed for it";
 
@@ -270,6 +273,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome callerSkip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, "Call(");
             Assert.That(callerSkip.Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
             Assert.That(callerSkip.FilePath, Is.EqualTo(FixturePath(CallerFileName)));
+            AssertNothingApplied(result);
+        }
+
+        /// <summary>
+        /// What: when the file that declares added method A fails to compile, the sibling file's
+        /// added method B that calls A and the existing body C that calls only B are both skipped
+        /// as isolated added-method callers, while an independent edit in the sibling file is
+        /// still applied.
+        /// </summary>
+        [Test]
+        public async Task Run_BrokenFileDeclaresAddedMethod_SkipsTransitiveCallerInSiblingFile()
+        {
+            string callerSource = InsertCallerMember(
+                "        public int AddedRelay(HotReloadCrossFileAddedMemberHost host)\n        {\n            return host.Added();\n        }\n\n");
+            callerSource = ReplaceInSource(callerSource, CallerCallBodyAnchor, "return AddedRelay(host);");
+            callerSource = ReplaceInSource(callerSource, CallerOtherBodyAnchor, "return 8;");
+
+            HotReloadOrchestratorResult result = await RunPairAsync(
+                "CrossFileBrokenHostTransitive",
+                BrokenHostDeclaringAdded(),
+                callerSource);
+
+            AssertOnlyFailureIsBrokenHostValue(result);
+            AssertIsolatedCallerSkip(result, "AddedRelay", FixturePath(CallerFileName));
+            AssertIsolatedCallerSkip(result, "Call(", FixturePath(CallerFileName));
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Other");
+            Assert.That(new HotReloadCrossFileAddedMemberCaller().Other(), Is.EqualTo(8));
+        }
+
+        /// <summary>
+        /// What: when the file that declares added method A fails to compile, a two-hop chain of
+        /// added methods in a sibling file (Outer calls Mid, Mid calls A) and the existing body
+        /// that calls Outer are all skipped as isolated added-method callers.
+        /// </summary>
+        [Test]
+        public async Task Run_BrokenFileDeclaresAddedMethod_SkipsTwoHopCallerChainInSiblingFile()
+        {
+            // Why the public same-assembly host and not the caller fixture: the caller type is
+            // internal, and the worker refuses one of its added methods calling another for that
+            // reason before the isolation retry this test covers ever runs.
+            string siblingSource = ReplaceInSource(
+                ReadFixture(OtherSameAssemblyFileName),
+                OtherExistingCallerAnchor,
+                "        public int ExistingCaller(int value)\n        {\n            return AddedOuter(value);\n        }\n\n"
+                + "        public int AddedMid(int value)\n        {\n            return new HotReloadCrossFileAddedMemberHost().Added() + value;\n        }\n\n"
+                + "        public int AddedOuter(int value)\n        {\n            return AddedMid(value);\n        }");
+            string hostPath = FixturePath(HostFileName);
+            string siblingPath = FixturePath(OtherSameAssemblyFileName);
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath, siblingPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "CrossFileBrokenHostTwoHopHost.cs",
+                        BrokenHostDeclaringAdded()),
+                    [siblingPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "CrossFileBrokenHostTwoHopSibling.cs",
+                        siblingSource)
+                });
+
+            AssertOnlyFailureIsBrokenHostValue(result);
+            AssertIsolatedCallerSkip(result, "AddedMid", siblingPath);
+            AssertIsolatedCallerSkip(result, "AddedOuter", siblingPath);
+            AssertIsolatedCallerSkip(result, "ExistingCaller", siblingPath);
             AssertNothingApplied(result);
         }
 
@@ -800,8 +870,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a sibling pulled in to re-bind is not described as re-applied when the host
-        /// shim compile fails; isolation reports the caller as Skipped and the live patch
-        /// stays on the previous body.
+        /// shim compile fails on a broken body beside the added method; isolation reports the
+        /// caller as Skipped and the live patch stays on the previous body.
         /// </summary>
         [Test]
         public async Task Run_FailedSiblingRebindDoesNotClaimReApplied()
@@ -838,8 +908,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
                         "RebindFailedSiblingHostBroken.cs",
-                        InsertHostMember(
-                            "        public int Added()\n        {\n            return Missing();\n        }\n\n")),
+                        ReplaceInSource(
+                            InsertHostMember(
+                                "        public int Added()\n        {\n            return 6;\n        }\n\n"),
+                            "return 1;",
+                            "int broken = \"not an int\";\n            return broken;")),
                     [callerPath] = firstCallerEditPath
                 });
 
@@ -847,7 +920,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 second,
                 hostPath,
                 HotReloadMethodOutcomeKind.Failed,
-                "Added");
+                ".Value(");
             HotReloadMethodOutcome callerOutcome = FindOutcomeForFile(
                 second,
                 CallerProjectRelativePath(),
@@ -1077,6 +1150,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string source = ReadFixture(HostFileName);
             Assert.That(source, Does.Contain(HostValueAnchor), "Precondition: host anchor must exist.");
             return source.Replace(HostValueAnchor, memberText + HostValueAnchor, StringComparison.Ordinal);
+        }
+
+        private static string InsertCallerMember(string memberText)
+        {
+            return ReplaceInSource(ReadFixture(CallerFileName), CallerMemberAnchor, memberText + CallerMemberAnchor);
+        }
+
+        // The host declares added method Added() while its existing Value() body no longer
+        // compiles, so the whole host file is refused and Added() never exists at runtime.
+        private static string BrokenHostDeclaringAdded()
+        {
+            string hostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 41;\n        }\n\n");
+            return ReplaceInSource(hostSource, "return 1;", "int broken = \"not an int\";\n            return broken;");
+        }
+
+        // Why exactly one row: an isolation that fell back to failing the whole group would add a
+        // file-level or shim-compile Failed row while every per-method assertion still held.
+        private static void AssertOnlyFailureIsBrokenHostValue(HotReloadOrchestratorResult result)
+        {
+            List<HotReloadMethodOutcome> failures = new List<HotReloadMethodOutcome>();
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    failures.Add(outcome);
+                }
+            }
+
+            Assert.That(failures.Count, Is.EqualTo(1), FormatOutcomes(result));
+            Assert.That(
+                failures[0].Method,
+                Does.Contain(nameof(HotReloadCrossFileAddedMemberHost) + ".Value("),
+                FormatOutcomes(result));
+            Assert.That(failures[0].FilePath, Is.EqualTo(FixturePath(HostFileName)));
+        }
+
+        private static void AssertIsolatedCallerSkip(
+            HotReloadOrchestratorResult result,
+            string methodNamePart,
+            string expectedFilePath)
+        {
+            HotReloadMethodOutcome skip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, methodNamePart);
+            Assert.That(
+                skip.Reason,
+                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason),
+                FormatOutcomes(result));
+            Assert.That(skip.FilePath, Is.EqualTo(expectedFilePath));
         }
 
         private static string ReplaceHostBody(string bodyAnchor, string bodyText)

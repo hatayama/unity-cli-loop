@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -129,6 +130,40 @@ func TestRunHotReloadKeepsResponseWhenFallbackCompileReturnsNothing(t *testing.T
 func TestInjectHotReloadCompileFallbackRejectsNonObjectPayload(t *testing.T) {
 	if _, err := injectHotReloadCompileFallback([]byte("[]"), []byte(`{"Success":true}`)); err == nil {
 		t.Fatal("expected an error for a non-object hot-reload response")
+	}
+}
+
+// Verifies the fallback note points at Warnings only when the hot-reload response carries
+// warnings, and at the per-method reasons when Warnings is missing, null, or empty.
+func TestInjectHotReloadCompileFallbackPointsAtTheFieldThatExplainsTheSkip(t *testing.T) {
+	cases := []struct {
+		name     string
+		response string
+		want     string
+	}{
+		{"with warnings", `{"Warnings":["Skipped A.B(): reason"]}`, "(see Warnings)"},
+		{"empty warnings", `{"Warnings":[]}`, "(see Methods[].Reason)"},
+		{"null warnings", `{"Warnings":null}`, "(see Methods[].Reason)"},
+		{"missing warnings", `{}`, "(see Methods[].Reason)"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			merged, err := injectHotReloadCompileFallback([]byte(testCase.response), []byte(`{"Success":true}`))
+			if err != nil {
+				t.Fatalf("inject failed: %v", err)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(merged, &fields); err != nil {
+				t.Fatalf("merged response is not an object: %v", err)
+			}
+			var note string
+			if err := json.Unmarshal(fields["CompileFallbackNote"], &note); err != nil {
+				t.Fatalf("CompileFallbackNote must be a string: %s", merged)
+			}
+			if !strings.Contains(note, testCase.want) {
+				t.Fatalf("note %q does not contain %q", note, testCase.want)
+			}
+		})
 	}
 }
 

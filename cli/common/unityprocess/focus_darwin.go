@@ -3,9 +3,12 @@
 package unityprocess
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 const (
@@ -98,13 +101,38 @@ func activateAppViaOpenMac(ctx context.Context, bundlePath string) error {
 }
 
 func runFocusCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
-	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
-	defer cancel()
-	return exec.CommandContext(commandContext, name, args...).Output()
+	return runFocusCommandWithin(ctx, FocusCommandTimeout, name, args...)
 }
 
 func runFocusCommandNoOutput(ctx context.Context, name string, args ...string) error {
-	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
+	return runFocusCommandNoOutputWithin(ctx, FocusCommandTimeout, name, args...)
+}
+
+// runFocusCommandWithin takes the timeout as a parameter so a test can reach the
+// timeout path without waiting for FocusCommandTimeout.
+func runFocusCommandWithin(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
+	commandContext, cancel := withCommandTimeout(ctx, timeout)
 	defer cancel()
-	return exec.CommandContext(commandContext, name, args...).Run()
+	output, err := exec.CommandContext(commandContext, name, args...).Output()
+	return output, focusCommandError(commandContext.Err(), err, exitErrorStderr(err))
+}
+
+func runFocusCommandNoOutputWithin(ctx context.Context, timeout time.Duration, name string, args ...string) error {
+	commandContext, cancel := withCommandTimeout(ctx, timeout)
+	defer cancel()
+	var stderr bytes.Buffer
+	command := exec.CommandContext(commandContext, name, args...)
+	command.Stderr = &stderr
+	err := command.Run()
+	return focusCommandError(commandContext.Err(), err, stderr.String())
+}
+
+// exitErrorStderr returns what Output captured on stderr, which it only exposes
+// through the returned *exec.ExitError.
+func exitErrorStderr(err error) string {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return string(exitErr.Stderr)
+	}
+	return ""
 }

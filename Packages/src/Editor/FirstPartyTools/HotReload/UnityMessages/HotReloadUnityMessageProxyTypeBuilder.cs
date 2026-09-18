@@ -64,6 +64,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return proxyType;
         }
 
+        /// <summary>
+        /// Points a proxy type this builder emitted at <paramref name="binding"/>, so the proxies
+        /// already attached forward to the new shims without being replaced.
+        /// </summary>
+        /// <remarks>
+        /// Why swapping the field is enough: the emitted methods read the binding from it on every
+        /// call, and one reference assignment is never seen half-done by Unity's message dispatch.
+        /// The caller has to have checked the shapes match; a proxy type only declares the messages
+        /// of the binding it was built for.
+        /// </remarks>
+        internal void Rebind(Type proxyType, HotReloadUnityMessageBinding binding)
+        {
+            Debug.Assert(proxyType != null, "proxyType must not be null.");
+            Debug.Assert(binding != null, "binding must not be null.");
+            FieldInfo bindingField = proxyType.GetField(
+                BindingFieldName,
+                BindingFlags.Public | BindingFlags.Static);
+            if (bindingField == null || bindingField.FieldType != typeof(HotReloadUnityMessageBinding))
+            {
+                throw new InvalidOperationException(
+                    proxyType.FullName + " was not emitted by this builder and holds no binding.");
+            }
+
+            bindingField.SetValue(null, binding);
+        }
+
         // The emitted body reads nothing but its own arguments and one static field of a public
         // type, because the target type and the shim it ends up calling are often internal and
         // this IL is checked for accessibility like compiled code.

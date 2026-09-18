@@ -128,6 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void EnqueueExpiredNotRetargetedForLogicalOwner(MethodBase method)
         {
             List<string> expiredIds = new List<string>();
+            List<string> reportedIds = new List<string>();
             foreach (KeyValuePair<string, MethodBase> pair in SourcePausePointPatcher.LogicalOwnerById)
             {
                 if (!pair.Value.Equals(method) || UloopPausePointRegistry.IsArmed(pair.Key))
@@ -142,13 +143,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 expiredIds.Add(pair.Key);
+                // A one-shot that hit already did all it was armed to do; its later expiry only
+                // closed the capture window, so warning that it "will not fire" is noise. A
+                // Continuous marker that hit would have kept firing, so it is still reported.
+                if (status.Mode != UloopPausePointCaptureMode.SingleShot || status.HitCount == 0)
+                {
+                    reportedIds.Add(pair.Key);
+                }
             }
 
+            // Every expired marker leaves the ledger, reported or not, so later reloads of this
+            // method do not evaluate it again.
             for (int index = 0; index < expiredIds.Count; index++)
             {
                 string id = expiredIds[index];
                 SourcePausePointPatcher.LogicalOwnerById.Remove(id);
                 SourcePausePointPatcher.RequestById.Remove(id);
+            }
+
+            for (int index = 0; index < reportedIds.Count; index++)
+            {
+                string id = reportedIds[index];
                 if (!SourcePausePointPatcher.PendingExpiredNotRetargetedIds.Contains(id))
                 {
                     SourcePausePointPatcher.PendingExpiredNotRetargetedIds.Add(id);

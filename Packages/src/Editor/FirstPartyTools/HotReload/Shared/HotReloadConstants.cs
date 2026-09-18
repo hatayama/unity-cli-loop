@@ -251,6 +251,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "No verified source snapshot for {0} (assembly {1}); patching all methods. "
             + "Run uloop compile to establish a baseline for edited-method detection.";
 
+        // Format: file name, assembly name. Used instead of the warning above when the compiled
+        // PDB lists no document for the file: a file whose code compiles to no method body (an
+        // enum, an interface, fields only) is never recorded there, so no compile can produce the
+        // baseline the other wording asks the reader to establish.
+        public const string NoCompiledMethodBodyBaselineWarningFormat =
+            "{0} (assembly {1}) has no compiled method body, so there is no baseline for "
+            + "edited-method detection; patching all methods. This is expected for files that only "
+            + "declare types without bodies.";
+
         // Format: file name, assembly name. Emitted when syntax-method key collision disables baseline.
         public const string BaselineDisabledByDuplicateKeysWarningFormat =
             "Baseline comparison disabled for {0} (assembly {1}): the file contains methods with "
@@ -273,9 +282,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string RetargetedPausePointIdDetailFormat =
             "{0} (now line {1}: {2})";
 
-        // Format: count of Methods entries that carry a LifecycleNote.
+        // Format: count of patched Methods entries that carry a LifecycleNote.
         public const string LifecycleNotesAggregatedMessageFormat =
             "{0} patched method(s) have one-shot lifecycle notes; see Methods[].LifecycleNote.";
+
+        // Format: count of added methods whose Unity message a hot-reload proxy delivers.
+        public const string ForwardedUnityMessagesAggregatedMessageFormat =
+            "{0} added Unity message(s) are delivered by a hot-reload proxy; see Methods[].LifecycleNote.";
 
         public const string AlreadyActiveReason =
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
