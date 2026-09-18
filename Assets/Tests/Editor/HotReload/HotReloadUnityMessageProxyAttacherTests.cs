@@ -222,6 +222,94 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(proxies[0].Target, Is.InstanceOf<HotReloadUnityMessageInternalFixture>());
         }
 
+        /// <summary>
+        /// What: rebinding a bound type to new shims for the same messages keeps the attached proxy
+        /// in place, so no second AddComponent reruns an added Start, and the proxy now forwards to
+        /// the new shim.
+        /// </summary>
+        [Test]
+        public void TryRebind_WithTheSameMessages_KeepsTheAttachedProxyAndForwardsToTheNewShim()
+        {
+            HotReloadUnityMessageProxyFixture target = CreateFixture();
+            BindFixture();
+            _attacher.Tick();
+            HotReloadUnityMessageProxy first = ProxiesOn(target.gameObject)[0];
+
+            bool rebound = _attacher.TryRebind(
+                typeof(HotReloadUnityMessageProxyFixture),
+                CreateBinding(
+                    typeof(HotReloadUnityMessageDuplicateFixtureShims),
+                    typeof(HotReloadUnityMessageProxyFixture),
+                    new[] { "Update" }));
+            _attacher.Tick();
+
+            Assert.That(rebound, Is.True);
+            HotReloadUnityMessageProxy[] proxies = ProxiesOn(target.gameObject);
+            Assert.That(proxies.Length, Is.EqualTo(1));
+            Assert.That(proxies[0], Is.SameAs(first));
+            InvokeMessage(proxies[0], "Update");
+            Assert.That(target.UpdateCount, Is.EqualTo(100), "The new shim adds 100; the first one adds 1.");
+        }
+
+        /// <summary>
+        /// What: a binding that declares other messages is refused, leaving the proxy type and the
+        /// binding it forwards through as they were.
+        /// </summary>
+        [Test]
+        public void TryRebind_WithOtherMessages_RefusesAndKeepsTheProxyType()
+        {
+            BindFixture("Update");
+            Type before = _attacher.FindProxyType(typeof(HotReloadUnityMessageProxyFixture));
+
+            bool rebound = _attacher.TryRebind(
+                typeof(HotReloadUnityMessageProxyFixture),
+                CreateBinding(
+                    typeof(HotReloadUnityMessageProxyFixtureShims),
+                    typeof(HotReloadUnityMessageProxyFixture),
+                    new[] { "Update", "Start" }));
+
+            Assert.That(rebound, Is.False);
+            Assert.That(_attacher.FindProxyType(typeof(HotReloadUnityMessageProxyFixture)), Is.SameAs(before));
+        }
+
+        /// <summary>
+        /// What: a slot whose gate differs is refused even when the name and parameters match, so a
+        /// proxy type is only reused when every slot carries the same meaning.
+        /// </summary>
+        [Test]
+        public void TryRebind_WithADifferentGate_Refuses()
+        {
+            BindFixture("Update");
+            HotReloadUnityMessageBinding ungated = new HotReloadUnityMessageBinding(
+                typeof(HotReloadUnityMessageProxyFixture),
+                new[] { "Update" },
+                new[] { false },
+                new Action<MonoBehaviour, object[]>[] { (target, args) => { } },
+                new[] { Type.EmptyTypes });
+
+            bool rebound = _attacher.TryRebind(typeof(HotReloadUnityMessageProxyFixture), ungated);
+
+            Assert.That(rebound, Is.False);
+        }
+
+        /// <summary>
+        /// What: a type that was never bound is refused, so the caller falls back to building a
+        /// proxy type for it.
+        /// </summary>
+        [Test]
+        public void TryRebind_ForATypeNotBound_Refuses()
+        {
+            bool rebound = _attacher.TryRebind(
+                typeof(HotReloadUnityMessageProxyFixture),
+                CreateBinding(
+                    typeof(HotReloadUnityMessageProxyFixtureShims),
+                    typeof(HotReloadUnityMessageProxyFixture),
+                    new[] { "Update" }));
+
+            Assert.That(rebound, Is.False);
+            Assert.That(_attacher.FindProxyType(typeof(HotReloadUnityMessageProxyFixture)), Is.Null);
+        }
+
         private void BindFixture(params string[] messageNames)
         {
             string[] names = messageNames.Length == 0 ? new[] { "Update" } : messageNames;
@@ -251,6 +339,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return HotReloadUnityMessageForwarderFactory.CreateBinding(targetType, shims);
+        }
+
+        private static void InvokeMessage(HotReloadUnityMessageProxy proxy, string messageName)
+        {
+            MethodInfo message = proxy.GetType().GetMethod(
+                messageName,
+                BindingFlags.Public | BindingFlags.Instance);
+            Assert.That(message, Is.Not.Null, "The generated proxy must declare " + messageName + ".");
+            message.Invoke(proxy, null);
         }
 
         private static HotReloadUnityMessageProxy[] ProxiesOn(GameObject owner)

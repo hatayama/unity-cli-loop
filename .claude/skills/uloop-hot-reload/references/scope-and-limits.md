@@ -197,7 +197,9 @@ initialization helpers called from them, anything that seeds state at startup) p
 successfully but show no effect: the one call they get is already in the past when the
 patch lands. An *added* `Start` is the exception, and only because it is not a patch at all:
 the proxy that carries it runs it once on each instance that already exists, at the moment
-the proxy attaches. The response marks these with `LifecycleNote` (see Output) — both direct one-shot
+the proxy attaches. A later reload that only changes method bodies keeps the attached proxies,
+so `Start` does not run again; it does when the reload changes which messages the type adds or
+their signatures, because the proxy is rebuilt. The response marks these with `LifecycleNote` (see Output) — both direct one-shot
 lifecycle messages and methods whose every compiled caller is a one-shot lifecycle message on a
 `MonoBehaviour`. The caller check is conservative: when the scan cannot prove exclusivity (a
 missing assembly, reflection, or event-driven calls), the note is omitted. To see an

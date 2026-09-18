@@ -13,8 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string Forwarded =
             "Unity message: forwarded to live instances by a hot-reload proxy component while Play "
             + "Mode runs. An added Start runs once on each existing instance when the proxy "
-            + "attaches, and again if a later reload changes this type's added messages. Execution "
-            + "order relative to other components is not guaranteed. Gone on any compile or domain "
+            + "attaches. The proxy is rebuilt (and an added Start runs again) only when a later "
+            + "reload changes which messages this type adds or their signatures. Execution order "
+            + "relative to other components is not guaranteed. Gone on any compile or domain "
             + "reload.";
 
         /// <summary>
