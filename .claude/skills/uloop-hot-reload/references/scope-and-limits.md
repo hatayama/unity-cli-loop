@@ -36,8 +36,9 @@ An added method reports its own row with Kind `Added`; the edited methods that c
 it report `Patched` as usual. Added `virtual`/`override`/`abstract` methods, explicit
 interface implementations, and generic methods are `Skipped`; a method-group or
 delegate reference to an added instance method skips the referencing method instead.
-Pause points cannot bind to lines inside an added method — enabling one there fails
-with the normal not-found error.
+Pause points cannot bind to lines inside an added method — enabling one there is
+refused with a message naming the added method (see
+[pause-point-interaction.md](pause-point-interaction.md)).
 
 An added field's values live in a side table that follows each instance's lifetime
 (statics live per domain). Its initializer does not run at construction time; it runs

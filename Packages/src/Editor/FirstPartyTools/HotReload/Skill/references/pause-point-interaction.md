@@ -18,7 +18,8 @@ enforcing exclusivity, every patch transition re-targets them:
   `uloop compile`: it has no compiled body and pause-point cannot arm its shim. Enabling
   a line inside it is refused with `PAUSE_POINT_RESOLVE_FAILED` and a message naming the
   added method; it is never armed on another method instead. Compile first, then enable
-  the pause point there.
+  the pause point there. A line that is also inside a compiled method's last compiled
+  span still arms that compiled method when `--method` names it.
 - `uloop hot-reload --revert-all` (or reverting a method's patch) re-targets armed
   markers back onto the compiled body; a marker whose line no longer resolves there
   stays suppressed with a reason until `uloop compile` and a re-enable.
