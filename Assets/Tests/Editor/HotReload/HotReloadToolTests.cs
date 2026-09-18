@@ -2096,7 +2096,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
-                isPlaying: false);
+                isPlaying: false,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("Requested"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2118,7 +2119,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
-                isPlaying: true);
+                isPlaying: true,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
             Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
@@ -2140,11 +2142,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
-                isPlaying: true);
+                isPlaying: true,
+                compileRefusedDuringPlay: false);
 
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(HotReloadConstants.CompileFallbackHeldForPlayModeRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// What: a held compile during play, with the Editor set to refuse compiles until play
+        /// ends, points at stopping Play Mode instead of suggesting --compile-on-skip on, which
+        /// would run a compile the Editor refuses.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_HeldDuringPlayWhenTheEditorRefusesCompiles_PointsAtStoppingPlayMode()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(CreateSkippedResult());
+            string nextActionBefore = response.RecommendedNextAction;
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.auto,
+                isPlaying: true,
+                compileRefusedDuringPlay: true);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
+            Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
+            Assert.That(response.RecommendedNextAction, Does.Contain("control-play-mode --action Stop"));
+            Assert.That(response.RecommendedNextAction, Does.Not.Contain("--compile-on-skip on"));
+        }
+
+        /// <summary>
+        /// What: --compile-on-skip on during play, with the Editor set to refuse compiles until
+        /// play ends, reports the compile as blocked and points at stopping Play Mode, so the
+        /// CLI does not run a compile that can only be refused.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_OnDuringPlayWhenTheEditorRefusesCompiles_ReportsBlocked()
+        {
+            HotReloadResponse response = new() { RecommendedNextAction = string.Empty };
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                CreateSkippedResult(),
+                HotReloadCompileOnSkip.on,
+                isPlaying: true,
+                compileRefusedDuringPlay: true);
+
+            Assert.That(response.CompileFallback, Is.EqualTo("BlockedByPlayModeSetting"));
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(HotReloadConstants.CompileFallbackRefusedDuringPlayRecommendedNextAction));
         }
 
         /// <summary>
@@ -2161,7 +2211,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.off,
-                isPlaying: false);
+                isPlaying: false,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("Disabled"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2187,7 +2238,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response,
                 result,
                 HotReloadCompileOnSkip.auto,
-                isPlaying: true);
+                isPlaying: true,
+                compileRefusedDuringPlay: false);
 
             Assert.That(response.CompileFallback, Is.EqualTo("NotNeeded"));
         }
