@@ -100,8 +100,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // earlier patches stay live, so the failed sentence would overstate what happened.
         public const string ActiveSiblingRebindSkippedOnlyWarningFormat =
             "'{0}' was pulled in to re-bind its active patches, but every method there was Skipped "
-            + "this time; see its rows for the reasons. Its earlier patches stay active until "
+            + "this time; see its rows for the reasons. Any earlier patches there stay active until "
             + "uloop compile clears the run.";
+
+        // Why a fourth wording: when the whole reload is refused, every file of the group gets the
+        // same file-level Failed row, so the sibling's rows only repeat the run's refusal reason
+        // and none of its active patches changed. The failed sentence would send the reader
+        // looking for patches that changed.
+        public const string ActiveSiblingRebindRunRefusedWarningFormat =
+            "'{0}' was pulled in to re-bind its active patches, but the whole reload was refused "
+            + "before re-applying them, so its active patches are unchanged; its rows repeat the "
+            + "refusal reason. Fix that and rerun, or run uloop compile to clear the run.";
 
         public const string ActiveSiblingRebindFailedWarningFormat =
             "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "

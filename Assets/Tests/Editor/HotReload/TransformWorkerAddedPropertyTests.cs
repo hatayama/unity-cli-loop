@@ -50,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string CompoundAssignmentReason =
             "Compound assignment, increment, and decrement of an added property are skipped; the accessor shim cannot preserve the operation. "
+            + "Rewrite it as a plain assignment statement ('X = X + 1;') to keep hot reloading. "
             + "Run 'uloop compile' to add it.";
 
         private const string ConsumedWriteReason =

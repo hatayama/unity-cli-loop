@@ -45,11 +45,15 @@ internal static class RetainedTypeSignatureReferenceFinder
             List<string> referrers = FindReferrers(BuildIdentity(verdict.Record), signatureIdentitiesByReferrer);
             if (referrers.Count > 0)
             {
-                return "Introduced type '" + verdict.MetadataName + "' appears in member signatures of '"
-                    + string.Join("', '", referrers)
-                    + "', which an earlier reload retained and this edit leaves unchanged; changing '"
+                string referrerList = "'" + string.Join("', '", referrers) + "'";
+                return "Introduced type '" + verdict.MetadataName + "' appears in member signatures of "
+                    + referrerList
+                    + ", which an earlier reload retained and this edit leaves unchanged; changing '"
                     + verdict.MetadataName
-                    + "' would split it between the retained assembly and this edit. Run 'uloop compile' to apply this edit.";
+                    + "' would split it between the retained assembly and this edit. To keep hot reloading, also edit "
+                    + referrerList
+                    + " in this same reload (a method body change is enough); passing its file unchanged does not help. "
+                    + "Otherwise run 'uloop compile' to apply this edit.";
             }
         }
 

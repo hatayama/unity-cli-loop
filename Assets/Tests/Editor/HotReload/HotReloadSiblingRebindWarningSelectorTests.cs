@@ -73,12 +73,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(format, Is.EqualTo(HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat));
         }
 
+        /// <summary>
+        /// What: a sibling whose only rows are the file-level Failed rows of a refused reload, with
+        /// nothing reverted, gets the run-refused warning because none of its patches changed.
+        /// </summary>
+        [Test]
+        public void SelectUnappliedWarningFormat_OnlyFileLevelFailedRowsAndNothingReverted_ReturnsTheRunRefusedWarning()
+        {
+            string format = HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(
+                CreateResultWithReverts(
+                    0,
+                    HotReloadMethodOutcome.Failed("(file)", "reason", SiblingPath),
+                    HotReloadMethodOutcome.Failed("(file)", "second reason", SiblingPath)));
+
+            Assert.That(format, Is.EqualTo(HotReloadConstants.ActiveSiblingRebindRunRefusedWarningFormat));
+        }
+
+        /// <summary>
+        /// What: file-level Failed rows alone do not prove the patches are unchanged once unchanged
+        /// patches were reverted, so that sibling keeps the failed-rebind warning.
+        /// </summary>
+        [Test]
+        public void SelectUnappliedWarningFormat_OnlyFileLevelFailedRowsAfterARevert_ReturnsTheFailedWarning()
+        {
+            string format = HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(
+                CreateResultWithReverts(1, HotReloadMethodOutcome.Failed("(file)", "reason", SiblingPath)));
+
+            Assert.That(format, Is.EqualTo(HotReloadConstants.ActiveSiblingRebindFailedWarningFormat));
+        }
+
+        /// <summary>
+        /// What: a file-level Failed row next to a method-level Failed row keeps the failed-rebind
+        /// warning, because a method of the sibling failed on its own.
+        /// </summary>
+        [Test]
+        public void SelectUnappliedWarningFormat_FileLevelAndMethodFailedRows_ReturnsTheFailedWarning()
+        {
+            string format = HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(
+                CreateResultWithReverts(
+                    0,
+                    HotReloadMethodOutcome.Failed("(file)", "reason", SiblingPath),
+                    HotReloadMethodOutcome.Failed("Sibling.Broken", "reason", SiblingPath)));
+
+            Assert.That(format, Is.EqualTo(HotReloadConstants.ActiveSiblingRebindFailedWarningFormat));
+        }
+
+        /// <summary>
+        /// What: a file-level Failed row next to a Skipped row is not a refused run alone, so the
+        /// sibling keeps the failed-rebind warning.
+        /// </summary>
+        [Test]
+        public void SelectUnappliedWarningFormat_FileLevelFailedAndSkippedRows_ReturnsTheFailedWarning()
+        {
+            string format = HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(
+                CreateResultWithReverts(
+                    0,
+                    HotReloadMethodOutcome.Failed("(file)", "reason", SiblingPath),
+                    HotReloadMethodOutcome.Skipped("Sibling.Skip", "reason", SiblingPath)));
+
+            Assert.That(format, Is.EqualTo(HotReloadConstants.ActiveSiblingRebindFailedWarningFormat));
+        }
+
         private static HotReloadFileProcessResult CreateResult(params HotReloadMethodOutcome[] outcomes)
+        {
+            return CreateResultWithReverts(0, outcomes);
+        }
+
+        private static HotReloadFileProcessResult CreateResultWithReverts(
+            int revertedUnchangedCount,
+            params HotReloadMethodOutcome[] outcomes)
         {
             return new HotReloadFileProcessResult(
                 new List<HotReloadMethodOutcome>(outcomes),
                 new List<string>(),
-                patchedCount: 0);
+                patchedCount: 0,
+                revertedUnchangedCount: revertedUnchangedCount);
         }
     }
 }
