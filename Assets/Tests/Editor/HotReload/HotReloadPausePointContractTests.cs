@@ -352,6 +352,97 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a SingleShot marker that hit and then expired when its capture window ended is
+        /// not reported as an expired marker that was never re-targeted, since it already fired.
+        /// </summary>
+        [Test]
+        public async Task HotReload_AfterSingleShotHitThenExpire_DoesNotWarnItWasNotRetargeted()
+        {
+            DateTime nowUtc = new DateTime(2026, 8, 12, 12, 0, 0, DateTimeKind.Utc);
+            FakePausePointPauseController pauseController = new FakePausePointPauseController();
+            UloopPausePointRegistry.ConfigureForTests(pauseController, () => nowUtc);
+
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            fixture.ComputeWithPrivate(5);
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+            // The hit paused the Editor, and the countdown stays frozen until it resumes.
+            pauseController.Resume();
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+
+            nowUtc = nowUtc.AddSeconds(2);
+            UloopPausePointSnapshot expired = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(expired.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(expired.HitCount, Is.GreaterThan(0));
+
+            HotReloadResponse apply = await HotReloadApplyFromEditedSourceAsync(
+                BuildEditedComputePlusHundred(onDisk),
+                "ContractHitThenExpired.cs");
+            string warnings = string.Join(" | ", apply.Warnings);
+            Assert.That(warnings, Does.Not.Contain("Expired pause points were not re-targeted"), warnings);
+            // Leaving the marker out of the warning must not keep it in the owner ledger, or every
+            // later reload of the method would evaluate it again.
+            Assert.That(SourcePausePointPatcher.LogicalOwnerById.ContainsKey(enable.Id), Is.False);
+            Assert.That(SourcePausePointPatcher.RequestById.ContainsKey(enable.Id), Is.False);
+        }
+
+        /// <summary>
+        /// What: a Continuous marker that hit and later expired is still reported, because unlike a
+        /// one-shot it would have kept firing on the edited body had it not expired.
+        /// </summary>
+        [Test]
+        public async Task HotReload_AfterContinuousHitThenExpire_WarnsItWasNotRetargeted()
+        {
+            DateTime nowUtc = new DateTime(2026, 8, 12, 12, 0, 0, DateTimeKind.Utc);
+            FakePausePointPauseController pauseController = new FakePausePointPauseController();
+            UloopPausePointRegistry.ConfigureForTests(pauseController, () => nowUtc);
+
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            fixture.ComputeWithPrivate(5);
+            pauseController.Resume();
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+
+            nowUtc = nowUtc.AddSeconds(2);
+            UloopPausePointSnapshot expired = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(expired.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(expired.HitCount, Is.GreaterThan(0));
+
+            HotReloadResponse apply = await HotReloadApplyFromEditedSourceAsync(
+                BuildEditedComputePlusHundred(onDisk),
+                "ContractContinuousHitThenExpired.cs");
+            string warnings = string.Join(" | ", apply.Warnings);
+            Assert.That(
+                warnings,
+                Does.Contain("Expired pause points were not re-targeted and will not fire: " + enable.Id),
+                warnings);
+        }
+
+        /// <summary>
         /// What: restore-after-revert rewrites ResolvedLine when re-resolve succeeds, proving
         /// the restore SetResolvedLine path (not only enable/retarget) updates the registry.
         /// </summary>

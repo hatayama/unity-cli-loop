@@ -363,7 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + FormatStalePatchRevertNote(result.RevertedUnchangedTotal);
             }
 
-            int lifecycleNoteCount = CountLifecycleNotes(result);
+            int lifecycleNoteCount = CountPatchedLifecycleNotes(result);
             if (lifecycleNoteCount > 0)
             {
                 // Why aggregate: per-method text already lives on Methods[].LifecycleNote;
@@ -371,6 +371,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message += " " + string.Format(
                     HotReloadConstants.LifecycleNotesAggregatedMessageFormat,
                     lifecycleNoteCount);
+            }
+
+            int forwardedMessageCount = CountForwardedUnityMessages(result);
+            if (forwardedMessageCount > 0)
+            {
+                message += " " + string.Format(
+                    HotReloadConstants.ForwardedUnityMessagesAggregatedMessageFormat,
+                    forwardedMessageCount);
             }
 
             return message;
@@ -388,18 +396,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 revertedUnchangedTotal);
         }
 
-        private static int CountLifecycleNotes(HotReloadOrchestratorResult result)
+        // Only patched rows: an added Unity message's note is about the proxy delivering it, not
+        // about a one-shot method, so counting it here would overstate the one-shot rows.
+        private static int CountPatchedLifecycleNotes(HotReloadOrchestratorResult result)
         {
             int lifecycleNoteCount = 0;
             for (int index = 0; index < result.Methods.Count; index++)
             {
-                if (!string.IsNullOrEmpty(result.Methods[index].LifecycleNote))
+                HotReloadMethodOutcome outcome = result.Methods[index];
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && !string.IsNullOrEmpty(outcome.LifecycleNote))
                 {
                     lifecycleNoteCount++;
                 }
             }
 
             return lifecycleNoteCount;
+        }
+
+        private static int CountForwardedUnityMessages(HotReloadOrchestratorResult result)
+        {
+            int forwardedCount = 0;
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                HotReloadMethodOutcome outcome = result.Methods[index];
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Added
+                    && HotReloadUnityMessageNotes.IsForwarded(outcome.LifecycleNote))
+                {
+                    forwardedCount++;
+                }
+            }
+
+            return forwardedCount;
         }
 
         private static bool AreAllOutcomesAlreadyActive(HotReloadOrchestratorResult result)

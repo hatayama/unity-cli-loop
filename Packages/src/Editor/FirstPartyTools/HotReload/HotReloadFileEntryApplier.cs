@@ -372,7 +372,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadUnityMessageDetector.Classify(resolved.ShimMethod, out Type _);
             if (classification == HotReloadUnityMessageDetector.Classification.Forwarded)
             {
-                return HotReloadUnityMessageNotes.Forwarded;
+                return HotReloadUnityMessageDetector.ResolveMemberName(resolved.ShimMethod) == "Start"
+                    ? HotReloadUnityMessageNotes.ForwardedStart
+                    : HotReloadUnityMessageNotes.Forwarded;
             }
 
             if (classification == HotReloadUnityMessageDetector.Classification.NotForwarded)

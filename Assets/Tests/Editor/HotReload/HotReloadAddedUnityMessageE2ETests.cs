@@ -77,7 +77,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadMethodOutcome added = FindAdded(result, "Update");
             Assert.That(added.LifecycleNote, Is.EqualTo(HotReloadUnityMessageNotes.Forwarded));
+            Assert.That(added.LifecycleNote, Does.Not.Contain("runs once on each existing instance"));
             Assert.That(result.Warnings, Has.None.Contain("not invoked until"));
+        }
+
+        /// <summary>
+        /// What: an added Start carries the note that says it runs once when the proxy attaches,
+        /// the one sentence the note on every other forwarded message leaves out.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedStart_ReportsTheNoteThatSaysItRunsWhenTheProxyAttaches()
+        {
+            HotReloadOrchestratorResult result = await RunWithAddedMemberAsync(
+                "AddedUnityMessageStartNote.cs",
+                "        private void Start()\n        {\n            Counter++;\n        }");
+
+            HotReloadMethodOutcome added = FindAdded(result, "Start");
+            Assert.That(added.LifecycleNote, Is.EqualTo(HotReloadUnityMessageNotes.ForwardedStart));
+            Assert.That(added.LifecycleNote, Does.Contain("runs once on each existing instance"));
         }
 
         /// <summary>

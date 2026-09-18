@@ -115,7 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 Plain(
                     "Writes to members of an added value-type field, and instance method calls on that field, "
-                    + "cannot be rewritten. " + CompileCallToAction,
+                    + "cannot be rewritten. Copy the field into a local, change the local, and assign the "
+                    + "whole value back. " + CompileCallToAction,
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
