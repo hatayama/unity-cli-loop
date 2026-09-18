@@ -131,19 +131,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: the same failing shims are not retried, so the warning is reported once instead of
-        /// on every reconcile until the user edits the file again.
+        /// What: an editor update that meets the failure first records it silently, and the run
+        /// that asks for warnings still gets exactly one line about it.
         /// </summary>
         [Test]
-        public void Reconcile_RunAgainOverFailingShims_DoesNotRepeatTheWarning()
+        public void Reconcile_AfterATickMetTheFailureFirst_StillReportsItToTheRun()
         {
             RegisterUnbuildableFixture();
-            _forwarding.Reconcile(new List<string>());
+            _forwarding.Tick();
             List<string> warnings = new List<string>();
 
             _forwarding.Reconcile(warnings);
 
-            Assert.That(warnings, Is.Empty);
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain(typeof(HotReloadUnityMessageProxyFixture).FullName));
+            Assert.That(_attacher.FindProxyType(typeof(HotReloadUnityMessageProxyFixture)), Is.Null);
+        }
+
+        /// <summary>
+        /// What: the shims that already failed are not built again, so a reconcile over them
+        /// reports the failure the first attempt produced rather than a newly raised one.
+        /// </summary>
+        [Test]
+        public void Reconcile_RunAgainOverFailingShims_ReportsTheFailureItAlreadyKnows()
+        {
+            RegisterUnbuildableFixture();
+            List<string> first = new List<string>();
+            _forwarding.Reconcile(first);
+            List<string> second = new List<string>();
+
+            _forwarding.Reconcile(second);
+
+            Assert.That(second, Is.EqualTo(first));
         }
 
         // The same message added to one type twice: a proxy could only declare it once, so building

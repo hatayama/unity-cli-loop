@@ -24,10 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // exactly the case a rebuild is needed for.
         private readonly Dictionary<Type, MethodInfo[]> _boundShimsByTarget =
             new Dictionary<Type, MethodInfo[]>();
-        // The shim methods that already failed to build, so a failure is reported once instead of
-        // on every editor update until the user edits the file again.
-        private readonly Dictionary<Type, MethodInfo[]> _failedShimsByTarget =
-            new Dictionary<Type, MethodInfo[]>();
+        // The shim methods that already failed to build, with the failure they produced: the build
+        // is not retried until the user edits the file again, while the message is kept so a run
+        // can still report a failure an editor update happened to find first.
+        private readonly Dictionary<Type, FailedBinding> _failedShimsByTarget =
+            new Dictionary<Type, FailedBinding>();
 
         internal HotReloadUnityMessageForwarding(
             HotReloadDomain domain,
@@ -142,8 +143,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            if (SameReferences(Lookup(_failedShimsByTarget, targetType), shims))
+            if (_failedShimsByTarget.TryGetValue(targetType, out FailedBinding failed)
+                && SameReferences(failed.Shims, shims))
             {
+                // Why the warning is repeated while the build is not: the editor update reconciles
+                // with nowhere to report to, so it can meet a failure first and leave the run that
+                // asked for warnings finishing silently about a message that will never arrive.
+                warnings?.Add(FailureWarning(targetType, failed.Failure));
                 return;
             }
 
@@ -153,9 +159,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // silently leaves the previous messages running against the new shims.
                 _attacher.Unbind(targetType);
                 _boundShimsByTarget.Remove(targetType);
-                _failedShimsByTarget[targetType] = shims;
-                warnings?.Add(
-                    $"Unity message forwarding for {targetType.FullName} is unavailable: {failure}");
+                _failedShimsByTarget[targetType] = new FailedBinding(shims, failure);
+                warnings?.Add(FailureWarning(targetType, failure));
                 return;
             }
 
@@ -183,6 +188,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        private static string FailureWarning(Type targetType, string failure)
+        {
+            return $"Unity message forwarding for {targetType.FullName} is unavailable: {failure}";
+        }
+
         private static MethodInfo[] Lookup(Dictionary<Type, MethodInfo[]> source, Type targetType)
         {
             return source.TryGetValue(targetType, out MethodInfo[] shims) ? shims : null;
@@ -204,6 +214,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return true;
+        }
+
+        /// <summary>The shims a build was last refused for, and the refusal it reported.</summary>
+        private readonly struct FailedBinding
+        {
+            internal FailedBinding(MethodInfo[] shims, string failure)
+            {
+                Debug.Assert(shims != null, "shims must not be null.");
+                Debug.Assert(!string.IsNullOrEmpty(failure), "failure must not be empty.");
+                Shims = shims;
+                Failure = failure;
+            }
+
+            internal MethodInfo[] Shims { get; }
+
+            internal string Failure { get; }
         }
     }
 }
