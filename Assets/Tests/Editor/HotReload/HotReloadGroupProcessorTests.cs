@@ -947,6 +947,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             file.SnapshotLabels = new HashSet<string>();
             file.SnapshotAddedLabels = new HashSet<string>();
+            file.SnapshotForwardedUnityMessageLabels = new HashSet<string>();
             return file;
         }
 

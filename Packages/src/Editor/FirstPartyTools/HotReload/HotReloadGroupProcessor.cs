@@ -407,6 +407,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.SnapshotAddedLabels = new HashSet<string>(
                     _domain.ListActiveAddedMethodKeys(file.ProjectRelativePath),
                     StringComparer.Ordinal);
+                file.SnapshotForwardedUnityMessageLabels = _collaborators.PlayMode.IsPlaying
+                    ? HotReloadDeactivatedUnityMessageNote.CollectForwardedLabels(
+                        _domain.DescribeAddedMembersOfFile(file.ProjectRelativePath))
+                    : new HashSet<string>(StringComparer.Ordinal);
                 // Why projectRelativePath (not workerSourcePath): contentPathOverride E2E copies
                 // live under Library/UloopHotReload/TestSources/ and are absent from the PDB
                 // document list. Assembly resolution already computed the on-disk path.

@@ -243,6 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings,
             HashSet<string> snapshotLabels,
             HashSet<string> snapshotAddedLabels,
+            HashSet<string> snapshotForwardedUnityMessageLabels,
             string projectRelativePath,
             TransformWorkerOutputDto workerOutput,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
@@ -251,6 +252,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
             Debug.Assert(snapshotAddedLabels != null, "snapshotAddedLabels must not be null.");
+            Debug.Assert(
+                snapshotForwardedUnityMessageLabels != null,
+                "snapshotForwardedUnityMessageLabels must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
 
             HashSet<string> currentLabels = CollectActiveLabelsForFile(domain, projectRelativePath);
@@ -277,17 +281,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendDeactivatedWarningLine(
                 warnings,
                 deactivatedAdded,
-                HotReloadConstants.DeactivatedAddedMembersWarningFormat);
+                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
+                HotReloadDeactivatedUnityMessageNote.Describe(deactivatedAdded, snapshotForwardedUnityMessageLabels));
             AppendDeactivatedWarningLine(
                 warnings,
                 deactivatedPatches,
-                HotReloadConstants.DeactivatedPatchesWarningFormat);
+                HotReloadConstants.DeactivatedPatchesWarningFormat,
+                null);
         }
 
         private static void AppendDeactivatedWarningLine(
             List<string> warnings,
             List<string> labels,
-            string format)
+            string format,
+            string trailingSentence)
         {
             if (labels.Count == 0)
             {
@@ -295,7 +302,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             labels.Sort(string.CompareOrdinal);
-            warnings.Add(string.Format(format, string.Join(", ", labels)));
+            string line = string.Format(format, string.Join(", ", labels));
+            warnings.Add(trailingSentence == null ? line : line + " " + trailingSentence);
         }
     }
 }

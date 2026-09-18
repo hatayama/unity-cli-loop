@@ -123,6 +123,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal HashSet<string> SnapshotAddedLabels { get; set; }
 
+        // The snapshotted added labels a proxy was forwarding as Unity messages. Empty outside
+        // Play Mode, where no proxy is attached and deactivating a message changes nothing live.
+        internal HashSet<string> SnapshotForwardedUnityMessageLabels { get; set; }
+
         // Set when a group-level stage already failed this file, so the apply loop must leave
         // its generations alone and keep the patches of the previous run in place.
         internal bool SkipApply { get; set; }
