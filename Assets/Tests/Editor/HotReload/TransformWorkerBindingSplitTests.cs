@@ -29,6 +29,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string InsertionAnchor = "        public int Handled => _handled;";
         private const string WireMethod =
             "\n\n        public void Wire()\n        {\n            _registry.Register(p => Handle(p));\n        }";
+        private const string WireMethodThatAlsoCounts =
+            "\n\n        public void Wire()\n        {\n            _registry.Register(p =>\n            {\n"
+            + "                _handled++;\n                Handle(p);\n            });\n        }";
 
         /// <summary>
         /// What: with the host alone in the run, the lambda binds against the compiled payload and
@@ -40,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunAsync(
                 new[] { HostFileName },
-                new[] { WithWire(ReadOnDisk(HostFileName)) });
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireMethod) });
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertNoSkippedMethodNamed(result, "Wire");
@@ -59,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunAsync(
                 new[] { HostFileName, PayloadFileName },
-                new[] { WithWire(ReadOnDisk(HostFileName)), ReadOnDisk(PayloadFileName) });
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireMethod), ReadOnDisk(PayloadFileName) });
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "Wire"), Is.Null, "Wire must not be applied.");
@@ -68,10 +71,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound));
         }
 
-        private static string WithWire(string hostSource)
+        /// <summary>
+        /// What: a lambda that also reaches a private field it can bind still gets the method
+        /// skipped, because the field access sends the body down the delegation path and that path
+        /// must not skip the check that the whole body bound.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_SkipsTheMethodEvenWhenItsLambdaAlsoTouchesAField()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireMethodThatAlsoCounts), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "Wire"), Is.Null, "Wire must not be applied.");
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound));
+        }
+
+        private static string WithMethod(string hostSource, string method)
         {
             Assert.That(hostSource, Does.Contain(InsertionAnchor), "Precondition: anchor must exist.");
-            return hostSource.Replace(InsertionAnchor, InsertionAnchor + WireMethod, StringComparison.Ordinal);
+            return hostSource.Replace(InsertionAnchor, InsertionAnchor + method, StringComparison.Ordinal);
         }
 
         private static string ReadOnDisk(string fileName)
