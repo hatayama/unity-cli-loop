@@ -28,6 +28,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         HotReloadShimFileLookup GetShimLookupForFile(string file);
 
         /// <summary>
+        /// Argument is a forward-slash path (absolute or project-relative) and a 1-based line;
+        /// returns the name of the method hot reload added to that file whose source range holds
+        /// the line, or null when the line is not inside an added method.
+        /// </summary>
+        string FindAddedMethodContainingLine(string file, int line);
+
+        /// <summary>
         /// Returns the PDB-checksum-verified compiled snapshot text for a project-relative source
         /// file, or null when no snapshot is available.
         /// </summary>

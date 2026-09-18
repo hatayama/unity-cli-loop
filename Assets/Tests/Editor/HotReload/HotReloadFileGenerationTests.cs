@@ -95,6 +95,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method registered with its source range is found for its first line, its
+        /// last line and a line between them, and not for the lines just outside, even in a
+        /// generation with no patched method, whose shim lookup is null.
+        /// </summary>
+        [Test]
+        public void FindAddedMethodContainingLine_ReportsTheAddedMethodOnlyInsideItsRange()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                sourceStartLine: 20,
+                sourceEndLine: 24);
+
+            Assert.That(generation.FindAddedMethodContainingLine(20), Is.EqualTo(AddedMethodKey));
+            Assert.That(generation.FindAddedMethodContainingLine(22), Is.EqualTo(AddedMethodKey));
+            Assert.That(generation.FindAddedMethodContainingLine(24), Is.EqualTo(AddedMethodKey));
+            Assert.That(generation.FindAddedMethodContainingLine(19), Is.Null);
+            Assert.That(generation.FindAddedMethodContainingLine(25), Is.Null);
+            Assert.That(generation.BuildShimLookup(), Is.Null);
+        }
+
+        /// <summary>
+        /// What: an added method registered without a source range never claims a line, so a
+        /// missing range cannot blame an unrelated line on an added method.
+        /// </summary>
+        [Test]
+        public void FindAddedMethodContainingLine_AddedMethodWithoutARange_ReportsNothing()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath);
+
+            Assert.That(generation.FindAddedMethodContainingLine(0), Is.Null);
+            Assert.That(generation.FindAddedMethodContainingLine(1), Is.Null);
+        }
+
+        /// <summary>
         /// What: IsActiveMember and ListActiveAddedMethodKeys report only the keys this generation
         /// registered.
         /// </summary>

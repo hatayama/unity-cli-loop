@@ -20,6 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public System.Func<string, HotReloadShimFileLookup> ShimLookupForFile { get; set; }
 
+        public System.Func<string, int, string> AddedMethodContainingLine { get; set; }
+
         public System.Func<string, string> VerifiedSnapshotSourceForFile { get; set; }
 
         public System.Func<string, string, string> VerifiedSnapshotSource { get; set; }
@@ -45,6 +47,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return ShimLookupForFile != null
                 ? ShimLookupForFile(file)
                 : Inner?.GetShimLookupForFile(file);
+        }
+
+        public string FindAddedMethodContainingLine(string file, int line)
+        {
+            return AddedMethodContainingLine != null
+                ? AddedMethodContainingLine(file, line)
+                : Inner?.FindAddedMethodContainingLine(file, line);
         }
 
         public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)

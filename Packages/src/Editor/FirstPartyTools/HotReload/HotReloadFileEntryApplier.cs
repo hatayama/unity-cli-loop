@@ -313,7 +313,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 generation.RegisterAddedMethod(
                     resolved.MethodLabel,
                     resolved.ShimMethod,
-                    resolved.FilePath);
+                    resolved.FilePath,
+                    resolved.Entry.sourceStartLine,
+                    resolved.Entry.sourceEndLine);
                 return HotReloadMethodOutcome.Added(
                     resolved.MethodLabel,
                     resolved.FilePath,

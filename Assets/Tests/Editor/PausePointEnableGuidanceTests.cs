@@ -431,6 +431,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a line inside a method hot reload added is refused with a message naming that
+        /// method and the compile it needs, even when the file has no patched method and so no
+        /// shim lookup.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheLineIsInsideAnAddedMethod_SaysHotReloadAddedThatMethod()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = file => null;
+                scope.Port.AddedMethodContainingLine = (file, line) =>
+                    line == IntroducedTypeRequestedLine ? "Ns.Owner.AddedStep()" : null;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = IntroducedTypeFilePath,
+                    Line = IntroducedTypeRequestedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "Line 10 is inside 'Ns.Owner.AddedStep()', which hot reload added; pause points "
+                        + "cannot be armed inside added methods until 'uloop compile', so it was refused "
+                        + "instead of arming another method."));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.AddedMethodResolveFailureNextAction));
+            }
+        }
+
+        /// <summary>
+        /// What: a line outside every added method keeps the general resolve-failure guidance, so
+        /// the added-method explanation cannot swallow an ordinary wrong line.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheLineIsOutsideEveryAddedMethod_KeepsTheGeneralResolveGuidance()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.IntroducedTypeSourceFiles = new HashSet<string>();
+                scope.Port.AddedMethodContainingLine = (file, line) =>
+                    line == IntroducedTypeRequestedLine + 1 ? "Ns.Owner.AddedStep()" : null;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = IntroducedTypeFilePath,
+                    Line = IntroducedTypeRequestedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.Message, Does.Not.Contain("which hot reload added"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+            }
+        }
+
+        /// <summary>
         /// What: a file the hot-reload side does not report as declaring an introduced type keeps
         /// the general resolve-failure guidance, so the new explanation cannot swallow the old one.
         /// </summary>

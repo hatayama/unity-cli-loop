@@ -283,6 +283,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // map; only the warning text differs.
             }
 
+            // Why before the compiled resolver: an added method has no compiled counterpart, so
+            // "on or after line N" would land on the next compiled method and arm the wrong code.
+            // Asked separately from the shim lookup, which is null when the file has only added
+            // methods and no patched ones.
+            string addedMethodName =
+                HotReloadPausePointCoordination.HotReloadSide?.FindAddedMethodContainingLine(
+                    normalizedFile,
+                    parameters.Line);
+            if (addedMethodName != null)
+            {
+                return PausePointResolveFailureResponse.CreateAddedMethodRefusal(parameters, addedMethodName);
+            }
+
             (SourcePausePointResolveResult resolveResult, string editedLineRemapWarning) =
                 PausePointEditedLineRemap.ResolveWithEditedLineRemap(
                     parameters.File, parameters.Line, parameters.Method, snapshotTiming);
