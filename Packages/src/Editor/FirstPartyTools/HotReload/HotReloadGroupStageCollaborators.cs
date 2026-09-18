@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerClient transformWorkerClient,
             IHotReloadPackageRootCapture packageRootCapture,
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
-            HotReloadGroupCommitPolicy commitPolicy)
+            HotReloadGroupCommitPolicy commitPolicy,
+            IHotReloadPlayModeQuery playMode)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             Debug.Assert(commitPolicy != null, "commitPolicy must not be null.");
+            Debug.Assert(playMode != null, "playMode must not be null.");
             Domain = domain;
             Patcher = patcher;
             FileEntryApplier = fileEntryApplier;
@@ -41,6 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PackageRootCapture = packageRootCapture;
             EditorStateSnapshotCapture = editorStateSnapshotCapture;
             CommitPolicy = commitPolicy;
+            PlayMode = playMode;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -58,5 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal IHotReloadEditorStateSnapshotCapture EditorStateSnapshotCapture { get; }
 
         internal HotReloadGroupCommitPolicy CommitPolicy { get; }
+
+        internal IHotReloadPlayModeQuery PlayMode { get; }
     }
 }

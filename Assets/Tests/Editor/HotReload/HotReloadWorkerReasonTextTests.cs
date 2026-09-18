@@ -229,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodVirtualOrAbstract,
                 NoArgs,
-                "Added virtual, override, or abstract methods are skipped; the compiled type has no vtable slot. "
+                "Added virtual, override, or abstract methods are skipped; the loaded type has no vtable slot. "
                 + "Run 'uloop compile' to add them.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodGeneric,
@@ -351,7 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedPropertyVirtualOrAbstract,
                 NoArgs,
-                "Added virtual, override, abstract, or interface properties are skipped; the compiled type has no vtable slot. "
+                "Added virtual, override, abstract, or interface properties are skipped; the loaded type has no vtable slot. "
                 + "Run 'uloop compile' to add them.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedPropertyExplicitInterface,

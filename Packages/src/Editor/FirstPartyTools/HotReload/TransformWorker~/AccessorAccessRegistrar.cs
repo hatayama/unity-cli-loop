@@ -27,6 +27,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         SyntaxNode node,
         AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -44,7 +45,7 @@ internal static class AccessorAccessRegistrar
 
         if (node is InvocationExpressionSyntax invocation)
         {
-            return TryRegisterInvocation(semanticModel, invocation, plan, out rejectReason);
+            return TryRegisterInvocation(semanticModel, invocation, plan, addedMemberAccess, out rejectReason);
         }
 
         if (node is ElementAccessExpressionSyntax elementAccess)
@@ -63,17 +64,23 @@ internal static class AccessorAccessRegistrar
                 semanticModel,
                 propertyOrFieldAssignment,
                 plan,
+                addedMemberAccess,
                 out rejectReason);
         }
 
         if (node is MemberAccessExpressionSyntax memberAccess)
         {
-            return TryRegisterMemberAccess(semanticModel, memberAccess, plan, out rejectReason);
+            return TryRegisterMemberAccess(semanticModel, memberAccess, plan, addedMemberAccess, out rejectReason);
         }
 
         if (node is IdentifierNameSyntax or GenericNameSyntax)
         {
-            return TryRegisterSimpleName(semanticModel, (SimpleNameSyntax)node, plan, out rejectReason);
+            return TryRegisterSimpleName(
+                semanticModel,
+                (SimpleNameSyntax)node,
+                plan,
+                addedMemberAccess,
+                out rejectReason);
         }
 
         return false;
@@ -175,6 +182,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         MemberAccessExpressionSyntax memberAccess,
         AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -201,6 +209,7 @@ internal static class AccessorAccessRegistrar
             semanticModel.GetSymbolInfo(memberAccess).Symbol
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
+            addedMemberAccess,
             out rejectReason);
     }
 
@@ -208,6 +217,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         SimpleNameSyntax name,
         AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -237,6 +247,7 @@ internal static class AccessorAccessRegistrar
         return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
             semanticModel.GetSymbolInfo(name).Symbol,
             plan,
+            addedMemberAccess,
             out rejectReason);
     }
 
@@ -255,6 +266,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment,
         AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -282,6 +294,7 @@ internal static class AccessorAccessRegistrar
                 assignment,
                 propertySymbol,
                 plan,
+                addedMemberAccess,
                 out rejectReason);
         }
 
@@ -311,6 +324,7 @@ internal static class AccessorAccessRegistrar
         SemanticModel semanticModel,
         InvocationExpressionSyntax invocation,
         AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -335,22 +349,21 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        if (methodSymbol.IsExtensionMethod)
+        rejectReason = FindMethodShapeRejectReason(methodSymbol);
+        if (rejectReason != null)
         {
-            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
             return false;
         }
 
-        if (methodSymbol.IsGenericMethod)
+        // The added-method rewrite calls the shim with the argument list as written, so ref/out
+        // arguments reach it; only a compiled method has to go through a delegate without them.
+        // Why not when an event is passed by ref: its read becomes an accessor call, which
+        // cannot be passed by ref, so the shim would fail to compile instead of skipping.
+        if (HasByRefParameter(methodSymbol)
+            && addedMemberAccess != null
+            && addedMemberAccess.IsAddedMethod(methodSymbol)
+            && !PassesEventByRef(semanticModel, invocation))
         {
-            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten);
-            return false;
-        }
-
-        if (methodSymbol.ReturnsByRef || methodSymbol.ReturnsByRefReadonly)
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape);
             return false;
         }
 
@@ -383,5 +396,56 @@ internal static class AccessorAccessRegistrar
 
         plan.GetOrAddMethod(methodSymbol);
         return true;
+    }
+
+    private static WorkerReason FindMethodShapeRejectReason(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol.IsExtensionMethod)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
+        }
+
+        if (methodSymbol.IsGenericMethod)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten);
+        }
+
+        if (methodSymbol.ReturnsByRef || methodSymbol.ReturnsByRefReadonly)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape);
+        }
+
+        return null;
+    }
+
+    private static bool PassesEventByRef(SemanticModel semanticModel, InvocationExpressionSyntax invocation)
+    {
+        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        {
+            if (argument.RefKindKeyword.IsKind(SyntaxKind.None))
+            {
+                continue;
+            }
+
+            if (semanticModel.GetSymbolInfo(argument.Expression).Symbol is IEventSymbol)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasByRefParameter(IMethodSymbol methodSymbol)
+    {
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            if (parameter.RefKind != RefKind.None)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

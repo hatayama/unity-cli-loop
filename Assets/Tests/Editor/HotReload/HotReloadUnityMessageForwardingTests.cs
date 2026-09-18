@@ -207,17 +207,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.RegisterAddedMethod(
                 "Fixture.Update.A",
                 ShimOf(typeof(HotReloadUnityMessageProxyFixtureShims), "Update"),
-                FixturePath);
+                FixturePath,
+                "Update",
+                "Fixture");
             generation.RegisterAddedMethod(
                 "Fixture.Update.B",
                 ShimOf(typeof(HotReloadUnityMessageDuplicateFixtureShims), "Update"),
-                FixturePath);
+                FixturePath,
+                "Update",
+                "Fixture");
         }
 
         private void RegisterAdded(string projectRelativePath, string methodKey, MethodInfo shim)
         {
             _access.GetOrBeginAddedMemberGeneration(projectRelativePath)
-                .RegisterAddedMethod(methodKey, shim, projectRelativePath);
+                .RegisterAddedMethod(methodKey, shim, projectRelativePath, "Update", "Fixture");
         }
 
         private HotReloadUnityMessageProxyFixture CreateFixture()

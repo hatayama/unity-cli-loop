@@ -36,8 +36,13 @@ An added method reports its own row with Kind `Added`; the edited methods that c
 it report `Patched` as usual. Added `virtual`/`override`/`abstract` methods, explicit
 interface implementations, and generic methods are `Skipped`; a method-group or
 delegate reference to an added instance method skips the referencing method instead.
-Pause points cannot bind to lines inside an added method — enabling one there fails
-with the normal not-found error.
+A private member added in the same reload is reached directly, not through an accessor
+delegate: a body may read or write an added private static property and call an added
+private method with `ref`/`out` arguments. The same shapes on a *compiled* private member
+still skip the method (see the `Skipped` table below).
+Pause points cannot bind to lines inside an added method — enabling one there is
+refused with a message naming the added method (see
+[pause-point-interaction.md](pause-point-interaction.md)).
 
 An added field's values live in a side table that follows each instance's lifetime
 (statics live per domain). Its initializer does not run at construction time; it runs
@@ -203,7 +208,9 @@ so `Start` does not run again; it does when the reload changes which messages th
 their signatures, because the proxy is rebuilt. The response marks these with `LifecycleNote` (see Output) — both direct one-shot
 lifecycle messages and methods whose every compiled caller is a one-shot lifecycle message on a
 `MonoBehaviour`. The caller check is conservative: when the scan cannot prove exclusivity (a
-missing assembly, reflection, or event-driven calls), the note is omitted. To see an
+missing assembly, reflection, or event-driven calls), the note is omitted. Only compiled callers
+are counted: a method hot reload added or patched that calls the method already runs the patched
+body, which the note does not see. To see an
 initialization change take effect, run `uloop compile` and restart
 Play Mode — with Domain Reload enabled (the default), a fresh Play entry reloads the
 domain and drops the patch, so the patched body alone cannot carry the change into the
@@ -244,7 +251,9 @@ the baseline again is unpatched on that run — the compiled IL comes back,
 Without a baseline — for example before
 the first compile after installing or updating the package — every editable method in
 the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
-to establish the baseline.
+to establish the baseline. Files the reload only re-applied as siblings share one
+such line per reason, `N re-applied sibling file(s) ...: <files>`, instead of one
+line each.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor
@@ -274,7 +283,7 @@ stay `Skipped`.
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
-| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates. Neither can access to a private/internal static property |
+| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates. Neither can access to a private/internal static property. These limits apply to compiled members; a static property or `ref`/`out` method added in the same reload is reached directly |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
 | Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |

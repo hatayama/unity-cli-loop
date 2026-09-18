@@ -143,7 +143,8 @@ internal static class AddedPropertyAccessorGuard
             accessorSymbol,
             bodyNode,
             typeState.SourceUnit.SemanticModel,
-            typeState.CompiledType);
+            typeState.CompiledType,
+            addedMemberAccess: null);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;
@@ -154,7 +155,8 @@ internal static class AddedPropertyAccessorGuard
             typeState.TypeSymbol,
             bodyNode,
             typeState.SourceUnit.SemanticModel,
-            decision);
+            decision,
+            addedMemberAccess: null);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

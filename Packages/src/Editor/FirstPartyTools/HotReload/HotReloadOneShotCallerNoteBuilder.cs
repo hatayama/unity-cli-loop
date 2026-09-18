@@ -28,7 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string IndirectFormat =
             "{0} is called only from one-shot lifecycle method(s) ({1}) in the compiled assemblies; "
             + "objects that already ran them will not run the patched body. It takes effect only for "
-            + "newly created objects, or run `uloop compile` and re-enter Play Mode.";
+            + "newly created objects, or run `uloop compile` and re-enter Play Mode. Callers hot reload "
+            + "added or patched are not counted; if one of them calls it, the patched body already runs.";
 
         /// <summary>
         /// Returns a note only when every compiled caller is a one-shot lifecycle message.

@@ -28,5 +28,6 @@ internal static class LifecycleNotes
 
     public const string DirectFormat =
         "{0} is a one-shot lifecycle method; objects that already ran it will not run the "
-        + "patched body. It takes effect only for newly created objects.";
+        + "patched body. It takes effect only for newly created objects. A method hot reload added "
+        + "or patched that calls it runs the patched body.";
 }

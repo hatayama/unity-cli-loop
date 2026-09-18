@@ -32,13 +32,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private readonly List<GameObject> _created = new List<GameObject>();
         private HotReloadDomainTestScope _scope;
         private IDisposable _playing;
+        private HotReloadStubPlayModeQuery _playMode;
 
         [SetUp]
         public void SetUp()
         {
             _scope = new HotReloadDomainTestScope();
-            _playing = HotReloadServicesTestScope.BeginWithPlayModeQuery(
-                new HotReloadStubPlayModeQuery { IsPlaying = true });
+            _playMode = new HotReloadStubPlayModeQuery { IsPlaying = true };
+            _playing = HotReloadServicesTestScope.BeginWithPlayModeQuery(_playMode);
         }
 
         [TearDown]
@@ -165,6 +166,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: in Play Mode, a run that deactivates an added Update a proxy was forwarding
+        /// appends to the deactivation warning the sentence that says Unity stops invoking it.
+        /// </summary>
+        [Test]
+        public async Task Run_DeactivatingAForwardedUpdateInPlayMode_SaysUnityStopsInvokingIt()
+        {
+            await RunWithAddedMemberAsync("AddedUnityMessageUpdateActive.cs", IncrementUpdateSource());
+
+            HotReloadOrchestratorResult result = await RunWithAddedMemberAsync(
+                "AddedUnityMessageUpdateUnbound.cs",
+                UnboundUpdateSource());
+
+            string warning = FindDeactivatedAddedMembersWarning(result);
+            Assert.That(warning, Does.Contain("Update"));
+            Assert.That(warning, Does.Contain("Unity no longer invokes the deactivated Unity message(s)"));
+        }
+
+        /// <summary>
+        /// What: outside Play Mode no proxy carries the message, so the same deactivation warning
+        /// leaves out the sentence about live instances.
+        /// </summary>
+        [Test]
+        public async Task Run_DeactivatingAnAddedUpdateOutsidePlayMode_OmitsTheLiveInstanceSentence()
+        {
+            _playMode.IsPlaying = false;
+            await RunWithAddedMemberAsync("AddedUnityMessageUpdateEditMode.cs", IncrementUpdateSource());
+
+            HotReloadOrchestratorResult result = await RunWithAddedMemberAsync(
+                "AddedUnityMessageUpdateEditModeUnbound.cs",
+                UnboundUpdateSource());
+
+            string warning = FindDeactivatedAddedMembersWarning(result);
+            Assert.That(warning, Does.Contain("Update"));
+            Assert.That(warning, Does.Not.Contain("Unity no longer invokes"));
+        }
+
+        /// <summary>
         /// What: a message this feature leaves to the compiler is reported as such on its own row
         /// and once for the run, and no proxy is attached for it.
         /// </summary>
@@ -249,6 +287,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string IncrementUpdateSource()
         {
             return "        private void Update()\n        {\n            Counter++;\n        }";
+        }
+
+        // Why an unbound body: the worker refuses it before any shim is compiled while the method
+        // is still declared, which is the shape the deactivation warning reports.
+        private static string UnboundUpdateSource()
+        {
+            return "        private void Update()\n        {\n            MissingHelperAddedByEdit();\n        }";
+        }
+
+        private static string FindDeactivatedAddedMembersWarning(HotReloadOrchestratorResult result)
+        {
+            string format = HotReloadConstants.DeactivatedAddedMembersWarningFormat;
+            string prefix = format.Substring(0, format.IndexOf("{0}", StringComparison.Ordinal));
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    return warning;
+                }
+            }
+
+            Assert.Fail("Expected the deactivated added members warning.\n" + string.Join("\n", result.Warnings));
+            return null;
         }
 
         private async Task<HotReloadOrchestratorResult> RunWithAddedMemberAsync(

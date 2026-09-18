@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodVirtualOrAbstract,
                 Plain(
-                    "Added virtual, override, or abstract methods are skipped; the compiled type has no vtable slot. "
+                    "Added virtual, override, or abstract methods are skipped; the loaded type has no vtable slot. "
                     + CompileCallToActionToAddThem,
                     0));
             templates.Add(
@@ -152,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyVirtualOrAbstract,
                 Plain(
-                    "Added virtual, override, abstract, or interface properties are skipped; the compiled type has no vtable slot. "
+                    "Added virtual, override, abstract, or interface properties are skipped; the loaded type has no vtable slot. "
                     + CompileCallToActionToAddThem,
                     0));
             templates.Add(

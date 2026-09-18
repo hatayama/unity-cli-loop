@@ -113,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.Sinks.Warnings,
                 file.SnapshotLabels,
                 file.SnapshotAddedLabels,
+                file.SnapshotForwardedUnityMessageLabels,
                 file.ProjectRelativePath,
                 context.WorkerOutput,
                 file.Sinks.Outcomes);
@@ -183,6 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sinks.Warnings,
                 file.SnapshotLabels,
                 file.SnapshotAddedLabels,
+                file.SnapshotForwardedUnityMessageLabels,
                 file.ProjectRelativePath,
                 context.WorkerOutput,
                 sinks.Outcomes);
@@ -314,8 +316,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolved.MethodLabel,
                     resolved.ShimMethod,
                     resolved.FilePath,
+                    resolved.Entry.methodName,
+                    resolved.Entry.typeMetadataName,
                     resolved.Entry.sourceStartLine,
-                    resolved.Entry.sourceEndLine);
+                    resolved.Entry.sourceEndLine,
+                    resolved.CompiledAssemblyPath);
                 return HotReloadMethodOutcome.Added(
                     resolved.MethodLabel,
                     resolved.FilePath,

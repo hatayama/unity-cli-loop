@@ -31,6 +31,11 @@ internal sealed class TypeEmitState
 
     public string TypeMetadataNameFromSyntax { get; set; }
 
+    // Which private members of this type the reload adds, set once its added properties are
+    // classified. Method decisions read it so the accessor plan leaves those members to the
+    // added-member rewrite.
+    public AddedMemberAccessLookup AddedMemberAccess { get; set; }
+
     public ShimTypeBuilder CurrentShimType { get; set; }
 
     public List<QueuedShimMethod> QueuedMethods { get; } = new List<QueuedShimMethod>();

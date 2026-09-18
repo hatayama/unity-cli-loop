@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1786,6 +1787,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.StartWith(
                     "Hot reload applied. PatchedTotal=2, ActivePatchTotal=2. Added: 1. "
                     + "2 of the patched and added rows re-applied changes from earlier reloads in sibling files. Skipped: 1."));
+        }
+
+        /// <summary>
+        /// What: every Methods row of a pulled-in sibling file is marked as re-applied from a
+        /// sibling whatever its Kind, while rows of the requested file and rows with no file are
+        /// not, so a reader can tell which rows this edit did not produce.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_SiblingRows_AreMarkedReappliedFromSiblingWhateverTheirKind()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Edited", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Patched("Sibling.Earlier", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Added("Sibling.AddedEarlier", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.Skip", "reason", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Skipped("Type.NoFile", "reason", string.Empty)
+                },
+                new List<string>(),
+                patchedTotal: 2,
+                activePatchTotal: 2,
+                reappliedSiblingPaths: new[] { "Assets/Sibling.cs" });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Methods.Select(row => row.Method + "=" + row.ReappliedFromSibling).ToArray(),
+                Is.EqualTo(new[]
+                {
+                    "Type.Edited=False",
+                    "Sibling.Earlier=True",
+                    "Sibling.AddedEarlier=True",
+                    "Sibling.Skip=True",
+                    "Type.NoFile=False"
+                }));
         }
 
         /// <summary>

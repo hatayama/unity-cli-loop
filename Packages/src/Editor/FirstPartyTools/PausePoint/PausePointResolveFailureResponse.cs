@@ -60,7 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // so there is no resolver sentence to keep.
         internal static PausePointResponse CreateAddedMethodRefusal(
             EnablePausePointSchema parameters,
-            string addedMethodName)
+            string addedMethodName,
+            bool methodFilterIsAmbiguous)
         {
             return PausePointFailureResponse.Create(
                 string.Format(
@@ -68,7 +69,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     addedMethodName),
                 SourcePausePointConstants.ErrorCodeResolveFailed,
-                SourcePausePointConstants.AddedMethodResolveFailureNextAction);
+                methodFilterIsAmbiguous
+                    ? SourcePausePointConstants.AmbiguousAddedMethodResolveFailureNextAction
+                    : SourcePausePointConstants.AddedMethodResolveFailureNextAction);
         }
 
         // Keeps the resolver's own sentence so the caller still sees which line failed, under a

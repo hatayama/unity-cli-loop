@@ -281,7 +281,8 @@ internal static class OrdinaryMethodQueue
                 methodSymbol,
                 methodBodyNode,
                 semanticModel,
-                typeState.CompiledType);
+                typeState.CompiledType,
+                typeState.AddedMemberAccess);
         if (isAddedMethod && decision.SkipReason == null)
         {
             decision = MethodTransformDecider.DecideAddedMethodAccessors(
@@ -289,7 +290,8 @@ internal static class OrdinaryMethodQueue
                 typeState.TypeSymbol,
                 methodBodyNode,
                 semanticModel,
-                decision);
+                decision,
+                typeState.AddedMemberAccess);
         }
 
         return decision;
