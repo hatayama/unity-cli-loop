@@ -1523,7 +1523,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 appliedWithSkipped.Message,
                 Is.EqualTo(
-                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1. "
                     + "3 warning(s). See Warnings. "
                     + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
@@ -1729,8 +1729,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1. "
                     + "1 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: an applied run that also skipped methods counts them right after Added, so the
+        /// summary line does not read as if every edit was applied.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AddedAndSkippedOutcomes_CountsSkippedAfterAdded()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Added("Type.AddedPing", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Skipped("Type.First", "reason", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Skipped("Type.Second", "reason", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Does.StartWith("Hot reload applied. PatchedTotal=0, ActivePatchTotal=1. Added: 1. Skipped: 2."));
         }
 
         /// <summary>

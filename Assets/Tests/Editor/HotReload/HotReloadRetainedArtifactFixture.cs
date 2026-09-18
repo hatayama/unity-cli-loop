@@ -44,6 +44,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string SiblingSource =
             "namespace Example { public class Sibling { public int Get() { return 3; } } }";
 
+        // The retained type whose signatures name the default retained type, recorded next to it
+        // when a test asks for a referrer.
+        private const string RetainedMetadataName = "Example.Retained";
+
+        public const string ReferrerMetadataName = "Example.RetainedFactory";
+
         private HotReloadRetainedArtifactFixture(
             string sourcePath,
             string projectRelativePath,
@@ -97,7 +103,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedSource,
                 SiblingSource,
                 DefaultArtifactMethodNames,
-                NoArtifactMethodNames);
+                NoArtifactMethodNames,
+                RetainedArtifactReferrerShape.None);
+        }
+
+        /// <summary>
+        /// Builds the same world with a second type in the artifact assembly whose signature names
+        /// the default retained type, so a test can edit that type while a type the artifact
+        /// still serves unchanged hands it out.
+        /// </summary>
+        public static Task<HotReloadRetainedArtifactFixture> CreateWithReferrerAsync(
+            string name,
+            string editedSource,
+            RetainedArtifactReferrerShape referrerShape)
+        {
+            return BuildAsync(
+                name,
+                editedSource,
+                SiblingSource,
+                DefaultArtifactMethodNames,
+                NoArtifactMethodNames,
+                referrerShape);
         }
 
         /// <summary>
@@ -114,7 +140,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedSource,
                 siblingSource,
                 DefaultArtifactMethodNames,
-                NoArtifactMethodNames);
+                NoArtifactMethodNames,
+                RetainedArtifactReferrerShape.None);
         }
 
         /// <summary>
@@ -129,7 +156,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] publicMethodNames,
             string[] privateMethodNames)
         {
-            return BuildAsync(name, editedSource, SiblingSource, publicMethodNames, privateMethodNames);
+            return BuildAsync(
+                name,
+                editedSource,
+                SiblingSource,
+                publicMethodNames,
+                privateMethodNames,
+                RetainedArtifactReferrerShape.None);
         }
 
         private static async Task<HotReloadRetainedArtifactFixture> BuildAsync(
@@ -137,7 +170,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedSource,
             string siblingSource,
             string[] publicMethodNames,
-            string[] privateMethodNames)
+            string[] privateMethodNames,
+            RetainedArtifactReferrerShape referrerShape)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(
@@ -155,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string targetAssemblyPath = Path.Combine(directory, "RetainedTarget.dll");
             string targetAssemblyMvid = CreateTargetAssembly(targetAssemblyPath);
             string artifactPath = Path.Combine(directory, "RetainedArtifact.dll");
-            CreateArtifactAssembly(artifactPath, publicMethodNames, privateMethodNames);
+            CreateArtifactAssembly(artifactPath, publicMethodNames, privateMethodNames, referrerShape);
             HotReloadRetainedArtifactFixture fixture = new HotReloadRetainedArtifactFixture(
                 sourcePath,
                 "Assets/RetainedDeclaration/" + name + "/Edited.cs",
@@ -167,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 artifactPath);
             // The recorded fingerprint has to be the value planning really produced for this
             // source, so it is read back from a prepare run rather than restated by the test.
-            fixture.RetainedFingerprint = await fixture.ReadPlannedFingerprintAsync();
+            fixture.RetainedFingerprint = await fixture.ReadPlannedFingerprintAsync(RetainedMetadataName);
             return fixture;
         }
 
@@ -239,7 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     new TransformWorkerIntroducedTypeArtifactTypeDto
                     {
-                        metadataName = "Example.Retained",
+                        metadataName = RetainedMetadataName,
                         originalAssemblyName = TargetAssemblyName,
                         originalAssemblyMvid = TargetAssemblyMvid,
                         ownerProjectRelativePath = ProjectRelativePath,
@@ -257,6 +291,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
+        }
+
+        /// <summary>
+        /// The recorded artifact with the referrer type listed too, under the fingerprint a test
+        /// planned for it, so the run knows the artifact serves both types.
+        /// </summary>
+        public TransformWorkerIntroducedTypeArtifactDto CreateRecordedArtifactWithReferrer(
+            string declarationFingerprint,
+            string referrerFingerprint)
+        {
+            TransformWorkerIntroducedTypeArtifactDto artifact = CreateRecordedArtifact(declarationFingerprint);
+            List<TransformWorkerIntroducedTypeArtifactTypeDto> types =
+                new List<TransformWorkerIntroducedTypeArtifactTypeDto>(artifact.types);
+            types.Add(
+                new TransformWorkerIntroducedTypeArtifactTypeDto
+                {
+                    metadataName = ReferrerMetadataName,
+                    originalAssemblyName = TargetAssemblyName,
+                    originalAssemblyMvid = TargetAssemblyMvid,
+                    ownerProjectRelativePath = ProjectRelativePath,
+                    declarationFingerprint = referrerFingerprint
+                });
+            artifact.types = types.ToArray();
+            return artifact;
         }
 
         private static string ReadAssemblySimpleName(string path)
@@ -324,20 +382,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private async Task<string> ReadPlannedFingerprintAsync()
+        /// <summary>
+        /// The fingerprint planning produces for the named type of the edited source as it is on
+        /// disk now, so a test can record a second type the way the first one is recorded.
+        /// </summary>
+        public async Task<string> ReadPlannedFingerprintAsync(string metadataName)
         {
             TransformWorkerClientResult prepared =
                 await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(BuildPrepareInput(), CancellationToken.None);
             Assert.That(prepared.Success, Is.True, prepared.ErrorMessage);
             foreach (TransformWorkerIntroducedTypeDto introducedType in prepared.Output.files[0].introducedTypes)
             {
-                if (introducedType.metadataName == "Example.Retained")
+                if (introducedType.metadataName == metadataName)
                 {
                     return introducedType.declarationFingerprint;
                 }
             }
 
-            Assert.Fail("Planning did not report the retained type.");
+            Assert.Fail("Planning did not report " + metadataName + ".");
             return null;
         }
 
@@ -372,7 +434,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static void CreateArtifactAssembly(
             string path,
             string[] publicMethodNames,
-            string[] privateMethodNames)
+            string[] privateMethodNames,
+            RetainedArtifactReferrerShape referrerShape)
         {
             AssemblyNameDefinition assemblyName = new AssemblyNameDefinition("RetainedArtifact", new Version(1, 0, 0, 0));
             using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(assemblyName, "RetainedArtifact", ModuleKind.Dll))
@@ -410,8 +473,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     assembly.MainModule.TypeSystem.Object);
                 AddConstructor(assembly, restricted, CecilMethodAttributes.Private);
                 assembly.MainModule.Types.Add(restricted);
+                AddReferrer(assembly, retained, referrerShape);
                 assembly.Write(path);
             }
+        }
+
+        // The referrer lives in the same assembly as the type it names, because a type served
+        // from metadata hands out the artifact's definition whichever retained assembly it is in.
+        private static void AddReferrer(
+            AssemblyDefinition assembly,
+            TypeDefinition retained,
+            RetainedArtifactReferrerShape referrerShape)
+        {
+            if (referrerShape == RetainedArtifactReferrerShape.None)
+            {
+                return;
+            }
+
+            TypeDefinition referrer = new TypeDefinition(
+                "Example",
+                "RetainedFactory",
+                CecilTypeAttributes.Public | CecilTypeAttributes.Class,
+                assembly.MainModule.TypeSystem.Object);
+            AddConstructor(assembly, referrer, CecilMethodAttributes.Public);
+            if (referrerShape == RetainedArtifactReferrerShape.PublicReturnType)
+            {
+                MethodDefinition make = new MethodDefinition(
+                    "Make",
+                    CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig,
+                    retained);
+                ILProcessor makeProcessor = make.Body.GetILProcessor();
+                makeProcessor.Append(makeProcessor.Create(OpCodes.Ldnull));
+                makeProcessor.Append(makeProcessor.Create(OpCodes.Ret));
+                referrer.Methods.Add(make);
+            }
+            else
+            {
+                MethodDefinition accept = new MethodDefinition(
+                    "Accept",
+                    CecilMethodAttributes.Private | CecilMethodAttributes.HideBySig,
+                    assembly.MainModule.TypeSystem.Void);
+                accept.Parameters.Add(new ParameterDefinition("value", Mono.Cecil.ParameterAttributes.None, retained));
+                ILProcessor acceptProcessor = accept.Body.GetILProcessor();
+                acceptProcessor.Append(acceptProcessor.Create(OpCodes.Ret));
+                referrer.Methods.Add(accept);
+            }
+
+            assembly.MainModule.Types.Add(referrer);
         }
 
         // The bodies are never executed: the artifact is only ever read as metadata, so a bare
@@ -487,5 +595,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.Fail("Compilation assembly was not found.");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Whether the fixture's artifact assembly also holds a type whose signature names the
+    /// default retained type, and through which member kind.
+    /// </summary>
+    internal enum RetainedArtifactReferrerShape
+    {
+        None,
+        PublicReturnType,
+        PrivateParameterType
     }
 }
