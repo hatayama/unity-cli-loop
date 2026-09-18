@@ -6,7 +6,8 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Decides whether a run left the requested files untouched, ignoring sibling re-applies.
+    /// Separates the outcomes of the files a run was asked about from those of the sibling files
+    /// it pulled in to re-apply earlier changes.
     /// </summary>
     internal static class HotReloadRequestedFileOutcomeSummary
     {
@@ -26,13 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 toProjectRelativeScriptPath != null,
                 "toProjectRelativeScriptPath must not be null.");
 
-            StringComparer fileComparer = Application.platform == RuntimePlatform.WindowsEditor
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
-            HashSet<string> siblingKeys = BuildSiblingKeys(
-                reappliedSiblingPaths,
-                toProjectRelativeScriptPath,
-                fileComparer);
+            HashSet<string> siblingKeys = BuildSiblingKeys(reappliedSiblingPaths, toProjectRelativeScriptPath);
             int requestedCount = 0;
             for (int index = 0; index < methods.Count; index++)
             {
@@ -57,11 +52,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return requestedCount > 0;
         }
 
+        /// <summary>
+        /// Counts the Patched and Added rows that belong to a sibling file the run pulled in to
+        /// re-apply its earlier changes, as opposed to the files the caller asked about.
+        /// </summary>
+        // Why only Patched and Added: the sibling paths list every pulled-in file whatever
+        // happened to it, and only these two kinds are part of the counts the message reports.
+        public static int CountReappliedSiblingOutcomes(
+            IReadOnlyList<HotReloadMethodOutcome> methods,
+            IReadOnlyCollection<string> reappliedSiblingPaths,
+            Func<string, string> toProjectRelativeScriptPath)
+        {
+            Debug.Assert(methods != null, "methods must not be null.");
+            Debug.Assert(reappliedSiblingPaths != null, "reappliedSiblingPaths must not be null.");
+            Debug.Assert(
+                toProjectRelativeScriptPath != null,
+                "toProjectRelativeScriptPath must not be null.");
+
+            HashSet<string> siblingKeys = BuildSiblingKeys(reappliedSiblingPaths, toProjectRelativeScriptPath);
+            int count = 0;
+            for (int index = 0; index < methods.Count; index++)
+            {
+                HotReloadMethodOutcome outcome = methods[index];
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Patched
+                    && outcome.Kind != HotReloadMethodOutcomeKind.Added)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(outcome.FilePath)
+                    && siblingKeys.Contains(toProjectRelativeScriptPath(outcome.FilePath)))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        // Why the path is normalized and compared per platform: an outcome's FilePath can be
+        // absolute while the sibling paths are project-relative, and Windows paths ignore case.
         private static HashSet<string> BuildSiblingKeys(
             IReadOnlyCollection<string> reappliedSiblingPaths,
-            Func<string, string> toProjectRelativeScriptPath,
-            StringComparer fileComparer)
+            Func<string, string> toProjectRelativeScriptPath)
         {
+            StringComparer fileComparer = Application.platform == RuntimePlatform.WindowsEditor
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
             HashSet<string> keys = new HashSet<string>(fileComparer);
             foreach (string path in reappliedSiblingPaths)
             {

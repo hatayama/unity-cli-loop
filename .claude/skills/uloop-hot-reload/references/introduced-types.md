@@ -38,6 +38,9 @@ apply, and patches from earlier reloads stay active:
   nothing for it. Not an error. Editing only the bodies of its ordinary methods keeps this row
   and patches those bodies on the artifact that already carries the type. Ordinary methods,
   fields and properties added to the type keep it as well and are applied as `Added` rows.
+  A struct is the exception: its method bodies are `Skipped` ("Struct (value type) methods are
+  skipped…") on an introduced struct as on a compiled one, so a struct body edit needs
+  `uloop compile`.
 - `Failed` — refused; see the table above.
 - `ActiveIntroducedTypeTotal` counts the types the domain holds after the run, whatever the
   methods did. Type rows never count toward `PatchedTotal`, `ActivePatchTotal`,
@@ -63,8 +66,9 @@ later apply re-introduces them. With Enter Play Mode Options set to disable Doma
 active changes and the introduced types survive Play entry and nothing is recorded as dropped.
 
 Values are not preserved across the reload that ends a type's life. Body-only edits of an
-introduced type's ordinary methods are patched on the artifact assembly, and added ordinary
-methods, fields and properties are applied as `Added` rows. Constructor, accessor and
+introduced type's ordinary methods are patched on the artifact assembly (except on a struct,
+whose method bodies are `Skipped`), and added ordinary methods, fields and properties are
+applied as `Added` rows. Constructor, accessor and
 initializer bodies, member removals, signature changes, and added constructors, operators,
 events, indexers or nested types still require a compile.
 
@@ -73,7 +77,8 @@ events, indexers or nested types still require a compile.
 Any refused shape above; use of the type from another assembly, from a file that is neither
 passed to this reload nor already hot-reloaded, or from `uloop execute-dynamic-code`; anything
 that reaches the type through Unity (serialization, `[SerializeField]`, Inspector,
-`AddComponent`, `CreateInstance`, message discovery); a call to a member an earlier or the same
+`AddComponent`, `CreateInstance`, message discovery); a method body edit of an introduced
+struct, which is `Skipped` like any struct method; a call to a member an earlier or the same
 reload *added* to a compiled type (an `Added` row), because introduced types compile against the
 compiled assemblies and retained artifacts only, so the compile fails naming the missing member;
 and any new or changed `.asmdef` / `.asmref`. When `execute-dynamic-code` fails on an introduced

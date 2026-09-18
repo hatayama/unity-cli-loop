@@ -96,6 +96,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "re-applying them, so its active patches are unchanged. Fix the refused declaration "
             + "and rerun, or run uloop compile to clear the run.";
 
+        // Why a third wording: a sibling whose every row was Skipped did not fail, and its
+        // earlier patches stay live, so the failed sentence would overstate what happened.
+        public const string ActiveSiblingRebindSkippedOnlyWarningFormat =
+            "'{0}' was pulled in to re-bind its active patches, but every method there was Skipped "
+            + "this time; see its rows for the reasons. Its earlier patches stay active until "
+            + "uloop compile clears the run.";
+
         public const string ActiveSiblingRebindFailedWarningFormat =
             "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "
             + "see its rows for which patches changed and run uloop compile to clear the run.";
