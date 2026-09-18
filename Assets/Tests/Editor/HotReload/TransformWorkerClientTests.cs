@@ -106,6 +106,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             "HotReloadSiblingConstDefinitions.cs",
             "HotReloadCrossFileAddedMemberHolder.cs",
+            "HotReloadAddedUnityMessageE2EFixtures.cs",
+            "HotReloadBindingSplitPayload.cs",
+            "HotReloadSnapshotBodylessFixture.cs",
         };
 
         /// <summary>
