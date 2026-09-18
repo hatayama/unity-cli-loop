@@ -51,6 +51,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Models the names the worker actually gives its shims: the member's name followed by the
+    /// marker and the number that keeps one run's shims apart.
+    /// </summary>
+    public static class HotReloadUnityMessageWorkerNamedFixtureShims
+    {
+        public static void Update__shim0(HotReloadUnityMessageProxyFixture __uloopInstance)
+        {
+            __uloopInstance.UpdateCount++;
+        }
+    }
+
+    /// <summary>
     /// A second shim host declaring the same message and signature as the first, so a binding built
     /// from both cannot emit a proxy: one type cannot declare the same method twice.
     /// </summary>

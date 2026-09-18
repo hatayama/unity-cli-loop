@@ -79,17 +79,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int slot = 0; slot < count; slot++)
             {
                 MethodInfo shim = shims[slot];
+                // Why the member name and not the shim's: Unity dispatches on the name the user
+                // wrote, while the shim carries the marker and number the worker appended to keep
+                // its own names apart.
+                string messageName = HotReloadUnityMessageDetector.ResolveMemberName(shim);
                 // One proxy type cannot declare the same message twice, and the same message added
                 // to one type from two files is an edit the user has to resolve, not a shape this
                 // can pick a winner for.
-                if (!seen.Add(shim.Name))
+                if (!seen.Add(messageName))
                 {
                     throw new InvalidOperationException(
-                        $"Unity message '{shim.Name}' is added more than once to {targetType.FullName}.");
+                        $"Unity message '{messageName}' is added more than once to {targetType.FullName}.");
                 }
 
-                names[slot] = shim.Name;
-                gated[slot] = HotReloadUnityMessageNames.IsGatedByTargetEnabled(shim.Name);
+                names[slot] = messageName;
+                gated[slot] = HotReloadUnityMessageNames.IsGatedByTargetEnabled(messageName);
                 forwarders[slot] = CreateForwarder(shim);
                 parameterTypes[slot] = MessageParameterTypes(shim);
             }

@@ -140,6 +140,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(targetType, Is.EqualTo(typeof(DetectorFixture)));
         }
 
+        /// <summary>
+        /// What: a shim named the way the worker actually names it — the member plus the marker and
+        /// a number — is classified by the member's name, so the feature works on a real run.
+        /// </summary>
+        [Test]
+        public void Classify_ShimNamedAsTheWorkerNamesIt_IsForwarded()
+        {
+            MethodInfo shim = ShimOf(typeof(WorkerNamedShims), "Update__shim0");
+
+            HotReloadUnityMessageDetector.Classification classification =
+                HotReloadUnityMessageDetector.Classify(shim, out Type targetType);
+
+            Assert.That(classification, Is.EqualTo(HotReloadUnityMessageDetector.Classification.Forwarded));
+            Assert.That(targetType, Is.EqualTo(typeof(DetectorFixture)));
+        }
+
+        /// <summary>
+        /// What: an added method whose own name ends in the marker followed by a number keeps that
+        /// name once the shim's own suffix is off, so it is still not a Unity message.
+        /// </summary>
+        [Test]
+        public void Classify_MemberNameThatItselfEndsInTheMarker_IsNotAUnityMessage()
+        {
+            MethodInfo shim = ShimOf(typeof(WorkerNamedShims), "Update__shim0__shim1");
+
+            HotReloadUnityMessageDetector.Classification classification =
+                HotReloadUnityMessageDetector.Classify(shim, out Type targetType);
+
+            Assert.That(classification, Is.EqualTo(HotReloadUnityMessageDetector.Classification.NotUnityMessage));
+            Assert.That(targetType, Is.Null);
+        }
+
+        /// <summary>
+        /// What: the marker with no number after it is not a suffix the worker produced, so the name
+        /// is left as it is.
+        /// </summary>
+        [Test]
+        public void ResolveMemberName_MarkerWithoutANumber_KeepsTheName()
+        {
+            MethodInfo shim = ShimOf(typeof(WorkerNamedShims), "Update__shim");
+
+            Assert.That(
+                HotReloadUnityMessageDetector.ResolveMemberName(shim),
+                Is.EqualTo("Update__shim"));
+        }
+
+        /// <summary>
+        /// What: a name that is nothing but the marker and a number has no member name in front of
+        /// it, so it is left as it is rather than resolving to an empty name.
+        /// </summary>
+        [Test]
+        public void ResolveMemberName_NameIsOnlyTheMarker_KeepsTheName()
+        {
+            MethodInfo shim = ShimOf(typeof(WorkerNamedShims), "__shim0");
+
+            Assert.That(
+                HotReloadUnityMessageDetector.ResolveMemberName(shim),
+                Is.EqualTo("__shim0"));
+        }
+
         private static MethodInfo ShimOf(Type host, string methodName)
         {
             MethodInfo shim = host.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
@@ -171,6 +231,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             public static void LateUpdate()
+            {
+            }
+        }
+
+        /// <summary>
+        /// Models the names the worker actually gives its shims: the member's name, the marker, and
+        /// the number that keeps one run's shims apart.
+        /// </summary>
+        private static class WorkerNamedShims
+        {
+            public static void Update__shim0(DetectorFixture __uloopInstance)
+            {
+            }
+
+            public static void Update__shim0__shim1(DetectorFixture __uloopInstance)
+            {
+            }
+
+            public static void Update__shim(DetectorFixture __uloopInstance)
+            {
+            }
+
+            public static void __shim0(DetectorFixture __uloopInstance)
             {
             }
         }
