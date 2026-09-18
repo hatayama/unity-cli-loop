@@ -71,6 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(shims != null && shims.Count > 0, "A binding needs at least one shim.");
 
             int count = shims.Count;
+            HashSet<string> seen = new HashSet<string>();
             string[] names = new string[count];
             bool[] gated = new bool[count];
             Action<MonoBehaviour, object[]>[] forwarders = new Action<MonoBehaviour, object[]>[count];
@@ -78,6 +79,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int slot = 0; slot < count; slot++)
             {
                 MethodInfo shim = shims[slot];
+                // One proxy type cannot declare the same message twice, and the same message added
+                // to one type from two files is an edit the user has to resolve, not a shape this
+                // can pick a winner for.
+                if (!seen.Add(shim.Name))
+                {
+                    throw new InvalidOperationException(
+                        $"Unity message '{shim.Name}' is added more than once to {targetType.FullName}.");
+                }
+
                 names[slot] = shim.Name;
                 gated[slot] = HotReloadUnityMessageNames.IsGatedByTargetEnabled(shim.Name);
                 forwarders[slot] = CreateForwarder(shim);
