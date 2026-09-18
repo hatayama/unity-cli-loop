@@ -146,6 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadRunAccumulator run = new HotReloadRunAccumulator(
                     HotReloadCompositionRoot.Services.Domain,
                     HotReloadCompositionRoot.Services.Patcher,
+                    HotReloadCompositionRoot.Services.UnityMessageForwarding,
                     autoRefreshHeldAtStart: HotReloadAutoRefreshHold.IsHeld);
 
                 Assert.That(
@@ -188,6 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadRunAccumulator run = new HotReloadRunAccumulator(
                     HotReloadCompositionRoot.Services.Domain,
                     HotReloadCompositionRoot.Services.Patcher,
+                    HotReloadCompositionRoot.Services.UnityMessageForwarding,
                     autoRefreshHeldAtStart: HotReloadAutoRefreshHold.IsHeld);
 
                 HotReloadOrchestratorResult result = run.BuildResult("correlation-already-armed");

@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly bool _autoRefreshHeldAtStart;
         private readonly HotReloadDomain _domain;
         private readonly HotReloadPatcher _patcher;
+        private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
         private int _patchedTotal;
         private int _unchangedTotal;
         private int _revertedUnchangedTotal;
@@ -53,12 +54,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public HotReloadRunAccumulator(
             HotReloadDomain domain,
             HotReloadPatcher patcher,
+            HotReloadUnityMessageForwarding unityMessageForwarding,
             bool autoRefreshHeldAtStart)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
+            Debug.Assert(
+                unityMessageForwarding != null, "unityMessageForwarding must not be null.");
             _domain = domain;
             _patcher = patcher;
+            _unityMessageForwarding = unityMessageForwarding;
             _autoRefreshHeldAtStart = autoRefreshHeldAtStart;
         }
 
@@ -148,6 +153,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             AppendInlineRiskWarning();
             AppendAddedFieldsLifetimeWarning();
+            // Why at the end of the run and on the main thread: the added methods this run brought
+            // in are in the domain by now, and building a proxy type touches Unity APIs that only
+            // answer on the main thread. A type whose proxy cannot be built reports here, so the
+            // run that introduced it is the one that says so.
+            _unityMessageForwarding.Reconcile(_warnings);
             LogSummary(correlationId);
             HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(_warnings, _siblingDerivedWarnings);
             HotReloadAutoRefreshHoldSyncResult autoRefreshHold =

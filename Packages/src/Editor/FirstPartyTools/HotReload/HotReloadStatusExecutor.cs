@@ -13,19 +13,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly HotReloadDomain _domain;
         private readonly HotReloadPatcher _patcher;
+        private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
 
-        internal HotReloadStatusExecutor(HotReloadDomain domain, HotReloadPatcher patcher)
+        internal HotReloadStatusExecutor(
+            HotReloadDomain domain,
+            HotReloadPatcher patcher,
+            HotReloadUnityMessageForwarding unityMessageForwarding)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
+            Debug.Assert(
+                unityMessageForwarding != null, "unityMessageForwarding must not be null.");
             _domain = domain;
             _patcher = patcher;
+            _unityMessageForwarding = unityMessageForwarding;
         }
 
         public HotReloadResponse ExecuteRevertAll()
         {
             int clearedCount = _patcher.ActiveChangeCount;
             _patcher.RevertAll();
+            // The added methods are gone with the revert, so the proxies that forward Unity
+            // messages into them come off in the same step rather than at the next update tick.
+            _unityMessageForwarding.Clear();
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();

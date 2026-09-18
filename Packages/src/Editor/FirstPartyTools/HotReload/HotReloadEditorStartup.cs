@@ -35,9 +35,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // argument, so they have to read whichever services are installed when they fire.
             HotReloadAutoRefreshHold.GetServices = () => HotReloadCompositionRoot.Services;
             HotReloadPlayModeEntryDropRecorder.GetServices = () => HotReloadCompositionRoot.Services;
+            HotReloadUnityMessageForwardingEditorHooks.GetForwarding =
+                () => HotReloadCompositionRoot.Services.UnityMessageForwarding;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();
+            HotReloadUnityMessageForwardingEditorHooks.Initialize();
             TransformWorkerHostLifecycle.RegisterForEditorStartup();
         }
     }

@@ -122,6 +122,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 dependencies,
                 collaborators,
                 groupCommitStage);
+            // Built here rather than inline below: the run reconciles it at the end of an apply
+            // and a revert takes its proxies off, so the orchestrator and the status executor have
+            // to hold the same instance the editor update ticks.
+            HotReloadUnityMessageForwarding unityMessageForwarding =
+                new HotReloadUnityMessageForwarding(
+                    domain,
+                    new HotReloadUnityMessageProxyAttacher(
+                        playMode,
+                        new HotReloadUnityMessageProxyTypeBuilder()));
             return new HotReloadServices(
                 domain,
                 harmony,
@@ -142,16 +151,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         editorStateSnapshotCapture),
                     new HotReloadDeferredInputClassifier(),
                     new HotReloadSiblingRebindReporter(domain),
-                    packageRootCapture),
-                new HotReloadStatusExecutor(domain, patcher),
+                    packageRootCapture,
+                    unityMessageForwarding),
+                new HotReloadStatusExecutor(domain, patcher, unityMessageForwarding),
                 packageRootCapture,
                 editorStateSnapshotCapture,
                 new HotReloadChangeDetector(),
-                new HotReloadUnityMessageForwarding(
-                    domain,
-                    new HotReloadUnityMessageProxyAttacher(
-                        playMode,
-                        new HotReloadUnityMessageProxyTypeBuilder())));
+                unityMessageForwarding);
         }
 
         /// <summary>
