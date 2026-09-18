@@ -37,14 +37,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativeSourcePath,
             string targetDllPath)
         {
+            TryLoadVerifiedSnapshotSource(
+                projectRoot,
+                projectRelativeSourcePath,
+                targetDllPath,
+                out string source);
+            return source;
+        }
+
+        /// <summary>
+        /// Says why <see cref="LoadVerifiedSnapshotSource"/> returned null for the same arguments.
+        /// </summary>
+        /// <remarks>
+        /// Why a second lookup rather than a richer load result: the loader has several callers
+        /// that only need the text, and only the missing-baseline warning needs the reason, so the
+        /// cost of reading the PDB again is paid on that rare path alone.
+        /// </remarks>
+        internal static HotReloadSnapshotMissReason DescribeSnapshotMiss(
+            string projectRelativeSourcePath,
+            string targetDllPath)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            return DescribeSnapshotMissAt(projectRoot, projectRelativeSourcePath, targetDllPath);
+        }
+
+        internal static HotReloadSnapshotMissReason DescribeSnapshotMissAt(
+            string projectRoot,
+            string projectRelativeSourcePath,
+            string targetDllPath)
+        {
+            return TryLoadVerifiedSnapshotSource(
+                projectRoot,
+                projectRelativeSourcePath,
+                targetDllPath,
+                out string _);
+        }
+
+        private static HotReloadSnapshotMissReason TryLoadVerifiedSnapshotSource(
+            string projectRoot,
+            string projectRelativeSourcePath,
+            string targetDllPath,
+            out string source)
+        {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeSourcePath), "projectRelativeSourcePath must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(targetDllPath), "targetDllPath must not be null or empty.");
 
+            source = null;
             string pdbPath = Path.ChangeExtension(targetDllPath, ".pdb");
             if (!File.Exists(targetDllPath) || !File.Exists(pdbPath))
             {
-                return null;
+                return HotReloadSnapshotMissReason.NoCompiledAssembly;
             }
 
             string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
@@ -58,27 +101,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 snapshotFileName);
             if (!File.Exists(snapshotPath))
             {
-                return null;
+                return HotReloadSnapshotMissReason.NoSnapshotFile;
             }
 
             // Why read once: the verified bytes must be the exact payload decoded for the worker —
             // a second read could race with another writer and diverge from the checksummed content.
             byte[] snapshotBytes = File.ReadAllBytes(snapshotPath);
             Document document = FindDocumentForProjectRelativePath(targetDllPath, pdbPath, slashNormalizedRelativePath);
-            if (document == null || document.Hash == null || document.Hash.Length == 0)
+            if (document == null)
             {
-                return null;
+                return HotReloadSnapshotMissReason.NoDocumentInPdb;
+            }
+
+            // A document without a checksum cannot verify the snapshot, which is the same outcome
+            // for the caller as a checksum that disagrees.
+            if (document.Hash == null || document.Hash.Length == 0)
+            {
+                return HotReloadSnapshotMissReason.HashMismatch;
             }
 
             byte[] actualHash = ComputeDocumentHash(document.HashAlgorithm, snapshotBytes);
             if (actualHash == null || !actualHash.SequenceEqual(document.Hash))
             {
-                return null;
+                return HotReloadSnapshotMissReason.HashMismatch;
             }
 
             using MemoryStream memoryStream = new MemoryStream(snapshotBytes, writable: false);
             using StreamReader reader = new StreamReader(memoryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            return reader.ReadToEnd();
+            source = reader.ReadToEnd();
+            return HotReloadSnapshotMissReason.None;
         }
 
         private static Document FindDocumentForProjectRelativePath(

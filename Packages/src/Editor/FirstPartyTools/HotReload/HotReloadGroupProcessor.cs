@@ -413,6 +413,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.SnapshotSource = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
                     file.ProjectRelativePath,
                     file.TargetDllPath);
+                file.SnapshotMissReason = file.SnapshotSource == null
+                    ? HotReloadSourceBaseline.DescribeSnapshotMiss(file.ProjectRelativePath, file.TargetDllPath)
+                    : HotReloadSnapshotMissReason.None;
             }
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor.Compilation;
 
@@ -10,9 +11,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class CompileResultFactory
     {
         internal static CompileResult CreateCompileResult(
-            CompilerMessage[] compileMessages,
+            CompilerMessage[] rawCompileMessages,
             bool isForceCompile)
         {
+            CompilerMessage[] compileMessages = RemoveDuplicates(rawCompileMessages);
             int errorCount = compileMessages.Count(m => m.type == CompilerMessageType.Error);
             int warningCount = compileMessages.Count(m => m.type == CompilerMessageType.Warning);
 
@@ -70,11 +72,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Creates an unknown compile result from the compiler messages already observed by this request.
         /// </summary>
         private static CompileResult CreateIndeterminateCompileResultFromMessages(
-            CompilerMessage[] compileMessages,
+            CompilerMessage[] rawCompileMessages,
             bool isForceCompile,
             string message)
         {
-            UnityEngine.Debug.Assert(compileMessages != null, "compileMessages must not be null");
+            UnityEngine.Debug.Assert(rawCompileMessages != null, "compileMessages must not be null");
+            CompilerMessage[] compileMessages = RemoveDuplicates(rawCompileMessages);
 
             CompilerMessage[] errors = compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
             CompilerMessage[] warnings = compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();
@@ -92,6 +95,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 isIndeterminate: true,
                 message: message
             );
+        }
+
+        // Unity can deliver the same diagnostic more than once for one compile, so without this
+        // every count and list repeats it. Only an exact match is dropped: two diagnostics that
+        // differ in any field are different findings.
+        private static CompilerMessage[] RemoveDuplicates(CompilerMessage[] compileMessages)
+        {
+            HashSet<(CompilerMessageType, string, int, int, string)> seen =
+                new HashSet<(CompilerMessageType, string, int, int, string)>();
+            List<CompilerMessage> unique = new List<CompilerMessage>(compileMessages.Length);
+            foreach (CompilerMessage compileMessage in compileMessages)
+            {
+                if (seen.Add((
+                        compileMessage.type,
+                        compileMessage.file,
+                        compileMessage.line,
+                        compileMessage.column,
+                        compileMessage.message)))
+                {
+                    unique.Add(compileMessage);
+                }
+            }
+
+            return unique.Count == compileMessages.Length ? compileMessages : unique.ToArray();
         }
 
         /// <summary>
