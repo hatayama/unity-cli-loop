@@ -70,27 +70,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int position = inputCount; position < filesOfGroup.Count; position++)
             {
                 string path = filesOfGroup[position].ProjectRelativePath;
-                if (ShouldDescribeSiblingAsReapplied(groupResults[position]))
+                string warningFormat =
+                    HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(groupResults[position]);
+                if (warningFormat == null)
                 {
                     reappliedPaths.Add(path);
+                    continue;
                 }
-                else if (groupResults[position].Outcomes.Count == 0)
-                {
-                    // A run stopped before it applied anything wrote no row for this file, so
-                    // the failed-rebind sentence would send the reader looking for rows that
-                    // were never written.
-                    groupResults[0].Warnings.Add(
-                        string.Format(
-                            HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat,
-                            path));
-                }
-                else
-                {
-                    groupResults[0].Warnings.Add(
-                        string.Format(
-                            HotReloadConstants.ActiveSiblingRebindFailedWarningFormat,
-                            path));
-                }
+
+                groupResults[0].Warnings.Add(string.Format(warningFormat, path));
             }
 
             if (reappliedPaths.Count > 0)
@@ -147,29 +135,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         HotReloadConstants.ActiveSiblingChangedSinceApplyWarningFormat,
                         changedSinceApplyPaths[index]));
             }
-        }
-
-        // Why not "no Failed row": isolation leaves a sibling as Skipped when its added-method
-        // callee failed to compile, and claiming that file was re-applied would be false.
-        private bool ShouldDescribeSiblingAsReapplied(HotReloadFileProcessResult result)
-        {
-            Debug.Assert(result != null, "result must not be null.");
-            bool sawApplied = false;
-            foreach (HotReloadMethodOutcome outcome in result.Outcomes)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
-                {
-                    return false;
-                }
-
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
-                    || outcome.Kind == HotReloadMethodOutcomeKind.Added)
-                {
-                    sawApplied = true;
-                }
-            }
-
-            return sawApplied;
         }
     }
 }
