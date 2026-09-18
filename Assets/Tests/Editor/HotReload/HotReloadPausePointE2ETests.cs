@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// (b) ArmThenHotReload_AutoRetargetsAndHitsEditedBody and
     /// (e) Enable_OnHotReloadedAsyncBody_HitsEditedResult are pinned by
     /// HotReloadPausePointContractTests; this suite covers the remaining orderings —
-    /// (c) enable→patch→revert-all, (d) unchanged-convergence peel, (f) local-function ShimDirect.
+    /// (c) enable→patch→revert-all, (d) unchanged-convergence peel, (f) local-function ShimDirect,
+    /// (g) a line inside an added method, (h) a compiled line beside an added method.
     /// </summary>
     public class HotReloadPausePointE2ETests
     {
@@ -146,12 +147,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
         }
 
+        /// <summary>
+        /// What: (g) a line inside a method the reload added in the middle of the file is refused
+        /// with a message naming that added method, with or without --method, instead of arming
+        /// the next compiled method.
+        /// </summary>
+        [Test]
+        public async Task PatchThenEnable_LineInsideAnAddedMethod_NamesTheAddedMethod()
+        {
+            string editedSource = BuildEditedComputeWithAddedMethod();
+            int enableLine = FindLineNumber(editedSource, "return _secret + delta + 200;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            HotReloadOrchestratorResult result =
+                await HotReloadFromEditedSourceAsync(editedSource, "E2E_g_AddedMethod.cs");
+            Assert.That(
+                result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Added),
+                Is.True,
+                FormatHotReloadOutcomes(result));
+
+            PausePointResponse enable = EnableContinuous(enableLine);
+
+            Assert.That(enable.Success, Is.False);
+            Assert.That(enable.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            Assert.That(enable.Message, Does.Contain("AddedBoost"));
+            Assert.That(enable.Message, Does.Contain("which hot reload added"));
+
+            PausePointResponse enableWithMethod = EnableContinuousInMethod(enableLine, "AddedBoost");
+
+            Assert.That(enableWithMethod.Success, Is.False);
+            Assert.That(enableWithMethod.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            Assert.That(enableWithMethod.Message, Does.Contain("AddedBoost"));
+            Assert.That(enableWithMethod.Message, Does.Contain("which hot reload added"));
+        }
+
+        /// <summary>
+        /// What: (h) in a file where the reload added a method, a line inside an untouched compiled
+        /// method still enables on the compiled line map, so the added-method refusal does not
+        /// swallow lines outside the added range.
+        /// </summary>
+        [Test]
+        public async Task PatchThenEnable_CompiledMethodBesideAnAddedMethod_StillEnables()
+        {
+            string editedSource = BuildEditedComputeWithAddedMethod();
+            int enableLine = FindLineNumber(editedSource, "public int VisibleSibling()") + 2;
+            Assert.That(enableLine, Is.LessThan(FindLineNumber(editedSource, "public int ComputeWithPrivate(int delta)")));
+
+            HotReloadOrchestratorResult result =
+                await HotReloadFromEditedSourceAsync(editedSource, "E2E_h_AddedMethod.cs");
+            Assert.That(
+                result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Added),
+                Is.True,
+                FormatHotReloadOutcomes(result));
+
+            PausePointResponse enable = EnableContinuous(enableLine);
+
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.False);
+        }
+
         private static PausePointResponse EnableContinuous(int line)
         {
             return new PausePointUseCase().Enable(new EnablePausePointSchema
             {
                 File = FixtureProjectRelativePath,
                 Line = line,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+        }
+
+        private static PausePointResponse EnableContinuousInMethod(int line, string method)
+        {
+            return new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = line,
+                Method = method,
                 TimeoutSeconds = 30,
                 Mode = UloopPausePointCaptureMode.Continuous
             });
@@ -180,6 +252,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "            }\n"
                 + "\n"
                 + "            return LocalBoost();\n"
+                + "        }";
+            string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static string BuildEditedComputeWithAddedMethod()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            const string original =
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }";
+            const string replacement =
+                "public int ComputeWithPrivate(int delta)\n        {\n            return AddedBoost(delta);\n        }\n"
+                + "\n"
+                + "        public int AddedBoost(int delta)\n"
+                + "        {\n"
+                + "            return _secret + delta + 200;\n"
                 + "        }";
             string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));

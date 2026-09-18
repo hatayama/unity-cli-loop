@@ -13,11 +13,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public MethodInfo ShimMethod { get; }
 
-        public HotReloadAddedMemberInfo(string methodKey, string filePath, MethodInfo shimMethod)
+        /// <summary>
+        /// 1-based first and last source lines of the added method in the file as it was reloaded,
+        /// both inclusive, or 0 when the range is unknown (a range of 0 never contains a line).
+        /// </summary>
+        public int SourceStartLine { get; }
+
+        public int SourceEndLine { get; }
+
+        public HotReloadAddedMemberInfo(
+            string methodKey,
+            string filePath,
+            MethodInfo shimMethod,
+            int sourceStartLine = 0,
+            int sourceEndLine = 0)
         {
             MethodKey = methodKey ?? string.Empty;
             FilePath = filePath ?? string.Empty;
             ShimMethod = shimMethod;
+            SourceStartLine = sourceStartLine;
+            SourceEndLine = sourceEndLine;
+        }
+
+        internal bool ContainsSourceLine(int line)
+        {
+            return SourceStartLine > 0 && SourceStartLine <= line && line <= SourceEndLine;
         }
     }
 }

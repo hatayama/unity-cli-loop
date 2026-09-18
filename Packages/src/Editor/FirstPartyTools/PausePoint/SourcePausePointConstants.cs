@@ -287,6 +287,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "is reported Patched, then enable the pause point again on a line inside that method. "
             + "Or run 'uloop compile' to compile the type and use the normal path.";
 
+        // Why a refusal of its own: an added method exists only in the hot reload shim, which
+        // pause-point cannot arm, and the compiled line map has no counterpart for it. Without
+        // this the compiled resolver would arm the next compiled method or report a wrong line.
+        // Format: requested line, added method name.
+        public const string AddedMethodResolveFailureMessageFormat =
+            "Line {0} is inside '{1}', which hot reload added; pause points cannot be armed inside "
+            + "added methods until 'uloop compile', so it was refused instead of arming another method.";
+
+        public const string AddedMethodResolveFailureNextAction =
+            "Run 'uloop compile', then enable the pause point on this line again.";
+
         // Format: method filter, requested line.
         public const string NoMethodNamedWithSequencePointMessageFormat =
             "No method named '{0}' with a sequence point on or after line {1} was found.";

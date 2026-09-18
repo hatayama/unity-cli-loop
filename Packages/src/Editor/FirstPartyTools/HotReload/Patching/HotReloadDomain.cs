@@ -457,6 +457,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return FindGenerationForRequestedPath(requestedPath)?.BuildShimLookup();
         }
 
+        internal string FindAddedMethodContainingLine(string requestedPath, int line)
+        {
+            return FindGenerationForRequestedPath(requestedPath)?.FindAddedMethodContainingLine(line);
+        }
+
         internal string LoadVerifiedSnapshotSourceForFile(string requestedPath)
         {
             return FindGenerationForRequestedPath(requestedPath)?.LoadVerifiedSnapshotSource();
