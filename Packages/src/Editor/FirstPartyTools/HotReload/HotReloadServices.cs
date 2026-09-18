@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadStatusExecutor statusExecutor,
             IHotReloadPackageRootCapture packageRootCapture,
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
-            IHotReloadChangeDetector changeDetector)
+            IHotReloadChangeDetector changeDetector,
+            HotReloadUnityMessageForwarding unityMessageForwarding)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(harmony != null, "harmony must not be null.");
@@ -40,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             Debug.Assert(changeDetector != null, "changeDetector must not be null.");
+            Debug.Assert(
+                unityMessageForwarding != null, "unityMessageForwarding must not be null.");
             Domain = domain;
             Harmony = harmony;
             Patcher = patcher;
@@ -54,6 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PackageRootCapture = packageRootCapture;
             EditorStateSnapshotCapture = editorStateSnapshotCapture;
             ChangeDetector = changeDetector;
+            UnityMessageForwarding = unityMessageForwarding;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -89,6 +93,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal IHotReloadChangeDetector ChangeDetector { get; }
 
         /// <summary>
+        /// Keeps the added Unity messages reaching live instances while Play Mode runs.
+        /// </summary>
+        internal HotReloadUnityMessageForwarding UnityMessageForwarding { get; }
+
+        /// <summary>
         /// A copy that runs <paramref name="orchestrator"/> instead of this one, sharing every
         /// other collaborator — including the domain, so installing the copy neither takes the
         /// resolver over nor disposes anything when it is put back.
@@ -109,7 +118,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 StatusExecutor,
                 PackageRootCapture,
                 EditorStateSnapshotCapture,
-                ChangeDetector);
+                ChangeDetector,
+                UnityMessageForwarding);
         }
 
         /// <summary>
@@ -132,7 +142,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 StatusExecutor,
                 PackageRootCapture,
                 EditorStateSnapshotCapture,
-                changeDetector);
+                changeDetector,
+                UnityMessageForwarding);
         }
     }
 }

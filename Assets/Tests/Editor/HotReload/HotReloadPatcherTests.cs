@@ -88,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     packageRootCapture,
                     new HotReloadEditorStateSnapshotCapture(),
                     TransformWorkerHost.Shared,
-                    HotReloadGroupProcessorDependencies.CreateProduction));
+                    HotReloadGroupProcessorDependencies.CreateProduction,
+                    new HotReloadApplicationPlayModeQuery()));
         }
 
         /// <summary>

@@ -1,5 +1,7 @@
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     // Why the file is named after the shim class and not after the fixture: Unity binds a
@@ -46,6 +48,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             __uloopInstance.PauseValue = paused;
         }
+    }
+
+    /// <summary>
+    /// A second shim host declaring the same message and signature as the first, so a binding built
+    /// from both cannot emit a proxy: one type cannot declare the same method twice.
+    /// </summary>
+    public static class HotReloadUnityMessageDuplicateFixtureShims
+    {
+        public static void Update(HotReloadUnityMessageProxyFixture __uloopInstance)
+        {
+            __uloopInstance.UpdateCount += 100;
+        }
+    }
+
+    /// <summary>Lets a test say whether the editor is in Play Mode.</summary>
+    internal sealed class HotReloadStubPlayModeQuery : IHotReloadPlayModeQuery
+    {
+        public bool IsPlaying { get; set; }
     }
 
     /// <summary>

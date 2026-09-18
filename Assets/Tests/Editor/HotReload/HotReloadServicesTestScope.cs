@@ -86,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     installed.PackageRootCapture,
                     editorStateSnapshotCapture,
                     transformWorkerHost,
-                    buildDependencies));
+                    buildDependencies,
+                    new HotReloadApplicationPlayModeQuery()));
         }
     }
 
