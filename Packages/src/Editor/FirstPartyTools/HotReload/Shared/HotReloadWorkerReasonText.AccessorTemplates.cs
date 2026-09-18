@@ -169,7 +169,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Plain("inaccessible methods that return by ref have no accessor rewrite shape.", 0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
-                Plain("inaccessible method calls with ref/out/in parameters are not rewritten.", 0));
+                Plain(
+                    "inaccessible method calls with ref/out/in parameters are not rewritten; the call is "
+                    + "refused whatever is passed, because the rewrite cannot forward ref/out/in parameters.",
+                    0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten,
                 Plain("inaccessible method calls with named arguments are not rewritten.", 0));

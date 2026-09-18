@@ -321,7 +321,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 NoArgs,
                 "Writes to members of an added value-type field, and instance method calls on that field, "
-                + "cannot be rewritten. Run 'uloop compile'.");
+                + "cannot be rewritten. Copy the field into a local, change the local, and assign the whole "
+                + "value back. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
                 new[] { "_score" },
@@ -589,7 +590,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 NoArgs,
-                "inaccessible method calls with ref/out/in parameters are not rewritten.");
+                "inaccessible method calls with ref/out/in parameters are not rewritten; the call is "
+                + "refused whatever is passed, because the rewrite cannot forward ref/out/in parameters.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten,
                 NoArgs,
