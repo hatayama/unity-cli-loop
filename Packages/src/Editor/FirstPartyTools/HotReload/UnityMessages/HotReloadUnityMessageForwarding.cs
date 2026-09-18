@@ -177,7 +177,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 HotReloadUnityMessageBinding binding =
                     HotReloadUnityMessageForwarderFactory.CreateBinding(targetType, shims);
-                _attacher.Bind(targetType, binding);
+                // New shims for the same messages keep the proxies already attached, so only a
+                // reload that changed the messages themselves puts new ones on and reruns Start.
+                if (!_attacher.TryRebind(targetType, binding))
+                {
+                    _attacher.Bind(targetType, binding);
+                }
                 failure = null;
                 return true;
             }

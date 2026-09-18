@@ -210,6 +210,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(target.UpdateCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: rebinding a built proxy type makes an already attached proxy forward to the new
+        /// binding's shim on its next message, without a new type or a new component.
+        /// </summary>
+        [Test]
+        public void Rebind_OnABuiltProxyType_ForwardsTheAttachedProxyToTheNewShim()
+        {
+            HotReloadUnityMessageProxyFixture target = CreateFixture();
+            Type proxyType = BuildProxyType("Update");
+            HotReloadUnityMessageProxy proxy = Attach(proxyType, target);
+            MethodInfo newShim = typeof(HotReloadUnityMessageDuplicateFixtureShims).GetMethod(
+                "Update",
+                BindingFlags.Public | BindingFlags.Static);
+
+            _builder.Rebind(
+                proxyType,
+                HotReloadUnityMessageForwarderFactory.CreateBinding(
+                    typeof(HotReloadUnityMessageProxyFixture),
+                    new List<MethodInfo> { newShim }));
+            InvokeMessage(proxyType, proxy, "Update", null);
+
+            Assert.That(target.UpdateCount, Is.EqualTo(100), "The new shim adds 100; the first one adds 1.");
+        }
+
+        /// <summary>
+        /// What: a type this builder did not emit is refused rather than silently left forwarding
+        /// through nothing.
+        /// </summary>
+        [Test]
+        public void Rebind_OnATypeItDidNotBuild_Throws()
+        {
+            HotReloadUnityMessageBinding binding = HotReloadUnityMessageForwarderFactory.CreateBinding(
+                typeof(HotReloadUnityMessageProxyFixture),
+                new List<MethodInfo>
+                {
+                    typeof(HotReloadUnityMessageProxyFixtureShims).GetMethod(
+                        "Update",
+                        BindingFlags.Public | BindingFlags.Static),
+                });
+
+            Assert.Throws<InvalidOperationException>(
+                () => _builder.Rebind(typeof(HotReloadUnityMessageProxyFixture), binding));
+        }
+
         private Type BuildProxyType(params string[] messageNames)
         {
             List<MethodInfo> shims = new List<MethodInfo>();

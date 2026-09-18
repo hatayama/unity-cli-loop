@@ -122,6 +122,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a second run that applies the same added Start again with a new body keeps the
+        /// proxy component already on the instance, so no second AddComponent reruns Start. An
+        /// EditMode test never sees Unity call Start, so the component's identity is what shows it.
+        /// </summary>
+        [Test]
+        public async Task Tick_AfterTheAddedStartWasAppliedAgain_KeepsTheAttachedProxy()
+        {
+            HotReloadAddedUnityMessageFixture target = CreateFixture();
+            await RunWithAddedMemberAsync(
+                "AddedUnityMessageStart.cs",
+                "        private void Start()\n        {\n            Counter++;\n        }");
+            Forwarding.Tick();
+            HotReloadUnityMessageProxy first = SingleProxyOn(target);
+
+            await RunWithAddedMemberAsync(
+                "AddedUnityMessageStartAgain.cs",
+                "        private void Start()\n        {\n            Counter += 10;\n        }");
+            Forwarding.Tick();
+
+            HotReloadUnityMessageProxy second = SingleProxyOn(target);
+            Assert.That(second, Is.SameAs(first));
+            InvokeMessage(second, "Start");
+            Assert.That(target.Counter, Is.EqualTo(10));
+        }
+
+        /// <summary>
         /// What: a message this feature leaves to the compiler is reported as such on its own row
         /// and once for the run, and no proxy is attached for it.
         /// </summary>
