@@ -1759,6 +1759,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an applied run that re-applied a sibling's earlier changes says how many of the
+        /// Patched and Added rows came from those siblings, right after the counts they are part of,
+        /// so a reader who edited one method is not left wondering where the rest came from.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_SiblingRowsReapplied_SaysHowManyOfTheCountsCameFromSiblings()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Edited", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Patched("Sibling.Earlier", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Added("Sibling.AddedEarlier", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.Skip", "reason", "Assets/Sibling.cs")
+                },
+                new List<string>(),
+                patchedTotal: 2,
+                activePatchTotal: 2,
+                reappliedSiblingPaths: new[] { "Assets/Sibling.cs" });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    "Hot reload applied. PatchedTotal=2, ActivePatchTotal=2. Added: 1. "
+                    + "Of these, 2 re-applied changes from earlier reloads in sibling files. Skipped: 1."));
+        }
+
+        /// <summary>
+        /// What: a pulled-in sibling whose rows were all Skipped re-applied nothing, so the message
+        /// adds no re-applied count for it.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_SiblingRowsAllSkipped_AddsNoReappliedCount()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Edited", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.Skip", "reason", "Assets/Sibling.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { "Assets/Sibling.cs" });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Message, Does.Not.Contain("re-applied changes from earlier reloads"));
+        }
+
+        /// <summary>
         /// What: an applied run without any Skipped outcome adds no Skipped-derived warning.
         /// </summary>
         [Test]
