@@ -284,12 +284,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "each introduced type from its own recorded declaration.";
 
         public const string SiblingNoVerifiedSourceSnapshotWarningFormat =
-            "{0} re-applied sibling file(s) have no verified source snapshot, so all their methods "
-            + "are patched: {1}. Run uloop compile to establish a baseline for edited-method detection.";
+            "{0} re-applied sibling file(s) have no verified source snapshot, so every method in them "
+            + "is treated as edited: {1}. Run uloop compile to establish a baseline for edited-method detection.";
 
         public const string SiblingNoCompiledMethodBodyBaselineWarningFormat =
             "{0} re-applied sibling file(s) have no compiled method body, so there is no baseline "
-            + "for edited-method detection and all their methods are patched: {1}. This is expected "
+            + "for edited-method detection and every method in them is treated as edited: {1}. This is expected "
             + "for files that only declare types without bodies.";
 
         // Format: file name, assembly name. Emitted when syntax-method key collision disables baseline.
