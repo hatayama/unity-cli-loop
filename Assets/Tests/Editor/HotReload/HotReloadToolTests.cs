@@ -1785,7 +1785,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response.Message,
                 Does.StartWith(
                     "Hot reload applied. PatchedTotal=2, ActivePatchTotal=2. Added: 1. "
-                    + "Of these, 2 re-applied changes from earlier reloads in sibling files. Skipped: 1."));
+                    + "2 of the patched and added rows re-applied changes from earlier reloads in sibling files. Skipped: 1."));
         }
 
         /// <summary>

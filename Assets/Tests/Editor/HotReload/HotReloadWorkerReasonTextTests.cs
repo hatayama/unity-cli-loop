@@ -391,6 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AddedPropertyCompoundAssignment,
                 NoArgs,
                 "Compound assignment, increment, and decrement of an added property are skipped; the accessor shim cannot preserve the operation. "
+                + "Rewrite it as a plain assignment statement ('X = X + 1;') to keep hot reloading. "
                 + "Run 'uloop compile' to add it.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedPropertyConsumedWrite,
@@ -564,7 +565,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape,
                 NoArgs,
-                "inaccessible static property access has no accessor rewrite shape.");
+                "inaccessible static property access has no accessor rewrite shape; make the property, its "
+                + "accessors, and its containing types public to keep hot reloading.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape,
                 NoArgs,

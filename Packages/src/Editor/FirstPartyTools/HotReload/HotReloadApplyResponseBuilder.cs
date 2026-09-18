@@ -320,8 +320,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // one method otherwise cannot tell why the counts are much larger than the edit.
             if (reappliedSiblingCount > 0)
             {
-                message += " Of these, " + reappliedSiblingCount
-                    + " re-applied changes from earlier reloads in sibling files.";
+                message += " " + reappliedSiblingCount
+                    + " of the patched and added rows re-applied changes from earlier reloads in sibling files.";
             }
 
             // Why counted here: the totals only count what was applied, so a run that skipped

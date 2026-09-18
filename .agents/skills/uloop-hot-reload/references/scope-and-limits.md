@@ -94,7 +94,8 @@ already declares as a field or an event. Edited callers are skipped too when the
 shape the accessor shim cannot carry: compound assignment or increment, an assignment
 whose value is consumed, a deconstruction target, an object initializer, a property
 pattern that matches the property, `nameof`, `ref`/`out`/`in`, and conditional access
-on the property itself.
+on the property itself. A compound assignment or increment keeps hot reloading when it is
+rewritten as a plain assignment statement (`X = X + 1;`).
 
 Types, events, and indexers are not reported per member — no `Skipped` row names them;
 at most they surface as outside-body drift in `Warnings`. Treat their silence
@@ -273,7 +274,7 @@ stay `Skipped`.
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
-| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
+| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates. Neither can a private/internal static property; making the property, its accessors, and its containing types `public` keeps hot reloading (`internal` is still inaccessible to the shim) |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
 | Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |

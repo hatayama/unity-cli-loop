@@ -8,6 +8,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadSiblingRebindWarningSelector
     {
+        private const string FileLevelMethodName = "(file)";
+
         // Why Failed is checked before Patched/Added: isolation leaves a sibling as Skipped when
         // its added-method callee failed to compile, and claiming that file was re-applied would
         // be false. Why Skipped-only is separate from Failed: nothing failed for such a sibling,
@@ -21,6 +23,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // A run stopped before it applied anything wrote no row for this file, so the
                 // failed-rebind sentence would send the reader looking for rows never written.
                 return HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat;
+            }
+
+            if (WasRefusedBeforeChangingAnyPatch(result))
+            {
+                return HotReloadConstants.ActiveSiblingRebindRunRefusedWarningFormat;
             }
 
             bool sawApplied = false;
@@ -45,6 +52,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return sawOnlySkipped
                 ? HotReloadConstants.ActiveSiblingRebindSkippedOnlyWarningFormat
                 : HotReloadConstants.ActiveSiblingRebindFailedWarningFormat;
+        }
+
+        // Why the revert count is checked too: unchanged patches are reverted before the shim
+        // compile, and a later group failure only appends file-level rows without restoring them,
+        // so file-level rows alone do not prove the sibling's active patches are unchanged.
+        private static bool WasRefusedBeforeChangingAnyPatch(HotReloadFileProcessResult result)
+        {
+            if (result.RevertedUnchangedCount != 0)
+            {
+                return false;
+            }
+
+            foreach (HotReloadMethodOutcome outcome in result.Outcomes)
+            {
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Failed || outcome.Method != FileLevelMethodName)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }
