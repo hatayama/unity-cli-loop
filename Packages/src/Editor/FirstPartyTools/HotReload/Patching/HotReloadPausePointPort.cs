@@ -30,9 +30,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.LookupShimsForFile(file);
         }
 
-        public string FindAddedMethodContainingLine(string file, int line)
+        public HotReloadAddedMethodAtLine FindAddedMethodContainingLine(string file, int line)
         {
             return _domain.FindAddedMethodContainingLine(file, line);
+        }
+
+        public bool HasActiveHotReloadChangesInFile(string file)
+        {
+            return _domain.HasActiveHotReloadChangesInFile(file);
         }
 
         public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)

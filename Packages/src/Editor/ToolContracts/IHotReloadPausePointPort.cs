@@ -29,10 +29,17 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
         /// <summary>
         /// Argument is a forward-slash path (absolute or project-relative) and a 1-based line;
-        /// returns the name of the method hot reload added to that file whose source range holds
-        /// the line, or null when the line is not inside an added method.
+        /// returns the method hot reload added to that file whose source range holds the line, or
+        /// null when the line is not inside an added method.
         /// </summary>
-        string FindAddedMethodContainingLine(string file, int line);
+        HotReloadAddedMethodAtLine FindAddedMethodContainingLine(string file, int line);
+
+        /// <summary>
+        /// Argument is a forward-slash path (absolute or project-relative); returns whether hot
+        /// reload still has a live patch or an added method in that file, which is what makes
+        /// its edited lines differ from the last compiled line map.
+        /// </summary>
+        bool HasActiveHotReloadChangesInFile(string file);
 
         /// <summary>
         /// Returns the PDB-checksum-verified compiled snapshot text for a project-relative source

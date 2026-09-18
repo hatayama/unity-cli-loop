@@ -116,7 +116,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string methodLabel = FormatEntryLabel(entry);
             if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
             {
-                return TryResolveAddedMethod(entry, methodLabel, shimAssembly, bindFailures, filePath);
+                return TryResolveAddedMethod(
+                    entry,
+                    methodLabel,
+                    fileHome,
+                    shimAssembly,
+                    bindFailures,
+                    filePath);
             }
 
             return TryResolveExistingMethod(
@@ -132,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static ResolvedEntryOutcome TryResolveAddedMethod(
             TransformWorkerEntryDto entry,
             string methodLabel,
+            HotReloadTypeHome fileHome,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
             string filePath)
@@ -157,7 +164,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadPatchShape.Transplant,
                     originalMethod: null,
                     shimMethod,
-                    isAddedMethod: true));
+                    isAddedMethod: true,
+                    FindAddedMethodCompiledAssemblyPath(entry, fileHome)));
+        }
+
+        // Why only a row without an artifact home in a project assembly: a row names an assembly
+        // only when an introduced-type artifact serves its type, and an artifact has no compiled
+        // snapshot, so such a file must keep reporting that it has no compiled line map.
+        private static string FindAddedMethodCompiledAssemblyPath(
+            TransformWorkerEntryDto entry,
+            HotReloadTypeHome fileHome)
+        {
+            if (!string.IsNullOrEmpty(entry.homeAssemblyName)
+                || fileHome.Kind != HotReloadTypeHomeKind.ScriptAssemblies)
+            {
+                return string.Empty;
+            }
+
+            return fileHome.DllPath;
         }
 
         private static ResolvedEntryOutcome TryResolveExistingMethod(
@@ -219,7 +243,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patchShape,
                     matchResult.Method,
                     shimMethod,
-                    isAddedMethod: false));
+                    isAddedMethod: false,
+                    compiledAssemblyPath: string.Empty));
         }
 
         private static (MethodInfo ShimMethod, string ErrorMessage) FindShimMethod(
@@ -296,6 +321,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public MethodInfo ShimMethod { get; }
             public bool IsAddedMethod { get; }
 
+            /// <summary>
+            /// For an added method, the compiled project assembly of its file; empty for a row an
+            /// introduced-type artifact serves and for a patched method, whose original method
+            /// already names its assembly.
+            /// </summary>
+            public string CompiledAssemblyPath { get; }
+
             public ResolvedEntry(
                 TransformWorkerEntryDto entry,
                 string methodLabel,
@@ -303,7 +335,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPatchShape patchShape,
                 MethodBase originalMethod,
                 MethodInfo shimMethod,
-                bool isAddedMethod)
+                bool isAddedMethod,
+                string compiledAssemblyPath)
             {
                 Entry = entry;
                 MethodLabel = methodLabel;
@@ -312,6 +345,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 OriginalMethod = originalMethod;
                 ShimMethod = shimMethod;
                 IsAddedMethod = isAddedMethod;
+                CompiledAssemblyPath = compiledAssemblyPath ?? string.Empty;
             }
         }
 

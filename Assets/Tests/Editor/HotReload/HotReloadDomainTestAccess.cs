@@ -76,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string filePath)
         {
             Domain.BeginAddedMemberOnlyGeneration(projectRelativePath)
-                .RegisterAddedMethod(methodKey, shimMethod, filePath);
+                .RegisterAddedMethod(methodKey, shimMethod, filePath, "Added", "Fixture");
         }
 
         internal void ReplaceAddedFields(string projectRelativePath, IReadOnlyList<string> addedFieldFullNames)

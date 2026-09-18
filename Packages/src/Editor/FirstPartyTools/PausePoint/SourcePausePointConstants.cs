@@ -298,6 +298,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AddedMethodResolveFailureNextAction =
             "Run 'uloop compile', then enable the pause point on this line again.";
 
+        public const string AmbiguousAddedMethodResolveFailureNextAction =
+            "To pause in the compiled method at this last-compiled-source line, pass --method as "
+            + "Type.Method so it does not also name the added method; otherwise run 'uloop compile', "
+            + "then enable the pause point on this line again.";
+
         // Format: method filter, requested line.
         public const string NoMethodNamedWithSequencePointMessageFormat =
             "No method named '{0}' with a sequence point on or after line {1} was found.";

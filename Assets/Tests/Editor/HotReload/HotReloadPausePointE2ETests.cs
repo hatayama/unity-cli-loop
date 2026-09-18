@@ -23,7 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// (e) Enable_OnHotReloadedAsyncBody_HitsEditedResult are pinned by
     /// HotReloadPausePointContractTests; this suite covers the remaining orderings —
     /// (c) enable→patch→revert-all, (d) unchanged-convergence peel, (f) local-function ShimDirect,
-    /// (g) a line inside an added method, (h) a compiled line beside an added method.
+    /// (g) a line inside an added method, (h) a compiled line beside an added method,
+    /// (i) a compiled method whose last compiled lines an added method now covers.
     /// </summary>
     public class HotReloadPausePointE2ETests
     {
@@ -206,6 +207,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.False);
         }
 
+        /// <summary>
+        /// What: (i) after a reload that only added methods above a compiled method, a compiled
+        /// line of that method which the added methods now cover arms the compiled method when
+        /// --method names it (and is still refused without --method), and the file keeps the
+        /// compiled snapshot that the edited-line remap and the line-count warning read.
+        /// </summary>
+        [Test]
+        public async Task AddOnlyReload_CompiledLineUnderAnAddedMethod_ArmsWithMethodAndKeepsCompiledSnapshot()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string editedSource = BuildEditedWithMethodsAddedAboveVisibleSibling(onDisk);
+            int compiledStatementLine = FindLineNumber(onDisk, "public int VisibleSibling()") + 2;
+            int editedStatementLine = FindLineNumber(editedSource, "public int VisibleSibling()") + 2;
+            Assert.That(editedStatementLine, Is.GreaterThan(compiledStatementLine));
+
+            HotReloadOrchestratorResult result = await HotReloadFromEditedSourceAsync(
+                editedSource,
+                "E2E_i_AddedAbove.cs",
+                requirePatched: false);
+            Assert.That(
+                result.Methods.All(m => m.Kind == HotReloadMethodOutcomeKind.Added),
+                Is.True,
+                FormatHotReloadOutcomes(result));
+            IHotReloadPausePointPort port = HotReloadPausePointCoordination.HotReloadSide;
+            Assert.That(port.GetShimLookupForFile(FixtureProjectRelativePath), Is.Null);
+            HotReloadAddedMethodAtLine addedAtLine =
+                port.FindAddedMethodContainingLine(FixtureProjectRelativePath, compiledStatementLine);
+            Assert.That(addedAtLine.Label, Does.Contain("AddedLead"));
+            Assert.That(addedAtLine.MethodName, Is.EqualTo("AddedLead"));
+            Assert.That(addedAtLine.DeclaringTypeName, Is.EqualTo(nameof(HotReloadE2EFixture)));
+            Assert.That(addedAtLine.NestedOuterTypeName, Is.Null);
+            Assert.That(port.HasActiveHotReloadChangesInFile(FixtureProjectRelativePath), Is.True);
+
+            PausePointResponse withoutMethod = EnableContinuous(compiledStatementLine);
+
+            Assert.That(withoutMethod.Success, Is.False);
+            Assert.That(withoutMethod.Message, Does.Contain("which hot reload added"));
+
+            PausePointResponse withMethod = EnableContinuousInMethod(compiledStatementLine, "VisibleSibling");
+
+            Assert.That(withMethod.Success, Is.True, withMethod.Message + " / " + withMethod.RecommendedNextAction);
+            Assert.That(withMethod.ResolvedLine, Is.EqualTo(compiledStatementLine));
+            Assert.That(withMethod.LineBasis, Is.EqualTo("LastCompiledSource"));
+            Assert.That(new HotReloadE2EFixture().VisibleSibling(), Is.EqualTo(1));
+            Assert.That(UloopPausePointRegistry.GetStatus(withMethod.Id).IsHit, Is.True);
+
+            // Why the pieces instead of the enable call: this harness keeps the edited source out
+            // of the fixture file, so only the compiled snapshot can come from the real reload.
+            string compiledSnapshot = port.GetVerifiedSnapshotSourceForFile(FixtureProjectRelativePath);
+            Assert.That(compiledSnapshot, Is.Not.Null.And.Not.Empty);
+            int remappedLine = PausePointEditedLineRemap.FindUniqueMatchingCompiledLineOrZero(
+                "VisibleSibling",
+                SplitLines(editedSource)[editedStatementLine - 1],
+                SplitLines(compiledSnapshot),
+                SourcePausePointResolver.FindCompiledMethodSpans(FixtureProjectRelativePath, "VisibleSibling"));
+            Assert.That(remappedLine, Is.EqualTo(compiledStatementLine));
+
+            List<string> warnings = new List<string>();
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                result.Methods,
+                _ => editedSource,
+                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot,
+                _ => FixtureProjectRelativePath,
+                result.ReappliedSiblingPaths);
+            Assert.That(warnings, Has.Some.Contains("line count differs from the last compiled source"));
+        }
+
         private static PausePointResponse EnableContinuous(int line)
         {
             return new PausePointUseCase().Enable(new EnablePausePointSchema
@@ -273,6 +342,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             return edited;
+        }
+
+        private static string BuildEditedWithMethodsAddedAboveVisibleSibling(string onDisk)
+        {
+            const string original = "        public int VisibleSibling()\n";
+            const string replacement =
+                "        public int AddedLead(int delta)\n"
+                + "        {\n"
+                + "            int lead = delta + 300;\n"
+                + "            return lead;\n"
+                + "        }\n"
+                + "\n"
+                + "        public int AddedTrail(int delta)\n"
+                + "        {\n"
+                + "            int trail = delta + 400;\n"
+                + "            return trail;\n"
+                + "        }\n"
+                + "\n"
+                + original;
+            string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static string[] SplitLines(string source)
+        {
+            return source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         }
 
         private static async Task<HotReloadOrchestratorResult> HotReloadFromEditedSourceAsync(

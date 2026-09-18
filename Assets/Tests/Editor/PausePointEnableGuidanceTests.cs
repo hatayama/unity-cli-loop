@@ -442,7 +442,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 scope.Port.ShimLookupForFile = file => null;
                 scope.Port.AddedMethodContainingLine = (file, line) =>
-                    line == IntroducedTypeRequestedLine ? "Ns.Owner.AddedStep()" : null;
+                    line == IntroducedTypeRequestedLine
+                        ? new HotReloadAddedMethodAtLine("Ns.Owner.AddedStep()", "AddedStep", "Owner", null)
+                        : null;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -477,7 +479,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 scope.Port.IntroducedTypeSourceFiles = new HashSet<string>();
                 scope.Port.AddedMethodContainingLine = (file, line) =>
-                    line == IntroducedTypeRequestedLine + 1 ? "Ns.Owner.AddedStep()" : null;
+                    line == IntroducedTypeRequestedLine + 1
+                        ? new HotReloadAddedMethodAtLine("Ns.Owner.AddedStep()", "AddedStep", "Owner", null)
+                        : null;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {

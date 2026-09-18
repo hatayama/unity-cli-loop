@@ -1772,6 +1772,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a file whose reload only added methods has no shim lookup, yet its resolve failure
+        /// still gets the hot-reload warning and next action, because the added methods moved its
+        /// edited lines away from the compiled line map all the same.
+        /// </summary>
+        [Test]
+        public void Enable_WhenResolveFailsAndFileHasOnlyAddedMethods_UsesResolveFailureWarningAndNextAction()
+        {
+            using (HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope())
+            {
+                hotReloadSideScope.Port.ShimLookupForFile = _ => null;
+                hotReloadSideScope.Port.ActiveHotReloadChangesInFile = _ => true;
+
+                PausePointResponse response = EnableUnresolvableLine();
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.Warning, Is.EqualTo(ExpectedEnableResolveFailureWarning));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction));
+            }
+        }
+
+        /// <summary>
         /// What: a line inside a patched method with no shim PDB is a distinct Kind, not
         /// NotInPatchedMethod.
         /// </summary>
