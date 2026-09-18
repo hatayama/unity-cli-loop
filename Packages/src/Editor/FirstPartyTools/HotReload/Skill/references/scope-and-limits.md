@@ -19,8 +19,7 @@ one shim assembly, so a body edited in one of them can call a member added in an
 — pass the declaring file and its callers to the same command. Compiled, unedited
 code cannot see it, and neither can anything that resolves members by name at
 runtime: reflection (`GetType().GetMethod("NewM")` returns `null`), Unity's message
-discovery (an added `Update` or `OnCollisionEnter` on a `MonoBehaviour` is never
-invoked — a `Warnings` entry names it), the Unity Test Runner (an added `[Test]` /
+discovery (see "Added Unity messages" below), the Unity Test Runner (an added `[Test]` /
 `[UnityTest]` method is not enumerated by `uloop run-tests --skip-compile` — a
 `Warnings` entry names it; run `uloop compile` first), UnityEvent/inspector wiring, and
 serialization. Referencing an added member from a file that is neither passed to this reload nor
@@ -166,13 +165,39 @@ and resets the running PlayMode session, so compiling member-by-member pays that
 repeatedly. After the one compile, re-enter PlayMode and continue exploring on the freshly
 compiled code.
 
+## Added Unity messages
+
+Unity finds a `MonoBehaviour`'s messages by name on the compiled class, so a message a
+reload added is not one the engine knows about. While Play Mode runs, hot reload stands a
+generated proxy component next to each live instance of the target type and forwards the
+message from there, so an added `Update`, `OnTriggerEnter`, or `OnMouseDown` does run. The
+method's row says which answer it got in `LifecycleNote` (see Output).
+
+- Forwarded: `Start`, `Update`, `LateUpdate`, `FixedUpdate`, `OnGUI`, the collision, trigger,
+  and mouse messages (2D included), and the application/pause/focus messages. `Update`,
+  `LateUpdate`, `FixedUpdate`, and `OnGUI` are forwarded only while the target itself is
+  active and enabled; the event messages are forwarded as they arrive.
+- Not forwarded, and listed together in one `Warnings` line: `Awake`, `OnEnable`,
+  `OnDisable`, `OnDestroy`, the editor-only messages (`Reset`, `OnValidate`,
+  `OnDrawGizmos`, `OnDrawGizmosSelected`), and any message declared with a return value or a
+  `ref`/`out` parameter. Run `uloop compile` to have the engine dispatch those.
+
+The proxies exist only for the running session: nothing is attached outside Play Mode, and a
+compile or a domain reload drops them along with every other patch. Execution order relative
+to other components is not guaranteed — a proxy is its own component, so an added `Update`
+does not run at the position the compiled one would. The reconcile that attaches proxies
+scans the open scenes for instances of the target types on each editor update, which costs a
+`FindObjectsByType` per bound type; it does nothing at all while no added message is active.
+
 ## One-shot code: a patch only changes the next call
 
 Hot reload changes what a method does on its *next* call — it never re-runs a call that
 already happened. Methods that run exactly once per session (`Awake`, `Start`, `OnEnable`,
 initialization helpers called from them, anything that seeds state at startup) patch
 successfully but show no effect: the one call they get is already in the past when the
-patch lands. The response marks these with `LifecycleNote` (see Output) — both direct one-shot
+patch lands. An *added* `Start` is the exception, and only because it is not a patch at all:
+the proxy that carries it runs it once on each instance that already exists, at the moment
+the proxy attaches. The response marks these with `LifecycleNote` (see Output) — both direct one-shot
 lifecycle messages and methods whose every compiled caller is a one-shot lifecycle message on a
 `MonoBehaviour`. The caller check is conservative: when the scan cannot prove exclusivity (a
 missing assembly, reflection, or event-driven calls), the note is omitted. To see an

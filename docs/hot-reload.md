@@ -295,6 +295,17 @@ Wire details:
   members that are still missing are reported with that hint, and changed `const` values
   (including enum members) are compared against the compiled target assembly and reported as
   a response warning; other outside-body edits stay silent.
+- A Unity message added to an existing `MonoBehaviour` is delivered by a generated proxy
+  component that hot reload attaches to each live instance while Play Mode runs, because
+  Unity's own message discovery only sees the compiled class. `Start`, `Update`,
+  `LateUpdate`, `FixedUpdate`, `OnGUI`, and the collision, trigger, mouse, and
+  application messages are forwarded; `Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, the
+  editor-only messages, and any message declared with a return value or a `ref`/`out`
+  parameter are not, and the run names those in one warning pointing at `uloop compile`.
+  An added `Start` runs once on each instance that already exists, at the moment the proxy
+  attaches. The proxies live only for the running session — nothing is attached outside
+  Play Mode, and a compile or domain reload drops them — and execution order relative to
+  the target's other components is not guaranteed.
 - In-flight async methods and coroutines keep running the old code until re-entered.
 - Callers whose call sites were JIT-inlined may not observe the detour (`IsLikelyJitInlined`
   heuristic produces a warning, as with pause points).
