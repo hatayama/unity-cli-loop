@@ -8,7 +8,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         NotNeeded = 0,
         Requested = 1,
         HeldForPlayMode = 2,
-        Disabled = 3
+        Disabled = 3,
+        BlockedByPlayModeSetting = 4
     }
 
     /// <summary>
@@ -44,13 +45,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Chooses the fallback for one run. isPlaying is a parameter rather than an Editor read so
-        /// the decision stays a pure function.
+        /// Chooses the fallback for one run. isPlaying and compileRefusedDuringPlay (Unity's
+        /// "Script Changes While Playing" set to recompile only after play ends) are parameters
+        /// rather than Editor reads so the decision stays a pure function.
         /// </summary>
         internal static HotReloadCompileFallbackDecision Decide(
             HotReloadCompileOnSkip option,
             bool hasUnappliedEdit,
-            bool isPlaying)
+            bool isPlaying,
+            bool compileRefusedDuringPlay)
         {
             // Nothing stayed unapplied, so no option asks for a compile: the run already put every
             // requested edit into the running domain.
@@ -64,9 +67,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadCompileFallbackDecision.Disabled;
             }
 
+            // Why on does not request a compile here: the compile tool refuses to run during play
+            // under this setting, so the CLI would only report a failed compile in place of the
+            // step that actually unblocks it.
             if (option == HotReloadCompileOnSkip.on)
             {
-                return HotReloadCompileFallbackDecision.Requested;
+                return isPlaying && compileRefusedDuringPlay
+                    ? HotReloadCompileFallbackDecision.BlockedByPlayModeSetting
+                    : HotReloadCompileFallbackDecision.Requested;
             }
 
             // Why auto holds during play: a compile reloads the domain and so ends the Play

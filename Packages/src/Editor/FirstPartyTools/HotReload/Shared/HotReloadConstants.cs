@@ -467,6 +467,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string CompileFallbackHeldForPlayModeRecommendedNextAction =
             "No compile ran because the Editor is in Play Mode and a compile would stop the Play session; rerun with --compile-on-skip on to compile anyway.";
 
+        // The same Stop step the compile tool recommends when it refuses to compile during play
+        // (CompileErrorNextActionsConstants.PlayModeStopNextAction); restated here because a tool
+        // may not reference another tool's assembly.
+        public const string CompileFallbackRefusedDuringPlayRecommendedNextAction =
+            "No compile ran because the Editor is in Play Mode and Unity's 'Script Changes While Playing' is set to 'Recompile After Finished Playing'. Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.";
+
+        // Unity's EditorPrefs entry behind "Script Changes While Playing", and its value for
+        // "Recompile After Finished Playing", under which the compile tool refuses to run during
+        // play. Only that one value is named because it is the only one hot reload acts on.
+        public const string ScriptCompilationDuringPlayEditorPrefsKey = "ScriptCompilationDuringPlay";
+
+        public const int ScriptCompilationDuringPlayRecompileAfterFinishedPlaying = 1;
+
         public const string RequestedFilesAllSkippedRecommendedNextAction =
             "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings).";
 

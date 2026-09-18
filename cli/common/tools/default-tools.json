@@ -770,7 +770,7 @@
               "on",
               "off"
             ],
-            "description": "When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run uloop compile in the same command: auto only in Edit Mode (never stops a Play session), on always, off never. The response's CompileFallback says which; when the compile ran, Compile carries its result and Success is the compile's.",
+            "description": "When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run uloop compile in the same command: auto only in Edit Mode (never stops a Play session), on always unless Unity holds compiles until Play ends, off never. The response's CompileFallback says which; when the compile ran, Compile carries its result and Success is the compile's.",
             "default": "auto"
           }
         }

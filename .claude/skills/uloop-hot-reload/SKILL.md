@@ -38,7 +38,7 @@ automatically — pass it with `--files`.
 | `--files` | array | - | Project-relative `.cs` paths to hot-reload (method bodies, added members, and new top-level types). When omitted or empty on apply, selects compiled snapshot sources only — those whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; a file that has never been compiled is never selected and must be passed explicitly; run `uloop compile` first when no snapshot exists, or pass explicit paths when no changed source is found |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and added member and clear the ledger; introduced types stay loaded until the next domain reload. When set, `--files` is ignored |
 | `--status` | flag | - | Lists the currently active changes (patched methods, added members, and introduced types) without applying or reverting anything. |
-| `--compile-on-skip` | enum | `auto` | When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run `uloop compile` in the same command: `auto` only in Edit Mode (never stops a Play session), `on` always, `off` never. The response's `CompileFallback` says which; when the compile ran, `Compile` carries its result and `Success` is the compile's. |
+| `--compile-on-skip` | enum | `auto` | When the run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), run `uloop compile` in the same command: `auto` only in Edit Mode (never stops a Play session), `on` always unless Unity holds compiles until Play ends, `off` never. The response's `CompileFallback` says which; when the compile ran, `Compile` carries its result and `Success` is the compile's. |
 
 ## Status
 
