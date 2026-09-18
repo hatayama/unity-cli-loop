@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -20,11 +21,17 @@ const (
 	hotReloadCompileFallbackNoteField      = "CompileFallbackNote"
 	hotReloadSuccessField                  = "Success"
 	hotReloadRecommendedNextActionField    = "RecommendedNextAction"
+	hotReloadWarningsField                 = "Warnings"
 )
 
 const (
-	hotReloadCompileFallbackSucceededNote    = "Hot reload left edits unapplied (see Warnings), so a compile ran in this same command and succeeded: every edit is compiled in, and the domain reload discarded the active hot-reload patches."
-	hotReloadCompileFallbackFailedNote       = "Hot reload left edits unapplied (see Warnings), so a compile ran in this same command and failed: see Compile.Errors."
+	// %s names the response field that says which edits were left unapplied.
+	hotReloadCompileFallbackSucceededNoteFormat = "Hot reload left edits unapplied (see %s), so a compile ran in this same command and succeeded: every edit is compiled in, and the domain reload discarded the active hot-reload patches."
+	hotReloadCompileFallbackFailedNoteFormat    = "Hot reload left edits unapplied (see %s), so a compile ran in this same command and failed: see Compile.Errors."
+	hotReloadUnappliedInWarnings                = "Warnings"
+	// A run can leave edits unapplied with no warning at all, and then the reasons are only on the
+	// per-method rows.
+	hotReloadUnappliedInMethodReasons        = "Methods[].Reason"
 	hotReloadCompileFallbackFailedNextAction = "Fix the errors in Compile.Errors, then rerun 'uloop compile' or 'uloop hot-reload'."
 )
 
@@ -119,7 +126,7 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 	fields[hotReloadCompileResultField] = compileRaw
 	fields[hotReloadSuccessField] = success
 
-	note, nextAction, err := hotReloadCompileFallbackAdvice(compile.Success)
+	note, nextAction, err := hotReloadCompileFallbackAdvice(compile.Success, hotReloadUnappliedPointer(fields))
 	if err != nil {
 		return nil, err
 	}
@@ -133,15 +140,25 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 	return json.Marshal(fields)
 }
 
-func hotReloadCompileFallbackAdvice(compileSucceeded bool) (json.RawMessage, json.RawMessage, error) {
+// hotReloadUnappliedPointer names the response field that explains the unapplied edits, so the
+// note never sends the reader to an empty Warnings array.
+func hotReloadUnappliedPointer(fields map[string]json.RawMessage) string {
+	var warnings []json.RawMessage
+	if err := json.Unmarshal(fields[hotReloadWarningsField], &warnings); err != nil || len(warnings) == 0 {
+		return hotReloadUnappliedInMethodReasons
+	}
+	return hotReloadUnappliedInWarnings
+}
+
+func hotReloadCompileFallbackAdvice(compileSucceeded bool, unappliedPointer string) (json.RawMessage, json.RawMessage, error) {
 	if compileSucceeded {
-		note, err := json.Marshal(hotReloadCompileFallbackSucceededNote)
+		note, err := json.Marshal(fmt.Sprintf(hotReloadCompileFallbackSucceededNoteFormat, unappliedPointer))
 		if err != nil {
 			return nil, nil, err
 		}
 		return note, nil, nil
 	}
-	note, err := json.Marshal(hotReloadCompileFallbackFailedNote)
+	note, err := json.Marshal(fmt.Sprintf(hotReloadCompileFallbackFailedNoteFormat, unappliedPointer))
 	if err != nil {
 		return nil, nil, err
 	}
