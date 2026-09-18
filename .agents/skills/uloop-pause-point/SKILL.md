@@ -92,10 +92,9 @@ On a wait timeout, `PAUSE_POINT_EXPIRED`, or an enable failure, read `Error.Deta
 ## Requirements & Safety
 
 - On the automatic Debug-switch warning: the pause point is already armed - do not interrupt or ask mid-flow.
-
-- Patches drop on every compile or domain reload (the compile / Play-entry responses warn). Pass `--persist` to re-arm automatically; see `references/persist.md`.
-- Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
-- An `--id` marker waits on a hand-written `UloopPausePoint.Pause(id)` call; its hits record no `CapturedVariables`.
+- Patches drop on every compile or domain reload (the compile / Play-entry responses warn). `--persist` re-arms automatically (`references/persist.md`).
+- Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; enable warns where detectable.
+- An `--id` marker waits on your `UloopPausePoint.Pause(id)` call (`using io.github.hatayama.UnityCliLoop.Runtime;`); its hits record no `CapturedVariables`.
 - For scripts under `Packages/`, pass the package-id path form (`Packages/<package-id>/...`); physical checkout paths do not resolve.
 
 ## Reference Guides
@@ -109,5 +108,5 @@ Read the one whose trigger matches:
 - `references/watch-expressions.md` — watch rules.
 - `references/condition-triggered-pause.md` — runtime-condition pauses.
 - `references/fast-progressing-games.md` — freezing self-progressing games, `--resume-play`.
-- `references/persist.md` — what `--persist` restores, timeout restart, first-frame gap, reading the re-arm report.
+- `references/persist.md` — what `--persist` restores, timeout restart, first-frame gap, the re-arm report.
 - `references/troubleshooting.md` — timeouts, missed hits, hot reload, Debug switch, failure codes.
