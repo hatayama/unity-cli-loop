@@ -14,6 +14,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public List<string> SuppressedPausePointIds { get; }
         public List<string> RetargetedPausePointIds { get; }
         public List<string> InlineRiskMethodLabels { get; }
+
+        /// <summary>
+        /// The labels of the added Unity messages the engine will not reach until a compile, so
+        /// the run can name them in one warning rather than one per method.
+        /// </summary>
+        public List<string> UnforwardedUnityMessageLabels { get; }
         public int UnchangedMethodCount { get; }
         public int RevertedUnchangedCount { get; }
         public string[] AddedFieldNames { get; }
@@ -33,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int patchedCount,
             List<string> suppressedPausePointIds = null,
             List<string> inlineRiskMethodLabels = null,
+            List<string> unforwardedUnityMessageLabels = null,
             int unchangedMethodCount = 0,
             List<string> retargetedPausePointIds = null,
             string[] addedFieldNames = null,
@@ -47,6 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PatchedCount = patchedCount;
             SuppressedPausePointIds = suppressedPausePointIds ?? new List<string>();
             InlineRiskMethodLabels = inlineRiskMethodLabels ?? new List<string>();
+            UnforwardedUnityMessageLabels =
+                unforwardedUnityMessageLabels ?? new List<string>();
             UnchangedMethodCount = unchangedMethodCount;
             RetargetedPausePointIds = retargetedPausePointIds ?? new List<string>();
             AddedFieldNames = addedFieldNames ?? Array.Empty<string>();

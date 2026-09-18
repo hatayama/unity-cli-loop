@@ -108,7 +108,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 installed.PackageRootCapture,
                 installed.EditorStateSnapshotCapture,
                 TransformWorkerHost.Shared,
-                HotReloadGroupProcessorDependencies.CreateProduction);
+                HotReloadGroupProcessorDependencies.CreateProduction,
+                new HotReloadApplicationPlayModeQuery());
         }
 
         private static HotReloadServices CreateServicesOwning(HotReloadDomain domain)
@@ -119,7 +120,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadPackageRootCapture(),
                 new HotReloadEditorStateSnapshotCapture(),
                 TransformWorkerHost.Shared,
-                HotReloadGroupProcessorDependencies.CreateProduction);
+                HotReloadGroupProcessorDependencies.CreateProduction,
+                new HotReloadApplicationPlayModeQuery());
         }
 
         private static HotReloadIntroducedTypeArtifact CreateArtifact(string metadataName)

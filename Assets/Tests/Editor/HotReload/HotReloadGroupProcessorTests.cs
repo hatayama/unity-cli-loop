@@ -317,6 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRunAccumulator run = new HotReloadRunAccumulator(
                 HotReloadCompositionRoot.Services.Domain,
                 HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
                 autoRefreshHeldAtStart: false);
             HotReloadInputResolutionSlot slot = new HotReloadInputResolutionSlot();
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
@@ -782,6 +783,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRunAccumulator run = new HotReloadRunAccumulator(
                 HotReloadCompositionRoot.Services.Domain,
                 HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
                 autoRefreshHeldAtStart: false);
             HotReloadNewSourceMembershipEvidence evidence = CreateChangedMembershipEvidence();
 
@@ -805,6 +807,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRunAccumulator first = new HotReloadRunAccumulator(
                 HotReloadCompositionRoot.Services.Domain,
                 HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
                 autoRefreshHeldAtStart: false);
             first.Add(CoverageCallerPath, CreateAppliedResult(evidence));
             first.RecordAppliedSourceHashes();
@@ -812,6 +815,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRunAccumulator second = new HotReloadRunAccumulator(
                 HotReloadCompositionRoot.Services.Domain,
                 HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
                 autoRefreshHeldAtStart: false);
             second.Add(CoverageCallerPath, CreateAppliedResult(null));
             second.RecordAppliedSourceHashes();

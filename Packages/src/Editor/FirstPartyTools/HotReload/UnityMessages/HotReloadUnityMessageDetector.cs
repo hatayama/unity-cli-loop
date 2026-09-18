@@ -17,12 +17,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // receiver parameter name is the only contract between them.
         internal const string ReceiverParameterName = "__uloopInstance";
 
+        // Keep in sync with TransformWorker~/ShimNameAllocator.NextShimMethodName. Every shim the
+        // worker emits is named after the member plus this marker and a number, so the name Unity
+        // dispatches on is only recoverable by taking that suffix back off.
+        internal const string ShimMethodNameMarker = "__shim";
+
         /// <summary>What a shim method is, as far as Unity's message dispatch is concerned.</summary>
         internal enum Classification
         {
             NotUnityMessage,
             Forwarded,
             NotForwarded
+        }
+
+        /// <summary>
+        /// The member name behind a shim method: the shim's own name without the marker and number
+        /// the worker appended. A name the worker did not produce is returned unchanged.
+        /// </summary>
+        internal static string ResolveMemberName(MethodInfo shim)
+        {
+            Debug.Assert(shim != null, "shim must not be null.");
+            string shimName = shim.Name;
+            int markerStart = shimName.LastIndexOf(ShimMethodNameMarker, StringComparison.Ordinal);
+            // Why a marker at index 0 is left alone: the member name before it would be empty, and
+            // a method actually named "__shim0" is not one of ours to rewrite.
+            if (markerStart <= 0)
+            {
+                return shimName;
+            }
+
+            int digitsStart = markerStart + ShimMethodNameMarker.Length;
+            if (digitsStart == shimName.Length)
+            {
+                return shimName;
+            }
+
+            for (int index = digitsStart; index < shimName.Length; index++)
+            {
+                if (!char.IsDigit(shimName[index]))
+                {
+                    return shimName;
+                }
+            }
+
+            return shimName.Substring(0, markerStart);
         }
 
         /// <summary>
@@ -49,7 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return Classification.NotUnityMessage;
             }
 
-            if (!HotReloadUnityMessageNames.IsKnownMessage(shim.Name))
+            string memberName = ResolveMemberName(shim);
+            if (!HotReloadUnityMessageNames.IsKnownMessage(memberName))
             {
                 return Classification.NotUnityMessage;
             }
@@ -68,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return Classification.NotForwarded;
             }
 
-            return HotReloadUnityMessageNames.IsForwarded(shim.Name)
+            return HotReloadUnityMessageNames.IsForwarded(memberName)
                 ? Classification.Forwarded
                 : Classification.NotForwarded;
         }

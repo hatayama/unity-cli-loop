@@ -38,6 +38,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal IReadOnlyList<Type> BoundTargetTypes => new List<Type>(_proxyTypeByTarget.Keys);
 
         /// <summary>
+        /// The proxy type currently built for <paramref name="targetType"/>, or null when the type
+        /// is not bound. A caller tells a rebuild apart by the type changing identity.
+        /// </summary>
+        internal Type FindProxyType(Type targetType)
+        {
+            Debug.Assert(targetType != null, "targetType must not be null.");
+            return _proxyTypeByTarget.TryGetValue(targetType, out Type proxyType) ? proxyType : null;
+        }
+
+        /// <summary>
         /// Starts attaching proxies for <paramref name="targetType"/>. A type bound already is
         /// rebound to the new binding, and the proxies of the previous one go at the next tick.
         /// </summary>

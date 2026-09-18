@@ -44,6 +44,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // Harmony first: reverting after the domain is put back would unpatch against the
             // generations the restored services own, not the ones this scope patched.
             _services.Patcher.RevertAll();
+            // The proxies this scope's runs attached are components in the open scene, and the
+            // domain that owns their types goes away with the scope, so they come off here.
+            _services.UnityMessageForwarding.Clear();
             _replacement.Dispose();
         }
     }

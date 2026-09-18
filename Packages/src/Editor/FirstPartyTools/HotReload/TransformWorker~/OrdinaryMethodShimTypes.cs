@@ -62,23 +62,4 @@ internal static class OrdinaryMethodShimTypes
             });
         }
     }
-
-    internal static void AppendUnityMessageWarningIfNeeded(
-        INamedTypeSymbol typeSymbol,
-        IMethodSymbol methodSymbol,
-        List<string> declarationDriftWarnings)
-    {
-        if (!ShimMethodEmitter.IsUnityEngineMonoBehaviourDerived(typeSymbol)
-            || !UnityMessageNames.Contains(methodSymbol.Name))
-        {
-            return;
-        }
-
-        declarationDriftWarnings.Add(
-            string.Format(
-                CultureInfo.InvariantCulture,
-                UnityMessageNames.AddedMessageWarningFormat,
-                methodSymbol.Name,
-                typeSymbol.ToDisplayString()));
-    }
 }

@@ -56,7 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadPackageRootCapture(),
                 new HotReloadEditorStateSnapshotCapture(),
                 TransformWorkerHost.Shared,
-                HotReloadGroupProcessorDependencies.CreateProduction);
+                HotReloadGroupProcessorDependencies.CreateProduction,
+                new HotReloadApplicationPlayModeQuery());
         }
 
         /// <summary>
@@ -85,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             TransformWorkerHost transformWorkerHost,
             Func<HotReloadGroupStageCollaborators, HotReloadGroupProcessorDependencies>
-                buildDependencies)
+                buildDependencies,
+            IHotReloadPlayModeQuery playMode)
         {
             // Built in dependency order, and every collaborator takes what it needs here: nothing
             // below may read the installed services, or a replacement scope would leave it bound
@@ -120,6 +122,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 dependencies,
                 collaborators,
                 groupCommitStage);
+            // Built here rather than inline below: the run reconciles it at the end of an apply
+            // and a revert takes its proxies off, so the orchestrator and the status executor have
+            // to hold the same instance the editor update ticks.
+            HotReloadUnityMessageForwarding unityMessageForwarding =
+                new HotReloadUnityMessageForwarding(
+                    domain,
+                    new HotReloadUnityMessageProxyAttacher(
+                        playMode,
+                        new HotReloadUnityMessageProxyTypeBuilder()));
             return new HotReloadServices(
                 domain,
                 harmony,
@@ -140,11 +151,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         editorStateSnapshotCapture),
                     new HotReloadDeferredInputClassifier(),
                     new HotReloadSiblingRebindReporter(domain),
-                    packageRootCapture),
-                new HotReloadStatusExecutor(domain, patcher),
+                    packageRootCapture,
+                    unityMessageForwarding),
+                new HotReloadStatusExecutor(domain, patcher, unityMessageForwarding),
                 packageRootCapture,
                 editorStateSnapshotCapture,
-                new HotReloadChangeDetector());
+                new HotReloadChangeDetector(),
+                unityMessageForwarding);
         }
 
         /// <summary>

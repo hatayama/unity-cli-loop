@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IHotReloadPackageRootCapture _packageRootCapture;
         private readonly HotReloadDomain _domain;
         private readonly HotReloadPatcher _patcher;
+        private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
 
         internal HotReloadOrchestrator(
             HotReloadDomain domain,
@@ -30,7 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadInputFileResolver inputFileResolver,
             HotReloadDeferredInputClassifier deferredInputClassifier,
             HotReloadSiblingRebindReporter siblingRebindReporter,
-            IHotReloadPackageRootCapture packageRootCapture)
+            IHotReloadPackageRootCapture packageRootCapture,
+            HotReloadUnityMessageForwarding unityMessageForwarding)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
@@ -39,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(deferredInputClassifier != null, "deferredInputClassifier must not be null.");
             Debug.Assert(siblingRebindReporter != null, "siblingRebindReporter must not be null.");
             Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
+            Debug.Assert(
+                unityMessageForwarding != null, "unityMessageForwarding must not be null.");
             _domain = domain;
             _patcher = patcher;
             _groupProcessor = groupProcessor;
@@ -46,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _deferredInputClassifier = deferredInputClassifier;
             _siblingRebindReporter = siblingRebindReporter;
             _packageRootCapture = packageRootCapture;
+            _unityMessageForwarding = unityMessageForwarding;
         }
 
         /// <summary>
@@ -76,7 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
             // SessionState, which is a main-thread API.
             HotReloadRunAccumulator run =
-                new HotReloadRunAccumulator(_domain, _patcher, HotReloadAutoRefreshHold.IsHeld);
+                new HotReloadRunAccumulator(
+                    _domain,
+                    _patcher,
+                    _unityMessageForwarding,
+                    HotReloadAutoRefreshHold.IsHeld);
             HotReloadInputResolutionSlot[] slots = new HotReloadInputResolutionSlot[files.Count];
             for (int index = 0; index < slots.Length; index++)
             {

@@ -17,13 +17,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadUnityMessageProxyAttacherTests
     {
         private readonly List<GameObject> _created = new List<GameObject>();
-        private FakePlayModeQuery _playMode;
+        private HotReloadStubPlayModeQuery _playMode;
         private HotReloadUnityMessageProxyAttacher _attacher;
 
         [SetUp]
         public void SetUp()
         {
-            _playMode = new FakePlayModeQuery { IsPlaying = true };
+            _playMode = new HotReloadStubPlayModeQuery { IsPlaying = true };
             _attacher = new HotReloadUnityMessageProxyAttacher(
                 _playMode,
                 new HotReloadUnityMessageProxyTypeBuilder());
@@ -269,12 +269,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             GameObject created = new GameObject(name);
             _created.Add(created);
             return created;
-        }
-
-        /// <summary>Lets a test say whether the editor is in Play Mode.</summary>
-        private sealed class FakePlayModeQuery : IHotReloadPlayModeQuery
-        {
-            public bool IsPlaying { get; set; }
         }
     }
 }

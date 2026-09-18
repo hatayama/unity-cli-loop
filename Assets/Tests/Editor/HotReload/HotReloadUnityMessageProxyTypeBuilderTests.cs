@@ -187,6 +187,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(second.Name, Is.Not.EqualTo(first.Name));
         }
 
+        /// <summary>
+        /// What: a proxy built from a shim named the way the worker names it declares the message
+        /// under the member's own name, which is the only name Unity dispatches on.
+        /// </summary>
+        [Test]
+        public void Build_FromAShimNamedAsTheWorkerNamesIt_DeclaresTheMessageName()
+        {
+            HotReloadUnityMessageProxyFixture target = CreateFixture();
+            MethodInfo shim = typeof(HotReloadUnityMessageWorkerNamedFixtureShims).GetMethod(
+                "Update__shim0",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.That(shim, Is.Not.Null, "The fixture shim method must exist.");
+            Type proxyType = _builder.Build(
+                HotReloadUnityMessageForwarderFactory.CreateBinding(
+                    typeof(HotReloadUnityMessageProxyFixture),
+                    new List<MethodInfo> { shim }));
+            HotReloadUnityMessageProxy proxy = Attach(proxyType, target);
+
+            InvokeMessage(proxyType, proxy, "Update", null);
+
+            Assert.That(target.UpdateCount, Is.EqualTo(1));
+        }
+
         private Type BuildProxyType(params string[] messageNames)
         {
             List<MethodInfo> shims = new List<MethodInfo>();

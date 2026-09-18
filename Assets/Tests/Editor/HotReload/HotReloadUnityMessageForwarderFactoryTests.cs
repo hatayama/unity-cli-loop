@@ -142,6 +142,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(target.UpdateCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// What: the same message added to one target type twice is refused, because a proxy type
+        /// could declare it only once.
+        /// </summary>
+        [Test]
+        public void CreateBinding_WithTheSameMessageTwice_Refuses()
+        {
+            List<MethodInfo> shims = new List<MethodInfo>
+            {
+                ShimOf(typeof(HotReloadUnityMessageProxyFixtureShims), "Update"),
+                ShimOf(typeof(HotReloadUnityMessageDuplicateFixtureShims), "Update")
+            };
+
+            Assert.Throws<InvalidOperationException>(
+                () => HotReloadUnityMessageForwarderFactory.CreateBinding(
+                    typeof(HotReloadUnityMessageProxyFixture),
+                    shims));
+        }
+
         private HotReloadUnityMessageProxyFixture CreateFixture()
         {
             GameObject owner = CreateGameObject("ForwarderFactoryTests_Target");

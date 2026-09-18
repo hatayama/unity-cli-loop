@@ -47,14 +47,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compileResult.Assembly);
             CommitAddedFieldsForFile(file.ProjectRelativePath, file.AddedFieldNames);
             List<string> inlineRiskMethodLabels = new List<string>();
+            List<string> unforwardedUnityMessageLabels = new List<string>();
             int patchedCount = ApplyResolvedEntries(
                 resolution.ResolvedEntries,
                 fileEntries,
                 file,
                 context.AssemblyName,
-                inlineRiskMethodLabels);
+                inlineRiskMethodLabels,
+                unforwardedUnityMessageLabels);
 
-            return FinishFileResult(context, file, patchedCount, applied: true, inlineRiskMethodLabels);
+            return FinishFileResult(
+                context,
+                file,
+                patchedCount,
+                applied: true,
+                inlineRiskMethodLabels,
+                unforwardedUnityMessageLabels);
         }
 
         /// <summary>
@@ -164,7 +172,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFile file,
             int patchedCount,
             bool applied,
-            List<string> inlineRiskMethodLabels = null)
+            List<string> inlineRiskMethodLabels = null,
+            List<string> unforwardedUnityMessageLabels = null)
         {
             HotReloadFileSinks sinks = file.Sinks;
             // Why here as well as the empty-entries return: apply can drop a still-declared
@@ -183,6 +192,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchedCount: patchedCount,
                 suppressedPausePointIds: sinks.SuppressedPausePointIds,
                 inlineRiskMethodLabels: inlineRiskMethodLabels ?? new List<string>(),
+                unforwardedUnityMessageLabels:
+                    unforwardedUnityMessageLabels ?? new List<string>(),
                 unchangedMethodCount: file.UnchangedMethodCount,
                 retargetedPausePointIds: sinks.RetargetedPausePointIds,
                 addedFieldNames: applied ? file.AddedFieldNames : null,
@@ -198,7 +209,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerEntryDto[] entriesToPatch,
             HotReloadGroupFile file,
             string assemblyName,
-            List<string> inlineRiskMethodLabels)
+            List<string> inlineRiskMethodLabels,
+            List<string> unforwardedUnityMessageLabels)
         {
             HotReloadFileSinks sinks = file.Sinks;
             List<HotReloadMethodOutcome> outcomes = sinks.Outcomes;
@@ -211,6 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolvedEntries[index],
                     file.ProjectRelativePath,
                     inlineRiskMethodLabels,
+                    unforwardedUnityMessageLabels,
                     sinks.SuppressedPausePointIds,
                     sinks.RetargetedPausePointIds);
                 outcomes.Add(outcome);
@@ -288,6 +301,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadEntryResolution.ResolvedEntry resolved,
             string projectRelativePath,
             List<string> inlineRiskMethodLabels,
+            List<string> unforwardedUnityMessageLabels,
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds)
         {
@@ -303,7 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadMethodOutcome.Added(
                     resolved.MethodLabel,
                     resolved.FilePath,
-                    resolved.Entry.lifecycleNote);
+                    ResolveAddedLifecycleNote(resolved, unforwardedUnityMessageLabels));
             }
 
             // Why before Apply: Apply notifies OnHotReloadPatchStateChanged(true) after the
@@ -345,6 +359,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolved.MethodLabel,
                 resolved.FilePath,
                 resolved.Entry.lifecycleNote);
+        }
+
+        // The note an added method's row carries. A Unity message needs its own answer because the
+        // worker cannot give one: whether the engine reaches the method is decided here, from the
+        // shim's receiver type and its signature.
+        private static string ResolveAddedLifecycleNote(
+            HotReloadEntryResolution.ResolvedEntry resolved,
+            List<string> unforwardedUnityMessageLabels)
+        {
+            HotReloadUnityMessageDetector.Classification classification =
+                HotReloadUnityMessageDetector.Classify(resolved.ShimMethod, out Type _);
+            if (classification == HotReloadUnityMessageDetector.Classification.Forwarded)
+            {
+                return HotReloadUnityMessageNotes.Forwarded;
+            }
+
+            if (classification == HotReloadUnityMessageDetector.Classification.NotForwarded)
+            {
+                unforwardedUnityMessageLabels.Add(resolved.MethodLabel);
+                return HotReloadUnityMessageNotes.NotForwarded;
+            }
+
+            return resolved.Entry.lifecycleNote;
         }
 
         // What: after Apply (+ retarget handler), splits armed markers into retargeted vs suppressed.
