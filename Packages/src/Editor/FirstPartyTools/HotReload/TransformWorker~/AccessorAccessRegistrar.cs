@@ -357,9 +357,12 @@ internal static class AccessorAccessRegistrar
 
         // The added-method rewrite calls the shim with the argument list as written, so ref/out
         // arguments reach it; only a compiled method has to go through a delegate without them.
+        // Why not when an event is passed by ref: its read becomes an accessor call, which
+        // cannot be passed by ref, so the shim would fail to compile instead of skipping.
         if (HasByRefParameter(methodSymbol)
             && addedMemberAccess != null
-            && addedMemberAccess.IsAddedMethod(methodSymbol))
+            && addedMemberAccess.IsAddedMethod(methodSymbol)
+            && !PassesEventByRef(semanticModel, invocation))
         {
             return false;
         }
@@ -413,6 +416,24 @@ internal static class AccessorAccessRegistrar
         }
 
         return null;
+    }
+
+    private static bool PassesEventByRef(SemanticModel semanticModel, InvocationExpressionSyntax invocation)
+    {
+        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        {
+            if (argument.RefKindKeyword.IsKind(SyntaxKind.None))
+            {
+                continue;
+            }
+
+            if (semanticModel.GetSymbolInfo(argument.Expression).Symbol is IEventSymbol)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool HasByRefParameter(IMethodSymbol methodSymbol)

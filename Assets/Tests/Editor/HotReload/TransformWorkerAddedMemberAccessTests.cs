@@ -101,6 +101,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: passing a compiled private field-like event by ref to an added private method is
+        /// still skipped, because the event read is rewritten to an accessor call that cannot be
+        /// passed by ref.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_PassingACompiledPrivateEventByRefToAnAddedMethod_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedClearsEvent()\n        {\n            AddedClear(ref PrivateChanged);\n        }\n\n"
+                + "        private void AddedClear(ref Action value)\n        {\n            value = null;\n        }");
+
+            AssertHasSkip(result, "AddedClearsEvent", RefOutInNotRewritten);
+        }
+
+        /// <summary>
+        /// What: passing a compiled private field by ref to an added private method is added, and
+        /// the shim keeps the argument by ref.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_PassingACompiledPrivateFieldByRefToAnAddedMethod_IsAddedWithTheRefKept()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedBumpsSeed()\n        {\n            AddedBumpSeed(ref _privateSeed);\n            return _privateSeed;\n        }\n\n"
+                + "        private void AddedBumpSeed(ref int value)\n        {\n            value += 3;\n        }");
+
+            AssertAddedAndNotSkipped(result, "AddedBumpsSeed");
+            Assert.That(result.Output.shimSource, Does.Contain("(__uloopInstance, ref __F__privateSeed(__uloopInstance))"), result.Output.shimSource);
+        }
+
+        /// <summary>
         /// What: an added private method that calls itself with an out argument is added.
         /// </summary>
         [Test]

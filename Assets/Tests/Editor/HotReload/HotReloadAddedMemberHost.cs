@@ -29,6 +29,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private int _privateSeed = 7;
 
+        private event Action PrivateChanged;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public bool HasPrivateChangedListeners()
+        {
+            return PrivateChanged != null;
+        }
+
         private const int PrivateConstThree = 3;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
