@@ -291,9 +291,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPausePointCoordination.HotReloadSide?.FindAddedMethodContainingLine(
                     normalizedFile,
                     parameters.Line);
+            SourcePausePointCompiledMethodSpan addedLineCompiledSpan = null;
             if (addedMethodName != null)
             {
-                return PausePointResolveFailureResponse.CreateAddedMethodRefusal(parameters, addedMethodName);
+                // Why a compiled span and not just --method: the filter matches short names across
+                // types and rounds forward, so only a span holding the line proves the caller
+                // passed a last-compiled-source line of that compiled method.
+                addedLineCompiledSpan = PausePointAddedMethodScope.FindSpanContainingLineOrNull(
+                    SourcePausePointResolver.FindCompiledMethodSpans(parameters.File, parameters.Method),
+                    parameters.Line);
+                if (addedLineCompiledSpan == null)
+                {
+                    return PausePointResolveFailureResponse.CreateAddedMethodRefusal(parameters, addedMethodName);
+                }
             }
 
             (SourcePausePointResolveResult resolveResult, string editedLineRemapWarning) =
@@ -307,6 +317,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     hasActiveHotReloadPatches: shimLookup != null,
                     resolveResult,
                     patchedMethodPdbUnavailableWarning);
+            }
+
+            // Why after resolving: rounding forward past the span end reaches another method of
+            // the same name, which is the wrong code the refusal above exists to avoid.
+            if (addedLineCompiledSpan != null
+                && !PausePointAddedMethodScope.IsLineInsideSpan(
+                    addedLineCompiledSpan,
+                    resolveResult.Resolution.ResolvedLine))
+            {
+                return PausePointResolveFailureResponse.CreateAddedMethodRefusal(parameters, addedMethodName);
             }
 
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(
