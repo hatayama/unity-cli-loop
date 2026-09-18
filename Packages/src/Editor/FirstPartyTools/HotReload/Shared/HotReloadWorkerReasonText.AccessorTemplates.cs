@@ -148,10 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Plain("receiver with possible side effects would be evaluated twice.", 0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape,
-                Plain(
-                    "inaccessible static property access has no accessor rewrite shape; make the property, its "
-                    + "accessors, and its containing types public to keep hot reloading.",
-                    0));
+                Plain("inaccessible static property access has no accessor rewrite shape.", 0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape,
                 Plain("inaccessible ref-returning properties have no accessor rewrite shape.", 0));

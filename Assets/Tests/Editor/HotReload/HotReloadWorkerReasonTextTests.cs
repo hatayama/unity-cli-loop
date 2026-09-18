@@ -565,8 +565,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape,
                 NoArgs,
-                "inaccessible static property access has no accessor rewrite shape; make the property, its "
-                + "accessors, and its containing types public to keep hot reloading.");
+                "inaccessible static property access has no accessor rewrite shape.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape,
                 NoArgs,
