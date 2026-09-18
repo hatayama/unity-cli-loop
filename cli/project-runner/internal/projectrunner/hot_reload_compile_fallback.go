@@ -154,10 +154,16 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 
 // A Message that is missing or not a string is left alone: only an older or unexpected package
 // sends one, and inventing a Message would claim a reload summary the Editor never wrote.
+// Why the first byte is checked: decoding JSON null into a string succeeds and leaves it empty,
+// so the decode alone would turn a null Message into one that holds only the suffix.
 func appendHotReloadCompileSucceededMessage(fields map[string]json.RawMessage) error {
-	message := ""
-	if err := json.Unmarshal(fields[hotReloadMessageField], &message); err != nil {
+	raw := fields[hotReloadMessageField]
+	if len(raw) == 0 || raw[0] != '"' {
 		return nil
+	}
+	message := ""
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return err
 	}
 	appended, err := json.Marshal(message + hotReloadCompileFallbackSucceededMessageSuffix)
 	if err != nil {

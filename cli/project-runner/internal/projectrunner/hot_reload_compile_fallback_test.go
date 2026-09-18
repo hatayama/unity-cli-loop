@@ -53,6 +53,21 @@ func TestRunHotReloadRunsFallbackCompileAndAdoptsItsSuccess(t *testing.T) {
 	}
 }
 
+// Verifies a hot-reload response whose Message is JSON null keeps it null when the fallback compile
+// succeeds, instead of becoming a Message that holds only the compile sentence.
+func TestInjectHotReloadCompileFallbackLeavesANullMessageNull(t *testing.T) {
+	merged, err := injectHotReloadCompileFallback(
+		json.RawMessage(`{"Success":false,"CompileFallback":"Requested","Message":null}`),
+		json.RawMessage(`{"Success":true}`))
+	if err != nil {
+		t.Fatalf("inject failed: %v", err)
+	}
+	fields := decodeSingleJSONObject(t, string(merged))
+	if string(fields["Message"]) != "null" {
+		t.Fatalf("a null Message must stay null: %s", merged)
+	}
+}
+
 // Verifies a hot-reload response without a Message gets none invented when the fallback compile
 // succeeds.
 func TestInjectHotReloadCompileFallbackLeavesAMissingMessageMissing(t *testing.T) {
