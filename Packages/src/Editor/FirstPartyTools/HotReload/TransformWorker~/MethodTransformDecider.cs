@@ -241,6 +241,17 @@ internal static class MethodTransformDecider
         SemanticModel semanticModel,
         MethodTransformDecision current)
     {
+        // Checked before the delegation path: a closure that binds one private access still takes
+        // that path, and an unbound call beside it would reach the shim unrewritten.
+        Diagnostic bindingError = AddedMemberBindingGuard.FindFirstBindingError(semanticModel, methodBodyNode);
+        if (bindingError != null)
+        {
+            return MethodTransformDecision.Skip(
+                WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
+                    bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture)));
+        }
+
         if (current.UsesDelegation)
         {
             return MethodTransformDecision.AddedMethod(true);
