@@ -27,7 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 toProjectRelativeScriptPath != null,
                 "toProjectRelativeScriptPath must not be null.");
 
-            HashSet<string> siblingKeys = BuildSiblingKeys(reappliedSiblingPaths, toProjectRelativeScriptPath);
+            HotReloadReappliedSiblingFiles siblingFiles =
+                new HotReloadReappliedSiblingFiles(reappliedSiblingPaths, toProjectRelativeScriptPath);
             int requestedCount = 0;
             for (int index = 0; index < methods.Count; index++)
             {
@@ -37,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (siblingKeys.Contains(toProjectRelativeScriptPath(outcome.FilePath)))
+                if (siblingFiles.Contains(outcome.FilePath))
                 {
                     continue;
                 }
@@ -69,7 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 toProjectRelativeScriptPath != null,
                 "toProjectRelativeScriptPath must not be null.");
 
-            HashSet<string> siblingKeys = BuildSiblingKeys(reappliedSiblingPaths, toProjectRelativeScriptPath);
+            HotReloadReappliedSiblingFiles siblingFiles =
+                new HotReloadReappliedSiblingFiles(reappliedSiblingPaths, toProjectRelativeScriptPath);
             int count = 0;
             for (int index = 0; index < methods.Count; index++)
             {
@@ -80,37 +82,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (!string.IsNullOrEmpty(outcome.FilePath)
-                    && siblingKeys.Contains(toProjectRelativeScriptPath(outcome.FilePath)))
+                if (siblingFiles.Contains(outcome.FilePath))
                 {
                     count++;
                 }
             }
 
             return count;
-        }
-
-        // Why the path is normalized and compared per platform: an outcome's FilePath can be
-        // absolute while the sibling paths are project-relative, and Windows paths ignore case.
-        private static HashSet<string> BuildSiblingKeys(
-            IReadOnlyCollection<string> reappliedSiblingPaths,
-            Func<string, string> toProjectRelativeScriptPath)
-        {
-            StringComparer fileComparer = Application.platform == RuntimePlatform.WindowsEditor
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
-            HashSet<string> keys = new HashSet<string>(fileComparer);
-            foreach (string path in reappliedSiblingPaths)
-            {
-                if (string.IsNullOrEmpty(path))
-                {
-                    continue;
-                }
-
-                keys.Add(toProjectRelativeScriptPath(path));
-            }
-
-            return keys;
         }
     }
 }

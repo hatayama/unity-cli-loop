@@ -21,6 +21,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
 
+            Func<string, string> toProjectRelativeScriptPath =
+                path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                    services.PackageRootCapture,
+                    path);
+            HotReloadReappliedSiblingFiles reappliedSiblingFiles =
+                new HotReloadReappliedSiblingFiles(result.ReappliedSiblingPaths, toProjectRelativeScriptPath);
             List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(result.Methods.Count);
             bool hasFailure = false;
             for (int index = 0; index < result.Methods.Count; index++)
@@ -44,7 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         InvocationCount = ReadsInvocationCountFromLedger(outcome.Kind)
                             ? HotReloadInvocationRegistry.GetCount(outcome.Method)
                             : 0L,
-                        LifecycleNote = outcome.LifecycleNote ?? string.Empty
+                        LifecycleNote = outcome.LifecycleNote ?? string.Empty,
+                        ReappliedFromSibling = reappliedSiblingFiles.Contains(outcome.FilePath)
                     });
             }
 
@@ -64,10 +71,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why before the pause-point extras: this warning is cleared by compile, so it must
             // count toward the single-compile resolution suffix instead of suppressing it.
-            Func<string, string> toProjectRelativeScriptPath =
-                path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
-                    services.PackageRootCapture,
-                    path);
             HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
                 warnings,
                 result.Methods,

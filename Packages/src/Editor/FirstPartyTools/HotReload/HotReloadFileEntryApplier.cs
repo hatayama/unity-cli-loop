@@ -113,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.Sinks.Warnings,
                 file.SnapshotLabels,
                 file.SnapshotAddedLabels,
+                file.SnapshotForwardedUnityMessageLabels,
                 file.ProjectRelativePath,
                 context.WorkerOutput,
                 file.Sinks.Outcomes);
@@ -183,6 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sinks.Warnings,
                 file.SnapshotLabels,
                 file.SnapshotAddedLabels,
+                file.SnapshotForwardedUnityMessageLabels,
                 file.ProjectRelativePath,
                 context.WorkerOutput,
                 sinks.Outcomes);

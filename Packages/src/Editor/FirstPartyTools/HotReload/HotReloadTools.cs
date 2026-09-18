@@ -81,6 +81,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// method. Empty when not applicable; does not change Kind.
         /// </summary>
         public string LifecycleNote { get; set; } = string.Empty;
+
+        /// <summary>
+        /// True when the row belongs to a sibling file the run pulled in to re-apply changes from
+        /// earlier reloads, not to a file this run was asked about. Set whatever the Kind.
+        /// </summary>
+        public bool ReappliedFromSibling { get; set; }
     }
 
     /// <summary>

@@ -48,7 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         filesToInclude[index].ProjectRelativePath,
                         filesToInclude[index].WorkerSourcePath,
                         new HotReloadFileSinks(run.SiblingDerivedWarnings, run.OneShotCallerNoteCandidates),
-                        filesToInclude[index].Evidence));
+                        filesToInclude[index].Evidence,
+                        run.SiblingBaselineNotices));
             }
 
             AddChangedSinceApplyWarnings(firstFile, rebind);

@@ -358,6 +358,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return patches;
         }
 
+        /// <summary>Active added members of one file, in no particular order.</summary>
+        internal IReadOnlyList<HotReloadAddedMemberInfo> DescribeAddedMembersOfFile(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            List<HotReloadAddedMemberInfo> members = new List<HotReloadAddedMemberInfo>();
+            FindGeneration(projectRelativePath)?.DescribeAddedMembers(members);
+            return members;
+        }
+
         /// <summary>Active added members across every file, sorted by method key.</summary>
         internal IReadOnlyList<HotReloadAddedMemberInfo> DescribeAddedMembers()
         {

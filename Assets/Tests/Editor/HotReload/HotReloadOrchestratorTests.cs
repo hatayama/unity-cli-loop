@@ -3222,6 +3222,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FileOutput = workerOutput.files[0],
                 SnapshotLabels = new HashSet<string>(),
                 SnapshotAddedLabels = new HashSet<string>(),
+                SnapshotForwardedUnityMessageLabels = new HashSet<string>(),
                 AddedFieldNames = addedFieldNames,
                 AddedConstNames = Array.Empty<string>()
             };

@@ -105,7 +105,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 transformWorkerClient,
                 packageRootCapture,
                 editorStateSnapshotCapture,
-                new HotReloadGroupCommitPolicy(domain, fileEntryApplier));
+                new HotReloadGroupCommitPolicy(domain, fileEntryApplier),
+                playMode);
             // A factory, not a built value: the stages are bound to the collaborators built here,
             // and a caller that built them from the installed services would bind a replacement's
             // group run back to the domain that was installed when it called.

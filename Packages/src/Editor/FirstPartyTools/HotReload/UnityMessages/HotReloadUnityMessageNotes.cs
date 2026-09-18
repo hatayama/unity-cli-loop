@@ -28,6 +28,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "reload.";
 
         /// <summary>
+        /// The sentence the deactivated-added-members warning appends in Play Mode when it names a
+        /// message a proxy was forwarding. The proxy is rebuilt because the set of messages it
+        /// carries changed, which is the only time an added Start runs again.
+        /// </summary>
+        internal const string DeactivatedForwardedFormat =
+            "Unity no longer invokes the deactivated Unity message(s) {0} on live instances; if the "
+            + "type still adds other forwarded messages, its "
+            + "proxy is rebuilt, so an added Start that remains runs again on each instance.";
+
+        /// <summary>
         /// The note for a message the engine dispatches but this feature leaves to the compiler.
         /// </summary>
         internal const string NotForwarded =

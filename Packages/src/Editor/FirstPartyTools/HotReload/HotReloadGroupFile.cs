@@ -57,10 +57,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             string workerSourcePath,
             HotReloadFileSinks sinks,
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence,
+            HotReloadSiblingBaselineNotices siblingBaselineNotices)
         {
             Debug.Assert(template != null, "template must not be null.");
-            return new HotReloadGroupFile(
+            Debug.Assert(siblingBaselineNotices != null, "siblingBaselineNotices must not be null.");
+            HotReloadGroupFile sibling = new HotReloadGroupFile(
                 projectRelativePath,
                 workerSourcePath,
                 projectRelativePath,
@@ -70,7 +72,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 template.ProjectRoot,
                 sinks,
                 newSourceMembershipEvidence);
+            sibling.SiblingBaselineNotices = siblingBaselineNotices;
+            return sibling;
         }
+
+        // Where a re-applied sibling's missing-baseline notice goes instead of its own warnings;
+        // null for a file the caller passed, which keeps one warning per file.
+        internal HotReloadSiblingBaselineNotices SiblingBaselineNotices { get; private set; }
 
         // The path the caller asked to reload, used as the outcome file path.
         internal string AssemblyResolvePath { get; }
@@ -114,6 +122,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HashSet<string> SnapshotLabels { get; set; }
 
         internal HashSet<string> SnapshotAddedLabels { get; set; }
+
+        // The snapshotted added labels a proxy was forwarding as Unity messages. Empty outside
+        // Play Mode, where no proxy is attached and deactivating a message changes nothing live.
+        internal HashSet<string> SnapshotForwardedUnityMessageLabels { get; set; }
 
         // Set when a group-level stage already failed this file, so the apply loop must leave
         // its generations alone and keep the patches of the previous run in place.

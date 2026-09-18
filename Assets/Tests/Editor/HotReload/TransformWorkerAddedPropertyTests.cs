@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "        public int ExistingCaller(int value)\n        {\n            return value;\n        }";
 
         private const string VirtualOrAbstractReason =
-            "Added virtual, override, abstract, or interface properties are skipped; the compiled type has no vtable slot. "
+            "Added virtual, override, abstract, or interface properties are skipped; the loaded type has no vtable slot. "
             + "Run 'uloop compile' to add them.";
 
         private const string InitAccessorReason =

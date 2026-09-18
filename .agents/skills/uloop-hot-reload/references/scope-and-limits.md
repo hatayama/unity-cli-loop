@@ -208,7 +208,9 @@ so `Start` does not run again; it does when the reload changes which messages th
 their signatures, because the proxy is rebuilt. The response marks these with `LifecycleNote` (see Output) — both direct one-shot
 lifecycle messages and methods whose every compiled caller is a one-shot lifecycle message on a
 `MonoBehaviour`. The caller check is conservative: when the scan cannot prove exclusivity (a
-missing assembly, reflection, or event-driven calls), the note is omitted. To see an
+missing assembly, reflection, or event-driven calls), the note is omitted. Only compiled callers
+are counted: a method hot reload added or patched that calls the method already runs the patched
+body, which the note does not see. To see an
 initialization change take effect, run `uloop compile` and restart
 Play Mode — with Domain Reload enabled (the default), a fresh Play entry reloads the
 domain and drops the patch, so the patched body alone cannot carry the change into the
@@ -249,7 +251,9 @@ the baseline again is unpatched on that run — the compiled IL comes back,
 Without a baseline — for example before
 the first compile after installing or updating the package — every editable method in
 the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
-to establish the baseline.
+to establish the baseline. Files the reload only re-applied as siblings share one
+such line per reason, `N re-applied sibling file(s) ...: <files>`, instead of one
+line each.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor

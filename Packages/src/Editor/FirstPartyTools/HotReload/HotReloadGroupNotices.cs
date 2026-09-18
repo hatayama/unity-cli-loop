@@ -112,7 +112,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     file.AssemblyName,
                     file.AssemblyResolvePath,
                     file.Sinks.Outcomes,
-                    file.Sinks.Warnings);
+                    file.Sinks.Warnings,
+                    file.SiblingBaselineNotices);
             }
         }
     }

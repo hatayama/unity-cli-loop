@@ -24,7 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName,
             string assemblyResolvePath,
             List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings)
+            List<string> warnings,
+            HotReloadSiblingBaselineNotices siblingBaselineNotices)
         {
             Debug.Assert(fileOutput != null, "fileOutput must not be null.");
             Debug.Assert(fileSkipped != null, "fileSkipped must not be null.");
@@ -39,7 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 declaresIntroducedType,
                 projectRelativePath,
                 assemblyName,
-                warnings);
+                warnings,
+                siblingBaselineNotices);
             // Why a Failed outcome and not a warning: a parse error is the file failing, not a
             // remark about it. Under the all-or-nothing contract the Failed row is what leaves the
             // file unapplied and makes the response's Success false.
@@ -78,16 +80,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool declaresIntroducedType,
             string projectRelativePath,
             string assemblyName,
-            List<string> warnings)
+            List<string> warnings,
+            HotReloadSiblingBaselineNotices siblingBaselineNotices)
         {
             if (snapshotMissReason != HotReloadSnapshotMissReason.None && patchCandidateRowCountForFile >= 1)
             {
-                warnings.Add(
-                    ChooseMissingBaselineWarning(
-                        snapshotMissReason,
-                        declaresIntroducedType,
-                        projectRelativePath,
-                        assemblyName));
+                HotReloadMissingBaselineKind kind =
+                    ChooseMissingBaselineKind(snapshotMissReason, declaresIntroducedType);
+                if (siblingBaselineNotices != null)
+                {
+                    siblingBaselineNotices.Add(kind, projectRelativePath);
+                }
+                else
+                {
+                    warnings.Add(
+                        string.Format(
+                            ChooseMissingBaselineWarningFormat(kind),
+                            Path.GetFileName(projectRelativePath),
+                            assemblyName));
+                }
             }
 
             if (fileOutput.baselineDisabledByDuplicateKeys)
@@ -101,33 +112,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// The sentence that explains why this file has no verified snapshot. A file declaring a
-        /// type hot reload introduced gets its own: for it a missing baseline is the normal state
-        /// rather than something a compile has yet to establish. So does a file with no compiled
-        /// method body, which the PDB never lists and so no compile can give a baseline.
+        /// Why this file has no verified snapshot. A file declaring a type hot reload introduced
+        /// gets its own kind: for it a missing baseline is the normal state rather than something
+        /// a compile has yet to establish. So does a file with no compiled method body, which the
+        /// PDB never lists and so no compile can give a baseline.
         /// </summary>
-        private static string ChooseMissingBaselineWarning(
-            HotReloadSnapshotMissReason snapshotMissReason,
-            bool declaresIntroducedType,
-            string projectRelativePath,
-            string assemblyName)
-        {
-            return string.Format(
-                ChooseMissingBaselineWarningFormat(snapshotMissReason, declaresIntroducedType),
-                Path.GetFileName(projectRelativePath),
-                assemblyName);
-        }
-
-        private static string ChooseMissingBaselineWarningFormat(
+        private static HotReloadMissingBaselineKind ChooseMissingBaselineKind(
             HotReloadSnapshotMissReason snapshotMissReason,
             bool declaresIntroducedType)
         {
             if (declaresIntroducedType)
             {
-                return HotReloadConstants.IntroducedTypeSourceNoBaselineWarningFormat;
+                return HotReloadMissingBaselineKind.IntroducedType;
             }
 
             return snapshotMissReason == HotReloadSnapshotMissReason.NoDocumentInPdb
+                ? HotReloadMissingBaselineKind.NoCompiledMethodBody
+                : HotReloadMissingBaselineKind.NoVerifiedSourceSnapshot;
+        }
+
+        private static string ChooseMissingBaselineWarningFormat(HotReloadMissingBaselineKind kind)
+        {
+            if (kind == HotReloadMissingBaselineKind.IntroducedType)
+            {
+                return HotReloadConstants.IntroducedTypeSourceNoBaselineWarningFormat;
+            }
+
+            return kind == HotReloadMissingBaselineKind.NoCompiledMethodBody
                 ? HotReloadConstants.NoCompiledMethodBodyBaselineWarningFormat
                 : HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat;
         }

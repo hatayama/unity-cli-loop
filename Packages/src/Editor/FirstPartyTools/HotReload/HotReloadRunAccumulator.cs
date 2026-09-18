@@ -24,6 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<string> _addedConsts = new List<string>();
         private readonly List<string> _siblingDerivedWarnings = new List<string>();
         private readonly List<string> _reappliedSiblingPaths = new List<string>();
+        private readonly HotReloadSiblingBaselineNotices _siblingBaselineNotices =
+            new HotReloadSiblingBaselineNotices();
         // Why appended without deduplication: one row per declaration is what the report means,
         // and two files declaring the same type is a mistake the run has to report against both.
         private readonly List<HotReloadIntroducedTypeOutcome> _introducedTypes =
@@ -70,6 +72,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>Warning sink shared with the per-file stage for sibling-derived notices.</summary>
         public List<string> SiblingDerivedWarnings => _siblingDerivedWarnings;
+
+        /// <summary>Where re-applied siblings report a missing baseline, summarized once per run.</summary>
+        public HotReloadSiblingBaselineNotices SiblingBaselineNotices => _siblingBaselineNotices;
 
         /// <summary>Candidate sink shared with the per-file stage for one-shot lifecycle notes.</summary>
         public List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates =>
@@ -155,6 +160,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public HotReloadOrchestratorResult BuildResult(string correlationId)
         {
+            // Why first: the per-file warnings of the re-applied files were merged last, so the
+            // summary of their missing baselines lands right after them.
+            _siblingBaselineNotices.AppendTo(_warnings);
             AppendInlineRiskWarning();
             AppendAddedFieldsLifetimeWarning();
             AppendUnforwardedUnityMessageWarning();
