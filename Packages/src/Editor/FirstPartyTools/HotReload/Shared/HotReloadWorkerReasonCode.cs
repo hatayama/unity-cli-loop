@@ -72,6 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         EventAddedInThisEdit,
         EventNameof,
         EventConditionalReceiver,
+        EventPassedByRef,
         EventAccessorRewriteUnavailable,
         AccessorContainingTypeNotVisible,
         AccessorSignatureTypeNotVisible,

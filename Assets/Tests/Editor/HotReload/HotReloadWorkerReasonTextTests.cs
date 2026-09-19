@@ -475,6 +475,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Methods that raise or read a field-like event through a conditional receiver "
                 + "('a?.E') are skipped; the shim cannot name the conditional receiver as the accessor "
                 + "call's argument. Use uloop compile.");
+            yield return Case(
+                HotReloadWorkerReasonCode.EventPassedByRef,
+                NoArgs,
+                "Methods that pass a field-like event by ref/out/in are skipped; the shim reads the "
+                + "event through an accessor call, which cannot be passed by reference. Use uloop compile.");
             yield return DetailCase(
                 HotReloadWorkerReasonCode.EventAccessorRewriteUnavailable,
                 NoArgs,

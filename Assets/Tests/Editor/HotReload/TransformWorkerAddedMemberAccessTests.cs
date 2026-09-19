@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string StaticPropertyNoShape = "inaccessible static property access has no accessor rewrite shape";
         private const string RefOutInNotRewritten = "inaccessible method calls with ref/out/in parameters are not rewritten";
+        private const string EventPassedByRef = "pass a field-like event by ref/out/in";
 
         /// <summary>
         /// What: an added method that reads an added private static property is added, not
@@ -102,8 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: passing a compiled private field-like event by ref to an added private method is
-        /// still skipped, because the event read is rewritten to an accessor call that cannot be
-        /// passed by ref.
+        /// still skipped for passing the event by ref, because the event read is rewritten to an
+        /// accessor call that cannot be passed by ref.
         /// </summary>
         [Test]
         public async Task AddedMethod_PassingACompiledPrivateEventByRefToAnAddedMethod_StaysSkipped()
@@ -112,7 +113,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public void AddedClearsEvent()\n        {\n            AddedClear(ref PrivateChanged);\n        }\n\n"
                 + "        private void AddedClear(ref Action value)\n        {\n            value = null;\n        }");
 
-            AssertHasSkip(result, "AddedClearsEvent", RefOutInNotRewritten);
+            AssertHasSkip(result, "AddedClearsEvent", EventPassedByRef);
+        }
+
+        /// <summary>
+        /// What: an added method that passes a compiled private field-like event by ref to an
+        /// accessible method is skipped, because the event read is rewritten to an accessor call
+        /// that cannot be passed by ref.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_PassingACompiledPrivateEventByRefToAnAccessibleMethod_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedSwapsEvent()\n        {\n"
+                + "            System.Threading.Interlocked.Exchange(ref PrivateChanged, null);\n        }");
+
+            AssertHasSkip(result, "AddedSwapsEvent", EventPassedByRef);
+        }
+
+        /// <summary>
+        /// What: an added property whose getter passes a compiled private field-like event by ref
+        /// to an accessible method is skipped for the same reason as a method body.
+        /// </summary>
+        [Test]
+        public async Task AddedPropertyGetter_PassingACompiledPrivateEventByRefToAnAccessibleMethod_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public bool AddedSwapsEventOnRead\n        {\n            get\n            {\n"
+                + "                return System.Threading.Interlocked.Exchange(ref PrivateChanged, null) != null;\n"
+                + "            }\n        }");
+
+            AssertHasSkip(result, "get_AddedSwapsEventOnRead", EventPassedByRef);
+        }
+
+        /// <summary>
+        /// What: a patched method that passes a compiled private field-like event by ref to an
+        /// accessible method is skipped rather than producing a shim that does not compile.
+        /// </summary>
+        [Test]
+        public async Task PatchedMethod_PassingACompiledPrivateEventByRefToAnAccessibleMethod_IsSkipped()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string compiledBody = "            return PrivateChanged != null;\n";
+            Assert.That(onDisk, Does.Contain(compiledBody));
+            string edited = onDisk.Replace(
+                compiledBody,
+                "            return System.Threading.Interlocked.Exchange(ref PrivateChanged, null) != null;\n",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostPassingEventByRef.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+
+            AssertHasSkip(result, "HasPrivateChangedListeners", EventPassedByRef);
         }
 
         /// <summary>

@@ -50,6 +50,13 @@ internal static class EventAccessorRules
                 return WorkerReason.Of(HotReloadWorkerReasonCode.EventConditionalReceiver);
             }
 
+            // The rewrite turns the event read into a cast of an accessor call, and C# cannot
+            // pass that by reference, so the shim would fail to compile instead of skipping.
+            if (IsPassedByRef(use.Node))
+            {
+                return WorkerReason.Of(HotReloadWorkerReasonCode.EventPassedByRef);
+            }
+
             WorkerReason reason = EvaluateEventSkipReason(use.EventSymbol, compiledType);
             if (reason != null)
             {
@@ -91,6 +98,13 @@ internal static class EventAccessorRules
     {
         return assignment.IsKind(SyntaxKind.AddAssignmentExpression)
             || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
+    }
+
+    private static bool IsPassedByRef(SyntaxNode eventUseNode)
+    {
+        return eventUseNode.Parent is ArgumentSyntax argument
+            && argument.Expression == eventUseNode
+            && !argument.RefKindKeyword.IsKind(SyntaxKind.None);
     }
 
     private static WorkerReason EvaluateEventSkipReason(IEventSymbol eventSymbol, INamedTypeSymbol compiledType)
