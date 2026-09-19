@@ -243,6 +243,48 @@ func TestPosixInstallScriptWritesZshPathBlock(t *testing.T) {
 	}
 }
 
+func TestPosixInstallScriptWritesBashrcOnLinux(t *testing.T) {
+	// Verifies Linux bash setup writes ~/.bashrc, because Linux terminals start non-login shells that skip ~/.bash_profile.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "bin")
+	if err := os.WriteFile(filepath.Join(home, ".bash_profile"), []byte("existing\n"), 0o600); err != nil {
+		t.Fatalf("failed to write bash profile: %v", err)
+	}
+	fakeBinDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBinDir, "uname"), []byte("#!/bin/sh\necho Linux\n"), 0o755); err != nil {
+		t.Fatalf("failed to write fake uname: %v", err)
+	}
+	command, err := CommandForOS("linux", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"SHELL=/bin/bash",
+		"PATH=" + fakeBinDir + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+	}
+
+	bashrcContent, err := os.ReadFile(filepath.Join(home, ".bashrc"))
+	if err != nil {
+		t.Fatalf("failed to read bashrc: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(bashrcContent), "export PATH="+shellProfileQuoteForTest(installDir)+":$PATH") {
+		t.Fatalf("bashrc missing uloop PATH block:\n%s", bashrcContent)
+	}
+}
+
 func TestPosixInstallScriptCreatesNestedFishProfile(t *testing.T) {
 	// Verifies macOS shell setup creates nested shell profile directories when needed.
 	if runtime.GOOS == "windows" {

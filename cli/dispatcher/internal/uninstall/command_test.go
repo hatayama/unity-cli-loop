@@ -116,7 +116,7 @@ func TestPosixUninstallScriptReplacesTemplateValues(t *testing.T) {
 }
 
 func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
-	// Verifies macOS uninstall removes only the shell PATH blocks owned by the installer.
+	// Verifies POSIX uninstall removes only the shell PATH blocks owned by the installer, including the Linux ~/.bashrc block.
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX uninstall script is not available on Windows")
 	}
@@ -146,6 +146,7 @@ func writePosixUninstallPathBlockProfiles(t *testing.T, home string, installDir 
 	t.Helper()
 	profilePaths := []string{
 		filepath.Join(home, ".bash_profile"),
+		filepath.Join(home, ".bashrc"),
 		filepath.Join(home, ".zshrc"),
 		filepath.Join(home, ".config", "fish", "config.fish"),
 	}
