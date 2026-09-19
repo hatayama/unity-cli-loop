@@ -1,5 +1,35 @@
 # Changelog
 
+## [3.7.0](https://github.com/hatayama/unity-cli-loop/compare/v3.6.3...v3.7.0) (2026-09-19)
+
+
+### Features
+
+* a Unity message added by hot reload now runs during Play Mode ([#2822](https://github.com/hatayama/unity-cli-loop/issues/2822)) ([035a6f0](https://github.com/hatayama/unity-cli-loop/commit/035a6f0606019ade7df386249b2f6bd4033d4f65))
+* Hot reload applies methods, fields, and properties added to an introduced type without a compile ([#2802](https://github.com/hatayama/unity-cli-loop/issues/2802)) ([462f1d0](https://github.com/hatayama/unity-cli-loop/commit/462f1d0542670741a71fd139c5e58ba80e3e603d))
+* Hot reload lets added methods use private static properties of compiled types ([#2847](https://github.com/hatayama/unity-cli-loop/issues/2847)) ([a398c4c](https://github.com/hatayama/unity-cli-loop/commit/a398c4ccd1af652c37983e7e54e9874de168496a))
+* Hot reload patches body-only edits of an introduced type without a compile ([#2796](https://github.com/hatayama/unity-cli-loop/issues/2796)) ([094f90b](https://github.com/hatayama/unity-cli-loop/commit/094f90b58f0104c42fed690ae1a4d936ab54da45))
+* Hot reload warns when an applied method reads an added field that only skipped methods assign ([#2848](https://github.com/hatayama/unity-cli-loop/issues/2848)) ([79d932b](https://github.com/hatayama/unity-cli-loop/commit/79d932bb1b991de62e85e423a52a294bd76f379c))
+* Hot reload without --files selects again the new files a Play Mode domain reload discarded ([#2853](https://github.com/hatayama/unity-cli-loop/issues/2853)) ([14c7cc5](https://github.com/hatayama/unity-cli-loop/commit/14c7cc5b8eac15fe70beffeeb32990422f418fa1))
+* Hot reload's skipped-writer warning also covers added property accessors and added auto-properties ([#2850](https://github.com/hatayama/unity-cli-loop/issues/2850)) ([526a5ad](https://github.com/hatayama/unity-cli-loop/commit/526a5adc22ce26df2c86eeda1a09818021e34eac))
+* hot-reload says whether the CLI should compile the edits it could not apply, chosen by --compile-on-skip ([#2819](https://github.com/hatayama/unity-cli-loop/issues/2819)) ([edf54a3](https://github.com/hatayama/unity-cli-loop/commit/edf54a34a1440c5a130477f406248033ea977d88))
+* uloop compile-check compiles C# with the bundled Roslyn without launching Unity ([#2773](https://github.com/hatayama/unity-cli-loop/issues/2773)) ([dc0bb70](https://github.com/hatayama/unity-cli-loop/commit/dc0bb70bfbc318aa2355717643a0100d97545fcb))
+
+
+### Bug Fixes
+
+* Agent skill docs for pause points, hot reload, and video recording now match actual tool behavior ([#2761](https://github.com/hatayama/unity-cli-loop/issues/2761)) ([cc12dc2](https://github.com/hatayama/unity-cli-loop/commit/cc12dc2bae88c39bc2c36d0b0988e0b5ee317323))
+* Dynamic code exception and diagnostic line numbers stay correct when one line holds a block or two statements ([#2816](https://github.com/hatayama/unity-cli-loop/issues/2816)) ([75e0939](https://github.com/hatayama/unity-cli-loop/commit/75e0939451b5cfbdd9f2d74c2f1174367a918ce2))
+* Hot reload and dynamic-code answers explain cross-assembly introduced types, always report introduced-type counts, and keep skipped-method warnings readable ([#2818](https://github.com/hatayama/unity-cli-loop/issues/2818)) ([fbdae2d](https://github.com/hatayama/unity-cli-loop/commit/fbdae2de43d93688aa0f46d0111315eede9bc046))
+* Hot reload answers name what actually blocked the reload instead of misleading the reader ([#2815](https://github.com/hatayama/unity-cli-loop/issues/2815)) ([ca3ec89](https://github.com/hatayama/unity-cli-loop/commit/ca3ec89a56e2427624fbf560d2f7e45de415eca0))
+* Hot reload handles more added-member edits, keeps pause points on compiled methods, and reports re-applied files more clearly ([#2843](https://github.com/hatayama/unity-cli-loop/issues/2843)) ([7e94d5e](https://github.com/hatayama/unity-cli-loop/commit/7e94d5e1f65fdfb48ac2ba749c1bd59bce8e082e))
+* Hot reload keeps working on a file whose type it introduced, and explains what it cannot do there ([#2807](https://github.com/hatayama/unity-cli-loop/issues/2807)) ([78823c2](https://github.com/hatayama/unity-cli-loop/commit/78823c2f5d8b4726348f451eec85b4da25fd229e))
+* Hot reload refuses edits that would drop earlier added methods, gives the right advice in Play Mode, and reports its results accurately ([#2834](https://github.com/hatayama/unity-cli-loop/issues/2834)) ([6d4a57e](https://github.com/hatayama/unity-cli-loop/commit/6d4a57e3ea8bc397ef561d9f70f740c3e2508a69))
+* Hot reload reports what a run actually did and skips added methods it cannot verify ([#2830](https://github.com/hatayama/unity-cli-loop/issues/2830)) ([c90d226](https://github.com/hatayama/unity-cli-loop/commit/c90d2265a7f5f1bdafe958c24e4bf26aa44f69f4))
+* Hot reload skips methods that pass an event by ref instead of emitting a shim that does not compile ([#2845](https://github.com/hatayama/unity-cli-loop/issues/2845)) ([f562877](https://github.com/hatayama/unity-cli-loop/commit/f562877c6c802d2ac56781bd0b9fa052eaf40d35))
+* Introduced-type compile reasons no longer list member order or enum header changes that a removal or an added member already explains ([#2817](https://github.com/hatayama/unity-cli-loop/issues/2817)) ([cee0749](https://github.com/hatayama/unity-cli-loop/commit/cee07495806f52e1da1d0eb47de2e1b9f736c494))
+* Pause points are refused inside methods hot reload added, and hot reload messages say how to keep reloading ([#2838](https://github.com/hatayama/unity-cli-loop/issues/2838)) ([ebcdbe5](https://github.com/hatayama/unity-cli-loop/commit/ebcdbe5755d2618313d351b164ec6207e21540b6))
+
 ## [3.6.3](https://github.com/hatayama/unity-cli-loop/compare/v3.6.2...v3.6.3) (2026-09-10)
 
 
