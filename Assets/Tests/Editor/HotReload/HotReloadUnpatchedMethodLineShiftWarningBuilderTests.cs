@@ -16,6 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class HotReloadUnpatchedMethodLineShiftWarningBuilderTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            // The production run captures these at its entry point; these tests normalize paths
+            // directly, so without their own capture they only pass after another class captured.
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
+        }
+
         /// <summary>
         /// What: a file whose edited source gained lines vs the last compiled snapshot warns that
         /// unpatched methods still resolve --line against compiled source.
