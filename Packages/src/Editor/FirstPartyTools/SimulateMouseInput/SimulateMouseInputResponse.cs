@@ -13,6 +13,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
+        /// <summary>
+        /// Set when an input callback removed an Input System state monitor while the mouse input was
+        /// being applied; empty otherwise and then omitted from the JSON.
+        /// </summary>
+        public string Warning { get; set; } = "";
         public string? Button { get; set; }
         public float? PositionX { get; set; }
         public float? PositionY { get; set; }
@@ -71,6 +76,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public SimulateMouseInputResponse()
         {
+        }
+
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
         }
     }
 }
