@@ -15,24 +15,30 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-// Warns about an added field that keeps its default value because every method assigning it was
-// skipped while a method reading it was applied. The reload itself succeeds, so without this line
-// the applied reader silently sees zero or null until the next compile.
+// Warns about an added field or added auto-property that keeps its default value because every
+// method or accessor assigning it was skipped while one reading it was applied. The reload itself
+// succeeds, so without this line the applied reader silently sees zero or null until the next compile.
 internal static class AddedFieldSkippedWriterWarnings
 {
-    public const string WarningFormat =
+    public const string FieldWarningFormat =
         "Added field '{0}' is assigned only in {1}, which this reload skipped, but {2} was applied "
         + "and reads it; the field keeps its default value until 'uloop compile'.";
 
+    public const string AutoPropertyWarningFormat =
+        "Added auto-property '{0}' is assigned only in {1}, which this reload skipped, but {2} was applied "
+        + "and reads it; the property keeps its default value until 'uloop compile'.";
+
     private const int MaxListedWriters = 3;
 
-    // Adds one warning per qualifying field declared in unit. Writers and readers are looked for
-    // in every unit of the group, because a method of another edited file may assign the field.
+    // Adds one warning per qualifying field or auto-property declared in unit. Writers and readers
+    // are looked for in every unit of the group, because a method of another edited file may
+    // assign the value.
     public static void AppendWarnings(
         WorkerSourceUnit unit,
         List<WorkerSourceUnit> transformUnits,
         List<TypeEmitState> allTypeEmitStates,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerSkipped> skipped)
     {
         if (skipped.Count == 0)
@@ -40,37 +46,41 @@ internal static class AddedFieldSkippedWriterWarnings
             return;
         }
 
-        Dictionary<IFieldSymbol, FieldUses> candidates = CollectCandidateFields(unit, addedFieldCatalog);
+        Dictionary<ISymbol, FieldUses> candidates =
+            new Dictionary<ISymbol, FieldUses>(SymbolEqualityComparer.Default);
+        CollectCandidateFields(unit, addedFieldCatalog, candidates);
+        CollectCandidateAutoProperties(unit, addedFieldCatalog, addedPropertyCatalog, candidates);
         if (candidates.Count == 0)
         {
             return;
         }
 
-        HashSet<string> skippedLabels = new HashSet<string>(skipped.Select(row => row.Method), StringComparer.Ordinal);
-        HashSet<SyntaxNode> queuedMethods = new HashSet<SyntaxNode>(
-            allTypeEmitStates.SelectMany(state => state.QueuedMethods).Select(queued => queued.MethodDeclaration));
+        SkippedWriterUseSiteClassifier classifier = new SkippedWriterUseSiteClassifier(
+            new HashSet<string>(skipped.Select(row => row.Method), StringComparer.Ordinal),
+            new HashSet<SyntaxNode>(
+                allTypeEmitStates.SelectMany(state => state.QueuedMethods).Select(queued => queued.MethodDeclaration)),
+            addedPropertyCatalog);
         foreach (WorkerSourceUnit scannedUnit in transformUnits)
         {
-            RecordUses(scannedUnit, candidates, skippedLabels, queuedMethods);
+            RecordUses(scannedUnit, candidates, classifier);
         }
 
-        foreach (KeyValuePair<IFieldSymbol, FieldUses> candidate in candidates)
+        foreach (KeyValuePair<ISymbol, FieldUses> candidate in candidates)
         {
             if (candidate.Value.ShouldWarn)
             {
-                unit.DeclarationDriftWarnings.Add(FormatWarning(candidate.Key.Name, candidate.Value));
+                unit.DeclarationDriftWarnings.Add(FormatWarning(candidate.Key, candidate.Value));
             }
         }
     }
 
     // Only a store-rewritten field without an initializer starts at its default value; a const
     // or an unavailable field never reaches an applied body in the first place.
-    private static Dictionary<IFieldSymbol, FieldUses> CollectCandidateFields(
+    private static void CollectCandidateFields(
         WorkerSourceUnit unit,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        Dictionary<ISymbol, FieldUses> candidates)
     {
-        Dictionary<IFieldSymbol, FieldUses> candidates =
-            new Dictionary<IFieldSymbol, FieldUses>(SymbolEqualityComparer.Default);
         foreach (TypeEmitState state in unit.TypeEmitStates)
         {
             foreach (VariableDeclaratorSyntax variable in state.TypeDeclaration.Members
@@ -82,62 +92,85 @@ internal static class AddedFieldSkippedWriterWarnings
                     continue;
                 }
 
-                AddedFieldBinding binding = addedFieldCatalog.FindOrNull(
-                    AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol));
-                if (binding != null && binding.IsStoreRewriteable && binding.Initializer == null)
+                if (StartsAtDefault(addedFieldCatalog, AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol)))
                 {
                     candidates[fieldSymbol] = new FieldUses();
                 }
             }
         }
+    }
 
-        return candidates;
+    // An emitted added auto-property keeps its value in the same store as an added field, under
+    // the property key, so the field's start-at-default rule applies to it unchanged.
+    private static void CollectCandidateAutoProperties(
+        WorkerSourceUnit unit,
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
+        Dictionary<ISymbol, FieldUses> candidates)
+    {
+        foreach (TypeEmitState state in unit.TypeEmitStates)
+        {
+            foreach (PropertyDeclarationSyntax property in state.TypeDeclaration.Members.OfType<PropertyDeclarationSyntax>())
+            {
+                IPropertySymbol propertySymbol = unit.SemanticModel.GetDeclaredSymbol(property);
+                AddedPropertyBinding binding = addedPropertyCatalog.FindBySymbolOrNull(propertySymbol);
+                if (binding != null && binding.IsAuto && StartsAtDefault(addedFieldCatalog, binding.PropertyKey))
+                {
+                    candidates[propertySymbol] = new FieldUses();
+                }
+            }
+        }
+    }
+
+    private static bool StartsAtDefault(AddedFieldCatalog addedFieldCatalog, string fieldKey)
+    {
+        AddedFieldBinding binding = addedFieldCatalog.FindOrNull(fieldKey);
+        return binding != null && binding.IsStoreRewriteable && binding.Initializer == null;
     }
 
     private static void RecordUses(
         WorkerSourceUnit scannedUnit,
-        Dictionary<IFieldSymbol, FieldUses> candidates,
-        HashSet<string> skippedLabels,
-        HashSet<SyntaxNode> queuedMethods)
+        Dictionary<ISymbol, FieldUses> candidates,
+        SkippedWriterUseSiteClassifier classifier)
     {
         SemanticModel semanticModel = scannedUnit.SemanticModel;
         foreach (IdentifierNameSyntax identifier in scannedUnit.BindingRoot.DescendantNodes().OfType<IdentifierNameSyntax>())
         {
-            // nameof folds to a string constant, so it neither reads nor writes the field.
+            // nameof folds to a string constant, so it neither reads nor writes the value.
             if (NameofRules.IsInsideNameofArgument(identifier))
             {
                 continue;
             }
 
-            IFieldSymbol fieldSymbol = AddedFieldBodyScan.TryGetFieldSymbol(semanticModel, identifier);
-            if (fieldSymbol == null || !candidates.TryGetValue(fieldSymbol, out FieldUses uses))
+            ISymbol symbol = ResolveValueSymbol(semanticModel, identifier);
+            if (symbol == null || !candidates.TryGetValue(symbol, out FieldUses uses))
             {
                 continue;
             }
 
-            MethodDeclarationSyntax method = FindEnclosingMethod(identifier);
-            string label = method == null
-                ? null
-                : WorkerMethodKeys.FormatMethodLabel(semanticModel.GetDeclaredSymbol(method));
-            bool isSkippedMethod = label != null && skippedLabels.Contains(label);
+            SkippedWriterUseSite site = classifier.Classify(semanticModel, identifier);
             if (IsWrite(identifier))
             {
-                uses.RecordWriter(isSkippedMethod ? label : null);
+                uses.RecordWriter(site.Kind == SkippedWriterUseSiteKind.Skipped ? site.Label : null);
                 continue;
             }
 
-            if (!isSkippedMethod && method != null && queuedMethods.Contains(method))
+            if (site.Kind == SkippedWriterUseSiteKind.Applied)
             {
-                uses.RecordAppliedReader(label);
+                uses.RecordAppliedReader(site.Label);
             }
         }
     }
 
-    // Null when the nearest enclosing member is not a method: a constructor, accessor or field
-    // initializer that writes the field is not a skipped method, so it keeps the warning quiet.
-    private static MethodDeclarationSyntax FindEnclosingMethod(SyntaxNode node)
+    private static ISymbol ResolveValueSymbol(SemanticModel semanticModel, IdentifierNameSyntax identifier)
     {
-        return node.Ancestors().OfType<MemberDeclarationSyntax>().FirstOrDefault() as MethodDeclarationSyntax;
+        IFieldSymbol fieldSymbol = AddedFieldBodyScan.TryGetFieldSymbol(semanticModel, identifier);
+        if (fieldSymbol != null)
+        {
+            return fieldSymbol;
+        }
+
+        return semanticModel.GetSymbolInfo(identifier).Symbol as IPropertySymbol;
     }
 
     private static bool IsWrite(IdentifierNameSyntax identifier)
@@ -182,12 +215,12 @@ internal static class AddedFieldSkippedWriterWarnings
         return node is TupleExpressionSyntax && node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node;
     }
 
-    private static string FormatWarning(string fieldName, FieldUses uses)
+    private static string FormatWarning(ISymbol candidate, FieldUses uses)
     {
         return string.Format(
             CultureInfo.InvariantCulture,
-            WarningFormat,
-            fieldName,
+            candidate is IPropertySymbol ? AutoPropertyWarningFormat : FieldWarningFormat,
+            candidate.Name,
             FormatList(uses.SkippedWriters, MaxListedWriters),
             FormatList(uses.AppliedReaders, 1));
     }
@@ -203,7 +236,7 @@ internal static class AddedFieldSkippedWriterWarnings
             + string.Format(CultureInfo.InvariantCulture, " and {0} more", labels.Count - maxListed);
     }
 
-    // How one candidate field is used across the group, in source order.
+    // How one candidate field or auto-property is used across the group, in source order.
     private sealed class FieldUses
     {
         private bool _hasOtherWriter;
@@ -214,7 +247,7 @@ internal static class AddedFieldSkippedWriterWarnings
 
         public bool ShouldWarn => !_hasOtherWriter && SkippedWriters.Count > 0 && AppliedReaders.Count > 0;
 
-        // Null means a writer that is not a skipped method, which rules the warning out.
+        // Null means a writer that is not a skipped method or accessor, which rules the warning out.
         public void RecordWriter(string skippedMethodLabel)
         {
             if (skippedMethodLabel == null)

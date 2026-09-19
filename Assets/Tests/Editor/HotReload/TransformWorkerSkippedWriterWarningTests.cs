@@ -27,11 +27,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CallerFileName = "HotReloadCrossFileAddedMemberCaller.cs";
         private const string HostLabelPrefix =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost.";
+        private const string CallerLabelPrefix =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberCaller.";
         private const string WarningMarker = "which this reload skipped";
 
         private const string AddedField = "        public int AddedValue;\n\n";
         private const string SkippedWriter =
             "        public void AddedSetUp()\n        {\n            AddedValue = StoredRef;\n        }\n\n";
+        private const string AddedAutoProperty = "        public int AddedCount { get; private set; }\n\n";
+        private const string SkippedCountWriter =
+            "        public void AddedSetUp()\n        {\n            AddedCount = StoredRef;\n        }\n\n";
         private const string ValueBody = "        public int Value()\n        {\n            return 1;\n        }";
 
         /// <summary>
@@ -54,6 +59,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(warnings[0], Does.Contain(HostLabelPrefix + "AddedSetUp()"));
             Assert.That(warnings[0], Does.Contain(HostLabelPrefix + "Value()"));
             Assert.That(warnings[0], Does.Contain("uloop compile"));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Added field 'AddedValue' is assigned only in " + HostLabelPrefix + "AddedSetUp(), "
+                    + "which this reload skipped, but " + HostLabelPrefix + "Value() was applied and reads it; "
+                    + "the field keeps its default value until 'uloop compile'."));
         }
 
         /// <summary>
@@ -215,6 +226,185 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> warnings = FindWarnings(result);
             Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
             Assert.That(warnings[0], Does.Contain(HostLabelPrefix + "Value() and 1 more"));
+        }
+
+        /// <summary>
+        /// What: an applied expression-bodied getter of an added property that reads the field
+        /// counts as an applied reader, so the warning names the getter.
+        /// </summary>
+        [Test]
+        public async Task AppliedGetterOfAddedProperty_ReadsField_Warns()
+        {
+            string getter = "        public int AddedView => AddedValue;\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                InsertIntoHostBody(ReadOnDisk(HostFileName), AddedField + SkippedWriter + getter),
+                ReadOnDisk(CallerFileName));
+
+            AssertWriterSkipped(result);
+            Assert.That(FindEntry(result, "get_AddedView"), Is.Not.Null);
+            List<string> warnings = FindWarnings(result);
+            Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
+            Assert.That(warnings[0], Does.Contain(HostLabelPrefix + "get_AddedView() was applied"));
+        }
+
+        /// <summary>
+        /// What: a block-bodied getter of an added property counts as an applied reader in the
+        /// same way as an expression-bodied one.
+        /// </summary>
+        [Test]
+        public async Task AppliedBlockBodiedGetter_ReadsField_Warns()
+        {
+            string getter =
+                "        public int AddedView\n        {\n            get { return AddedValue; }\n        }\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                InsertIntoHostBody(ReadOnDisk(HostFileName), AddedField + SkippedWriter + getter),
+                ReadOnDisk(CallerFileName));
+
+            AssertWriterSkipped(result);
+            Assert.That(FindEntry(result, "get_AddedView"), Is.Not.Null);
+            List<string> warnings = FindWarnings(result);
+            Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
+            Assert.That(warnings[0], Does.Contain(HostLabelPrefix + "get_AddedView() was applied"));
+        }
+
+        /// <summary>
+        /// What: the getter of an added property that this reload skipped is not an applied
+        /// reader, so without another applied reader nothing warns.
+        /// </summary>
+        [Test]
+        public async Task SkippedAddedPropertyGetter_IsNotAnAppliedReader()
+        {
+            string getter =
+                "        public int AddedView\n        {\n            get { return AddedValue + StoredRef; }\n        }\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                InsertIntoHostBody(ReadOnDisk(HostFileName), AddedField + SkippedWriter + getter),
+                ReadOnDisk(CallerFileName));
+
+            AssertWriterSkipped(result);
+            Assert.That(FindSkipped(result, "get_AddedView"), Is.Not.Null, FormatSkipped(result));
+            AssertNoWarning(result);
+        }
+
+        /// <summary>
+        /// What: an applied setter of an added property that assigns the field keeps the warning
+        /// quiet, because it is a writer that this reload did not skip.
+        /// </summary>
+        [Test]
+        public async Task AppliedSetterOfAddedProperty_Writes_DoesNotWarn()
+        {
+            string property =
+                "        public int AddedSink\n        {\n            get { return 0; }\n"
+                + "            set { AddedValue = value; }\n        }\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                HostWithReader(AddedField + SkippedWriter + property, "return AddedValue;"),
+                ReadOnDisk(CallerFileName));
+
+            AssertWriterSkipped(result);
+            Assert.That(FindEntry(result, "set_AddedSink"), Is.Not.Null);
+            AssertNoWarning(result);
+        }
+
+        /// <summary>
+        /// What: the setter of an added property that this reload skipped counts as a skipped
+        /// writer, so an applied reader of the field it alone assigns warns and names the setter.
+        /// </summary>
+        [Test]
+        public async Task SkippedSetterOfAddedProperty_IsASkippedWriter_Warns()
+        {
+            string property =
+                "        public int AddedSink\n        {\n            get { return 0; }\n"
+                + "            set { AddedValue = value + StoredRef; }\n        }\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                HostWithReader(AddedField + property, "return AddedValue;"),
+                ReadOnDisk(CallerFileName));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipped(result, "set_AddedSink"), Is.Not.Null, FormatSkipped(result));
+            Assert.That(FindEntry(result, "Value"), Is.Not.Null);
+            List<string> warnings = FindWarnings(result);
+            Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
+            Assert.That(warnings[0], Does.Contain("'AddedValue'"));
+            Assert.That(warnings[0], Does.Contain(HostLabelPrefix + "set_AddedSink("));
+        }
+
+        /// <summary>
+        /// What: an added auto-property without an initializer that only a skipped method assigns
+        /// warns when an applied method of another file reads it, with the auto-property wording.
+        /// </summary>
+        [Test]
+        public async Task AddedAutoProperty_SkippedOnlyWriter_WithAppliedReaderInOtherFile_Warns()
+        {
+            string caller = ReplaceInSource(ReadOnDisk(CallerFileName), "return host.Value();", "return host.AddedCount;");
+            TransformWorkerClientResult result = await RunAsync(
+                InsertIntoHostBody(ReadOnDisk(HostFileName), AddedAutoProperty + SkippedCountWriter),
+                caller);
+
+            AssertWriterSkipped(result);
+            Assert.That(FindEntry(result, "Call"), Is.Not.Null);
+            List<string> warnings = FindWarnings(result);
+            Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Added auto-property 'AddedCount' is assigned only in " + HostLabelPrefix + "AddedSetUp(), "
+                    + "which this reload skipped, but " + CallerLabelPrefix + "Call("
+                    + "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost) "
+                    + "was applied and reads it; the property keeps its default value until 'uloop compile'."));
+        }
+
+        /// <summary>
+        /// What: an added auto-property with an initializer does not warn, because it does not
+        /// keep its default value when its only writer is skipped.
+        /// </summary>
+        [Test]
+        public async Task AddedAutoPropertyWithInitializer_DoesNotWarn()
+        {
+            string property = "        public int AddedCount { get; private set; } = 1;\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                HostWithReader(property + SkippedCountWriter, "return AddedCount;"),
+                ReadOnDisk(CallerFileName));
+
+            AssertWriterSkipped(result);
+            AssertNoWarning(result);
+        }
+
+        /// <summary>
+        /// What: an applied method that also assigns the added auto-property keeps the warning
+        /// quiet.
+        /// </summary>
+        [Test]
+        public async Task AddedAutoProperty_AppliedMethodAlsoWrites_DoesNotWarn()
+        {
+            string appliedWriter =
+                "        public void AddedReset()\n        {\n            AddedCount = 0;\n        }\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                HostWithReader(AddedAutoProperty + appliedWriter + SkippedCountWriter, "return AddedCount;"),
+                ReadOnDisk(CallerFileName));
+
+            AssertWriterSkipped(result);
+            Assert.That(FindEntry(result, "AddedReset"), Is.Not.Null);
+            AssertNoWarning(result);
+        }
+
+        /// <summary>
+        /// What: a method skipped for incrementing the added auto-property is its only writer, so
+        /// an applied reader warns and names that method.
+        /// </summary>
+        [Test]
+        public async Task AddedAutoProperty_IncrementInSkippedMethod_Warns()
+        {
+            string incrementer = "        public void AddedBump()\n        {\n            AddedCount++;\n        }\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                HostWithReader(AddedAutoProperty + incrementer, "return AddedCount;"),
+                ReadOnDisk(CallerFileName));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipped(result, "AddedBump"), Is.Not.Null, FormatSkipped(result));
+            Assert.That(FindEntry(result, "Value"), Is.Not.Null);
+            List<string> warnings = FindWarnings(result);
+            Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
+            Assert.That(warnings[0], Does.StartWith("Added auto-property 'AddedCount'"));
+            Assert.That(warnings[0], Does.Contain(HostLabelPrefix + "AddedBump()"));
         }
 
         private static string HostWithReader(string addedMembers, string valueBody)
