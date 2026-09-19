@@ -100,6 +100,18 @@ expect_verify_fails() {
   fi
 }
 
+# The release target resolvers treat --list as the definition of a complete
+# release, so a Linux name missing from it would let an incomplete release pass.
+expect_listed_asset() {
+  listed_asset="$1"
+  if ! "$ROOT_DIR/scripts/verify-native-cli-release-assets.sh" --list | grep -Fx "$listed_asset" >/dev/null; then
+    fail "--list does not include $listed_asset"
+  fi
+}
+
+expect_listed_asset "$LINUX_ARCHIVE"
+expect_listed_asset "$LINUX_ARCHIVE.sha256"
+
 expect_verify_fails remove_linux_archive "$LINUX_ARCHIVE"
 expect_verify_fails corrupt_linux_checksum "$LINUX_ARCHIVE"
 expect_verify_fails replace_linux_archive_without_executable "$LINUX_ARCHIVE"
