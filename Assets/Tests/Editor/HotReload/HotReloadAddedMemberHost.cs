@@ -111,6 +111,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             get { return 5; }
         }
 
+        private static int PrivateStaticCounter { get; set; }
+
+        private static int _privateStaticRefSeed = 2;
+
+        private static ref int PrivateStaticRefSeed => ref _privateStaticRefSeed;
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         private bool TryReadPrivateSeed(out int value)
         {
@@ -120,6 +126,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public class NestedAddedFieldHost
         {
+            private static int NestedPrivateStaticSeed
+            {
+                get { return 6; }
+            }
+
             [MethodImpl(MethodImplOptions.NoInlining)]
             public int ExistingNested()
             {

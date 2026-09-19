@@ -15,10 +15,10 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Worker coverage for bodies that reach members hot reload added through shapes the
-    /// accessor rewrite refuses for compiled members: a private static property, and a private
-    /// method call with ref or out arguments. Added members are rewritten to public shim calls,
-    /// so only compiled members may keep those refusals.
+    /// Worker coverage for bodies that reach private members through accessor shapes: added
+    /// members are rewritten to public shim calls, compiled private static properties go through
+    /// receiver-less accessor delegates, and a compiled private method call with ref or out
+    /// arguments stays refused.
     /// </summary>
     public class TransformWorkerAddedMemberAccessTests
     {
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostCloseMarker =
             "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }";
 
-        private const string StaticPropertyNoShape = "inaccessible static property access has no accessor rewrite shape";
+        private const string RefReturningPropertyNoShape = "inaccessible ref-returning properties have no accessor rewrite shape";
         private const string RefOutInNotRewritten = "inaccessible method calls with ref/out/in parameters are not rewritten";
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
 
@@ -247,16 +247,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an added method that reads a compiled private static property is still skipped,
-        /// because the loaded member stays private whatever the edited source declares.
+        /// What: an added method that reads a compiled private static property is added, and the
+        /// shim calls the getter delegate with no receiver argument.
         /// </summary>
         [Test]
-        public async Task AddedMethod_ReadingACompiledPrivateStaticProperty_StaysSkipped()
+        public async Task AddedMethod_ReadingACompiledPrivateStaticProperty_IsAdded()
         {
             TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
                 "public int AddedReadCompiledStatic()\n        {\n            return PrivateStaticSeedValue + 1;\n        }");
 
-            AssertHasSkip(result, "AddedReadCompiledStatic", StaticPropertyNoShape);
+            AssertAddedAndNotSkipped(result, "AddedReadCompiledStatic");
+            Assert.That(result.Output.shimSource, Does.Contain("__P_get_PrivateStaticSeedValue()"), result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: an added method that assigns a compiled private static property is added, and the
+        /// shim calls the setter delegate with the value as its only argument.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_AssigningACompiledPrivateStaticProperty_IsAdded()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedWriteCompiledStatic(int value)\n        {\n            PrivateStaticCounter = value;\n        }");
+
+            AssertAddedAndNotSkipped(result, "AddedWriteCompiledStatic");
+            Assert.That(result.Output.shimSource, Does.Contain("__P_set_PrivateStaticCounter(value)"), result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: an added method that compound-assigns a compiled private static property is added,
+        /// and the shim sets the property to the getter result combined with the right side.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompoundAssigningACompiledPrivateStaticProperty_IsAdded()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedBumpCompiledStatic(int value)\n        {\n            HotReloadAddedMemberHost.PrivateStaticCounter += value;\n        }");
+
+            AssertAddedAndNotSkipped(result, "AddedBumpCompiledStatic");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Match(@"__P_set_PrivateStaticCounter\(__P_get_PrivateStaticCounter\(\)\s*\+\s*value\)"),
+                result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: an added method on a nested type that reads that type's compiled private static
+        /// property is added, and the getter binds against the nested type.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_ReadingANestedTypesCompiledPrivateStaticProperty_IsAdded()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string existingNested =
+                "            public int ExistingNested()\n            {\n                return 1;\n            }";
+            Assert.That(onDisk, Does.Contain(existingNested));
+            string edited = onDisk.Replace(
+                existingNested,
+                existingNested
+                + "\n\n            public int AddedReadNestedStatic()\n            {\n"
+                + "                return NestedPrivateStaticSeed + 1;\n            }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("NestedStaticPropertyRead.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+
+            AssertAddedAndNotSkipped(result, "AddedReadNestedStatic");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Contain("typeof(global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost.NestedAddedFieldHost), \"get_NestedPrivateStaticSeed\""),
+                result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: an added method that reads a compiled private static ref-returning property is
+        /// still skipped, because a getter delegate cannot return the property by reference.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_ReadingACompiledPrivateStaticRefReturningProperty_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedReadCompiledStaticRef()\n        {\n            return PrivateStaticRefSeed + 1;\n        }");
+
+            AssertHasSkip(result, "AddedReadCompiledStaticRef", RefReturningPropertyNoShape);
         }
 
         /// <summary>

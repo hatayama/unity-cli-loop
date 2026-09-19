@@ -317,7 +317,6 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         ISymbol leftSymbol = _semanticModel.GetSymbolInfo(node.Left).Symbol;
         if (leftSymbol is IPropertySymbol propertySymbol
             && !propertySymbol.IsIndexer
-            && !propertySymbol.IsStatic
             && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
         {
             return HarmonyAccessors.RewritePropertyAssignment(node, propertySymbol);
