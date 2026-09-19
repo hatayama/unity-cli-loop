@@ -199,6 +199,12 @@ internal static class WorkerGroupPipeline
             }
 
             AppendOutsideMethodBodyDriftWarnings(unit, addedMethodCatalog, addedFieldCatalog);
+            AddedFieldSkippedWriterWarnings.AppendWarnings(
+                unit,
+                transformUnits,
+                allTypeEmitStates,
+                addedFieldCatalog,
+                skipped);
         }
 
         return BuildWorkerOutput(

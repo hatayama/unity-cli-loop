@@ -11,6 +11,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private int _stored;
 
+        // A compiled private ref-returning property: the accessor rewrite has no shape for it, so
+        // an added method that reads it is skipped while the rest of the file is applied.
+        private ref int StoredRef => ref _stored;
+
         public int Value()
         {
             return 1;
