@@ -106,13 +106,13 @@ internal sealed class HarmonyAccessorShimRewrite
 
         if (symbol is IPropertySymbol propertySymbol
             && !propertySymbol.IsIndexer
-            && !propertySymbol.IsStatic
             && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
         {
             AccessorEntry entry = _rewriter._accessorPlan.GetOrAddPropertyGetter(propertySymbol);
+            ExpressionSyntax receiver = propertySymbol.IsStatic ? null : _rewriter.VisitReceiver(receiverSyntax);
             return CreateDelegateInvocation(
                     entry.DelegateFieldName,
-                    new[] { _rewriter.VisitReceiver(receiverSyntax) })
+                    BuildPropertyAccessorArguments(receiver))
                 .WithTriviaFrom(triviaSource);
         }
 
@@ -123,8 +123,11 @@ internal sealed class HarmonyAccessorShimRewrite
         AssignmentExpressionSyntax node,
         IPropertySymbol propertySymbol)
     {
-        ExpressionSyntax receiver = _rewriter.ExtractReceiver(node.Left);
-        ExpressionSyntax visitedReceiver = _rewriter.VisitReceiver(receiver);
+        // A static property has no receiver to extract: the left side is a bare name or a type
+        // name, and neither may be visited as an instance expression.
+        ExpressionSyntax visitedReceiver = propertySymbol.IsStatic
+            ? null
+            : _rewriter.VisitReceiver(_rewriter.ExtractReceiver(node.Left));
         ExpressionSyntax visitedRight = (ExpressionSyntax)_rewriter.Visit(node.Right);
         AccessorEntry setter = _rewriter._accessorPlan.GetOrAddPropertySetter(propertySymbol);
 
@@ -132,20 +135,39 @@ internal sealed class HarmonyAccessorShimRewrite
         {
             return CreateDelegateInvocation(
                     setter.DelegateFieldName,
-                    new[] { visitedReceiver, visitedRight })
+                    BuildPropertyAccessorArguments(visitedReceiver, visitedRight))
                 .WithTriviaFrom(node);
         }
 
         AccessorEntry getter = _rewriter._accessorPlan.GetOrAddPropertyGetter(propertySymbol);
         ExpressionSyntax getCall = CreateDelegateInvocation(
             getter.DelegateFieldName,
-            new[] { visitedReceiver });
+            BuildPropertyAccessorArguments(visitedReceiver));
         SyntaxKind binaryKind = ShimBodyRewriter.GetCompoundAssignmentBinaryKind(node.Kind());
         ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
         return CreateDelegateInvocation(
                 setter.DelegateFieldName,
-                new[] { visitedReceiver, combined })
+                BuildPropertyAccessorArguments(
+                    visitedReceiver,
+                    AddedFieldShimRewrite.CastToAssignedType(combined, propertySymbol.Type)))
             .WithTriviaFrom(node);
+    }
+
+    // The delegate type of a static accessor has no receiver parameter (AccessorEntry leaves the
+    // declaring type out of it), so passing one would make the shim fail to compile.
+    private static ExpressionSyntax[] BuildPropertyAccessorArguments(
+        ExpressionSyntax visitedReceiver,
+        params ExpressionSyntax[] values)
+    {
+        if (visitedReceiver == null)
+        {
+            return values;
+        }
+
+        ExpressionSyntax[] arguments = new ExpressionSyntax[values.Length + 1];
+        arguments[0] = visitedReceiver;
+        values.CopyTo(arguments, 1);
+        return arguments;
     }
 
     internal static ExpressionSyntax CreateFieldRefInvocation(

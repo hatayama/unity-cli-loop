@@ -98,13 +98,6 @@ internal static class AccessorReadRegistrar
             return false;
         }
 
-        if (propertySymbol.IsStatic)
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape);
-            return false;
-        }
-
         if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
         {
             rejectReason =

@@ -29,7 +29,7 @@ internal static class AccessorPropertyWriteRules
         rejectReason = null;
         bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
 
-        // Why accessibility first: shape gates (indexer/static/ref-return) must not reject fully
+        // Why accessibility first: shape gates (indexer/ref-return) must not reject fully
         // public writes such as dict[key]=value or Time.timeScale=0f. The read-side path already
         // pre-filters with IsInaccessibleAccessor/IsInaccessibleFromExternalAssembly before shape
         // checks — keep that order here for symmetry.
@@ -134,12 +134,6 @@ internal static class AccessorPropertyWriteRules
         if (propertySymbol.IsIndexer)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorIndexerNoShape);
-        }
-
-        if (propertySymbol.IsStatic)
-        {
-            return
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape);
         }
 
         if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)

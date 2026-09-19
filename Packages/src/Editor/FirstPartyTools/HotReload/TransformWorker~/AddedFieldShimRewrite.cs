@@ -110,7 +110,7 @@ internal sealed class AddedFieldShimRewrite
         return CreateAddedFieldSet(
                 binding,
                 receiver,
-                CastToAddedFieldType(combined, binding.FieldType))
+                CastToAssignedType(combined, binding.FieldType))
             .WithTriviaFrom(node);
     }
 
@@ -133,7 +133,7 @@ internal sealed class AddedFieldShimRewrite
         return CreateAddedFieldSet(
                 binding,
                 receiver,
-                CastToAddedFieldType(combined, binding.FieldType))
+                CastToAssignedType(combined, binding.FieldType))
             .WithTriviaFrom(triviaSource);
     }
 
@@ -148,12 +148,12 @@ internal sealed class AddedFieldShimRewrite
             && postfix.IsKind(SyntaxKind.PostDecrementExpression);
     }
 
-    // Why cast: C# compound assignment and ++/-- apply a conversion back to the field type
+    // Why cast: C# compound assignment and ++/-- apply a conversion back to the assigned type
     // (byte += 1 is (byte)(byte + 1)). Emitting the binary without that conversion is CS1503.
-    internal static ExpressionSyntax CastToAddedFieldType(ExpressionSyntax expression, ITypeSymbol fieldType)
+    internal static ExpressionSyntax CastToAssignedType(ExpressionSyntax expression, ITypeSymbol assignedType)
     {
         TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
-            fieldType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            assignedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
         return SyntaxFactory.CastExpression(
             typeSyntax,
             SyntaxFactory.ParenthesizedExpression(expression));

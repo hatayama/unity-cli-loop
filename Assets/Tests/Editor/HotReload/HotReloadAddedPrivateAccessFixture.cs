@@ -16,6 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const int PrivateConstThree = 3;
 
+        private static int StaticWritableValue
+        {
+            get { return _staticWritable; }
+            set { _staticWritable = value; }
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ReadInstanceSecret()
         {

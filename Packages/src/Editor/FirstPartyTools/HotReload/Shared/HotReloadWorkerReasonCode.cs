@@ -94,7 +94,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AccessorCompoundInaccessibleGetterNoShape,
         AccessorAssignmentValueConsumed,
         AccessorReceiverDoubleEvaluation,
-        AccessorStaticPropertyNoShape,
         AccessorRefReturningPropertyNoShape,
         AccessorConstructorCallNoShape,
         AccessorInitializerAssignmentNoShape,
