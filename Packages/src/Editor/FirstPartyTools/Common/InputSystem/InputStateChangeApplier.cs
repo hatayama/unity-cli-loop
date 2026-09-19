@@ -15,6 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // back through every apply call site.
         public int SuppressedAssertionCount { get; private set; }
 
+        private readonly InputSystemMonitorRemovalAssertionOrigin _assertionOrigin =
+            new InputSystemMonitorRemovalAssertionOrigin();
+
         public void Apply(InputDevice device, InputEventPtr eventPtr, InputUpdateType updateType)
         {
             Debug.Assert(device != null, "device must not be null");
@@ -27,7 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(original);
+            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(
+                original,
+                _assertionOrigin.IsCurrentAssertionFromMonitorRemoval);
             Debug.unityLogger.logHandler = filter;
             try
             {

@@ -13,6 +13,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// processing, the Input System's FireStateChangeNotifications removes the monitor immediately and
     /// DynamicBitfield.ClearBit then trips its range assert. Player builds strip that Debug.Assert, so
     /// dropping it keeps the Editor's observable result the same as a player's.
+    /// A log is dropped only when both the text matches exactly and the origin check confirms the
+    /// assert came from the Input System's monitor-removal path. Why not text alone: a user's bare
+    /// Debug.Assert(false) inside an input callback renders the same text, and hiding it would both
+    /// swallow the user's log and produce a false monitor-removal warning.
     /// </summary>
     internal sealed class InputSystemMonitorRemovalAssertionLogFilter : ILogHandler
     {
@@ -21,18 +25,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string SingleArgumentFormat = "{0}";
 
         private readonly ILogHandler _inner;
+        private readonly Func<bool> _isMonitorRemovalOrigin;
 
         public int SuppressedCount { get; private set; }
 
-        public InputSystemMonitorRemovalAssertionLogFilter(ILogHandler inner)
+        public InputSystemMonitorRemovalAssertionLogFilter(ILogHandler inner, Func<bool> isMonitorRemovalOrigin)
         {
             Debug.Assert(inner != null, "inner must not be null");
+            Debug.Assert(isMonitorRemovalOrigin != null, "isMonitorRemovalOrigin must not be null");
             _inner = inner;
+            _isMonitorRemovalOrigin = isMonitorRemovalOrigin;
         }
 
         public void LogFormat(LogType logType, Object context, string format, params object[] args)
         {
-            if (IsMessagelessAssertion(logType, format, args))
+            // The origin check walks the stack, so it runs only after the cheap text match succeeds.
+            if (IsMessagelessAssertion(logType, format, args) && _isMonitorRemovalOrigin())
             {
                 SuppressedCount++;
                 return;

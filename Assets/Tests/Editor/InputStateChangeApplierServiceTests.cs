@@ -141,6 +141,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(service.SuppressedAssertionCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a bare Debug.Assert(false) raised by a monitor callback stays visible and is not counted.
+        /// </summary>
+        [Test]
+        public void Apply_WhenMonitorRaisesBareAssert_KeepsAssertVisibleAndDoesNotCount()
+        {
+            InputStateChangeApplierService service = new InputStateChangeApplierService();
+            BareAssertMonitor monitor = new BareAssertMonitor(removeSelf: false);
+            InputState.AddChangeMonitor(_keyboard[Key.B], monitor, MonitorIndex);
+            LogAssert.Expect(LogType.Assert, "Assertion failed");
+
+            try
+            {
+                ApplyKeyB(service);
+            }
+            finally
+            {
+                InputState.RemoveChangeMonitor(_keyboard[Key.B], monitor, MonitorIndex);
+            }
+
+            Assert.That(_assertLogCount, Is.EqualTo(1));
+            Assert.That(service.SuppressedAssertionCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a monitor that raises a bare assert and then removes itself keeps only its own assert visible
+        /// while the Input System's monitor-removal assert is suppressed and counted once.
+        /// </summary>
+        [Test]
+        public void Apply_WhenMonitorRaisesBareAssertAndRemovesItself_KeepsOnlyUserAssertVisible()
+        {
+            InputStateChangeApplierService service = new InputStateChangeApplierService();
+            BareAssertMonitor monitor = new BareAssertMonitor(removeSelf: true);
+            InputState.AddChangeMonitor(_keyboard[Key.B], monitor, MonitorIndex);
+            LogAssert.Expect(LogType.Assert, "Assertion failed");
+
+            ApplyKeyB(service);
+
+            Assert.That(_assertLogCount, Is.EqualTo(1));
+            Assert.That(service.SuppressedAssertionCount, Is.EqualTo(1));
+        }
+
         private void ApplyKeyB(InputStateChangeApplierService service)
         {
             using (StateEvent.From(_keyboard, out InputEventPtr eventPtr))
@@ -183,6 +225,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void NotifyControlStateChanged(InputControl control, double time, InputEventPtr eventPtr, long monitorIndex)
             {
                 throw new InvalidOperationException("monitor failure");
+            }
+
+            public void NotifyTimerExpired(InputControl control, double time, long monitorIndex, int timerIndex)
+            {
+            }
+        }
+
+        private sealed class BareAssertMonitor : IInputStateChangeMonitor
+        {
+            private readonly bool _removeSelf;
+
+            public BareAssertMonitor(bool removeSelf)
+            {
+                _removeSelf = removeSelf;
+            }
+
+            public void NotifyControlStateChanged(InputControl control, double time, InputEventPtr eventPtr, long monitorIndex)
+            {
+                Debug.Assert(false);
+                if (_removeSelf)
+                {
+                    InputState.RemoveChangeMonitor(control, this, monitorIndex);
+                }
             }
 
             public void NotifyTimerExpired(InputControl control, double time, long monitorIndex, int timerIndex)

@@ -22,12 +22,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void LogFormat_WhenMessagelessAssertion_SuppressesAndCounts()
         {
             RecordingLogHandler inner = new RecordingLogHandler();
-            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner);
+            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner, () => true);
 
             filter.LogFormat(LogType.Assert, null, "{0}", "Assertion failed");
 
             Assert.That(inner.FormattedLogs, Is.Empty);
             Assert.That(filter.SuppressedCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies the messageless assert is forwarded and not counted when the origin check rejects it.
+        /// </summary>
+        [Test]
+        public void LogFormat_WhenMessagelessAssertionHasNonInputSystemOrigin_Forwards()
+        {
+            RecordingLogHandler inner = new RecordingLogHandler();
+            InputSystemMonitorRemovalAssertionLogFilter filter =
+                new InputSystemMonitorRemovalAssertionLogFilter(inner, () => false);
+
+            filter.LogFormat(LogType.Assert, null, "{0}", "Assertion failed");
+
+            Assert.That(inner.FormattedLogs.Count, Is.EqualTo(1));
+            Assert.That(filter.SuppressedCount, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -37,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void LogFormat_WhenAssertionHasMessage_Forwards()
         {
             RecordingLogHandler inner = new RecordingLogHandler();
-            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner);
+            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner, () => true);
 
             filter.LogFormat(LogType.Assert, null, "{0}", "Assertion failed: custom message");
 
@@ -52,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void LogFormat_WhenErrorWithAssertionText_Forwards()
         {
             RecordingLogHandler inner = new RecordingLogHandler();
-            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner);
+            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner, () => true);
 
             filter.LogFormat(LogType.Error, null, "{0}", "Assertion failed");
 
@@ -67,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void LogFormat_WhenAssertionHasTwoArgs_Forwards()
         {
             RecordingLogHandler inner = new RecordingLogHandler();
-            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner);
+            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner, () => true);
 
             filter.LogFormat(LogType.Assert, null, "{0}", "Assertion failed", "extra");
 
@@ -82,7 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void LogFormat_WhenAssertionFormatIsCustom_Forwards()
         {
             RecordingLogHandler inner = new RecordingLogHandler();
-            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner);
+            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner, () => true);
 
             filter.LogFormat(LogType.Assert, null, "custom: {0}", "Assertion failed");
 
@@ -97,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void LogException_Always_Forwards()
         {
             RecordingLogHandler inner = new RecordingLogHandler();
-            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner);
+            InputSystemMonitorRemovalAssertionLogFilter filter = new InputSystemMonitorRemovalAssertionLogFilter(inner, () => true);
             InvalidOperationException exception = new InvalidOperationException("boom");
 
             filter.LogException(exception, null);
