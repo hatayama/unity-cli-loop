@@ -55,9 +55,7 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
 ### ステップ 1：CLI をインストールする
 
-**macOS、Linux (x86_64)、Windows Git Bash:**
-
-Linux では focus-window と compile-check は未対応です。
+**macOS、Windows Git Bash:**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh

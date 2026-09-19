@@ -55,9 +55,7 @@ Make sure you have:
 
 ### Step 1: Install the CLI
 
-**macOS, Linux (x86_64), Windows Git Bash:**
-
-On Linux, focus-window and compile-check are not supported.
+**macOS, Windows Git Bash:**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
