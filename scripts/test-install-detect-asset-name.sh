@@ -1,8 +1,10 @@
 #!/bin/sh
-# Verifies install.sh's detect_asset_name helper maps each supported
-# uname OS/architecture pair to the published dispatcher asset, and rejects
-# pairs that have no published asset (Linux arm64, unsupported OSes) with an
-# explicit error instead of searching releases for a missing file.
+# Verifies install.sh's uname-dependent helpers. detect_asset_name maps each
+# supported uname OS/architecture pair to the published dispatcher asset, and
+# rejects pairs that have no published asset (Linux arm64, unsupported OSes)
+# with an explicit error instead of searching releases for a missing file.
+# detect_bash_profile_path points Linux bash users at ~/.bashrc and keeps the
+# macOS ~/.bash_profile choice.
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
@@ -48,6 +50,7 @@ export PATH
 
 eval "$(extract_function detect_asset_name)"
 eval "$(extract_function detect_installed_command_name)"
+eval "$(extract_function detect_bash_profile_path)"
 
 expect_asset() {
   mock_os=$1
@@ -85,6 +88,16 @@ expect_reject() {
   fi
 }
 
+expect_bash_profile() {
+  mock_os=$1
+  expected_profile=$2
+  actual_profile=$(export MOCK_UNAME_OS="$mock_os"; detect_bash_profile_path)
+  if [ "$actual_profile" != "$expected_profile" ]; then
+    echo "FAIL: $mock_os bash profile resolved '$actual_profile', expected '$expected_profile'" >&2
+    exit 1
+  fi
+}
+
 expect_asset Linux x86_64 uloop-dispatcher-linux-amd64.tar.gz uloop
 expect_asset Darwin arm64 uloop-dispatcher-darwin-arm64.tar.gz uloop
 expect_asset Darwin x86_64 uloop-dispatcher-darwin-amd64.tar.gz uloop
@@ -92,4 +105,11 @@ expect_asset MINGW64_NT-10.0 x86_64 uloop-dispatcher-windows-amd64.zip uloop.exe
 expect_reject Linux aarch64 "Unsupported Linux architecture"
 expect_reject FreeBSD x86_64 "Unsupported OS"
 
-echo "install.sh detect_asset_name tests passed"
+# An existing ~/.bash_profile must not win on Linux, where terminals never read it.
+HOME="$work_dir/home"
+mkdir -p "$HOME"
+: > "$HOME/.bash_profile"
+expect_bash_profile Linux "$HOME/.bashrc"
+expect_bash_profile Darwin "$HOME/.bash_profile"
+
+echo "install.sh uname-dependent helper tests passed"
