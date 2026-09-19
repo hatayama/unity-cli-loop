@@ -59,7 +59,10 @@ method instead; for a reference type, guard that with
 the method `Skipped`. When every method that assigns such a field is `Skipped` but a
 method that reads it was applied, a `Warnings` entry names the field, the skipped
 writers and the reader: the reader sees `default(T)`. Fix the skip reason and reload
-again, or run `uloop compile`. Added `const` values are folded into edited bodies as literals,
+again, or run `uloop compile`. Accessors of properties added in the same edit count as
+readers and writers too: an applied getter is a reader, and a skipped setter is a skipped
+writer. An added auto-property without an initializer gets the same check, with a warning
+that starts `Added auto-property`. Added `const` values are folded into edited bodies as literals,
 like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
 resolved type has any — their values live in the hot-reload shim and are not visible
