@@ -122,6 +122,29 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 	}
 }
 
+func TestCommandForLinuxConfiguresShellPathAndLegacyCleanup(t *testing.T) {
+	// Verifies Linux install uses the same POSIX setup command as macOS, including PATH setup and legacy cleanup.
+	command, err := CommandForOS("linux", Options{
+		InstallDir: "/home/tester/.local/bin",
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	if command.Name != "sh" {
+		t.Fatalf("command name mismatch: %s", command.Name)
+	}
+	if command.TargetPath != "/home/tester/.local/bin/uloop" {
+		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+	if !command.UpdatesPath {
+		t.Fatal("Linux install should update shell PATH")
+	}
+	if !command.CleansLegacy {
+		t.Fatal("Linux install should clean legacy launchers")
+	}
+}
+
 func TestWindowsInstallScriptReplacesTemplateValues(t *testing.T) {
 	// Verifies Windows setup templates cannot ship with unresolved placeholders.
 	installDir := `C:\Temp\uloop's bin`
@@ -687,13 +710,13 @@ func TestPosixInstallScriptSkipsDefaultNpmCleanupForInstallPrefix(t *testing.T) 
 
 func TestCommandForOSRejectsUnsupportedOS(t *testing.T) {
 	// Verifies unsupported platforms fail before building any setup command.
-	_, err := CommandForOS("linux", Options{
+	_, err := CommandForOS("freebsd", Options{
 		InstallDir: "/Users/ExampleUser/.local/bin",
 	})
 	if err == nil {
 		t.Fatal("expected unsupported OS error")
 	}
-	if !strings.Contains(err.Error(), "macOS and Windows") {
+	if !strings.Contains(err.Error(), "macOS, Linux, and Windows") {
 		t.Fatalf("unexpected unsupported OS error: %v", err)
 	}
 }

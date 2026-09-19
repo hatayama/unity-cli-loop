@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	UnsupportedOSMessage = "native update is only supported on macOS and Windows"
+	UnsupportedOSMessage = "native update is only supported on macOS, Linux, and Windows"
 )
 
 type Options struct {
@@ -35,7 +35,7 @@ func CommandForOS(goos string, options Options) (Command, error) {
 	version := ScriptVersion(options)
 	updateSelector := Selector(options)
 	switch goos {
-	case "darwin":
+	case "darwin", "linux":
 		return commandForScript("sh", PosixScriptName, version, updateSelector), nil
 	case "windows":
 		return commandForScript("powershell", WindowsScriptName, version, updateSelector), nil

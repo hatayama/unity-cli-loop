@@ -690,14 +690,38 @@ func TestUpdateFailsWhenExecutablePathResolutionFails(t *testing.T) {
 	}
 }
 
-func TestUpdateCommandForLinuxIsUnsupported(t *testing.T) {
-	// Verifies Linux update fails before trying to run a platform-specific update.
-	_, _, err := updateCommandForOS("linux")
+func TestUpdateCommandForFreeBSDIsUnsupported(t *testing.T) {
+	// Verifies an unsupported OS fails before trying to run a platform-specific update.
+	_, _, err := updateCommandForOS("freebsd")
 	if err == nil {
 		t.Fatal("expected unsupported OS error")
 	}
-	if !strings.Contains(err.Error(), "macOS and Windows") {
-		t.Fatalf("unexpected linux error: %v", err)
+	if !strings.Contains(err.Error(), "macOS, Linux, and Windows") {
+		t.Fatalf("unexpected freebsd error: %v", err)
+	}
+}
+
+func TestUpdateCommandForLinuxUsesDirectInstaller(t *testing.T) {
+	// Verifies Linux update runs the same verified POSIX release installer as macOS.
+	command, err := update.CommandForOS("linux", update.Options{
+		CurrentVersion: dispatcherVersion,
+	})
+	if err != nil {
+		t.Fatalf("updateCommandForOS failed: %v", err)
+	}
+
+	if command.Name != "sh" {
+		t.Fatalf("command mismatch: %s", command.Name)
+	}
+	expectedScriptURL := update.ScriptAssetURL(dispatchercontract.DispatcherCurrent.DispatcherVersion, update.PosixScriptName)
+	if command.InstallerURL != expectedScriptURL {
+		t.Fatalf("installer URL mismatch: %s", command.InstallerURL)
+	}
+	if command.InstallerChecksumURL != expectedScriptURL+".sha256" {
+		t.Fatalf("installer checksum URL mismatch: %s", command.InstallerChecksumURL)
+	}
+	if command.InstallerName != update.PosixScriptName {
+		t.Fatalf("installer name mismatch: %s", command.InstallerName)
 	}
 }
 
@@ -711,10 +735,10 @@ func TestUpdateCommandRejectsUnsupportedOS(t *testing.T) {
 
 func skipWhenNativeUpdateIsUnsupported(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" || runtime.GOOS == "windows" {
 		return
 	}
-	t.Skip("native update is supported only on macOS and Windows")
+	t.Skip("native update is supported only on macOS, Linux, and Windows")
 }
 
 func stubManualUpdateHooks(t *testing.T, updatedVersion string) func() {

@@ -40,6 +40,31 @@ func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
 	}
 }
 
+func TestCommandForLinuxRemovesUloopFromInstallDirectory(t *testing.T) {
+	// Verifies Linux uninstall removes the dispatcher binary from the selected install directory.
+	command, err := CommandForOS("linux", Options{
+		InstallDir: "/home/tester/.local/bin",
+		CurrentPID: 1234,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	if command.Name != "sh" {
+		t.Fatalf("command name mismatch: %s", command.Name)
+	}
+	joinedArgs := strings.Join(command.Args, " ")
+	if !strings.Contains(joinedArgs, "/home/tester/.local/bin/uloop") {
+		t.Fatalf("target path missing: %s", joinedArgs)
+	}
+	if !strings.Contains(joinedArgs, "rm -f") {
+		t.Fatalf("remove command missing: %s", joinedArgs)
+	}
+	if command.TargetPath != "/home/tester/.local/bin/uloop" {
+		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+}
+
 func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T) {
 	// Verifies Windows uninstall defers deletion until the running dispatcher process exits.
 	command, err := CommandForOS("windows", Options{
@@ -249,14 +274,14 @@ func TestCommandForWindowsRemovesUserPathBeforeDeletingDispatcher(t *testing.T) 
 
 func TestCommandForOSRejectsUnsupportedOS(t *testing.T) {
 	// Verifies unsupported platforms fail before building any destructive command.
-	_, err := CommandForOS("linux", Options{
+	_, err := CommandForOS("freebsd", Options{
 		InstallDir: "/tmp/bin",
 		CurrentPID: 1234,
 	})
 	if err == nil {
 		t.Fatal("expected unsupported OS error")
 	}
-	if !strings.Contains(err.Error(), "macOS and Windows") {
+	if !strings.Contains(err.Error(), "macOS, Linux, and Windows") {
 		t.Fatalf("unexpected unsupported OS error: %v", err)
 	}
 }
