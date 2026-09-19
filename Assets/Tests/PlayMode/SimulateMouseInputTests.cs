@@ -198,6 +198,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator LongPress_WhenUnityPausesDuringObservation_Should_ReleaseButton()
+        {
+            // Verifies a pause-point pause during a long press releases the injected mouse button state.
+            yield return null;
+
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.LongPress.ToString(),
+                ["x"] = 400,
+                ["y"] = 300,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the long-press observation window.");
+
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("LongPress", lastResponse.Action);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Pause-point interruption should release the injected mouse button state.");
+            Assert.IsFalse(SimulateMouseInputOverlayState.HasAnyActivity, "Pause-point interruption should clear mouse overlay state.");
+        }
+
+        [UnityTest]
         public IEnumerator LongPress_WithZeroDuration_Should_ReturnError()
         {
             yield return null;
