@@ -162,7 +162,7 @@ func parseLinuxProcCmdline(buf []byte) []string {
 
 // matchLinuxUnityProcess decides from a raw argv slice whether a process is an
 // interactive Unity Editor and, if so, which project it opened. Unlike the macOS
-// matcher it does not join argv and cut the project path out with a regex: argv
+// matcher it does not join argv and match substrings or regexes over it: argv
 // boundaries are preserved in /proc, so a project path containing spaces is read
 // without guessing where it ends. path.Base (not filepath.Base) keeps the result
 // identical when the tests run on Windows, since Linux paths always use '/'.
@@ -173,8 +173,7 @@ func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
 	if path.Base(args[0]) != "Unity" {
 		return UnityProcess{}, false
 	}
-	lowerCommand := strings.ToLower(strings.Join(args, " "))
-	if strings.Contains(lowerCommand, "-batchmode") || strings.Contains(lowerCommand, "assetimportworker") {
+	if hasNonEditorLinuxArg(args) {
 		return UnityProcess{}, false
 	}
 	projectPath := linuxProjectPathFromArgs(args)
@@ -182,6 +181,19 @@ func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
 		return UnityProcess{}, false
 	}
 	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+}
+
+// hasNonEditorLinuxArg reports whether argv marks a batchmode run or an asset
+// import worker. It compares whole arguments rather than substrings of the joined
+// command so a project path that merely contains these words is not excluded.
+func hasNonEditorLinuxArg(args []string) bool {
+	for _, arg := range args {
+		lowerArg := strings.ToLower(arg)
+		if lowerArg == "-batchmode" || strings.HasPrefix(lowerArg, "assetimportworker") {
+			return true
+		}
+	}
+	return false
 }
 
 // linuxProjectPathFromArgs returns the value of Unity's -projectPath flag, accepting

@@ -227,6 +227,8 @@ func TestMatchLinuxUnityProcessExtractsProjectPath(t *testing.T) {
 	}{
 		{"separate value keeps spaces", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/My Project"}, "/work/My Project"},
 		{"equals form with mixed case", []string{"/opt/Unity/Editor/Unity", "-projectPath=/work/p"}, "/work/p"},
+		{"project path containing batchmode", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/nightly-batchmode"}, "/work/nightly-batchmode"},
+		{"project path containing assetimportworker", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/AssetImportWorker-lab"}, "/work/AssetImportWorker-lab"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
