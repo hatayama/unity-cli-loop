@@ -536,11 +536,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string DefaultSelectionNewFilesNote =
             " New files that have never been compiled are not selected automatically.";
 
+        // Opens the selection message of an omitted --files run that found no changed file but
+        // still selects files Play entry discarded.
+        public const string DefaultSelectionNoChangedFilesPrefix =
+            "--files was omitted; no file changed since the last compile.";
+
+        // Format: {0} = count, {1} = comma-separated project-relative paths of the owner files of
+        // introduced types that the Play-entry domain reload discarded.
+        public const string DefaultSelectionReselectedDroppedFilesFormat =
+            " {0} new file(s) that hot reload had introduced before the Play Mode domain reload "
+            + "discarded them were selected again: {1}.";
+
+        // Replaces DefaultSelectionNewFilesNote when discarded new files were selected, so the
+        // note does not read as if those files were left out too.
+        public const string DefaultSelectionOtherNewFilesNote =
+            " Other new files that have never been compiled are not selected automatically.";
+
         // SessionState key for the change identities (patched methods, added members, introduced
         // types) discarded by the Play-entry domain reload.
         // SessionState survives that reload and is cleared when the Editor process exits.
         public const string PlayModeEntryDropSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIdentities";
+
+        // SessionState key for the owner files of introduced types discarded by the Play-entry
+        // domain reload, one "identity<TAB>project-relative path" line per type.
+        public const string PlayModeEntryDropSourcesSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIntroducedSources";
 
         // Format: remaining discarded identity count. Used only when --status active count is 0.
         public const string PlayModeEntryDropStatusMessageFormat =

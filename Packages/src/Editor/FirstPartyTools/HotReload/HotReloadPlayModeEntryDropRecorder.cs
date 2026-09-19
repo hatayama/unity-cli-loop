@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            HotReloadPlayModeEntryDropLedger.Clear();
+            ClearLedgers();
         }
 
         internal static void NotifyApplyRecovered(
@@ -112,12 +112,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outcome.MetadataName));
             }
 
-            HotReloadPlayModeEntryDropLedger.Remove(recoveredIdentities);
+            RemoveFromLedgers(recoveredIdentities);
         }
 
         internal static void NotifyRevertAll()
         {
-            HotReloadPlayModeEntryDropLedger.Clear();
+            ClearLedgers();
         }
 
         internal static void ResetPendingForTesting()
@@ -128,9 +128,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void NotifyPlayModeStateChanged(
             PlayModeStateChange state,
             IReadOnlyList<string> identities,
+            IReadOnlyList<HotReloadPlayModeEntryDropSource> introducedSources,
             bool isDomainReloadDisabledOnEnterPlayMode)
         {
             Debug.Assert(identities != null, "identities must not be null");
+            Debug.Assert(introducedSources != null, "introducedSources must not be null");
             DiscardPendingIfSameDomainSurvived();
             if (!ShouldRecord(state, isDomainReloadDisabledOnEnterPlayMode, identities.Count))
             {
@@ -138,7 +140,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadPlayModeEntryDropLedger.Record(identities);
+            HotReloadPlayModeEntryDropSourceLedger.Record(introducedSources);
             RememberPending(identities);
+        }
+
+        // Why both ledgers move together: a source line names the type identity it was recorded
+        // under, so a type that leaves the identity ledger must take its owner file along, or an
+        // omitted --files run would keep selecting a file whose type is no longer discarded.
+        private static void RemoveFromLedgers(IReadOnlyList<string> identities)
+        {
+            HotReloadPlayModeEntryDropLedger.Remove(identities);
+            HotReloadPlayModeEntryDropSourceLedger.Remove(identities);
+        }
+
+        private static void ClearLedgers()
+        {
+            HotReloadPlayModeEntryDropLedger.Clear();
+            HotReloadPlayModeEntryDropSourceLedger.Clear();
         }
 
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
@@ -146,6 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             NotifyPlayModeStateChanged(
                 state,
                 CollectActiveIdentities(),
+                CollectActiveIntroducedSources(),
                 IsDomainReloadDisabledOnEnterPlayMode());
         }
 
@@ -157,7 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            HotReloadPlayModeEntryDropLedger.Remove(_pendingIdentitiesRecordedInThisDomain);
+            RemoveFromLedgers(_pendingIdentitiesRecordedInThisDomain);
             _pendingIdentitiesRecordedInThisDomain = null;
         }
 
@@ -241,6 +260,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return identities;
+        }
+
+        /// <summary>
+        /// The owner file of each introduced type the next domain reload would discard, keyed by
+        /// the same identity CollectActiveIdentities gives that type.
+        /// </summary>
+        internal static IReadOnlyList<HotReloadPlayModeEntryDropSource> CollectActiveIntroducedSources()
+        {
+            Debug.Assert(GetServices != null, "GetServices must be set before sources are collected.");
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> introducedTypes =
+                GetServices().Domain.IntroducedTypes.DescribeActive();
+            List<HotReloadPlayModeEntryDropSource> sources =
+                new List<HotReloadPlayModeEntryDropSource>(introducedTypes.Count);
+            for (int index = 0; index < introducedTypes.Count; index++)
+            {
+                HotReloadIntroducedTypeDescriptor descriptor = introducedTypes[index];
+                // A type with no owner file has nothing an omitted --files run could select again.
+                if (string.IsNullOrEmpty(descriptor.OwnerProjectRelativePath))
+                {
+                    continue;
+                }
+
+                sources.Add(new HotReloadPlayModeEntryDropSource(
+                    HotReloadPlayModeEntryDropIdentity.ForType(
+                        descriptor.OriginalAssemblyName,
+                        descriptor.MetadataName.Value),
+                    descriptor.OwnerProjectRelativePath));
+            }
+
+            return sources;
         }
 
         private static bool IsDomainReloadDisabledOnEnterPlayMode()
