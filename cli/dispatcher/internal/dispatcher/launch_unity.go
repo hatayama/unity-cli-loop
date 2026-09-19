@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -15,6 +16,17 @@ func windowsUnityExecutableCandidates(version string) []string {
 		}
 	}
 	return candidates
+}
+
+// linuxUnityExecutableCandidates lists where Unity Hub installs an Editor on Linux.
+// An unknown home directory yields no candidate rather than a relative path that
+// would be resolved against the caller's working directory. path.Join keeps the
+// '/'-separated result identical when the tests run on Windows.
+func linuxUnityExecutableCandidates(version string, homeDir string) []string {
+	if homeDir == "" {
+		return []string{}
+	}
+	return []string{path.Join(homeDir, "Unity", "Hub", "Editor", version, "Editor", "Unity")}
 }
 
 func readUnityEditorVersion(projectRoot string) (string, error) {
