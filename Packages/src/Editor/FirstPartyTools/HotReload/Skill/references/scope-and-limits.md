@@ -56,7 +56,10 @@ writers with a per-method reason. To apply such a field without compiling, decla
 without an initializer — it starts at `default(T)` — and assign it inside the patched
 method instead; for a reference type, guard that with
 `if (_field == null) { _field = new List<int>(); }`. `??=` is not rewritable and keeps
-the method `Skipped`. Added `const` values are folded into edited bodies as literals,
+the method `Skipped`. When every method that assigns such a field is `Skipped` but a
+method that reads it was applied, a `Warnings` entry names the field, the skipped
+writers and the reader: the reader sees `default(T)`. Fix the skip reason and reload
+again, or run `uloop compile`. Added `const` values are folded into edited bodies as literals,
 like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
 resolved type has any — their values live in the hot-reload shim and are not visible
