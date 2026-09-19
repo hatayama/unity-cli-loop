@@ -133,7 +133,8 @@ internal static class RetainedDeclarationStage
                 MetadataName = verdict.MetadataName,
                 OriginalAssemblyName = verdict.Record.OriginalAssemblyName,
                 OriginalAssemblyMvid = verdict.Record.OriginalAssemblyMvid,
-                ChangedMethodKeys = verdict.Match.ChangedMethodSyntaxKeys.ToArray()
+                ChangedMethodKeys = verdict.Match.ChangedMethodSyntaxKeys.ToArray(),
+                ChangedGetterPropertyKeys = verdict.Match.ChangedGetterPropertySyntaxKeys.ToArray()
             });
         }
 

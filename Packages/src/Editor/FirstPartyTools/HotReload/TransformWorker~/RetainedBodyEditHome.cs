@@ -12,8 +12,9 @@ internal static class RetainedBodyEditHome
     /// <summary>
     /// Binds the type state to the retained artifact that serves it and returns that artifact's
     /// type, or null when no artifact of this run serves the type. On success the state also
-    /// carries the assembly the patch belongs in and the method keys this edit changed, because
-    /// every other method still runs the body the artifact holds.
+    /// carries the assembly the patch belongs in and the keys of the methods and getter-only
+    /// properties this edit changed, because every other member still runs the body the artifact
+    /// holds.
     /// </summary>
     internal static INamedTypeSymbol Adopt(TypeEmitState typeState, SemanticModel semanticModel)
     {
@@ -41,6 +42,9 @@ internal static class RetainedBodyEditHome
         typeState.HomeAssemblyName = homeAssemblyName;
         typeState.RetainedChangedMethodKeys = new HashSet<string>(
             bodyEditType.ChangedMethodKeys ?? new string[0],
+            StringComparer.Ordinal);
+        typeState.RetainedChangedGetterPropertyKeys = new HashSet<string>(
+            bodyEditType.ChangedGetterPropertyKeys ?? new string[0],
             StringComparer.Ordinal);
         return artifactType;
     }
