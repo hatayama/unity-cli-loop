@@ -156,6 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
                 PlayModeStateChange.ExitingEditMode,
                 new[] { "Type.Active()" },
+                Array.Empty<HotReloadPlayModeEntryDropSource>(),
                 isDomainReloadDisabledOnEnterPlayMode: false);
 
             Assert.That(
@@ -165,12 +166,135 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
                 PlayModeStateChange.EnteredEditMode,
                 new[] { "Type.Active()" },
+                Array.Empty<HotReloadPlayModeEntryDropSource>(),
                 isDomainReloadDisabledOnEnterPlayMode: false);
 
             Assert.That(
                 HotReloadPlayModeEntryDropLedger.GetIdentities(),
                 Is.EqualTo(new[] { "Type.Old()" }));
         }
+        /// <summary>
+        /// What: a recorded Play entry also records the owner file of each discarded introduced type.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenItRecords_AlsoRecordsIntroducedSources()
+        {
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                new[] { "Type.Active()", IntroducedIdentityA },
+                new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/Introduced.cs" }));
+        }
+
+        /// <summary>
+        /// What: a cancelled Play entry forgets the owner files it just recorded and keeps older ones.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenPlayEntryIsCancelledInTheSameDomain_RemovesOnlyPendingSources()
+        {
+            HotReloadPlayModeEntryDropSourceLedger.Record(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityB, "Assets/Older.cs")
+            });
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.EnteredEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/Older.cs" }));
+        }
+
+        /// <summary>
+        /// What: an apply forgets the owner files of types it introduced or found already active,
+        /// and keeps the file of a type it failed to introduce.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_RemovesSourcesOfIntroducedAndAlreadyActiveTypesOnly()
+        {
+            HotReloadPlayModeEntryDropSourceLedger.Record(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(
+                    HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1"),
+                    "Assets/T1.cs"),
+                new HotReloadPlayModeEntryDropSource(
+                    HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T2"),
+                    "Assets/T2.cs"),
+                new HotReloadPlayModeEntryDropSource(
+                    HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T3"),
+                    "Assets/T3.cs")
+            });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>
+                {
+                    HotReloadIntroducedTypeOutcome.Introduced("Fixture.T1", "Fixture.Assembly", "Assets/T1.cs"),
+                    HotReloadIntroducedTypeOutcome.AlreadyActive(
+                        "Fixture.T2",
+                        "Fixture.Assembly",
+                        "Assets/T2.cs",
+                        bodyEdited: false),
+                    HotReloadIntroducedTypeOutcome.Failed("Fixture.T3", "Fixture.Assembly", "Assets/T3.cs", "reason")
+                });
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/T3.cs" }));
+        }
+
+        /// <summary>
+        /// What: a successful compile and a revert-all each forget every recorded owner file.
+        /// </summary>
+        [Test]
+        public void NotifyCompilationFinishedWithoutErrorsAndNotifyRevertAll_ClearSources()
+        {
+            HotReloadPlayModeEntryDropSourceLedger.Record(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs")
+            });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyCompilationFinished(0);
+
+            Assert.That(HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(), Is.Empty);
+
+            HotReloadPlayModeEntryDropSourceLedger.Record(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs")
+            });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+
+            Assert.That(HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a Play entry that keeps the domain records no owner file, as it records no identity.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenDomainReloadIsDisabled_DoesNotRecordSources()
+        {
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                isDomainReloadDisabledOnEnterPlayMode: true);
+
+            Assert.That(HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(), Is.Empty);
+        }
+
         /// <summary>
         /// What: a reload that both patched a method and introduced a type offers both to the
         /// ledger, so Play entry records the type it is about to unload as well as the patch.
@@ -371,6 +495,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(File.Exists(path), Is.True, "Fixture missing: " + path);
             return path;
         }
+
+        private static readonly string IntroducedIdentityA =
+            HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.IntroducedA");
+
+        private static readonly string IntroducedIdentityB =
+            HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.IntroducedB");
 
         private const string HostFileName = "HotReloadCrossFileAddedMemberHost.cs";
 
