@@ -122,6 +122,29 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 	}
 }
 
+func TestCommandForLinuxConfiguresShellPathAndLegacyCleanup(t *testing.T) {
+	// Verifies Linux install uses the same POSIX setup command as macOS, including PATH setup and legacy cleanup.
+	command, err := CommandForOS("linux", Options{
+		InstallDir: "/home/tester/.local/bin",
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	if command.Name != "sh" {
+		t.Fatalf("command name mismatch: %s", command.Name)
+	}
+	if command.TargetPath != "/home/tester/.local/bin/uloop" {
+		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+	if !command.UpdatesPath {
+		t.Fatal("Linux install should update shell PATH")
+	}
+	if !command.CleansLegacy {
+		t.Fatal("Linux install should clean legacy launchers")
+	}
+}
+
 func TestWindowsInstallScriptReplacesTemplateValues(t *testing.T) {
 	// Verifies Windows setup templates cannot ship with unresolved placeholders.
 	installDir := `C:\Temp\uloop's bin`
@@ -217,6 +240,48 @@ func TestPosixInstallScriptWritesZshPathBlock(t *testing.T) {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("profile content missing %q:\n%s", expected, content)
 		}
+	}
+}
+
+func TestPosixInstallScriptWritesBashrcOnLinux(t *testing.T) {
+	// Verifies Linux bash setup writes ~/.bashrc, because Linux terminals start non-login shells that skip ~/.bash_profile.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "bin")
+	if err := os.WriteFile(filepath.Join(home, ".bash_profile"), []byte("existing\n"), 0o600); err != nil {
+		t.Fatalf("failed to write bash profile: %v", err)
+	}
+	fakeBinDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBinDir, "uname"), []byte("#!/bin/sh\necho Linux\n"), 0o755); err != nil {
+		t.Fatalf("failed to write fake uname: %v", err)
+	}
+	command, err := CommandForOS("linux", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"SHELL=/bin/bash",
+		"PATH=" + fakeBinDir + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+	}
+
+	bashrcContent, err := os.ReadFile(filepath.Join(home, ".bashrc"))
+	if err != nil {
+		t.Fatalf("failed to read bashrc: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(bashrcContent), "export PATH="+shellProfileQuoteForTest(installDir)+":$PATH") {
+		t.Fatalf("bashrc missing uloop PATH block:\n%s", bashrcContent)
 	}
 }
 
@@ -687,13 +752,13 @@ func TestPosixInstallScriptSkipsDefaultNpmCleanupForInstallPrefix(t *testing.T) 
 
 func TestCommandForOSRejectsUnsupportedOS(t *testing.T) {
 	// Verifies unsupported platforms fail before building any setup command.
-	_, err := CommandForOS("linux", Options{
+	_, err := CommandForOS("freebsd", Options{
 		InstallDir: "/Users/ExampleUser/.local/bin",
 	})
 	if err == nil {
 		t.Fatal("expected unsupported OS error")
 	}
-	if !strings.Contains(err.Error(), "macOS and Windows") {
+	if !strings.Contains(err.Error(), "macOS, Linux, and Windows") {
 		t.Fatalf("unexpected unsupported OS error: %v", err)
 	}
 }

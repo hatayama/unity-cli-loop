@@ -88,6 +88,7 @@ cleanup_shell_path_blocks() {
     remove_path_block "$HOME/.bash_profile" || return 1
     remove_path_block "$HOME/.bash_login" || return 1
     remove_path_block "$HOME/.profile" || return 1
+    remove_path_block "$HOME/.bashrc" || return 1
 
     if [ -n "${ZDOTDIR:-}" ]; then
         remove_path_block "$ZDOTDIR/.zshrc" || return 1

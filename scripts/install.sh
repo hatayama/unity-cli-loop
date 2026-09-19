@@ -68,6 +68,7 @@ detect_asset_name() {
 
   case "$os" in
     Darwin) os_name="darwin" ;;
+    Linux) os_name="linux" ;;
     MINGW*|MSYS*) os_name="windows" ;;
     *)
       echo "Unsupported OS: $os" >&2
@@ -91,6 +92,14 @@ detect_asset_name() {
     fi
     echo "uloop-dispatcher-windows-amd64.zip"
     return
+  fi
+
+  # Linux releases publish only amd64, because the Unity Linux Editor ships for
+  # x86_64 only. Stop here so other architectures get a clear error instead of
+  # a "release not found" failure while searching for a missing asset.
+  if [ "$os_name" = "linux" ] && [ "$arch_name" != "amd64" ]; then
+    echo "Unsupported Linux architecture: $arch" >&2
+    exit 1
   fi
 
   echo "uloop-dispatcher-$os_name-$arch_name.tar.gz"
@@ -163,6 +172,12 @@ detect_user_shell_name() {
 }
 
 detect_bash_profile_path() {
+  # Linux terminal emulators start bash as a non-login shell, which reads
+  # ~/.bashrc and never ~/.bash_profile.
+  if [ "$(uname -s)" = "Linux" ]; then
+    echo "$HOME/.bashrc"
+    return
+  fi
   if [ -f "$HOME/.bash_profile" ]; then
     echo "$HOME/.bash_profile"
     return
@@ -553,6 +568,9 @@ test_uloop_native_install_supported() {
     Darwin)
       printf '%s\n' "$help_output" | grep -F "On macOS," >/dev/null
       ;;
+    Linux)
+      printf '%s\n' "$help_output" | grep -F "On Linux," >/dev/null
+      ;;
     MINGW*|MSYS*)
       printf '%s\n' "$help_output" | grep -F "On Windows," >/dev/null
       ;;
@@ -647,7 +665,7 @@ trap cleanup_install EXIT
 trap "exit 129" INT HUP TERM
 
 compute_asset_sha256() {
-  # Why: install.sh runs on macOS (shasum) and MINGW/MSYS (sha256sum). We do the
+  # Why: install.sh runs on macOS (shasum), Linux, and MINGW/MSYS (sha256sum). We do the
   # computation once here so both the same-origin .sha256 check and the trusted
   # manifest check share one hex string.
   if command -v sha256sum >/dev/null 2>&1; then
