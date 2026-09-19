@@ -3541,6 +3541,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method that assigns, compound-assigns and reads a compiled private
+        /// static property is Added and the compiled reader returns the written value.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_PrivateStaticPropertyWrite_ReadsBackWrittenValue()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedWriteStaticProperty();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedWriteStaticProperty()\n        {\n"
+                + "            StaticWritableValue = 5;\n"
+                + "            StaticWritableValue += 3;\n"
+                + "            return StaticWritableValue;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            host.ResetStaticWritable();
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedPrivateStaticPropertyWrite.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedWriteStaticProperty");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(8));
+            Assert.That(host.ReadStaticWritable(), Is.EqualTo(8));
+            host.ResetStaticWritable();
+        }
+
+        /// <summary>
         /// What: an existing patched method that reads a private static field through a
         /// closure (pre-existing delegation path) is Patched and returns the compiled value.
         /// </summary>

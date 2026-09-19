@@ -14,9 +14,9 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// End-to-end EditMode coverage for added private members reached through shapes the
-    /// compiled-member accessor delegates cannot express: a static property read and ref/out
-    /// arguments. The reload must emit them and the patched runtime must return their values.
+    /// End-to-end EditMode coverage for added private members that compiled-member accessor
+    /// delegates cannot reach: a static property the compiled type lacks, and ref/out arguments.
+    /// The reload must emit them and the patched runtime must return their values.
     /// </summary>
     public class HotReloadAddedMemberAccessE2ETests
     {
