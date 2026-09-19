@@ -101,4 +101,9 @@ snapshot and is never selected automatically — pass it with `--files`, or run 
 establish a complete baseline. A script under a brand-new `.asmdef` still needs `uloop compile`
 first, because Unity has to create the assembly before a reload can target it.
 
+One exception: when the Play Mode domain reload discards types that hot reload had introduced,
+the files that declare them are remembered. The next reload without `--files` selects them again
+after the changed files, as long as they are still on disk, and the message names them. A
+successful compile, `--revert-all`, or a reload that brings those types back forgets them.
+
 Full rules, exact response wording, and the compile-required list: `docs/hot-reload-introduced-types.md`.

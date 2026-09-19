@@ -152,3 +152,20 @@ selected automatically; pass it (and any other path) with `--files`.
 
 A brand-new script under a brand-new `.asmdef` still needs `uloop compile` first — Unity has to
 create the assembly before any reload can target it.
+
+One exception covers the files hot reload had already introduced types from. When entering Play
+Mode reloads the domain and discards those types, the files that declare them are remembered for
+the rest of the Editor session. The next `uloop hot-reload` without `--files` selects each of them
+again, after the changed files, if it is still on disk and is not already a changed file. The
+selection message then names them:
+
+- `--files was omitted; N changed file(s) since the last compile were selected: <paths>. M new
+  file(s) that hot reload had introduced before the Play Mode domain reload discarded them were
+  selected again: <paths>. Other new files that have never been compiled are not selected
+  automatically.`
+- With no changed file, the first sentence reads `--files was omitted; no file changed since the
+  last compile.` and the reload still runs instead of reporting that nothing changed.
+
+A file is forgotten once every type it declared is brought back by a reload (introduced again or
+found already active), and all of them are forgotten on a successful compile or `--revert-all`.
+Without such a file, the selection message is the same as before.

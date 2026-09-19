@@ -236,7 +236,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             services.PackageRootCapture.CaptureCurrent();
             HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
                 parameters.Files,
-                services.ChangeDetector.Detect);
+                services.ChangeDetector.Detect,
+                HotReloadDroppedIntroducedSourceFiles.ListExistingOnDisk());
             if (selection.ValidationFailure != null)
             {
                 return CreateValidationFailure(services, selection.ValidationFailure);
