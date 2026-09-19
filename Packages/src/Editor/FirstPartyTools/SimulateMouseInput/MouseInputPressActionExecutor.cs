@@ -226,15 +226,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused && pressWasApplied)
             {
-                // Why: ApplyOnNextConfiguredUpdate already disposed the pending apply subscription when
-                // it returned Paused, so a release routed through it again is discarded and the button
-                // stays held until the next command. Write the release straight into the device after
-                // that dispose, so no queued edge can re-apply the press once the Editor resumes.
-                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                MouseInputMainThreadCleanup.ReleaseButtonImmediatelyAfterPauseInterruption(mouse, button);
-                MouseInputState.SetButtonUp(button);
-                SimulateMouseInputOverlayState.Clear();
-                return waitOutcome;
+                return await ReleaseHeldButtonAfterPause(mouse, button).ConfigureAwait(false);
             }
 
             if (pressWasApplied)
@@ -248,6 +240,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     MouseInputMainThreadCleanup.ScheduleTimedOutButtonCleanup(mouse, button, false);
                     return InputSimulationWaitOutcome.TimedOut;
+                }
+
+                // The pause can also arrive while this release is queued, which discards it the same way.
+                if (releaseOutcome == InputSimulationWaitOutcome.Paused)
+                {
+                    return await ReleaseHeldButtonAfterPause(mouse, button).ConfigureAwait(false);
                 }
             }
 
@@ -263,6 +261,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return waitOutcome;
+        }
+
+        /// <summary>
+        /// Writes the release straight into the device after a pause discarded the queued one, and
+        /// reports the paused outcome.
+        /// </summary>
+        private static async Task<InputSimulationWaitOutcome> ReleaseHeldButtonAfterPause(
+            Mouse mouse,
+            RuntimeMouseButton button)
+        {
+            // Why: ApplyOnNextConfiguredUpdate already disposed the pending apply subscription when it
+            // returned Paused, so a release routed through it again is discarded and the button stays
+            // held until the next command. Writing after that dispose also keeps a queued edge from
+            // re-applying the press once the Editor resumes.
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            MouseInputMainThreadCleanup.ReleaseButtonImmediatelyAfterPauseInterruption(mouse, button);
+            MouseInputState.SetButtonUp(button);
+            SimulateMouseInputOverlayState.Clear();
+            return InputSimulationWaitOutcome.Paused;
         }
 
         private static RuntimeMouseButton ToRuntimeMouseButton(UnityCliLoopMouseButton button)

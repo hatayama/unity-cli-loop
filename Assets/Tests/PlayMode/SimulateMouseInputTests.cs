@@ -211,7 +211,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 ["duration"] = 1f
             }, System.Threading.CancellationToken.None);
 
-            yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
+            float pressDeadline = Time.realtimeSinceStartup + 5f;
+            yield return new WaitUntil(() =>
+                mouse.leftButton.isPressed || task.IsCompleted || Time.realtimeSinceStartup >= pressDeadline);
+            Assert.IsTrue(mouse.leftButton.isPressed, "The press must be applied before the pause is simulated.");
             Assert.IsFalse(task.IsCompleted, "The test must pause during the long-press observation window.");
 
             InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
