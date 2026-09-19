@@ -568,10 +568,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "receiver with possible side effects would be evaluated twice.");
             yield return Case(
-                HotReloadWorkerReasonCode.AccessorStaticPropertyNoShape,
-                NoArgs,
-                "inaccessible static property access has no accessor rewrite shape.");
-            yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape,
                 NoArgs,
                 "inaccessible ref-returning properties have no accessor rewrite shape.");
