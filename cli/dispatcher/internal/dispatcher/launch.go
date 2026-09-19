@@ -449,6 +449,12 @@ func unityExecutableCandidates(version string) []string {
 		return []string{fmt.Sprintf("/Applications/Unity/Hub/Editor/%s/Unity.app/Contents/MacOS/Unity", version)}
 	case "windows":
 		return windowsUnityExecutableCandidates(version)
+	case "linux":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return []string{}
+		}
+		return linuxUnityExecutableCandidates(version, homeDir)
 	default:
 		return []string{}
 	}
