@@ -102,8 +102,16 @@ internal static class EventAccessorRules
 
     private static bool IsPassedByRef(SyntaxNode eventUseNode)
     {
-        return eventUseNode.Parent is ArgumentSyntax argument
-            && argument.Expression == eventUseNode
+        // 'ref (E)' is still a by-ref argument, and the rewritten read inside the parentheses is
+        // still not a variable, so the argument is looked up past any wrapping parentheses.
+        SyntaxNode argumentExpression = eventUseNode;
+        while (argumentExpression.Parent is ParenthesizedExpressionSyntax parenthesized)
+        {
+            argumentExpression = parenthesized;
+        }
+
+        return argumentExpression.Parent is ArgumentSyntax argument
+            && argument.Expression == argumentExpression
             && !argument.RefKindKeyword.IsKind(SyntaxKind.None);
     }
 

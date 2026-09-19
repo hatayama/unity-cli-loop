@@ -132,6 +132,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: wrapping the event in parentheses before passing it by ref does not get past the
+        /// by-ref check, because the rewritten read is still passed by reference.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_PassingAParenthesizedCompiledPrivateEventByRef_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedSwapsWrappedEvent()\n        {\n"
+                + "            System.Threading.Interlocked.Exchange(ref ((this.PrivateChanged)), null);\n        }");
+
+            AssertHasSkip(result, "AddedSwapsWrappedEvent", EventPassedByRef);
+        }
+
+        /// <summary>
         /// What: an added property whose getter passes a compiled private field-like event by ref
         /// to an accessible method is skipped for the same reason as a method body.
         /// </summary>
