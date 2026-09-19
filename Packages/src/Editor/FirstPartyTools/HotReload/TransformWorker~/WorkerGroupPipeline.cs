@@ -204,6 +204,7 @@ internal static class WorkerGroupPipeline
                 transformUnits,
                 allTypeEmitStates,
                 addedFieldCatalog,
+                addedPropertyCatalog,
                 skipped);
         }
 
