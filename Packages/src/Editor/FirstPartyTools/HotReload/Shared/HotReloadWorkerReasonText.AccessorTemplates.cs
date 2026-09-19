@@ -60,6 +60,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "('a?.E') are skipped; the shim cannot name the conditional receiver as the accessor "
                     + "call's argument. Use uloop compile.",
                     0));
+            templates.Add(
+                HotReloadWorkerReasonCode.EventPassedByRef,
+                Plain(
+                    "Methods that pass a field-like event by ref/out/in are skipped; the shim reads the "
+                    + "event through an accessor call, which cannot be passed by reference. Use uloop compile.",
+                    0));
             // Why the sentence ends in a colon and the separator is empty: the rejected accessor
             // rewrite is the whole reason the method was skipped, so it reads as one sentence.
             templates.Add(
