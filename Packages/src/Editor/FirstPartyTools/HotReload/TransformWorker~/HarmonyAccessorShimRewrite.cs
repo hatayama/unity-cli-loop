@@ -147,7 +147,9 @@ internal sealed class HarmonyAccessorShimRewrite
         ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
         return CreateDelegateInvocation(
                 setter.DelegateFieldName,
-                BuildPropertyAccessorArguments(visitedReceiver, combined))
+                BuildPropertyAccessorArguments(
+                    visitedReceiver,
+                    AddedFieldShimRewrite.CastToAssignedType(combined, propertySymbol.Type)))
             .WithTriviaFrom(node);
     }
 

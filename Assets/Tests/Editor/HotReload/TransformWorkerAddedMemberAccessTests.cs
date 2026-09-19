@@ -287,7 +287,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertAddedAndNotSkipped(result, "AddedBumpCompiledStatic");
             Assert.That(
                 result.Output.shimSource,
-                Does.Match(@"__P_set_PrivateStaticCounter\(__P_get_PrivateStaticCounter\(\)\s*\+\s*value\)"),
+                Does.Match(@"__P_set_PrivateStaticCounter\(\(int\)\(__P_get_PrivateStaticCounter\(\)\s*\+\s*value\)\)"),
+                result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: a compound assignment to a compiled private static byte property is added, and the
+        /// value passed to the setter is cast back to byte as C# does for compound assignment.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompoundAssigningACompiledPrivateStaticByteProperty_CastsToPropertyType()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedBumpCompiledStaticByte()\n        {\n            PrivateStaticByteCounter += 1;\n        }");
+
+            AssertAddedAndNotSkipped(result, "AddedBumpCompiledStaticByte");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Match(@"__P_set_PrivateStaticByteCounter\(\(byte\)\(__P_get_PrivateStaticByteCounter\(\)\s*\+\s*1\)\)"),
+                result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: a compound assignment to a compiled private instance byte property is added, and
+        /// the value passed to the setter is cast back to byte as C# does for compound assignment.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompoundAssigningACompiledPrivateInstanceByteProperty_CastsToPropertyType()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedBumpCompiledByte()\n        {\n            PrivateByteCounter += 1;\n        }");
+
+            AssertAddedAndNotSkipped(result, "AddedBumpCompiledByte");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Match(@"__P_set_PrivateByteCounter\(__uloopInstance,\s*\(byte\)\(__P_get_PrivateByteCounter\(__uloopInstance\)\s*\+\s*1\)\)"),
                 result.Output.shimSource);
         }
 

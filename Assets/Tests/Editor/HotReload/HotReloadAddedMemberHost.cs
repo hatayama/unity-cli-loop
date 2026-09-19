@@ -113,6 +113,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static int PrivateStaticCounter { get; set; }
 
+        // byte, so a compound assignment through the accessor needs the implicit narrowing
+        // conversion C# applies to the left-hand type.
+        private static byte PrivateStaticByteCounter { get; set; }
+
+        private byte PrivateByteCounter { get; set; }
+
         private static int _privateStaticRefSeed = 2;
 
         private static ref int PrivateStaticRefSeed => ref _privateStaticRefSeed;
