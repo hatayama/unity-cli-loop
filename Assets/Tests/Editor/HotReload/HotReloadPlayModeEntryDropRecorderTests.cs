@@ -297,7 +297,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a reload that both patched a method and introduced a type offers both to the
-        /// ledger, so Play entry records the type it is about to unload as well as the patch.
+        /// ledger, so Play entry records the type it is about to unload as well as the patch,
+        /// and offers the type's owner file under the same identity.
         /// </summary>
         [Test]
         public async Task CollectActiveIdentities_AfterARunThatPatchedAMethodAndIntroducedAType_ReturnsBoth()
@@ -336,6 +337,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         identities.FindAll(identity => identity.Contains("Scaled")).Count,
                         Is.EqualTo(1),
                         "The patched method must still be collected next to the type.");
+
+                    IReadOnlyList<HotReloadPlayModeEntryDropSource> sources =
+                        HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources();
+
+                    Assert.That(sources.Count, Is.EqualTo(1), "The introduced type must offer its owner file.");
+                    Assert.That(
+                        sources[0].Identity,
+                        Is.EqualTo(
+                            HotReloadPlayModeEntryDropIdentity.ForType(
+                                introduced.OriginalAssemblyName,
+                                introduced.MetadataName)),
+                        "The owner file must be keyed by the identity a later apply recovers.");
+                    Assert.That(
+                        sources[0].ProjectRelativePath,
+                        Is.EqualTo(introduced.OwnerProjectRelativePath),
+                        "The owner file must be the file the run declared the type in.");
+                    Assert.That(
+                        sources[0].ProjectRelativePath,
+                        Is.EqualTo("Assets/Tests/Editor/HotReload/" + HostFileName),
+                        "The owner file must be the fixture passed to the run.");
                 }
                 finally
                 {
