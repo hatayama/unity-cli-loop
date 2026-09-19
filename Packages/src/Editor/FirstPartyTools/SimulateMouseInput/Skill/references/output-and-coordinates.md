@@ -7,6 +7,7 @@ Returns JSON with:
 - `Success`: Whether the operation succeeded
 - `Message`: Status message
 - `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`); unused for `--dry-run`
+- `Warning` (string, optional): Set when an input callback removed an Input System state monitor while the mouse input was being applied (for example, a `performed` callback that disables its own action map). uloop suppressed the Input System's internal `Assertion failed` log for it; the input itself was delivered, but other actions bound to the same control may have missed it.
 - `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
 - `PositionX` / `PositionY`: Target top-left Game View coordinates (nullable float; populated for `Click` / `LongPress`)
 - `CameraName` / `CameraPath`: Camera that `Camera.main` resolved to for `--dry-run` (reported on both hit and no-hit). When a `No physics hit` result looks wrong, check these first — another camera carrying the `MainCamera` tag can silently win `Camera.main` resolution
