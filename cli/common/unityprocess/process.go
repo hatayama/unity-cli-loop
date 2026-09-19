@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -60,6 +61,8 @@ func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
 		return listUnityProcessesMac(ctx)
 	case "windows":
 		return listUnityProcessesWindows(ctx)
+	case "linux":
+		return listUnityProcessesLinux(ctx)
 	default:
 		return []UnityProcess{}, nil
 	}
@@ -142,6 +145,62 @@ func parseMacProcArgs2(buf []byte) ([]string, error) {
 		rest = rest[argEnd+1:]
 	}
 	return args, nil
+}
+
+// parseLinuxProcCmdline splits a /proc/<pid>/cmdline buffer into argv. The kernel
+// stores argv as NUL-terminated strings, so splitting on NUL keeps argument
+// boundaries (and spaces inside arguments) exactly as the process received them.
+// Like parseMacProcArgs2, it has no Linux-specific dependency, so it stays in the
+// shared file and runs in every OS's CI.
+func parseLinuxProcCmdline(buf []byte) []string {
+	trimmed := bytes.TrimRight(buf, "\x00")
+	if len(trimmed) == 0 {
+		return []string{}
+	}
+	return strings.Split(string(trimmed), "\x00")
+}
+
+// matchLinuxUnityProcess decides from a raw argv slice whether a process is an
+// interactive Unity Editor and, if so, which project it opened. Unlike the macOS
+// matcher it does not join argv and cut the project path out with a regex: argv
+// boundaries are preserved in /proc, so a project path containing spaces is read
+// without guessing where it ends. path.Base (not filepath.Base) keeps the result
+// identical when the tests run on Windows, since Linux paths always use '/'.
+func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
+	if len(args) == 0 {
+		return UnityProcess{}, false
+	}
+	if path.Base(args[0]) != "Unity" {
+		return UnityProcess{}, false
+	}
+	lowerCommand := strings.ToLower(strings.Join(args, " "))
+	if strings.Contains(lowerCommand, "-batchmode") || strings.Contains(lowerCommand, "assetimportworker") {
+		return UnityProcess{}, false
+	}
+	projectPath := linuxProjectPathFromArgs(args)
+	if projectPath == "" {
+		return UnityProcess{}, false
+	}
+	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+}
+
+// linuxProjectPathFromArgs returns the value of Unity's -projectPath flag, accepting
+// both the "-projectPath <path>" and "-projectPath=<path>" forms case-insensitively.
+func linuxProjectPathFromArgs(args []string) string {
+	const projectPathFlag = "-projectpath"
+	for index, arg := range args {
+		lowerArg := strings.ToLower(arg)
+		if lowerArg == projectPathFlag {
+			if index+1 >= len(args) {
+				return ""
+			}
+			return args[index+1]
+		}
+		if strings.HasPrefix(lowerArg, projectPathFlag+"=") {
+			return arg[len(projectPathFlag+"="):]
+		}
+	}
+	return ""
 }
 
 func parseWindowsUnityProcesses(output string) []UnityProcess {
