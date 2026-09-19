@@ -70,3 +70,5 @@ build_binary darwin amd64 uloop "$DISPATCHER_DIR" ./cmd/dispatcher
 build_binary darwin amd64 uloop-project-runner "$RUNNER_DIR" ./cmd/project-runner
 build_binary windows amd64 uloop "$DISPATCHER_DIR" ./cmd/dispatcher
 build_binary windows amd64 uloop-project-runner "$RUNNER_DIR" ./cmd/project-runner
+build_binary linux amd64 uloop "$DISPATCHER_DIR" ./cmd/dispatcher
+build_binary linux amd64 uloop-project-runner "$RUNNER_DIR" ./cmd/project-runner
