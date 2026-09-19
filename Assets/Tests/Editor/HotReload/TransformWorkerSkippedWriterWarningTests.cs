@@ -178,6 +178,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a skipped method that only passes the field as an in argument is a reader, not a
+        /// writer, so a field that nothing assigns does not warn about skipped writers.
+        /// </summary>
+        [Test]
+        public async Task SkippedMethodPassesFieldByIn_DoesNotWarn()
+        {
+            string inReader =
+                "        private static int Consume(in int value)\n        {\n            return value;\n        }\n\n"
+                + "        public int AddedPeek()\n        {\n            return Consume(in AddedValue) + StoredRef;\n        }\n\n";
+            TransformWorkerClientResult result = await RunAsync(
+                HostWithReader(AddedField + inReader, "return AddedValue;"),
+                ReadOnDisk(CallerFileName));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipped(result, "AddedPeek"), Is.Not.Null, FormatSkipped(result));
+            Assert.That(FindEntry(result, "Value"), Is.Not.Null);
+            AssertNoWarning(result);
+        }
+
+        /// <summary>
         /// What: two applied readers of the same field still give one warning line, which names
         /// the first reader in declaration order and counts the rest.
         /// </summary>

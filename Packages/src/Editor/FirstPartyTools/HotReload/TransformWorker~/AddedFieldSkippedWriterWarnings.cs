@@ -158,7 +158,11 @@ internal static class AddedFieldSkippedWriterWarnings
             case PostfixUnaryExpressionSyntax postfix:
                 return postfix.IsKind(SyntaxKind.PostIncrementExpression) || postfix.IsKind(SyntaxKind.PostDecrementExpression);
             case ArgumentSyntax argument:
-                return argument.RefKindKeyword.Kind() != SyntaxKind.None || IsDeconstructionTarget(argument);
+                // An in argument is read-only; counting it as a write would name a skipped
+                // method that only reads the field as its writer.
+                return argument.RefKindKeyword.IsKind(SyntaxKind.RefKeyword)
+                    || argument.RefKindKeyword.IsKind(SyntaxKind.OutKeyword)
+                    || IsDeconstructionTarget(argument);
             case RefExpressionSyntax _:
                 return true;
             default:
