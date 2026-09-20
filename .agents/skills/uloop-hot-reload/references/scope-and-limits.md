@@ -52,7 +52,12 @@ on the field's first access from edited code — once per instance, or once per 
 for statics. Initializer expressions are limited to literals and externally visible
 static calls (`= 5`, `= Math.Abs(x)`); object creation (`= new List<int>()`) and
 anything touching the host type or instance state skips the field's readers and
-writers with a per-method reason. To apply such a field without compiling, declare it
+writers with a per-method reason. The one object creation that applies is a type an
+earlier reload introduced and this Editor session still keeps active, through a
+constructor the retained assembly holds as `public` — including in the reload that also
+edits a body of that type. A constructor this reload adds to it, or one whose parameters
+the retained assembly does not hold, keeps the readers and writers `Skipped`.
+To apply such a field without compiling, declare it
 without an initializer — it starts at `default(T)` — and assign it inside the patched
 method instead; for a reference type, guard that with
 `if (_field == null) { _field = new List<int>(); }`. `??=` is not rewritable and keeps
