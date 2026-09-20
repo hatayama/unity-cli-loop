@@ -161,12 +161,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             DateTime pauseWindowStart = PauseWindowStartUtc.Value;
-            PauseWindowStartUtc = null;
-            _pauseWindowOwnerId = null;
+            // Credit first, close second. RecordMethodEntry reads the window flag and the
+            // deadline off-thread, so closing the window before the deadlines are extended
+            // exposes a moment where the window already reads closed while every deadline is
+            // still the pre-pause one - an entry recorded there would be dropped as outside the
+            // capture window. Main-thread behaviour is unchanged: TryExpire only declines to
+            // expire while the window is open, and it cannot run between these two statements.
             foreach (UloopPausePointEntry entry in Entries.Values)
             {
                 entry.ExtendExpiryForPause(pauseWindowStart, now);
             }
+
+            PauseWindowStartUtc = null;
+            _pauseWindowOwnerId = null;
         }
     }
 }

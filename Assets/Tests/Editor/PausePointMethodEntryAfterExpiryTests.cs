@@ -114,6 +114,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies the credited-back deadline is already in effect once the pause window closes:
+        /// a method entry recorded right after the inspection pause ends is still counted, even
+        /// though the nominal deadline passed while the Editor was paused.
+        /// </summary>
+        [Test]
+        public void RecordMethodEntry_AfterPauseWindowClosed_IsCountedWithCreditedDeadline()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("inspect", 30);
+            UloopPausePoint.Pause("inspect");
+            _nowUtc = _nowUtc.AddSeconds(137);
+            UloopPausePointRegistry.Clear("inspect");
+
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Enabled));
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// Test double that records pause requests without mutating Unity Editor state.
         /// </summary>
         private sealed class FakePauseController : IUloopPausePointPauseController
