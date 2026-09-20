@@ -214,10 +214,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: two files that both change line count each get their own warning.
+        /// What: two files that both change line count collapse into one warning that states the
+        /// targeting caveat once and lists each file with its edited and compiled line counts.
         /// </summary>
         [Test]
-        public void Append_WhenTwoFilesBothShifted_AddsTwoWarnings()
+        public void Append_WhenTwoFilesBothShifted_AddsOneCollapsedWarning()
         {
             List<string> warnings = new List<string>();
             List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
@@ -238,15 +239,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ToProjectRelativeScriptPath,
                 Array.Empty<string>());
 
-            Assert.That(warnings.Count, Is.EqualTo(2));
+            Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
                 warnings[0],
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
+                    "2 file(s) differ in line count from the last compiled source (Assets/Scripts/Player.cs: edited 3 lines vs compiled 2, Assets/Scripts/Enemy.cs: edited 4 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
+        }
+
+        /// <summary>
+        /// What: the collapsed warning states the targeting explanation exactly once however many
+        /// files shifted, so a run touching three files does not repeat it three times.
+        /// </summary>
+        [Test]
+        public void Append_WhenThreeFilesShifted_StatesTheExplanationOnce()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Patched("Player.Jump", "Assets/Scripts/Player.cs"),
+                HotReloadMethodOutcome.Patched("Enemy.Idle", "Assets/Scripts/Enemy.cs"),
+                HotReloadMethodOutcome.Patched("Boss.Roar", "Assets/Scripts/Boss.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                _ => "line1\nline2\nline3",
+                _ => "line1\nline2",
+                ToProjectRelativeScriptPath,
+                Array.Empty<string>());
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
-                warnings[1],
-                Is.EqualTo(
-                    "Assets/Scripts/Enemy.cs: line count differs from the last compiled source (edited 4 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
+                CountOccurrences(warnings[0], "This matters for 'enable-pause-point --line' targeting"),
+                Is.EqualTo(1),
+                warnings[0]);
+            Assert.That(
+                warnings[0],
+                Does.StartWith(
+                    "3 file(s) differ in line count from the last compiled source "
+                    + "(Assets/Scripts/Player.cs: edited 3 lines vs compiled 2, "
+                    + "Assets/Scripts/Enemy.cs: edited 3 lines vs compiled 2, "
+                    + "Assets/Scripts/Boss.cs: edited 3 lines vs compiled 2)."));
+        }
+
+        private static int CountOccurrences(string text, string value)
+        {
+            int count = 0;
+            int index = text.IndexOf(value, StringComparison.Ordinal);
+            while (index >= 0)
+            {
+                count++;
+                index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal);
+            }
+
+            return count;
         }
 
         /// <summary>
