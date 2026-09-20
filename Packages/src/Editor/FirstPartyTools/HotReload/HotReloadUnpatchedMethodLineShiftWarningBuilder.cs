@@ -19,27 +19,97 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // PatchedMethodPdbUnavailable still falls through to the compiled line map.
         // Why conclusion first: the first sentence is the conclusion; usability rounds
         // showed readers stop at sentence one, so do not restore the explanation-first order.
+        // Why the explanation is a shared constant: the collapsed multi-file warning states it
+        // once for the whole run, so the two formats must not drift apart.
+        private const string TargetingExplanation =
+            "This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line.";
+
         public static string Build(string file, string editedSource, string compiledSource)
+        {
+            LineShiftEntry entry = TryMeasure(file, editedSource, compiledSource);
+            if (entry == null)
+            {
+                return string.Empty;
+            }
+
+            return BuildSingleFileWarning(entry);
+        }
+
+        private static string BuildSingleFileWarning(LineShiftEntry entry)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}: line count differs from the last compiled source (edited {1} lines vs compiled {2}). {3}",
+                entry.File,
+                entry.EditedLineCount,
+                entry.CompiledLineCount,
+                TargetingExplanation);
+        }
+
+        private static LineShiftEntry TryMeasure(string file, string editedSource, string compiledSource)
         {
             if (string.IsNullOrEmpty(file) || editedSource == null || string.IsNullOrEmpty(compiledSource))
             {
-                return string.Empty;
+                return null;
             }
 
             int editedLineCount = CountLines(editedSource);
             int compiledLineCount = CountLines(compiledSource);
             if (editedLineCount == compiledLineCount)
             {
-                return string.Empty;
+                return null;
             }
 
-            string normalizedFile = HotReloadSourcePathNormalizer.ToForwardSlashes(file);
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                "{0}: line count differs from the last compiled source (edited {1} lines vs compiled {2}). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line.",
-                normalizedFile,
-                editedLineCount,
-                compiledLineCount);
+            return new LineShiftEntry
+            {
+                File = HotReloadSourcePathNormalizer.ToForwardSlashes(file),
+                EditedLineCount = editedLineCount,
+                CompiledLineCount = compiledLineCount
+            };
+        }
+
+        // Why one warning from two files up: usability rounds showed the per-file warnings repeated
+        // the same three-sentence caveat for every file, burying the rest of the run's warnings.
+        private static void AppendTouchedWarning(List<string> warnings, List<LineShiftEntry> touched)
+        {
+            if (touched.Count == 0)
+            {
+                return;
+            }
+
+            if (touched.Count == 1)
+            {
+                warnings.Add(BuildSingleFileWarning(touched[0]));
+                return;
+            }
+
+            List<string> perFile = new List<string>(touched.Count);
+            for (int index = 0; index < touched.Count; index++)
+            {
+                LineShiftEntry entry = touched[index];
+                perFile.Add(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "{0}: edited {1} lines vs compiled {2}",
+                        entry.File,
+                        entry.EditedLineCount,
+                        entry.CompiledLineCount));
+            }
+
+            warnings.Add(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} file(s) differ in line count from the last compiled source ({1}). {2}",
+                    touched.Count,
+                    string.Join(", ", perFile),
+                    TargetingExplanation));
+        }
+
+        private sealed class LineShiftEntry
+        {
+            public string File;
+            public int EditedLineCount;
+            public int CompiledLineCount;
         }
 
         // Why unique canonical file: outcome FilePath is the raw apply input, so absolute+relative
@@ -70,27 +140,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 toProjectRelativeScriptPath,
                 fileComparer);
             List<string> continuingFiles = new List<string>();
+            List<LineShiftEntry> touchedThisRun = new List<LineShiftEntry>();
             for (int index = 0; index < buckets.Count; index++)
             {
                 LineShiftFileBucket bucket = buckets[index];
-                string warning = Build(
+                LineShiftEntry entry = TryMeasure(
                     bucket.CanonicalFile,
                     readEditedSource(bucket.CanonicalFile),
                     readCompiledSource(bucket.CanonicalFile));
-                if (warning.Length == 0)
+                if (entry == null)
                 {
                     continue;
                 }
 
                 if (bucket.TouchedThisRun)
                 {
-                    warnings.Add(warning);
+                    touchedThisRun.Add(entry);
                     continue;
                 }
 
                 continuingFiles.Add(bucket.CanonicalFile);
             }
 
+            AppendTouchedWarning(warnings, touchedThisRun);
             AppendContinuingWarning(warnings, continuingFiles);
         }
 
