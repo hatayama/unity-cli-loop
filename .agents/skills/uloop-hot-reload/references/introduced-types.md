@@ -82,15 +82,16 @@ events, indexers or nested types still require a compile.
 ## Still needs `uloop compile`
 
 Any refused shape above; use of the type from another assembly, from a file that is neither
-passed to this reload nor already hot-reloaded, or from `uloop execute-dynamic-code`; anything
+passed to this reload nor already hot-reloaded; anything
 that reaches the type through Unity (serialization, `[SerializeField]`, Inspector,
 `AddComponent`, `CreateInstance`, message discovery); a method body edit of an introduced
 struct, which is `Skipped` like any struct method; a call to a member an earlier or the same
 reload *added* to a compiled type (an `Added` row), because introduced types compile against the
 compiled assemblies and retained artifacts only, so the compile fails naming the missing member;
-and any new or changed `.asmdef` / `.asmref`. When `execute-dynamic-code` fails on an introduced
-type, the diagnostic's `Hint` names it and points to reflection through the loaded assembly or to
-`uloop compile`.
+and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
+the exception: every active artifact is referenced by that compilation, so the snippet can name an
+introduced type directly, with its namespace. When such a snippet still fails on the name, the
+diagnostic's `Hint` names the type and how to spell it.
 
 ## File selection and new files
 

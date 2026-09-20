@@ -12,13 +12,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     public sealed class IntroducedTypeDiagnosticHintTests
     {
         private const string SingleMatchHint =
-            "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type.";
+            "'Widget' is a hot-reload introduced type (Example.Widget), and the assembly holding it is referenced by this compilation while it stays active. Name it with its namespace (Example.Widget) rather than by the name the error reports, or add a using for that namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
+
+        private const string SingleMatchNamingSuggestion =
+            "Name the type as Example.Widget, or add a using for its namespace";
 
         private const string SingleMatchReflectionSuggestion =
             "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Widget\") and drive it through reflection";
 
         private const string CompileSuggestion =
-            "Run 'uloop compile' when the type is final, then reference it directly";
+            "Run 'uloop compile' when the type is final, then reference it as an ordinary compiled type";
 
         /// <summary>
         /// Verifies a CS0246 whose type name is an active introduced type gets the introduced-type
@@ -36,10 +39,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.That(built, Is.True);
             Assert.That(hint, Is.EqualTo(SingleMatchHint));
-            Assert.That(hint, Does.Contain("not visible through reflection"));
+            Assert.That(hint, Does.Contain("not through reflection either"));
             Assert.That(
                 suggestions,
-                Is.EqualTo(new[] { SingleMatchReflectionSuggestion, CompileSuggestion }));
+                Is.EqualTo(new[] { SingleMatchNamingSuggestion, SingleMatchReflectionSuggestion, CompileSuggestion }));
         }
 
         /// <summary>
@@ -60,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(hint, Is.EqualTo(SingleMatchHint));
             Assert.That(
                 suggestions,
-                Is.EqualTo(new[] { SingleMatchReflectionSuggestion, CompileSuggestion }));
+                Is.EqualTo(new[] { SingleMatchNamingSuggestion, SingleMatchReflectionSuggestion, CompileSuggestion }));
         }
 
         /// <summary>
@@ -81,11 +84,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 hint,
                 Is.EqualTo(
-                    "'Widget' is a hot-reload introduced type (Example.Outer+Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
+                    "'Widget' is a hot-reload introduced type (Example.Outer+Widget), and the assembly holding it is referenced by this compilation while it stays active. Name it with its namespace (Example.Outer+Widget) rather than by the name the error reports, or add a using for that namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[]
                 {
+                    "Name the type as Example.Outer+Widget, or add a using for its namespace",
                     "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Outer+Widget\") and drive it through reflection",
                     CompileSuggestion
                 }));
@@ -108,11 +112,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(built, Is.True);
             Assert.That(
                 hint,
-                Does.StartWith("'Generation' is a hot-reload introduced type (Example.Generation.Widget)."));
+                Does.StartWith("'Generation' is a hot-reload introduced type (Example.Generation.Widget),"));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[]
                 {
+                    "Name the type as Example.Generation.Widget, or add a using for its namespace",
                     "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Generation.Widget\") and drive it through reflection",
                     CompileSuggestion
                 }));
@@ -174,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(hint, Is.EqualTo(SingleMatchHint));
             Assert.That(
                 suggestions,
-                Is.EqualTo(new[] { SingleMatchReflectionSuggestion, CompileSuggestion }));
+                Is.EqualTo(new[] { SingleMatchNamingSuggestion, SingleMatchReflectionSuggestion, CompileSuggestion }));
         }
 
         /// <summary>
@@ -251,12 +256,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 hint,
                 Is.EqualTo(
-                    "'Widget' matches these hot-reload introduced types: Example.Widget, Other.Widget. execute-dynamic-code compiles against the compiled assemblies only, so none of them is visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Pick the one you mean and use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
+                    "'Widget' matches these hot-reload introduced types: Example.Widget, Other.Widget. The assembly holding each one is referenced by this compilation while it stays active, so name the one you mean with its namespace rather than by the name the error reports. Members that hot reload added to them are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[]
                 {
+                    SingleMatchNamingSuggestion,
                     SingleMatchReflectionSuggestion,
+                    "Name the type as Other.Widget, or add a using for its namespace",
                     "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Other.Widget\") and drive it through reflection",
                     CompileSuggestion
                 }));

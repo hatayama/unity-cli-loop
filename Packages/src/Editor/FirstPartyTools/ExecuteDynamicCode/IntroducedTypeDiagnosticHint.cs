@@ -4,8 +4,9 @@ using System.Collections.Generic;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Explains a missing-type diagnostic whose name is a hot-reload introduced type: dynamic
-    /// code compiles against on-disk assemblies only, so the type is invisible here by design.
+    /// Explains a missing-type diagnostic whose name is a hot-reload introduced type: the type is
+    /// active and its assembly is referenced, so the name the snippet used is what the compiler
+    /// could not resolve.
     /// </summary>
     internal static class IntroducedTypeDiagnosticHint
     {
@@ -17,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string NameNotInContextErrorCode = "CS0103";
 
         private const string CompileSuggestion =
-            "Run 'uloop compile' when the type is final, then reference it directly";
+            "Run 'uloop compile' when the type is final, then reference it as an ordinary compiled type";
 
         /// <summary>
         /// Builds the hint and suggestions for a diagnostic that names an active introduced type.
@@ -143,11 +144,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (matches.Count == 1)
             {
-                return $"'{name}' is a hot-reload introduced type ({matches[0]}). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type.";
+                return $"'{name}' is a hot-reload introduced type ({matches[0]}), and the assembly holding it is referenced by this compilation while it stays active. Name it with its namespace ({matches[0]}) rather than by the name the error reports, or add a using for that namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
             }
 
             string candidateList = string.Join(", ", matches);
-            return $"'{name}' matches these hot-reload introduced types: {candidateList}. execute-dynamic-code compiles against the compiled assemblies only, so none of them is visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Pick the one you mean and use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
+            return $"'{name}' matches these hot-reload introduced types: {candidateList}. The assembly holding each one is referenced by this compilation while it stays active, so name the one you mean with its namespace rather than by the name the error reports. Members that hot reload added to them are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
         }
 
         private static List<string> BuildSuggestions(List<string> matches)
@@ -155,6 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suggestions = new List<string>();
             foreach (string metadataName in matches)
             {
+                suggestions.Add($"Name the type as {metadataName}, or add a using for its namespace");
                 suggestions.Add(
                     "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes())"
                     + $".First(t => t.FullName == \"{metadataName}\") and drive it through reflection");

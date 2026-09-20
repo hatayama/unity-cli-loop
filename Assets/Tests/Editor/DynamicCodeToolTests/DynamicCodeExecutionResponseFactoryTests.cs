@@ -495,13 +495,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(
                     response.Diagnostics[0].Hint,
                     Is.EqualTo(
-                        "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
+                        "'Widget' is a hot-reload introduced type (Example.Widget), and the assembly holding it is referenced by this compilation while it stays active. Name it with its namespace (Example.Widget) rather than by the name the error reports, or add a using for that namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
                 Assert.That(
                     response.Diagnostics[0].Suggestions,
                     Is.EqualTo(new[]
                     {
+                        "Name the type as Example.Widget, or add a using for its namespace",
                         "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Widget\") and drive it through reflection",
-                        "Run 'uloop compile' when the type is final, then reference it directly",
+                        "Run 'uloop compile' when the type is final, then reference it as an ordinary compiled type",
                         "Use Namespace.One.Widget",
                         "Use Namespace.Two.Widget"
                     }));
@@ -604,7 +605,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
                 Assert.That(
                     response.Diagnostics[0].Hint,
-                    Does.StartWith("'Badge' is a hot-reload introduced type (Example.Badge)."));
+                    Does.StartWith("'Badge' is a hot-reload introduced type (Example.Badge),"));
             }
             finally
             {
