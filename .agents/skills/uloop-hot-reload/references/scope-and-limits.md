@@ -67,7 +67,9 @@ like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
 resolved type has any — their values live in the hot-reload shim and are not visible
 to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
-names fail with CS1061). Read them from a patched method body instead.
+names fail with CS1061). Read them from a patched method body instead. When such a
+failure quotes the name of an active added member, the diagnostic's `Hint` says so
+rather than leaving the error reading as a typo.
 
 A type introduced in the same reload cannot use added members of a compiled type: its
 artifact is compiled against the compiled assemblies, so such a reference fails with
