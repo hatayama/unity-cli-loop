@@ -24,10 +24,10 @@ A command that waits for a frame or a physics step cannot finish while the Edito
 
 `uloop pause-point-status` still answers while Unity is busy — use it to confirm a hit is holding the pause. Then recover either way:
 
-1. Stop the uloop process that is running the command (Ctrl-C in its terminal, otherwise interrupt or kill that process). Its request is cancelled and returns no result, the Editor pause is released, and the next command runs.
+1. Stop the uloop process that is running the command (Ctrl-C in its terminal, otherwise interrupt or kill that process). Its request is cancelled and returns no result, the Editor pause is released, and the next command runs. This does not apply to every tool: a `run-tests` run that respects Enter Play Mode settings, and a `compile` that waits for a domain reload, are deliberately not cancelled when their client disconnects, so stopping the process leaves the pause in place — use step 2 for those.
 2. Release the pause in the Editor (Edit > Play Mode > Pause). Frames resume, so the running command finishes and returns its result.
 
-Avoid the state instead: do not start a frame-waiting snippet while a marker is armed. Take the hit first (`await-pause-point`, or `enable-pause-point --await`), then run the snippet while you own the pause.
+Avoid the state instead: never start a frame-waiting snippet while a marker is armed or while the Editor is paused — starting it after the hit deadlocks the same way. Take the hit first (`await-pause-point`, or `enable-pause-point --await`) and inspect the capture; when you are done, resume play (`control-play-mode --action Resume` — the gate is free at that point) and only then run the frame-waiting snippet. While the pause holds, run only snippets that do not wait for a frame or a physics step.
 
 ## Locating Where Control Flow Stops
 

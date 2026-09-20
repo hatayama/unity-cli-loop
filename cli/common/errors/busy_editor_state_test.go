@@ -93,7 +93,7 @@ const (
 	expectedPausedBusyStalledAction = "Unity is paused in Play Mode. A running command that waits for a frame or a physics step cannot finish until play resumes, so this busy state does not clear on its own."
 	expectedPausedBusyStatusAction  = "Run `uloop pause-point-status` (it answers while Unity is busy) to see whether a pause-point hit is holding the pause."
 	expectedPausedBusyStopAction    = "Stop the uloop process that is running the command (Ctrl-C in its terminal, otherwise interrupt or kill that process). Its request is cancelled and returns no result, the Editor pause is released, and the next command can run."
-	expectedPausedBusyResumeAction  = "Or release the pause in the Editor (Edit > Play Mode > Pause). Frames resume, so the running command finishes and returns its result."
+	expectedPausedBusyResumeAction  = "Release the pause in the Editor (Edit > Play Mode > Pause). Frames resume, so the running command finishes and returns its result."
 )
 
 // Verifies a paused Play Mode busy payload explains that the running command cannot
@@ -134,6 +134,26 @@ func TestUnityServerBusyNextActions_WhenPausedOutsidePlayMode_OmitsPauseRecovery
 	for _, action := range actions {
 		if action == expectedPausedBusyStalledAction {
 			t.Fatalf("pause guidance must need Play Mode: %#v", actions)
+		}
+	}
+}
+
+// Verifies a running tool the Editor keeps alive across a client disconnect drops the
+// stop-the-process step, because stopping it would not release the Editor pause.
+func TestUnityServerBusyNextActions_WhenPausedWhileRunningDisconnectSurvivingTool_OmitsStopStep(t *testing.T) {
+	isPlaying := true
+	isPaused := true
+	for _, runningToolName := range []string{"run-tests", "compile"} {
+		data := serverBusyErrorData{IsPlaying: &isPlaying, IsPaused: &isPaused, RunningToolName: runningToolName}
+
+		actions := unityServerBusyNextActions(data)
+		for _, action := range actions {
+			if action == expectedPausedBusyStopAction {
+				t.Fatalf("%s must not promise recovery by stopping the process: %#v", runningToolName, actions)
+			}
+		}
+		if actions[2] != expectedPausedBusyResumeAction {
+			t.Fatalf("%s must still offer the Editor resume step: %#v", runningToolName, actions)
 		}
 	}
 }
