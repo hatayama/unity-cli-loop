@@ -4161,7 +4161,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: after an added method applies, a later run whose added body does not bind is
         /// refused by the worker before any shim is compiled: the added method and its caller are
         /// Skipped with the worker's reasons, nothing fails, and the run deactivates the earlier
-        /// AddedPing registration with one warning naming it. A third run with the body fixed
+        /// AddedPing registration with one warning naming it and telling the reader that another
+        /// reload of the same shape skips it again. A third run with the body fixed
         /// registers AddedPing again and the caller returns the new value.
         /// </summary>
         [Test]
@@ -4195,7 +4196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(0));
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
 
             string fixedBody = WithWorkingAddedPing(onDisk).Replace(
                 "            return value + 1;\n        }",
@@ -4436,7 +4437,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after an added method applies, a later run that skips it as virtual while
-        /// still patching an unrelated method warns with the added method's label.
+        /// still patching an unrelated method warns with the added method's label and the
+        /// wording that says another reload of the same shape skips it again.
         /// </summary>
         [Test]
         public async Task Run_VirtualAddedMethodAfterSuccess_WarnsDeactivatedPatches()
@@ -4460,12 +4462,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
         }
 
         /// <summary>
         /// What: after an added method applies, a later run that skips every method as virtual
-        /// (empty entries) still warns with the added-member deactivation wording.
+        /// (empty entries) still warns with the skipped added-member deactivation wording.
         /// </summary>
         [Test]
         public async Task Run_VirtualAddedMethodAfterSuccess_EmptyEntries_WarnsDeactivatedAddedMembers()
@@ -4485,7 +4487,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
         }
 
         /// <summary>
@@ -4790,7 +4792,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after a return-type replacement applies, a later run that gates it and
-        /// applies an unrelated method warns with the replacement label.
+        /// applies an unrelated method warns with the replacement label; the gate reports the
+        /// replacement as Skipped, so the warning is the one that names Methods[].Reason.
         /// </summary>
         [Test]
         public async Task Run_ReturnTypeChange_GatedReplacementDeactivatedByUnrelatedApply_Warns()
@@ -4831,7 +4834,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 0);
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(expectedLabel));
+                ExpectedDeactivatedSkippedAddedMembersWarning(expectedLabel));
         }
 
         /// <summary>
@@ -7241,14 +7244,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return string.Format(HotReloadConstants.DeactivatedAddedMembersWarningFormat, joinedLabels);
         }
 
+        private static string ExpectedDeactivatedSkippedAddedMembersWarning(string joinedLabels)
+        {
+            return string.Format(HotReloadConstants.DeactivatedSkippedAddedMembersWarningFormat, joinedLabels);
+        }
+
         private static bool IsDeactivatedPatchesWarning(string warning)
         {
-            return warning.StartsWith(
-                    DeactivatedWarningPrefix(HotReloadConstants.DeactivatedPatchesWarningFormat),
-                    StringComparison.Ordinal)
-                || warning.StartsWith(
-                    DeactivatedWarningPrefix(HotReloadConstants.DeactivatedAddedMembersWarningFormat),
-                    StringComparison.Ordinal);
+            foreach (string format in DeactivationWarningFormats())
+            {
+                if (warning.StartsWith(DeactivatedWarningPrefix(format), StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string[] DeactivationWarningFormats()
+        {
+            return new[]
+            {
+                HotReloadConstants.DeactivatedPatchesWarningFormat,
+                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
+                HotReloadConstants.DeactivatedSkippedPatchesWarningFormat,
+                HotReloadConstants.DeactivatedSkippedAddedMembersWarningFormat
+            };
         }
 
         private static string DeactivatedWarningPrefix(string format)

@@ -164,6 +164,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string DeactivatedAddedMembersWarningFormat =
             "This run deactivated previously active added members: {0}. They are no longer registered, but patches this run left active may still reach their previous shim bodies. Edit and reload again to re-apply them, or run 'uloop compile'.";
 
+        // Why a separate sentence for the members this run skipped: the ordinary wording invites
+        // another reload, and another reload of the same shape skips them again. What has to
+        // change first is the shape their Methods[] reason names.
+        public const string DeactivatedSkippedPatchesWarningFormat =
+            "This run deactivated previously active patches by skipping them: {0}. They reverted to the "
+            + "compiled behavior, and reloading the same shape skips them again; change what their "
+            + "Methods[].Reason names and reload, or run 'uloop compile'.";
+
+        public const string DeactivatedSkippedAddedMembersWarningFormat =
+            "This run deactivated previously active added members by skipping them: {0}. They are no longer "
+            + "registered, but patches this run left active may still reach their previous shim bodies. "
+            + "Reloading the same shape skips them again; change what their Methods[].Reason names and "
+            + "reload, or run 'uloop compile'.";
+
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/RemovedMemberKinds.cs.
         public const string RemovedMemberKindMethod = "method";
