@@ -245,6 +245,9 @@ internal static class AddedFieldSkipEvaluator
 
     // Compared by display string because the two constructors come from different assemblies -
     // the artifact and the edited source - so the same type is not the same symbol on both sides.
+    // The ref kind is part of the comparison because C# lets 'T(int)' and 'T(ref int)' overload
+    // each other: without it an artifact holding only the by-value one would answer for a call
+    // the domain cannot resolve.
     private static bool ParameterTypesMatch(IMethodSymbol artifactConstructor, IMethodSymbol constructor)
     {
         if (artifactConstructor.Parameters.Length != constructor.Parameters.Length)
@@ -254,10 +257,16 @@ internal static class AddedFieldSkipEvaluator
 
         for (int index = 0; index < constructor.Parameters.Length; index++)
         {
-            string artifactParameter = artifactConstructor.Parameters[index].Type.ToDisplayString();
+            IParameterSymbol artifactParameter = artifactConstructor.Parameters[index];
+            IParameterSymbol sourceParameter = constructor.Parameters[index];
+            if (artifactParameter.RefKind != sourceParameter.RefKind)
+            {
+                return false;
+            }
+
             if (!string.Equals(
-                    artifactParameter,
-                    constructor.Parameters[index].Type.ToDisplayString(),
+                    artifactParameter.Type.ToDisplayString(),
+                    sourceParameter.Type.ToDisplayString(),
                     StringComparison.Ordinal))
             {
                 return false;
