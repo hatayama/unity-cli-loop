@@ -897,6 +897,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(active[1].MetadataName.Value, Is.EqualTo("Example.OtherIntroduced"));
         }
 
+        /// <summary>
+        /// Verifies that a prepared artifact contributes no reference path, so a compilation outside
+        /// the domain is never bound to a type this domain may never activate.
+        /// </summary>
+        [Test]
+        public void DescribeActiveArtifactPaths_WhenTheArtifactIsOnlyPrepared_ReportsNoPath()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            registry.RegisterPrepared(CreateArtifact("prepared"));
+
+            Assert.That(registry.DescribeActiveArtifactPaths(), Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies that activation publishes the dll of each active artifact, ordered, so a
+        /// compilation-cache key built from the list is stable across runs.
+        /// </summary>
+        [Test]
+        public void DescribeActiveArtifactPaths_WhenArtifactsAreActive_ReportsEachDllOrdered()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact second = new HotReloadIntroducedTypeArtifact(
+                CreateDynamicAssembly("second"),
+                "Library/Introduced/Second.dll",
+                "Library/Introduced/Second.pdb",
+                new List<HotReloadIntroducedTypeDescriptor> { CreateOtherDescriptor("second") });
+            HotReloadIntroducedTypeArtifact first = new HotReloadIntroducedTypeArtifact(
+                CreateDynamicAssembly("first"),
+                "Library/Introduced/First.dll",
+                "Library/Introduced/First.pdb",
+                new List<HotReloadIntroducedTypeDescriptor> { CreateDescriptor("first") });
+
+            registry.RegisterPrepared(second);
+            registry.Activate(second);
+            registry.RegisterPrepared(first);
+            registry.Activate(first);
+
+            Assert.That(
+                registry.DescribeActiveArtifactPaths(),
+                Is.EqualTo(new[] { "Library/Introduced/First.dll", "Library/Introduced/Second.dll" }));
+        }
+
         private static HotReloadIntroducedTypeArtifact CreateArtifact(string fingerprint)
         {
             Assembly assembly = typeof(HotReloadIntroducedTypeRegistryTests).Assembly;

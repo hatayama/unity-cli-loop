@@ -45,5 +45,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(cached.AutoInjectedNamespaces[0].TriggerIdentifier, Is.EqualTo("StringBuilder"));
             Assert.That(cached.AutoInjectedNamespaces[0].IsSpeculative, Is.True);
         }
+
+        /// <summary>
+        /// What: the same snippet compiled against a different set of additional references gets a
+        /// different cache key, so a result compiled against one generation of hot-reload introduced
+        /// types is not reused once that generation is gone.
+        /// </summary>
+        [Test]
+        public void GenerateCacheKey_WhenAdditionalReferencesDiffer_DiffersToo()
+        {
+            CompilationCacheManager manager = new();
+            CompilationRequest withoutReferences = new()
+            {
+                Code = "return 1;",
+                ClassName = "CachedClass",
+                Namespace = "CachedNs"
+            };
+            CompilationRequest withFirstGeneration = new()
+            {
+                Code = "return 1;",
+                ClassName = "CachedClass",
+                Namespace = "CachedNs",
+                AdditionalReferences = new List<string> { "Library/Introduced/Generation1.dll" }
+            };
+            CompilationRequest withSecondGeneration = new()
+            {
+                Code = "return 1;",
+                ClassName = "CachedClass",
+                Namespace = "CachedNs",
+                AdditionalReferences = new List<string> { "Library/Introduced/Generation2.dll" }
+            };
+
+            string keyWithoutReferences = manager.GenerateCacheKey(withoutReferences);
+            string keyWithFirstGeneration = manager.GenerateCacheKey(withFirstGeneration);
+            string keyWithSecondGeneration = manager.GenerateCacheKey(withSecondGeneration);
+
+            Assert.That(keyWithFirstGeneration, Is.Not.EqualTo(keyWithoutReferences));
+            Assert.That(keyWithSecondGeneration, Is.Not.EqualTo(keyWithFirstGeneration));
+        }
+
+        /// <summary>
+        /// What: the key does not depend on the order the additional references arrive in, so a
+        /// reordered but identical reference set still hits the cache.
+        /// </summary>
+        [Test]
+        public void GenerateCacheKey_WhenAdditionalReferencesAreReordered_StaysTheSame()
+        {
+            CompilationCacheManager manager = new();
+            CompilationRequest ascending = new()
+            {
+                Code = "return 1;",
+                ClassName = "CachedClass",
+                Namespace = "CachedNs",
+                AdditionalReferences = new List<string>
+                {
+                    "Library/Introduced/One.dll",
+                    "Library/Introduced/Two.dll"
+                }
+            };
+            CompilationRequest descending = new()
+            {
+                Code = "return 1;",
+                ClassName = "CachedClass",
+                Namespace = "CachedNs",
+                AdditionalReferences = new List<string>
+                {
+                    "Library/Introduced/Two.dll",
+                    "Library/Introduced/One.dll"
+                }
+            };
+
+            Assert.That(
+                manager.GenerateCacheKey(descending),
+                Is.EqualTo(manager.GenerateCacheKey(ascending)));
+        }
     }
 }

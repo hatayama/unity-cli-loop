@@ -130,6 +130,86 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         /// <summary>
         /// Test support type used by editor and play mode fixtures.
         /// </summary>
+        /// <summary>
+        /// Verifies a snippet compiles against the on-disk assembly of every active introduced type,
+        /// so the snippet can reference such a type directly.
+        /// </summary>
+        [Test]
+        public async Task ExecuteCodeAsync_WhenIntroducedTypesAreActive_CompilesAgainstTheirArtifacts()
+        {
+            Func<IReadOnlyList<string>> previousDescribe =
+                HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths;
+            HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths =
+                () => new List<string> { "Library/Introduced/One.dll", "Library/Introduced/Two.dll" };
+            try
+            {
+                RequestCapturingCompilationService compiler = new();
+                DynamicCodeExecutor executor = new(
+                    compiler,
+                    new CountingCompiledCommandInvoker(),
+                    new DynamicCodeSourcePreparationService());
+
+                await executor.ExecuteCodeAsync(
+                    "return 1;",
+                    cancellationToken: CancellationToken.None,
+                    compileOnly: true);
+
+                Assert.That(
+                    compiler.LastRequest.AdditionalReferences,
+                    Is.EqualTo(new[] { "Library/Introduced/One.dll", "Library/Introduced/Two.dll" }));
+            }
+            finally
+            {
+                HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths = previousDescribe;
+            }
+        }
+
+        /// <summary>
+        /// Verifies a snippet compiled while hot reload is not installed asks for no additional
+        /// reference, so the request is the one this tool has always sent.
+        /// </summary>
+        [Test]
+        public async Task ExecuteCodeAsync_WhenHotReloadIsNotInstalled_CompilesWithoutAdditionalReferences()
+        {
+            Func<IReadOnlyList<string>> previousDescribe =
+                HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths;
+            HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths = null;
+            try
+            {
+                RequestCapturingCompilationService compiler = new();
+                DynamicCodeExecutor executor = new(
+                    compiler,
+                    new CountingCompiledCommandInvoker(),
+                    new DynamicCodeSourcePreparationService());
+
+                await executor.ExecuteCodeAsync(
+                    "return 1;",
+                    cancellationToken: CancellationToken.None,
+                    compileOnly: true);
+
+                Assert.That(compiler.LastRequest.AdditionalReferences, Is.Empty);
+            }
+            finally
+            {
+                HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths = previousDescribe;
+            }
+        }
+
+        /// <summary>
+        /// Test support type that keeps the request it was asked to compile, so a test can state what
+        /// the executor sends rather than what it returns.
+        /// </summary>
+        private sealed class RequestCapturingCompilationService : IDynamicCompilationService
+        {
+            internal CompilationRequest LastRequest { get; private set; }
+
+            public Task<CompilationResult> CompileAsync(CompilationRequest request, CancellationToken ct = default)
+            {
+                LastRequest = request;
+                return Task.FromResult(new CompilationResult { Success = true });
+            }
+        }
+
         private sealed class NullTimingCompilationService : IDynamicCompilationService
         {
             private readonly CompilationResult _result;

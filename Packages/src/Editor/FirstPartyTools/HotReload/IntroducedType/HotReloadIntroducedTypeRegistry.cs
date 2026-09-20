@@ -204,6 +204,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Lists the on-disk dll of every active artifact, so a compilation outside this domain can
+        /// reference the introduced types instead of being refused by the compiler.
+        /// </summary>
+        /// <remarks>
+        /// Prepared artifacts are left out: their types are not active yet, and referencing one
+        /// would bind a compilation to a type this domain may never activate. The copy is taken
+        /// under the gate for the same reason as in <see cref="DescribeActive"/>. Ordered so a
+        /// compilation-cache key built from it is stable across runs.
+        /// </remarks>
+        public IReadOnlyList<string> DescribeActiveArtifactPaths()
+        {
+            List<string> paths = new List<string>();
+            lock (gate)
+            {
+                foreach (HotReloadIntroducedTypeArtifact artifact in activeByAssemblyIdentity.Values)
+                {
+                    paths.Add(artifact.DllPath);
+                }
+            }
+
+            paths.Sort(StringComparer.Ordinal);
+            return paths;
+        }
+
+        /// <summary>
         /// Answers whether a compiled assembly still owns a type this domain introduced.
         /// </summary>
         public bool HasActiveTypesForOriginalAssembly(string originalAssemblyName)
