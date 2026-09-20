@@ -172,6 +172,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "compiled behavior, and reloading the same shape skips them again; change what their "
             + "Methods[].Reason names and reload, or run 'uloop compile'.";
 
+        // Why this is reported at all: a skip that leaves an earlier patch active produces no
+        // Skipped-versus-compiled difference the reader can see. The method keeps running the
+        // older reload's body, which matches neither the compiled assembly nor the source on
+        // disk, and nothing else in the response says so.
+        public const string SkippedMethodKeepsActivePatchWarningFormat =
+            "This run skipped these methods, so what runs for them is still the body an earlier hot "
+            + "reload applied, which matches neither the compiled assembly nor the source on disk: {0}. "
+            + "Reloading the same shape skips them again; change what their Methods[].Reason names and "
+            + "reload, or run 'uloop compile'.";
+
         public const string DeactivatedSkippedAddedMembersWarningFormat =
             "This run deactivated previously active added members by skipping them: {0}. They are no longer "
             + "registered, but patches this run left active may still reach their previous shim bodies. "
