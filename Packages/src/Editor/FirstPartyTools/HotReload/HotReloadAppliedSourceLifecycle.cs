@@ -210,6 +210,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             HashSet<string> labels = CollectAddedEntryLabels(workerOutput);
+            labels.UnionWith(CollectSkippedLabels(outcomes));
+            return labels;
+        }
+
+        private static HashSet<string> CollectSkippedLabels(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
             if (outcomes == null)
             {
                 return labels;
@@ -278,16 +285,78 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            AppendDeactivatedWarningLine(
-                warnings,
+            HashSet<string> skippedLabels = CollectSkippedLabels(outcomes);
+            AppendAddedWarningLines(warnings, deactivatedAdded, skippedLabels, snapshotForwardedUnityMessageLabels);
+            AppendPatchWarningLines(warnings, deactivatedPatches, skippedLabels);
+        }
+
+        // Why the two sentences are emitted separately rather than merged: a member this run
+        // skipped comes back only after its reason is addressed, and the ordinary sentence tells
+        // the reader to reload again - which skips it again. A run that deactivated both kinds
+        // gets one line of each, so neither group is given the other's instruction.
+        private static void AppendAddedWarningLines(
+            List<string> warnings,
+            List<string> deactivatedAdded,
+            HashSet<string> skippedLabels,
+            HashSet<string> snapshotForwardedUnityMessageLabels)
+        {
+            SplitBySkipped(
                 deactivatedAdded,
-                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
-                HotReloadDeactivatedUnityMessageNote.Describe(deactivatedAdded, snapshotForwardedUnityMessageLabels));
+                skippedLabels,
+                out List<string> skipped,
+                out List<string> deactivatedOnly);
             AppendDeactivatedWarningLine(
                 warnings,
+                deactivatedOnly,
+                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
+                HotReloadDeactivatedUnityMessageNote.Describe(deactivatedOnly, snapshotForwardedUnityMessageLabels));
+            AppendDeactivatedWarningLine(
+                warnings,
+                skipped,
+                HotReloadConstants.DeactivatedSkippedAddedMembersWarningFormat,
+                HotReloadDeactivatedUnityMessageNote.Describe(skipped, snapshotForwardedUnityMessageLabels));
+        }
+
+        private static void AppendPatchWarningLines(
+            List<string> warnings,
+            List<string> deactivatedPatches,
+            HashSet<string> skippedLabels)
+        {
+            SplitBySkipped(
                 deactivatedPatches,
+                skippedLabels,
+                out List<string> skipped,
+                out List<string> deactivatedOnly);
+            AppendDeactivatedWarningLine(
+                warnings,
+                deactivatedOnly,
                 HotReloadConstants.DeactivatedPatchesWarningFormat,
                 null);
+            AppendDeactivatedWarningLine(
+                warnings,
+                skipped,
+                HotReloadConstants.DeactivatedSkippedPatchesWarningFormat,
+                null);
+        }
+
+        private static void SplitBySkipped(
+            List<string> labels,
+            HashSet<string> skippedLabels,
+            out List<string> skipped,
+            out List<string> deactivatedOnly)
+        {
+            skipped = new List<string>();
+            deactivatedOnly = new List<string>();
+            foreach (string label in labels)
+            {
+                if (skippedLabels.Contains(label))
+                {
+                    skipped.Add(label);
+                    continue;
+                }
+
+                deactivatedOnly.Add(label);
+            }
         }
 
         private static void AppendDeactivatedWarningLine(

@@ -296,15 +296,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return "        private void Update()\n        {\n            MissingHelperAddedByEdit();\n        }";
         }
 
+        // Both wordings are accepted because the Unity-message sentence is appended to whichever
+        // of them the run produced, and which one it is depends on whether the same run also
+        // skipped the member.
         private static string FindDeactivatedAddedMembersWarning(HotReloadOrchestratorResult result)
         {
-            string format = HotReloadConstants.DeactivatedAddedMembersWarningFormat;
-            string prefix = format.Substring(0, format.IndexOf("{0}", StringComparison.Ordinal));
+            string[] formats =
+            {
+                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
+                HotReloadConstants.DeactivatedSkippedAddedMembersWarningFormat
+            };
             foreach (string warning in result.Warnings)
             {
-                if (warning.StartsWith(prefix, StringComparison.Ordinal))
+                foreach (string format in formats)
                 {
-                    return warning;
+                    string prefix = format.Substring(0, format.IndexOf("{0}", StringComparison.Ordinal));
+                    if (warning.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        return warning;
+                    }
                 }
             }
 
