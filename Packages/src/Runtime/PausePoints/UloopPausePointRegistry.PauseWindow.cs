@@ -17,7 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // While set, no entry's capture window is allowed to expire (see TryExpire): a marker's
         // own hit freezes every marker's countdown for the duration of the inspection pause,
         // and the frozen duration is credited back to each entry's ExpiresAtUtc on resume.
-        private static DateTime? _pauseWindowStartUtc;
+        // Why ticks (0 = no window open) rather than DateTime?: RecordMethodEntry reads the open
+        // flag from injected IL on arbitrary threads, where a DateTime? cannot be read atomically.
+        private static long _pauseWindowStartTicks;
         // The id of the marker whose hit is actually holding the Editor paused. Kept separate
         // from _latestHitSnapshot, which every hit overwrites (including Trace-mode hits that
         // never pause): using _latestHitSnapshot here would let an unrelated Trace hit that
@@ -25,6 +27,24 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // pause to itself. Overwritten by a later non-Trace hit, since a second marker hitting
         // while already paused becomes the new (only) reason the Editor stays paused.
         private static string _pauseWindowOwnerId;
+
+        // Single accessor for the window start so the ticks field stays the one source of truth.
+        private static DateTime? PauseWindowStartUtc
+        {
+            get
+            {
+                long ticks = Interlocked.Read(ref _pauseWindowStartTicks);
+                return ticks == 0L ? null : new DateTime(ticks, DateTimeKind.Utc);
+            }
+            set => Interlocked.Exchange(ref _pauseWindowStartTicks, value?.Ticks ?? 0L);
+        }
+
+        // Off-thread-safe form of "a hit currently holds the Editor paused", for callers that only
+        // need the flag and must not allocate or touch main-thread state.
+        private static bool IsPauseWindowOpen()
+        {
+            return Interlocked.Read(ref _pauseWindowStartTicks) != 0L;
+        }
 
         /// <summary>
         /// Read-only signal for callers outside this registry (e.g. execute-dynamic-code) that
@@ -37,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         /// </summary>
         public static string GetActivePausePointId()
         {
-            return _pauseWindowStartUtc.HasValue ? _pauseWindowOwnerId ?? string.Empty : string.Empty;
+            return PauseWindowStartUtc.HasValue ? _pauseWindowOwnerId ?? string.Empty : string.Empty;
         }
 
         /// <summary>
@@ -91,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // of being misreported as a resume this clear performed (it would be a no-op resume of
             // an already-unpaused Editor) and instead of leaving the stale window freezing expiry.
             ClosePauseWindowIfEditorResumedExternally();
-            if (!_pauseWindowStartUtc.HasValue)
+            if (!PauseWindowStartUtc.HasValue)
             {
                 return false;
             }
@@ -123,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         /// </summary>
         public static void ClosePauseWindowIfEditorResumedExternally()
         {
-            if (!_pauseWindowStartUtc.HasValue || _pauseController.IsPaused)
+            if (!PauseWindowStartUtc.HasValue || _pauseController.IsPaused)
             {
                 return;
             }
@@ -135,18 +155,25 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // entry's ExpiresAtUtc and closes the window. A no-op when no window is open.
         private static void CreditPauseWindowAndClose(DateTime now)
         {
-            if (!_pauseWindowStartUtc.HasValue)
+            if (!PauseWindowStartUtc.HasValue)
             {
                 return;
             }
 
-            DateTime pauseWindowStart = _pauseWindowStartUtc.Value;
-            _pauseWindowStartUtc = null;
-            _pauseWindowOwnerId = null;
+            DateTime pauseWindowStart = PauseWindowStartUtc.Value;
+            // Credit first, close second. RecordMethodEntry reads the window flag and the
+            // deadline off-thread, so closing the window before the deadlines are extended
+            // exposes a moment where the window already reads closed while every deadline is
+            // still the pre-pause one - an entry recorded there would be dropped as outside the
+            // capture window. Main-thread behaviour is unchanged: TryExpire only declines to
+            // expire while the window is open, and it cannot run between these two statements.
             foreach (UloopPausePointEntry entry in Entries.Values)
             {
                 entry.ExtendExpiryForPause(pauseWindowStart, now);
             }
+
+            PauseWindowStartUtc = null;
+            _pauseWindowOwnerId = null;
         }
     }
 }
