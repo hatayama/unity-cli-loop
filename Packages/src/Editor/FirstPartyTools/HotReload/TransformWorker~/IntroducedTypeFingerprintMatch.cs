@@ -35,6 +35,8 @@ internal sealed class IntroducedTypeFingerprintMatch
     // kind whose edit is known to move the header hash as well.
     private const string EnumMemberKeyPrefix = "enum:";
 
+    private const int MaxNamedOmittedAdditions = 3;
+
     private const string OrderDetail = "order";
 
     private const string HeaderDetail = "header";
@@ -273,8 +275,8 @@ internal sealed class IntroducedTypeFingerprintMatch
     // Why the comparison is filtered rather than reported as it stands: a reader told that an
     // addition this reload already applied is part of why a compile is required takes the addition
     // back out, which is the one edit that cannot help. Only the differences that actually block
-    // the reload are named; the applicable additions are counted so they are not mistaken for a
-    // silent omission either.
+    // the reload are named; the applicable additions are counted and named so they are not
+    // mistaken for a silent omission either.
     private static IntroducedTypeFingerprintMatch ReportDeclarationChanged(
         HotReloadIntroducedTypeFingerprintComparison comparison,
         HotReloadIntroducedTypeFingerprint recorded,
@@ -300,14 +302,14 @@ internal sealed class IntroducedTypeFingerprintMatch
             || hasEnumMemberEdit;
         bool omitHeader = hasEnumMemberEdit;
         List<string> blocking = new List<string>();
-        int omittedAdditions = 0;
+        List<string> omittedAdditions = new List<string>();
         foreach (string detail in comparison.Details)
         {
             if (detail.StartsWith(AddedDetailPrefix, StringComparison.Ordinal)
                 && memberIndex.FindMemberKind(detail.Substring(AddedDetailPrefix.Length))
                     != IntroducedTypeMemberKind.Other)
             {
-                omittedAdditions++;
+                omittedAdditions.Add(detail.Substring(AddedDetailPrefix.Length));
                 continue;
             }
 
@@ -324,9 +326,9 @@ internal sealed class IntroducedTypeFingerprintMatch
             blocking.Add(detail);
         }
 
-        if (omittedAdditions > 0)
+        if (omittedAdditions.Count > 0)
         {
-            blocking.Add(omittedAdditions + " applicable addition(s) omitted");
+            blocking.Add(DescribeOmittedAdditions(omittedAdditions));
         }
 
         Debug.Assert(
@@ -339,6 +341,22 @@ internal sealed class IntroducedTypeFingerprintMatch
             NoKeys,
             NoKeys,
             blocking);
+    }
+
+    // Why the names and not the count alone: a reader who cannot tell which additions were left
+    // out has to diff the declaration against the artifact by hand to be sure the edit they made
+    // is among them. Why a head and a remainder: a declaration can gain many members at once, and
+    // the blocking differences this line sits next to are what the reader has to act on.
+    private static string DescribeOmittedAdditions(List<string> omittedAdditions)
+    {
+        int namedCount = Math.Min(omittedAdditions.Count, MaxNamedOmittedAdditions);
+        string names = string.Join(", ", omittedAdditions.GetRange(0, namedCount));
+        if (namedCount < omittedAdditions.Count)
+        {
+            names += " and " + (omittedAdditions.Count - namedCount) + " more";
+        }
+
+        return omittedAdditions.Count + " applicable addition(s) omitted: " + names;
     }
 
     private static bool HasDetailWithPrefix(

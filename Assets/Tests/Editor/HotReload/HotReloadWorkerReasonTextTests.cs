@@ -248,8 +248,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
-                NoArgs,
-                "Calls an added method that hot reload cannot emit. Run 'uloop compile'.");
+                new[] { "Outer.Inner.Ping()" },
+                "Calls the added method 'Outer.Inner.Ping()', which hot reload cannot emit. "
+                + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced,
                 NoArgs,

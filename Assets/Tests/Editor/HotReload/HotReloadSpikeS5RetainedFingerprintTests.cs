@@ -716,8 +716,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
         }
 
         /// <summary>What: removing one member while adding another asks for a compile and names
-        /// the removal only, counting the addition the reload could have applied, so the reader
-        /// does not read the addition as the reason and take it back out.</summary>
+        /// the removal as the reason, listing the addition the reload could have applied under a
+        /// wording that says it is not the cause, so the reader does not take the addition back
+        /// out.</summary>
         [Test]
         public async Task Plan_RemovedMethodWithAnAddedMethod_RequiresACompileAndNamesOnlyTheRemoval()
         {
@@ -740,7 +741,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                     + " Declaration differences: "));
             Assert.That(reason, Does.Contain("removed:"));
             Assert.That(reason, Does.Not.Contain("added:"));
-            Assert.That(reason, Does.Contain("1 applicable addition(s) omitted"));
+            Assert.That(reason, Does.Contain("1 applicable addition(s) omitted: Example.Retained::Extra()"));
         }
 
         /// <summary>What: adding a constructor ahead of the existing members asks for a compile and
