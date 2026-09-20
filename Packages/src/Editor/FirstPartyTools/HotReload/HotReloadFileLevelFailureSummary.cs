@@ -48,8 +48,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string prefix = failureCount > 1
                 ? "First of " + failureCount + " file-level failures: "
                 : "First file-level failure: ";
-            sentence = prefix + EndWithPeriod(firstReason);
+            sentence = prefix + EndWithPeriod(FirstLine(firstReason));
             return true;
+        }
+
+        // Why only the first line: a refusal reason can carry several lines - a parse error lists
+        // every diagnostic, a failed shim compilation adds the compile errors and a hint - and
+        // Message is read as one line. The remaining lines stay on the Methods row.
+        private static string FirstLine(string reason)
+        {
+            string[] lines = reason.Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                string line = lines[index].Trim();
+                if (line.Length > 0)
+                {
+                    return line;
+                }
+            }
+
+            return reason;
         }
 
         // Why: the reason is free text written by whichever guard refused the file, so the

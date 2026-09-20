@@ -1487,6 +1487,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a multi-line file-level reason (a parse error listing every diagnostic, or a shim
+        /// compilation failure with its hint) contributes only its first line to Message; the rest
+        /// stays on the Methods row.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithMultiLineFileLevelReason_PrefixesOnlyItsFirstLine()
+        {
+            const string multiLineReason =
+                "Compilation of the shim assembly failed.\nAssets/A.cs(3,5): error CS0103: unknown\n"
+                + "Add the new member with 'uloop compile'.";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("(file)", multiLineReason, "a.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload finished with one or more Failed method outcomes. "
+                    + "First file-level failure: Compilation of the shim assembly failed. See Methods."));
+            Assert.That(response.Methods[0].Reason, Is.EqualTo(multiLineReason));
+        }
+
+        /// <summary>
         /// What: every apply-message branch appends the warning-count suffix when Warnings is
         /// non-empty, and the applied branch mentions Skipped before that suffix.
         /// </summary>
