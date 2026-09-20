@@ -39,6 +39,8 @@ return x;
 
 Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
 
+Never wait for a frame or physics step while a pause point is armed: its hit pauses the Editor, the snippet cannot finish, and later commands are rejected as busy until that process is stopped (`uloop-pause-point` skill).
+
 This snippet runs in the Editor execution context: `Screen.width` and `Screen.height` are Editor pixels, not the Game View resolution. For a ray through the Game View center, use `cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))`.
 
 ## Known transpiler constraints

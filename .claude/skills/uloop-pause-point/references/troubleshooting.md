@@ -18,6 +18,17 @@ A pause point hits only when control flow reaches the patched line (or the `Paus
 
 If a `simulate-*` command instead returns a failure whose message says PlayMode is paused, suspect a pause point hit rather than an unrelated failure: an active pause point can make PlayMode paused mid-simulation, and the `simulate-*` call surfaces that as a preflight failure. The failure response names the responsible marker in `RejectedByActivePausePointId`, and sets `RejectedBeforeExecution: true` for any pre-execution refusal. A `--trigger` refused that way aborts the wait right away with `PAUSE_POINT_TRIGGER_FAILED` quoting the refusal, instead of waiting the marker out. When `RejectedByActivePausePointId` names the marker being awaited, the wait reads that marker's status once more: a hit that counts for this wait (for a continuous/trace marker already hit when the wait began, only a `LastHitSequence` newer than the one at wait start) is reported as the wait's success (with `TriggerFailed: true` and the refusal `Warning`), and a marker that was not hit — for example one re-armed while PlayMode was still paused by its previous hit — fails fast the same way. Check `uloop pause-point-status --id <id>` first to confirm the hit before treating it as a bug in the simulated action itself.
 
+## A Frame Wait While a Hit Holds the Pause
+
+A command that waits for a frame or a physics step cannot finish while the Editor is paused — no frame arrives — and `uloop` is single-flight, so every later command is rejected with `UNITY_SERVER_BUSY` (its `Error.Details.Data.isPaused` is `true`). `clear-pause-point` and `control-play-mode --action Resume` are rejected the same way, so no command releases the pause and waiting never ends. The usual way in: a marker is armed, its hit pauses the Editor, and an `execute-dynamic-code` snippet that awaits the next frame is running or is started afterwards.
+
+`uloop pause-point-status` still answers while Unity is busy — use it to confirm a hit is holding the pause. Then recover either way:
+
+1. Stop the uloop process that is running the command (Ctrl-C in its terminal, otherwise interrupt or kill that process). Its request is cancelled and returns no result, the Editor pause is released, and the next command runs.
+2. Release the pause in the Editor (Edit > Play Mode > Pause). Frames resume, so the running command finishes and returns its result.
+
+Avoid the state instead: do not start a frame-waiting snippet while a marker is armed. Take the hit first (`await-pause-point`, or `enable-pause-point --await`), then run the snippet while you own the pause.
+
 ## Locating Where Control Flow Stops
 
 To locate where control flow stops before an unhit line, bisect with a second pause point on the method's entry (its first executable line). If the entry point hits while the target line stays at `HitCount=0`, an early return or a branch between the two lines is filtering execution — inspect the guard values in the entry hit's `CapturedVariables` instead of retrying the original line.
