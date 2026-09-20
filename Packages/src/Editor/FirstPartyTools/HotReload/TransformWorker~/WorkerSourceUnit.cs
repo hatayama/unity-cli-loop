@@ -87,6 +87,13 @@ internal sealed class WorkerSourceUnit
     public List<WorkerRetainedBodyEditType> RetainedBodyEditTypes { get; } =
         new List<WorkerRetainedBodyEditType>();
 
+    // Every such declaration of the run, whichever file of the group declares it. A file that only
+    // uses one of those types has none of its own, and still has to tell the source declaration
+    // left in the binding tree from a type no artifact serves. Emit keeps reading the per-file
+    // list, because a patch belongs to the file that declares the type.
+    public IReadOnlyList<WorkerRetainedBodyEditType> RunRetainedBodyEditTypes { get; set; } =
+        new WorkerRetainedBodyEditType[0];
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();

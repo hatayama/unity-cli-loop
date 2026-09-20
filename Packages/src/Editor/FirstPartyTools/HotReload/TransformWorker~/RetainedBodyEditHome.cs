@@ -71,6 +71,27 @@ internal static class RetainedBodyEditHome
             FindBodyEditType(sourceUnit.RetainedBodyEditTypes, CecilTypeNames.ToMetadataName(typeSymbol)));
     }
 
+    /// <summary>
+    /// The artifact serving a type any file of this run keeps in its tree, or null when no
+    /// artifact of this run serves it. Asked by a file that uses such a type without declaring
+    /// it, where the declaration lives in another unit of the same group.
+    /// </summary>
+    internal static INamedTypeSymbol FindRunRetainedType(
+        WorkerSourceUnit sourceUnit,
+        SemanticModel semanticModel,
+        INamedTypeSymbol typeSymbol)
+    {
+        if (sourceUnit == null || typeSymbol == null)
+        {
+            return null;
+        }
+
+        return ResolveArtifactType(
+            sourceUnit,
+            semanticModel,
+            FindBodyEditType(sourceUnit.RunRetainedBodyEditTypes, CecilTypeNames.ToMetadataName(typeSymbol)));
+    }
+
     private static INamedTypeSymbol ResolveArtifactType(
         WorkerSourceUnit sourceUnit,
         SemanticModel semanticModel,
@@ -89,7 +110,7 @@ internal static class RetainedBodyEditHome
     }
 
     private static WorkerRetainedBodyEditType FindBodyEditType(
-        List<WorkerRetainedBodyEditType> bodyEditTypes,
+        IReadOnlyList<WorkerRetainedBodyEditType> bodyEditTypes,
         string metadataName)
     {
         foreach (WorkerRetainedBodyEditType bodyEditType in bodyEditTypes)
