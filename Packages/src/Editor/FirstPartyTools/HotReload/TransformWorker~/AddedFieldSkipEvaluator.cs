@@ -193,9 +193,78 @@ internal static class AddedFieldSkipEvaluator
             return false;
         }
 
-        return artifactMap.FindNormalizedIdentity(
-            constructedType.ContainingAssembly,
-            CecilTypeNames.ToMetadataName(constructedType.OriginalDefinition)) != null;
+        if (artifactMap.FindNormalizedIdentity(
+                constructedType.ContainingAssembly,
+                CecilTypeNames.ToMetadataName(constructedType.OriginalDefinition)) != null)
+        {
+            return true;
+        }
+
+        return ConstructsRetainedSourceDeclaration(constructor, constructedType, semanticModel, sourceUnit);
+    }
+
+    // Why the source declaration counts as well: a type whose bodies this same reload edits keeps
+    // its declaration in the binding tree, so the construction binds to the source symbol while
+    // the artifact assembly the shim references is what serves the type at run time. Refusing it
+    // would make the first body edit of an introduced type refuse every field initializer that
+    // constructs it, for as long as the edited file differs from the compiled assembly.
+    private static bool ConstructsRetainedSourceDeclaration(
+        IMethodSymbol constructor,
+        INamedTypeSymbol constructedType,
+        SemanticModel semanticModel,
+        WorkerSourceUnit sourceUnit)
+    {
+        INamedTypeSymbol artifactType = RetainedBodyEditHome.FindRunRetainedType(
+            sourceUnit,
+            semanticModel,
+            constructedType.OriginalDefinition);
+        if (artifactType == null)
+        {
+            return false;
+        }
+
+        // The constructor the lambda really runs is the artifact's, not the one bound from
+        // source: a constructor this reload added to the type, or one whose accessibility the
+        // source now spells differently, is not there to be called.
+        return HasMatchingPublicConstructor(artifactType, constructor);
+    }
+
+    private static bool HasMatchingPublicConstructor(INamedTypeSymbol artifactType, IMethodSymbol constructor)
+    {
+        foreach (IMethodSymbol candidate in artifactType.InstanceConstructors)
+        {
+            if (candidate.DeclaredAccessibility == Accessibility.Public
+                && ParameterTypesMatch(candidate, constructor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Compared by display string because the two constructors come from different assemblies -
+    // the artifact and the edited source - so the same type is not the same symbol on both sides.
+    private static bool ParameterTypesMatch(IMethodSymbol artifactConstructor, IMethodSymbol constructor)
+    {
+        if (artifactConstructor.Parameters.Length != constructor.Parameters.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < constructor.Parameters.Length; index++)
+        {
+            string artifactParameter = artifactConstructor.Parameters[index].Type.ToDisplayString();
+            if (!string.Equals(
+                    artifactParameter,
+                    constructor.Parameters[index].Type.ToDisplayString(),
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     internal static bool HasDisallowedInitializerSymbol(
