@@ -49,7 +49,7 @@ nothing from them is applied, while files in other assemblies still apply.
 | Condition | `Reason` |
 |---|---|
 | The declaration of a type this domain already introduced has changed in a way the artifact cannot be brought up to | `Changed introduced type requires a compile: <type> Declaration differences: <parts>.` — the differences name the fingerprint parts that stopped matching, and are omitted when the comparison only knows the type name. `removed:<member>` and `declaration:<member>` name a member the artifact holds that the source no longer declares the same way; `added:<member>` names one the source gained; `header` is the type's own declaration (accessibility, kind, base list, type parameters), `defines` the preprocessor symbols the file was read with, and `order` the declared order of the members. `added:` keys are applied rather than refused when every added member is an ordinary method, field or property and nothing else about the declaration differs; an added constructor, operator, event, indexer or nested type is refused like any other change. The `order` an insertion shifts is forgiven as long as the members the record holds keep the same order once the added keys are dropped. Additions the reload could have applied (ordinary methods, fields, properties) are not listed; the row ends with `N applicable addition(s) omitted` so the reader knows they are not the cause |
-| A member body of a type this domain already introduced changed in a way that cannot be patched | `Changed member body of introduced type requires a compile: <type> Changed members: <keys>. Only ordinary method bodies of an introduced type can be hot reloaded.` |
+| A member body of a type this domain already introduced changed in a way that cannot be patched | `Changed member body of introduced type requires a compile: <type> Changed members: <keys>. Only ordinary method bodies and getter-only property bodies of an introduced type can be hot reloaded.` |
 | Two files of the same reload declare the same type | `Introduced type <type> is declared in more than one file of the group: <paths>.` |
 | The artifact assembly failed to compile | `Introduced-type compilation failed: <compiler output>` |
 
@@ -67,11 +67,13 @@ unload it either — the type stays loaded, and the active state of the domain i
 What is fixed is the declaration, not the code behind it. Editing only the bodies of the type's
 ordinary methods leaves the declaration identical, so the reload patches those bodies on the
 artifact assembly that already carries the type and reports the type as an `AlreadyActive` row
-with the methods as `Patched`. Restoring such a body to what the artifact was compiled from
-reverts the patch, so the artifact runs its own code again. Bodies that are not ordinary method
-bodies — constructors, property and event accessors, field and property initializers — and any
-change to the declaration other than adding an ordinary method, field or property still require
-a compile.
+with the methods as `Patched`. A property whose getter is its only accessor with a body is read
+the same way: the fingerprint folds every body of a property into one hash, so only that shape
+tells the comparison the difference can be the getter's alone. Restoring such a body to what the
+artifact was compiled from reverts the patch, so the artifact runs its own code again. Every
+other body — constructors, setter, init, indexer and event accessors, field and property
+initializers — and any change to the declaration other than adding an ordinary method, field or
+property still require a compile.
 
 ## Partial apply
 
@@ -125,9 +127,11 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 - **Values are not preserved.** Nothing carries the state of an introduced type's instances
   across the domain reload that ends its life, and this stage makes no attempt to. Treat an
   introduced type as an Editor-session illusion, exactly like an added member.
-- Body-only edits of an introduced type's ordinary methods are patched on the artifact assembly,
+- Body-only edits of an introduced type's ordinary methods, and of a property whose getter is
+  its only accessor with a body, are patched on the artifact assembly,
   and ordinary methods, fields and properties added to it are applied through the same
-  added-member machinery a compiled type uses. Constructor / accessor / initializer bodies,
+  added-member machinery a compiled type uses. Constructor / setter / init / indexer / event
+  accessor / initializer bodies,
   member removals, signature changes, and additions of constructors, operators, events,
   indexers or nested types still require a compile.
 - A member added to an introduced type lives in the shim that reload compiled, so a later reload

@@ -49,5 +49,11 @@ internal sealed class TypeEmitState
     // body the artifact holds, so patching it would replace a body with the same body.
     public HashSet<string> RetainedChangedMethodKeys { get; set; }
 
+    // The syntax property keys whose getter body this edit changed on a type a retained artifact
+    // serves, or null when no artifact serves the type. A property outside the set still runs the
+    // getter the artifact holds. Set together with RetainedChangedMethodKeys, so either one being
+    // null says the same thing about the type.
+    public HashSet<string> RetainedChangedGetterPropertyKeys { get; set; }
+
     public bool TypeIsAbsentFromCompiledAssembly { get; set; }
 }

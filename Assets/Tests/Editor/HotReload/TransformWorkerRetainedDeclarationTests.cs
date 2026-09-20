@@ -537,6 +537,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a getter-only property body edit of a retained type whose declaration escapes its
+        /// own name is patched on the artifact assembly. The changed-body keys and the key the emit
+        /// stage spells a property with are both built from the declaration, so `@Retained` cannot
+        /// make the two disagree and leave an edited getter reported as one the artifact runs.
+        /// </summary>
+        [Test]
+        public async Task Transform_RetainedDeclarationNameIsEscaped_PatchesTheEditedPropertyGetter()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "EscapedTypeNameGetter",
+                    WithEscapedTypeName(WithNumberProperty(ArtifactBackedSource)),
+                    new[] { "Twice", "Thrice", "get_Number" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                WithEscapedTypeName(WithEditedNumberProperty(ArtifactBackedSource)));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto[] patched = FindEntries(result, "get_Number");
+            Assert.That(patched.Length, Is.EqualTo(1), DescribeRows(result));
+            Assert.That(patched[0].typeMetadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(patched[0].homeAssemblyName, Is.EqualTo(fixture.ArtifactAssemblyName));
+            Assert.That(FindUnchanged(result, "get_Number"), Is.Empty, DescribeRows(result));
+        }
+
+        /// <summary>
         /// What: a property getter of a retained type is reported as unchanged in the assembly
         /// serving the type, not patched as a getter of the edited file's own assembly. The
         /// comparison that kept the declaration reported that no accessor body changed, while the
@@ -894,6 +926,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return source.Replace(
                 "        public static int Value = 1;\n",
                 "        public static int Value = 1;\n\n        public int Number => Value;\n",
+                StringComparison.Ordinal);
+        }
+
+        // The same declaration with only the getter body of that property edited, which is the one
+        // difference a reload of a retained type has to read as a body it can patch.
+        private static string WithEditedNumberProperty(string source)
+        {
+            return source.Replace(
+                "        public static int Value = 1;\n",
+                "        public static int Value = 1;\n\n        public int Number => Value + 1;\n",
                 StringComparison.Ordinal);
         }
 

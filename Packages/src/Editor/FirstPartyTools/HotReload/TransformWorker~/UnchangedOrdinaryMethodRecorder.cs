@@ -69,10 +69,10 @@ internal static class UnchangedOrdinaryMethodRecorder
 
     /// <summary>
     /// Records the getter of a property declared on a type a retained artifact serves as
-    /// unchanged. The fingerprint comparison that let this reload keep the declaration reported
-    /// that only ordinary method bodies differ, so an accessor body here is the one the artifact
-    /// was compiled from. Only a getter with a body of its own produces a row, which is the shape
-    /// the ordinary getter path produces too.
+    /// unchanged. Called for the properties the fingerprint comparison did not name among the
+    /// changed bodies, so the getter here is the one the artifact was compiled from. Only a getter
+    /// with a body of its own produces a row, which is the shape the ordinary getter path produces
+    /// too.
     /// </summary>
     internal static void RecordRetainedPropertyGetterAsUnchanged(
         TypeEmitState typeState,

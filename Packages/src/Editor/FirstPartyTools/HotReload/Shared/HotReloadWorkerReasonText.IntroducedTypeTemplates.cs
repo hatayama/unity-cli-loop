@@ -74,7 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Changed member body of introduced type requires a compile: {0}",
                     1,
                     " Changed members: ",
-                    ". Only ordinary method bodies of an introduced type can be hot reloaded."));
+                    ". Only ordinary method bodies and getter-only property bodies of an "
+                    + "introduced type can be hot reloaded."));
 
             // The fragment that carries a list the worker already joined: the tokens name
             // fingerprint parts and member keys rather than reading as English, so wording them
