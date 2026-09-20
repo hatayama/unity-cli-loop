@@ -13,6 +13,12 @@ When updating a pinned action:
 For nested action paths such as `github/codeql-action/upload-sarif`, resolve the
 tag against the action repository, not the nested action path.
 
+A folded `run:` block (`run: >`) must contain no comment. YAML folds the whole
+block into one command line, so a `#` there comments out every argument written
+after it and the step keeps passing with those arguments silently dropped. Put
+the explanation in a YAML comment above the step instead, or use a literal block
+(`run: |`) where each line keeps its own newline.
+
 Pull request workflows must not restore Go module caches through `setup-go`.
 Use `cache: false` for `actions/setup-go` in workflows triggered by
 `pull_request` or `pull_request_target`.
