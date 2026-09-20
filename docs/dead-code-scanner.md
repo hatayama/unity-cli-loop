@@ -39,6 +39,13 @@ the same change.
 Negative `--max-public-candidates` values, or omitting the option, disable the
 ceiling check.
 
+The step passes the flag through a folded YAML block, so any explanation has to
+stay above the step: a `#` inside the block is folded onto the command line and
+comments out every argument after it, which silently disables the ceiling.
+`TestFoldedRunBlocksContainNoShellComment` in
+`cli/release-automation/internal/architecture` fails the pull request when a
+comment reappears inside a folded `run:` block.
+
 ## Interpreting the output
 
 Interpret scanner output conservatively:
@@ -63,3 +70,17 @@ and do not add scanner-silencing machinery that changes the public API surface.
 | `UnityCliLoopToolRegistrar.NotifyToolChanges` | Same public extension API. |
 | `ToolContracts.EditorWindowCaptureUtility.CaptureGameRenderingAsync` | Migration target: `ThirdPartyToolMigrationRuleCatalog` rewrites third-party tool code to call this façade, so user code outside this repository is the caller. |
 | `ExecuteDynamicCodeResponse.Error` | Documented tool response field (`ExecuteDynamicCode` Skill). Outbound JSON shape, not an in-repo read. |
+
+These groups stay `PublicCandidate` for the same reason repeatedly, so triage them
+by category instead of symbol by symbol.
+
+| Group | Why it stays |
+|---|---|
+| `ICallbacks` implementations in `RunTests/TestFramework` | Unity's Test Runner calls them; the interface declaration is the only in-repo reference. |
+| `AsmdefTemplate` fields in `RunTestsTestAsmdefProposalBuilder` | Serialized verbatim into the proposed `.asmdef`; the names are Unity's schema, not ours. |
+| `type` on the `JsonRpcErrorData` subclasses | Wire discriminator the CLI reads as `error.data.type`; each subclass overrides an abstract member. |
+| Tool schema parameters (`CompileSchema.TimeoutSeconds`, `FindGameObjectsSchema.IncludeInheritedProperties`) | Inbound JSON parameter names, also published in the generated tool catalog. |
+| `TransformWorkerProgram.Main` | Entry point of the worker process the Editor launches through the .NET host. |
+| `HotReloadUnityMessageProxy`'s protected constructor | The reflection-emitted subclass chains to it; no C# source calls it. |
+| `GenericConsoleWindowUtility.GetConsoleLogCounts` | Pre-Unity-6 fallback behind `#if`; the scanner compiles only the Unity 6 branch. |
+| `Utf8StringWriter.Encoding` | Overrides `StringWriter.Encoding` so the XML writer emits UTF-8. |
