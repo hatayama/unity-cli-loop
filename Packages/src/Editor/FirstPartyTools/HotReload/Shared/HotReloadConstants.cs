@@ -199,6 +199,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
 
+        // Why a warning rather than a re-run of the initializer: a stored value cannot be told
+        // apart from one the edited code assigned, so re-running would overwrite live state. The
+        // run reports the mismatch instead, because nothing else in the response shows it.
+        public const string AddedFieldInitializerChangedWarningFormat =
+            "A previous reload already added these fields, so this run's initializer for them does "
+            + "not reach a value that already exists: {0}. It runs only where the field has not been "
+            + "read yet; assign the value inside a patched method (for a reference type, "
+            + "'if (field == null) field = ...;'), rename the field, or run 'uloop compile'.";
+
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
 

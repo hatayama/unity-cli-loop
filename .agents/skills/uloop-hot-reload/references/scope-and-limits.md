@@ -57,6 +57,11 @@ earlier reload introduced and this Editor session still keeps active, through a
 constructor the retained assembly holds as `public` — including in the reload that also
 edits a body of that type. A constructor this reload adds to it, or one whose parameters
 the retained assembly does not hold, keeps the readers and writers `Skipped`.
+Because the initializer runs on first access, one this reload adds to — or changes on — a
+field an earlier reload already added never reaches a value the side table already holds:
+it runs only where the field has not been read yet. That reload names those fields in
+`Warnings`; the way to reach the existing instances is to assign the value inside a patched
+method, rename the field, or run `uloop compile`.
 To apply such a field without compiling, declare it
 without an initializer — it starts at `default(T)` — and assign it inside the patched
 method instead; for a reference type, guard that with

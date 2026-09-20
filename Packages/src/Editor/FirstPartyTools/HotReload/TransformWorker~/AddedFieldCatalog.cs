@@ -61,11 +61,49 @@ internal sealed class AddedFieldCatalog : AddedMemberCatalog<AddedFieldBinding>
         return ListDisplayNamesOfFile(_foldedConstKeys, projectRelativePath);
     }
 
-    // Why filter by the binding's file: the catalog spans a whole group, while addedFieldNames
-    // and addedConstNames are per-file rows in the worker output.
+    /// <summary>
+    /// The initializer text of each rewritten added field, in the order
+    /// <see cref="ListRewrittenAddedFieldDisplayNames"/> returns their names. A field declared
+    /// without an initializer contributes an empty entry.
+    /// </summary>
+    /// <remarks>
+    /// Why the text travels with the names: the Editor compares it against what the previous
+    /// reload recorded, and a field that gained or changed an initializer after it was already
+    /// active cannot reach a value the store already holds.
+    /// </remarks>
+    public string[] ListRewrittenAddedFieldInitializers(string projectRelativePath)
+    {
+        List<AddedFieldBinding> bindings = ListSortedBindingsOfFile(_rewrittenAddedFieldKeys, projectRelativePath);
+        string[] initializers = new string[bindings.Count];
+        for (int index = 0; index < bindings.Count; index++)
+        {
+            initializers[index] = FormatInitializerText(bindings[index]);
+        }
+
+        return initializers;
+    }
+
     private string[] ListDisplayNamesOfFile(HashSet<string> fieldKeys, string projectRelativePath)
     {
-        List<string> names = new List<string>(fieldKeys.Count);
+        List<AddedFieldBinding> bindings = ListSortedBindingsOfFile(fieldKeys, projectRelativePath);
+        string[] names = new string[bindings.Count];
+        for (int index = 0; index < bindings.Count; index++)
+        {
+            names[index] = FormatAddedFieldDisplayName(bindings[index].FieldKey);
+        }
+
+        return names;
+    }
+
+    // Why filter by the binding's file: the catalog spans a whole group, while addedFieldNames
+    // and addedConstNames are per-file rows in the worker output.
+    // Why sorted by display name: the names row and the initializers row are read as parallel
+    // arrays, so both have to be built from one order.
+    private List<AddedFieldBinding> ListSortedBindingsOfFile(
+        HashSet<string> fieldKeys,
+        string projectRelativePath)
+    {
+        List<AddedFieldBinding> bindings = new List<AddedFieldBinding>(fieldKeys.Count);
         foreach (string fieldKey in fieldKeys)
         {
             AddedFieldBinding binding = GetRegistered(fieldKey);
@@ -74,11 +112,26 @@ internal sealed class AddedFieldCatalog : AddedMemberCatalog<AddedFieldBinding>
                 continue;
             }
 
-            names.Add(FormatAddedFieldDisplayName(fieldKey));
+            bindings.Add(binding);
         }
 
-        names.Sort(StringComparer.Ordinal);
-        return names.ToArray();
+        bindings.Sort(
+            (left, right) => string.CompareOrdinal(
+                FormatAddedFieldDisplayName(left.FieldKey),
+                FormatAddedFieldDisplayName(right.FieldKey)));
+        return bindings;
+    }
+
+    // Why normalized: re-indenting a declaration must not read as a changed initializer, and the
+    // Editor only ever compares this text against the text of the previous reload.
+    private static string FormatInitializerText(AddedFieldBinding binding)
+    {
+        if (binding.Initializer == null)
+        {
+            return string.Empty;
+        }
+
+        return binding.Initializer.NormalizeWhitespace().ToFullString();
     }
 
     // Why this shape: method labels replace '/' with '+' then join with '.', so field

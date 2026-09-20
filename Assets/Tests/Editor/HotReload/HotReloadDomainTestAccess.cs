@@ -81,7 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         internal void ReplaceAddedFields(string projectRelativePath, IReadOnlyList<string> addedFieldFullNames)
         {
-            GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(addedFieldFullNames);
+            // Null initializers: these tests pin which fields a type holds, not what a previous
+            // reload initialized them with.
+            GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(
+                addedFieldFullNames,
+                null);
         }
 
         internal void RecordSupersededSignature(

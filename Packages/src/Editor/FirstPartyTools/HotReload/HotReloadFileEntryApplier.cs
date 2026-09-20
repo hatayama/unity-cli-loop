@@ -40,12 +40,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(fileEntries.Length > 0, "An applied file must hold an entry.");
             Debug.Assert(resolution != null && resolution.AllResolved, "resolution must be resolved.");
 
+            // Why before the generation starts: BeginGeneration drops the added-field ledger,
+            // and with it the initializers the previous reload committed.
+            List<string> initializerChangedFields = CollectInitializerChangedAddedFields(
+                file.ProjectRelativePath,
+                file.AddedFieldNames,
+                file.AddedFieldInitializers);
             _domain.BeginGeneration(
                 file.ProjectRelativePath,
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
                 compileResult.Assembly);
-            CommitAddedFieldsForFile(file.ProjectRelativePath, file.AddedFieldNames);
+            CommitAddedFieldsForFile(
+                file.ProjectRelativePath,
+                file.AddedFieldNames,
+                file.AddedFieldInitializers);
+            AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
             List<string> inlineRiskMethodLabels = new List<string>();
             List<string> unforwardedUnityMessageLabels = new List<string>();
             int patchedCount = ApplyResolvedEntries(
@@ -97,12 +107,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> addedLabelsAtClear =
                 _domain.ListActiveAddedMethodKeys(file.ProjectRelativePath);
             HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, context.CorrelationId);
-            _domain.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
             // Why AddedFieldNames first: a retry (gate or isolation) replaces this file's added
             // field names, and committing the first-pass names would resurrect a field the
             // retry no longer emits. The worker row is the first-pass fallback.
             string[] addedFieldNames = file.AddedFieldNames ?? file.FileOutput.addedFieldNames;
-            CommitAddedFieldsForFile(file.ProjectRelativePath, addedFieldNames);
+            string[] addedFieldInitializers =
+                file.AddedFieldInitializers ?? file.FileOutput.addedFieldInitializers;
+            List<string> initializerChangedFields = CollectInitializerChangedAddedFields(
+                file.ProjectRelativePath,
+                addedFieldNames,
+                addedFieldInitializers);
+            _domain.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
+            CommitAddedFieldsForFile(
+                file.ProjectRelativePath,
+                addedFieldNames,
+                addedFieldInitializers);
+            AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
             // Why recorded: a file that only declares an added member has no entry of its own,
             // yet a sibling file's applied body uses that field, so the run must report it.
             file.ClearedAddedFieldNames = addedFieldNames;
@@ -127,10 +147,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why only here and the empty-entries deactivation: a failed worker or shim compile
         // returns empty AddedFieldNames while leaving existing patches, so writing the ledger
         // from the run response would wipe added fields that are still live.
-        private void CommitAddedFieldsForFile(string projectRelativePath, string[] addedFieldNames)
+        private void CommitAddedFieldsForFile(
+            string projectRelativePath,
+            string[] addedFieldNames,
+            string[] addedFieldInitializers)
         {
             _domain.FindGeneration(projectRelativePath)?.ReplaceAddedFields(
-                addedFieldNames ?? Array.Empty<string>());
+                addedFieldNames ?? Array.Empty<string>(),
+                addedFieldInitializers);
+        }
+
+        // The fields a previous reload already added and this run declares with a different
+        // initializer. Read from the generation the run is about to replace, so the caller has to
+        // collect before it starts the new one.
+        private List<string> CollectInitializerChangedAddedFields(
+            string projectRelativePath,
+            string[] addedFieldNames,
+            string[] addedFieldInitializers)
+        {
+            List<string> changedFieldNames = new List<string>();
+            _domain.FindGeneration(projectRelativePath)?.CollectAddedFieldsWithChangedInitializer(
+                addedFieldNames,
+                addedFieldInitializers,
+                changedFieldNames);
+            return changedFieldNames;
+        }
+
+        // Why one line for the whole file: the reader's next step is the same for every field
+        // named, and a line per field would bury the rest of the run's warnings.
+        private static void AppendAddedFieldInitializerChangedWarning(
+            List<string> warnings,
+            List<string> changedFieldNames)
+        {
+            if (changedFieldNames.Count == 0)
+            {
+                return;
+            }
+
+            warnings.Add(
+                string.Format(
+                    HotReloadConstants.AddedFieldInitializerChangedWarningFormat,
+                    string.Join(", ", changedFieldNames)));
         }
 
         internal HotReloadFileProcessResult BuildUnappliedResult(HotReloadGroupFile file)
