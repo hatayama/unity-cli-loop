@@ -90,7 +90,7 @@ reload *added* to a compiled type (an `Added` row), because introduced types com
 compiled assemblies and retained artifacts only, so the compile fails naming the missing member;
 and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
 the exception: every active artifact is referenced by that compilation, so the snippet can name an
-introduced type directly, with its namespace. When such a snippet still fails on the name, the
+introduced type directly by its full name. When such a snippet still fails on the name, the
 diagnostic's `Hint` names the type and how to spell it.
 
 ## File selection and new files

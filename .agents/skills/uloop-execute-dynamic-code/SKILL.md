@@ -39,7 +39,7 @@ return x;
 
 Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
 
-A type an active hot reload introduced is nameable here; write its namespace. Members hot reload *added* to a type are not.
+A type an active hot reload introduced is nameable here; write its full name. Members hot reload *added* to a type are not.
 
 This snippet runs in the Editor execution context: `Screen.width` and `Screen.height` are Editor pixels, not the Game View resolution. For a ray through the Game View center, use `cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))`.
 

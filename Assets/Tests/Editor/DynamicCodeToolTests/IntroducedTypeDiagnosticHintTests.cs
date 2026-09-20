@@ -12,10 +12,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     public sealed class IntroducedTypeDiagnosticHintTests
     {
         private const string SingleMatchHint =
-            "'Widget' is a hot-reload introduced type (Example.Widget), and the assembly holding it is referenced by this compilation while it stays active. Name it with its namespace (Example.Widget) rather than by the name the error reports, or add a using for that namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
+            "'Widget' is a hot-reload introduced type (Example.Widget), and the assembly holding it is referenced by this compilation while it stays active, so the name is what did not resolve. Write it as Example.Widget, or add a using for its namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type.";
 
         private const string SingleMatchNamingSuggestion =
-            "Name the type as Example.Widget, or add a using for its namespace";
+            "Write it as Example.Widget, or add a using for its namespace";
 
         private const string SingleMatchReflectionSuggestion =
             "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Widget\") and drive it through reflection";
@@ -68,7 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
         /// <summary>
         /// Verifies a nested introduced type matches on its simple name, its namespace prefix still
-        /// gates the CS0234 match, and the Cecil metadata name is reported in reflection form.
+        /// gates the CS0234 match, and both spellings of the Cecil metadata name are reported where
+        /// they belong: the C# form to write, the reflection form to compare a FullName against.
         /// </summary>
         [Test]
         public void TryBuild_WhenIntroducedTypeIsNested_MatchesOnTheSimpleName()
@@ -84,13 +85,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 hint,
                 Is.EqualTo(
-                    "'Widget' is a hot-reload introduced type (Example.Outer+Widget), and the assembly holding it is referenced by this compilation while it stays active. Name it with its namespace (Example.Outer+Widget) rather than by the name the error reports, or add a using for that namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
+"'Widget' is a hot-reload introduced type (Example.Outer.Widget), and the assembly holding it is referenced by this compilation while it stays active, so the name is what did not resolve. Write it as Example.Outer.Widget; a using does not bring the simple name of a nested type into scope. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[]
                 {
-                    "Name the type as Example.Outer+Widget, or add a using for its namespace",
+                    "Write it as Example.Outer.Widget; a using does not bring the simple name of a nested type into scope",
                     "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Outer+Widget\") and drive it through reflection",
+                    CompileSuggestion
+                }));
+        }
+
+        /// <summary>
+        /// Verifies an introduced type in the global namespace is told to be written by its own
+        /// name, with no advice to add a using it could not have.
+        /// </summary>
+        [Test]
+        public void TryBuild_WhenIntroducedTypeHasNoNamespace_LeavesOutTheUsingAdvice()
+        {
+            bool built = IntroducedTypeDiagnosticHint.TryBuild(
+                "CS0246",
+                "The type or namespace name 'Widget' could not be found",
+                new List<string> { "Widget" },
+                out string hint,
+                out List<string> suggestions);
+
+            Assert.That(built, Is.True);
+            Assert.That(hint, Does.Contain("Write it as Widget, which is already its full name"));
+            Assert.That(hint, Does.Not.Contain("add a using"));
+            Assert.That(
+                suggestions,
+                Is.EqualTo(new[]
+                {
+                    "Write it as Widget, which is already its full name",
+                    "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Widget\") and drive it through reflection",
                     CompileSuggestion
                 }));
         }
@@ -117,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 suggestions,
                 Is.EqualTo(new[]
                 {
-                    "Name the type as Example.Generation.Widget, or add a using for its namespace",
+                    "Write it as Example.Generation.Widget, or add a using for its namespace",
                     "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Generation.Widget\") and drive it through reflection",
                     CompileSuggestion
                 }));
@@ -256,14 +284,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 hint,
                 Is.EqualTo(
-                    "'Widget' matches these hot-reload introduced types: Example.Widget, Other.Widget. The assembly holding each one is referenced by this compilation while it stays active, so name the one you mean with its namespace rather than by the name the error reports. Members that hot reload added to them are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
+"'Widget' matches these hot-reload introduced types: Example.Widget, Other.Widget. The assembly holding each one is referenced by this compilation while it stays active, so pick the one you mean and write its full name as spelled here. Members that hot reload added to them are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
             Assert.That(
                 suggestions,
                 Is.EqualTo(new[]
                 {
                     SingleMatchNamingSuggestion,
                     SingleMatchReflectionSuggestion,
-                    "Name the type as Other.Widget, or add a using for its namespace",
+                    "Write it as Other.Widget, or add a using for its namespace",
                     "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Other.Widget\") and drive it through reflection",
                     CompileSuggestion
                 }));

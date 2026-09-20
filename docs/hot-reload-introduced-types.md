@@ -93,7 +93,9 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 
 A snippet run by `uloop execute-dynamic-code` can name an active introduced type directly: every
 active artifact on disk is added to that compilation's references, so the type is nameable for as
-long as it stays active. Name it with its namespace, as the snippet has no using for it. Two
+long as it stays active. Write its full name, as the snippet has no using for its namespace, and
+spell a nested type in C# form (`Outer.Inner`), which a using cannot shorten. Only a public type
+is introduced at all, so a snippet never meets an inaccessible one. Two
 limits stay: members hot reload *added* to a type are still invisible to a snippet, added or not
 to an introduced type, because an addition lives only in the reload's shim; and the compilation
 cache keys on the reference set, so a snippet compiled against one generation of artifacts is

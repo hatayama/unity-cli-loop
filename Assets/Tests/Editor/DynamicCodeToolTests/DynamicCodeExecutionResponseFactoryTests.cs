@@ -495,12 +495,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(
                     response.Diagnostics[0].Hint,
                     Is.EqualTo(
-                        "'Widget' is a hot-reload introduced type (Example.Widget), and the assembly holding it is referenced by this compilation while it stays active. Name it with its namespace (Example.Widget) rather than by the name the error reports, or add a using for that namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
+                        "'Widget' is a hot-reload introduced type (Example.Widget), and the assembly holding it is referenced by this compilation while it stays active, so the name is what did not resolve. Write it as Example.Widget, or add a using for its namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
                 Assert.That(
                     response.Diagnostics[0].Suggestions,
                     Is.EqualTo(new[]
                     {
-                        "Name the type as Example.Widget, or add a using for its namespace",
+                        "Write it as Example.Widget, or add a using for its namespace",
                         "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Widget\") and drive it through reflection",
                         "Run 'uloop compile' when the type is final, then reference it as an ordinary compiled type",
                         "Use Namespace.One.Widget",
