@@ -21,6 +21,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private int _expiredMethodEntryCount;
         private int _expiredHitWhenSkippedCount;
         private string _hitWhenErrorNote = string.Empty;
+        // The capture-window deadline is read from the injected method-entry counter on arbitrary
+        // threads (see IsWithinCaptureWindow) while the main thread can be extending it, and a
+        // DateTime is too wide to read atomically - so the deadline itself lives in this field.
+        private long _expiresAtUtcTicks;
 
         public UloopPausePointEntry(
             string id,
@@ -66,7 +70,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public int MaxPreviewElements { get; }
         public int MaxCallerFrames { get; }
         public DateTime EnabledAtUtc { get; }
-        public DateTime ExpiresAtUtc { get; private set; }
+        public DateTime ExpiresAtUtc
+        {
+            get => new DateTime(System.Threading.Interlocked.Read(ref _expiresAtUtcTicks), DateTimeKind.Utc);
+            private set => System.Threading.Interlocked.Exchange(ref _expiresAtUtcTicks, value.Ticks);
+        }
         public int Generation { get; }
         public bool HasMethodEntryInstrumentation { get; }
         // Why keep this on the entry: Unity's cached physics-message dispatch can run the
@@ -132,6 +140,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // Why first only: later frames can repeat or change an error, but the first one is the
             // closest evidence of why the condition began failing while leaving the hot path lock-free.
             System.Threading.Interlocked.CompareExchange(ref _hitWhenErrorNote, errorMessage, string.Empty);
+        }
+
+        // Reports whether nowUtc is still inside the capture window without touching entry state,
+        // so the injected method-entry counter can ask from any thread. Expiry itself stays with
+        // ExpireIfNeeded on the main thread.
+        public bool IsWithinCaptureWindow(DateTime nowUtc)
+        {
+            return nowUtc.Ticks < System.Threading.Interlocked.Read(ref _expiresAtUtcTicks);
         }
 
         public bool ExpireIfNeeded(DateTime nowUtc)

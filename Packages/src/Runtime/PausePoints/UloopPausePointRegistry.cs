@@ -385,10 +385,23 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // recorded, which is acceptable because strict synchronization is not required here.
         public static void RecordMethodEntry(string id)
         {
-            if (Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled)
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry) || !entry.IsEnabled)
             {
-                entry.IncrementMethodEntryCount();
+                return;
             }
+
+            // Expiry is lazy, so a marker whose capture window already closed still reads
+            // IsEnabled until a main-thread path applies the expiry. Counting entries from that
+            // gap made an expired marker claim the armed method ran while it was armed. This only
+            // reads the deadline - the expiry itself stays on the main thread in TryExpire. While
+            // a hit holds the Editor paused every countdown is frozen and the frozen duration is
+            // credited back on resume, so no deadline applies yet and the entry still counts.
+            if (!IsPauseWindowOpen() && !entry.IsWithinCaptureWindow(NowUtc()))
+            {
+                return;
+            }
+
+            entry.IncrementMethodEntryCount();
         }
 
         // Returns the immutable condition attached at enable time. Capture calls this only after
@@ -557,7 +570,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             if (entry.Mode != UloopPausePointCaptureMode.Trace)
             {
                 _pauseController.Pause();
-                _pauseWindowStartUtc ??= now;
+                PauseWindowStartUtc ??= now;
                 _pauseWindowOwnerId = id;
             }
 
@@ -631,7 +644,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // not count against it.
         private static bool TryExpire(UloopPausePointEntry entry, DateTime now)
         {
-            if (_pauseWindowStartUtc.HasValue)
+            if (IsPauseWindowOpen())
             {
                 return false;
             }
@@ -684,7 +697,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _nextHitSequence = 0;
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
-            _pauseWindowStartUtc = null;
+            PauseWindowStartUtc = null;
             _pauseWindowOwnerId = null;
             Interlocked.Exchange(ref _pendingClientDisconnectResume, 0);
             _pauseController = new UnityEditorPausePointPauseController();
