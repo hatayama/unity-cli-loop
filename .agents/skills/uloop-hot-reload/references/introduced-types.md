@@ -27,7 +27,7 @@ apply, and patches from earlier reloads stay active:
 | Condition | `Reason` starts with |
 |---|---|
 | The declaration of an already-introduced type changed | `Changed introduced type requires a compile:` |
-| A member body of an already-introduced type changed and is not an ordinary method body | `Changed member body of introduced type requires a compile:` |
+| A member body of an already-introduced type changed and is neither an ordinary method body nor a getter-only property body | `Changed member body of introduced type requires a compile:` |
 | Two files of the reload declare the same type | `Introduced type <type> is declared in more than one file of the group:` |
 | The artifact assembly did not compile | `Introduced-type compilation failed:` |
 
@@ -35,8 +35,9 @@ apply, and patches from earlier reloads stay active:
 
 - `Introduced` — this reload compiled and activated the declaration.
 - `AlreadyActive` — an earlier reload of this domain already holds it; this reload introduced
-  nothing for it. Not an error. Editing only the bodies of its ordinary methods keeps this row
-  and patches those bodies on the artifact that already carries the type. Ordinary methods,
+  nothing for it. Not an error. Editing only the bodies of its ordinary methods, or of a
+  property whose getter is its only accessor with a body, keeps this row and patches those
+  bodies on the artifact that already carries the type. Ordinary methods,
   fields and properties added to the type keep it as well and are applied as `Added` rows.
   A struct is the exception: its method bodies are `Skipped` ("Struct (value type) methods are
   skipped…") on an introduced struct as on a compiled one, so a struct body edit needs
@@ -73,9 +74,10 @@ later apply re-introduces them. With Enter Play Mode Options set to disable Doma
 active changes and the introduced types survive Play entry and nothing is recorded as dropped.
 
 Values are not preserved across the reload that ends a type's life. Body-only edits of an
-introduced type's ordinary methods are patched on the artifact assembly (except on a struct,
-whose method bodies are `Skipped`), and added ordinary methods, fields and properties are
-applied as `Added` rows. Constructor, accessor and
+introduced type's ordinary methods, and of a property whose getter is its only accessor with a
+body, are patched on the artifact assembly (except on a struct, whose method bodies are
+`Skipped`), and added ordinary methods, fields and properties are
+applied as `Added` rows. Constructor, setter, init, indexer and event accessor bodies,
 initializer bodies, member removals, signature changes, and added constructors, operators,
 events, indexers or nested types still require a compile.
 

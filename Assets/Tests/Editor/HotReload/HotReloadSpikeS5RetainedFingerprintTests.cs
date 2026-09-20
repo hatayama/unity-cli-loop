@@ -389,7 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                     "Changed member body of introduced type requires a compile: "
                     + RetainedTypeMetadataName
                     + " Changed members: " + ConstructorMemberKey
-                    + ". Only ordinary method bodies of an introduced type can be hot reloaded."));
+                    + ". Only ordinary method bodies and getter-only property bodies of an introduced type can be hot reloaded."));
         }
 
         /// <summary>What: a recorded fingerprint this version cannot read asks for a compile and
