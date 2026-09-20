@@ -87,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 Assert.That(HotReloadPausePointCoordination.HotReloadSide, Is.Null);
                 Assert.That(HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames, Is.Null);
+                Assert.That(HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths, Is.Null);
                 Assert.That(HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames, Is.Null);
             }
             finally

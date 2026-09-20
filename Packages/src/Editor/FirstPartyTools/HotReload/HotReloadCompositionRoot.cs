@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 using HarmonyLib;
 
@@ -199,6 +200,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTranspilerDomainGateway.Current = domain;
             HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames =
                 () => DescribeActiveTypeNames(domain);
+            HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths =
+                () => DescribeActiveArtifactReferencePaths(domain);
             HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames =
                 () => DescribeActiveAddedMemberNames(domain);
             HotReloadPausePointCoordination.HotReloadSide = new HotReloadPausePointPort(domain);
@@ -218,6 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // The sibling tools are told "no domain installed" here too: leaving the port behind
             // would keep answering pause point from the domain the uninstall is about to dispose.
             HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames = null;
+            HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths = null;
             HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames = null;
             HotReloadPausePointCoordination.HotReloadSide = null;
         }
@@ -253,6 +257,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return names;
+        }
+
+        // Why the file check is here rather than in the registry: the registry states what this
+        // domain activated, and a compilation needs what a compiler can still open. An artifact
+        // whose file went away would fail the reading compilation instead of being skipped.
+        private static IReadOnlyList<string> DescribeActiveArtifactReferencePaths(HotReloadDomain domain)
+        {
+            List<string> paths = new List<string>();
+            foreach (string path in domain.IntroducedTypes.DescribeActiveArtifactPaths())
+            {
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    paths.Add(path);
+                }
+            }
+
+            return paths;
         }
 
         private static IReadOnlyList<string> DescribeActiveAddedMemberNames(HotReloadDomain domain)

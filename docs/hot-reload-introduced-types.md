@@ -91,6 +91,18 @@ and still fail a method. The three shapes a caller has to be able to read:
 whatever the methods did. In the third shape the recommended next action is a partial-apply
 recovery: the types stay loaded whatever the methods did, so a re-apply is not a clean retry.
 
+## Use from execute-dynamic-code
+
+A snippet run by `uloop execute-dynamic-code` can name an active introduced type directly: every
+active artifact on disk is added to that compilation's references, so the type is nameable for as
+long as it stays active. Write its full name, as the snippet has no using for its namespace, and
+spell a nested type in C# form (`Outer.Inner`), which a using cannot shorten. Only a public type
+is introduced at all, so a snippet never meets an inaccessible one. Two
+limits stay: members hot reload *added* to a type are still invisible to a snippet, added or not
+to an introduced type, because an addition lives only in the reload's shim; and the compilation
+cache keys on the reference set, so a snippet compiled against one generation of artifacts is
+recompiled rather than reused once that generation is gone.
+
 ## When a compile is still required
 
 - Any refused shape in the tables above.
@@ -100,10 +112,6 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
   reload nor already hot-reloaded still refers to the compiled world, where the type is absent.
 - Anything that reads the type through Unity: serialization, `[SerializeField]`, Inspector
   display, `AddComponent`, `ScriptableObject.CreateInstance`, Unity message discovery.
-- Use from `uloop execute-dynamic-code`. Dynamic code compiles against the compiled assemblies,
-  not against the reload's artifact. The compile error's `Hint` names the introduced type and
-  points to reflection through the loaded assembly or to `uloop compile`, so the failure does not
-  read as a missing type.
 - A new or changed `.asmdef` / `.asmref`. Assembly layout is decided at compile time.
 - A call to a member an earlier or the same reload *added* to a compiled type (an `Added` row).
   Introduced types compile against the compiled assemblies and the retained artifacts only, so
