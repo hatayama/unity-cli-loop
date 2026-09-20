@@ -298,11 +298,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.ListActiveMethodKeys(projectRelativePath);
         }
 
-        public IReadOnlyList<string> ListActiveFilePaths()
-        {
-            return _domain.ListActiveFilePaths();
-        }
-
         /// <summary>
         /// The live patches on the methods one assembly declares on one type, so a run can peel
         /// what an earlier reload left on a retained declaration its source no longer edits.

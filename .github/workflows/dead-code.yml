@@ -49,4 +49,4 @@ jobs:
           --include-kept false
           --format table
           --fail-on high-confidence
-          --max-public-candidates 39
+          --max-public-candidates 37

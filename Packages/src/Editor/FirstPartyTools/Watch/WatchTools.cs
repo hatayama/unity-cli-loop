@@ -411,7 +411,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public static WatchExpressionRegistry Registry => RegistryValue;
         public static IWatchExpressionCompiler Compiler => _compiler;
-        public static IWatchPersistenceStore Store => _store;
 
         /// <summary>
         /// Result of the restore that ran after the last domain reload, or null when no restore
