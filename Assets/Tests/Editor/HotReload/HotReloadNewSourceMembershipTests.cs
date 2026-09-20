@@ -570,6 +570,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Each boundary failure names the assembly definition it is about, so a reader does not
+        /// have to guess which of the ancestor .asmdef / .asmref files blocked the reload.
+        /// </summary>
+        [Test]
+        public void TryCreateBoundary_WhenBoundaryFails_NamesTheBoundaryPath()
+        {
+            string notImported = HotReloadNewSourceMembershipBoundaryCollector.TryCreateBoundary(
+                "Assets/Feature/New.asmdef",
+                Encoding.UTF8.GetBytes("disk"),
+                null,
+                "guid",
+                "guid",
+                out HotReloadNewSourceMembershipBoundary _);
+            string deleted = HotReloadNewSourceMembershipBoundaryCollector.TryCreateBoundary(
+                "Assets/Feature/Child/Nested.asmref",
+                null,
+                Encoding.UTF8.GetBytes("import"),
+                "guid",
+                "guid",
+                out HotReloadNewSourceMembershipBoundary _);
+            string changed = HotReloadNewSourceMembershipBoundaryCollector.TryCreateBoundary(
+                "Assets/Feature/Changed.asmref",
+                Encoding.UTF8.GetBytes("disk"),
+                Encoding.UTF8.GetBytes("import"),
+                "guid",
+                "guid",
+                out HotReloadNewSourceMembershipBoundary _);
+
+            Assert.That(notImported, Does.Contain("Assets/Feature/New.asmdef"));
+            Assert.That(deleted, Does.Contain("Assets/Feature/Child/Nested.asmref"));
+            Assert.That(changed, Does.Contain("Assets/Feature/Changed.asmref"));
+        }
+
+        /// <summary>
         /// A package path without a readable physical directory fails membership capture before directory enumeration.
         /// </summary>
         [Test]
