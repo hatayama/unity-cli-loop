@@ -340,6 +340,31 @@ func TestClassifyServerBusyRPCError_WhenCompiling_IncludesEditorActivityAndGuida
 	}
 }
 
+func TestClassifyServerBusyRPCError_WhenPausedInPlayMode_ExplainsTheStallAndRecovery(t *testing.T) {
+	// Verifies a busy failure raised while Play Mode is paused reaches the caller with the
+	// pause explanation first and with a recovery step, instead of wait/retry alone.
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "Unity is busy running 'execute-dynamic-code'.",
+		Data: json.RawMessage(
+			`{"type":"server_busy","runningToolName":"execute-dynamic-code","requestedToolName":"clear-pause-point","isPlaying":true,"isPaused":true}`),
+	}
+
+	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "clear-pause-point"})
+	if len(cliErr.NextActions) == 0 ||
+		!strings.Contains(cliErr.NextActions[0], "does not clear on its own") {
+		t.Fatalf("next actions must lead with the pause stall: %#v", cliErr.NextActions)
+	}
+	joinedActions := strings.Join(cliErr.NextActions, "\n")
+	if !strings.Contains(joinedActions, "Stop the uloop process that is running the command") {
+		t.Fatalf("next actions must name the recovery step: %#v", cliErr.NextActions)
+	}
+	editorActivity, ok := cliErr.Details["EditorActivity"].(map[string]any)
+	if !ok || editorActivity["isPaused"] != true {
+		t.Fatalf("editor activity must report the pause: %#v", cliErr.Details)
+	}
+}
+
 func TestWriteClassifiedServerBusyRPCErrorWritesErrorEnvelope(t *testing.T) {
 	// Verifies server_busy output uses the same machine-readable error envelope as other failures.
 	err := &unityipc.RPCError{

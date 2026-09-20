@@ -88,3 +88,69 @@ func TestUnityServerBusyEditorActivitySummary_CopiesKnownFields(t *testing.T) {
 		t.Fatalf("stall seconds mismatch: %#v", summary)
 	}
 }
+
+const (
+	expectedPausedBusyStalledAction = "Unity is paused in Play Mode. A running command that waits for a frame or a physics step cannot finish until play resumes, so this busy state does not clear on its own."
+	expectedPausedBusyStatusAction  = "Run `uloop pause-point-status` (it answers while Unity is busy) to see whether a pause-point hit is holding the pause."
+	expectedPausedBusyStopAction    = "Stop the uloop process that is running the command (Ctrl-C in its terminal, otherwise interrupt or kill that process). Its request is cancelled and returns no result, the Editor pause is released, and the next command can run."
+	expectedPausedBusyResumeAction  = "Or release the pause in the Editor (Edit > Play Mode > Pause). Frames resume, so the running command finishes and returns its result."
+)
+
+// Verifies a paused Play Mode busy payload explains that the running command cannot
+// finish on its own and lists the recovery steps before the generic wait/retry pair.
+func TestUnityServerBusyNextActions_WhenPausedInPlayMode_LeadsWithPauseRecovery(t *testing.T) {
+	isPlaying := true
+	isPaused := true
+	data := serverBusyErrorData{IsPlaying: &isPlaying, IsPaused: &isPaused}
+
+	actions := unityServerBusyNextActions(data)
+	if len(actions) != 6 {
+		t.Fatalf("expected four pause actions before the default pair, got %#v", actions)
+	}
+	if actions[0] != expectedPausedBusyStalledAction {
+		t.Fatalf("first action mismatch: %#v", actions)
+	}
+	if actions[1] != expectedPausedBusyStatusAction {
+		t.Fatalf("second action mismatch: %#v", actions)
+	}
+	if actions[2] != expectedPausedBusyStopAction {
+		t.Fatalf("third action mismatch: %#v", actions)
+	}
+	if actions[3] != expectedPausedBusyResumeAction {
+		t.Fatalf("fourth action mismatch: %#v", actions)
+	}
+	if actions[4] != "Wait for the running Unity command to complete." {
+		t.Fatalf("default wait action must stay: %#v", actions)
+	}
+}
+
+// Verifies a paused flag outside Play Mode adds no pause guidance, because an Editor
+// pause only stops frames while Play Mode runs.
+func TestUnityServerBusyNextActions_WhenPausedOutsidePlayMode_OmitsPauseRecovery(t *testing.T) {
+	isPaused := true
+	data := serverBusyErrorData{IsPaused: &isPaused}
+
+	actions := unityServerBusyNextActions(data)
+	for _, action := range actions {
+		if action == expectedPausedBusyStalledAction {
+			t.Fatalf("pause guidance must need Play Mode: %#v", actions)
+		}
+	}
+}
+
+// Verifies a compile that is also paused keeps the compile line first, because the
+// compile finishes on its own and frees the gate whatever the pause does.
+func TestUnityServerBusyNextActions_WhenCompilingWhilePaused_KeepsCompileGuidanceFirst(t *testing.T) {
+	isCompiling := true
+	isPlaying := true
+	isPaused := true
+	data := serverBusyErrorData{IsCompiling: &isCompiling, IsPlaying: &isPlaying, IsPaused: &isPaused}
+
+	actions := unityServerBusyNextActions(data)
+	if actions[0] != "Unity is compiling scripts; wait for compilation to finish before retrying." {
+		t.Fatalf("compile guidance must stay first: %#v", actions)
+	}
+	if actions[1] != expectedPausedBusyStalledAction {
+		t.Fatalf("pause guidance must follow the compile line: %#v", actions)
+	}
+}
