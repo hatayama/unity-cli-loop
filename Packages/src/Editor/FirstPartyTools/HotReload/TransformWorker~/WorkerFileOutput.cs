@@ -37,6 +37,10 @@ internal sealed class WorkerFileOutput
 
     public string[] AddedFieldNames { get; set; }
 
+    // One entry per AddedFieldNames entry, in the same order: the normalized initializer text,
+    // empty when the field is declared without one.
+    public string[] AddedFieldInitializers { get; set; }
+
     public string[] AddedConstNames { get; set; }
 
     public WorkerIntroducedType[] IntroducedTypes { get; set; }

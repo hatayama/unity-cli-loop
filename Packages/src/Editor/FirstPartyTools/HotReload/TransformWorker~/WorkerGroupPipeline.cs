@@ -420,6 +420,8 @@ internal static class WorkerGroupPipeline
             RemovedMembers = unit.RemovedMembers.ToArray(),
             RemovedMethodSignatures = unit.RemovedMethodSignatures.ToArray(),
             AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(projectRelativePath),
+            AddedFieldInitializers =
+                addedFieldCatalog.ListRewrittenAddedFieldInitializers(projectRelativePath),
             AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
             IntroducedTypes = unit.IntroducedTypes.ToArray(),
             IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),

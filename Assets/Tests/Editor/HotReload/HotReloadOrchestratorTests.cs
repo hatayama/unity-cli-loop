@@ -3809,6 +3809,137 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an initializer added to a field an earlier reload already added is named in
+        /// Warnings, leaves the value an existing instance holds alone, and still runs for an
+        /// instance that has not read the field yet.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldGainsInitializerAfterItWasActive_WarnsAndKeepsStoredValue()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldWithoutInitializer.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(CountAddedFieldInitializerChangedWarnings(first.Warnings), Is.EqualTo(0));
+
+            HotReloadAddedFieldApplyFixture existingHost = new HotReloadAddedFieldApplyFixture();
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(0));
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldGainsInitializer.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                second.Warnings,
+                Does.Contain(ExpectedAddedFieldInitializerChangedWarning("AddedCount")),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(0));
+
+            HotReloadAddedFieldApplyFixture freshHost = new HotReloadAddedFieldApplyFixture();
+            Assert.That(freshHost.ReadAdded(), Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: a field added with its initializer in the same reload is not warned about,
+        /// because nothing holds a value for it yet.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldCarriesItsInitializerFromTheStart_DoesNotWarn()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldInitializedFromTheStart.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(
+                CountAddedFieldInitializerChangedWarnings(result.Warnings),
+                Is.EqualTo(0),
+                "Warnings were:\n" + string.Join("\n", result.Warnings));
+
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            Assert.That(host.ReadAdded(), Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: reloading an added field whose initializer did not change is not warned about,
+        /// so an unrelated edit in the same file stays quiet.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldInitializerUnchangedOnReapply_DoesNotWarn()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;");
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldInitializerStable1.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldInitializerStable2.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                CountAddedFieldInitializerChangedWarnings(second.Warnings),
+                Is.EqualTo(0),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+        }
+
+        /// <summary>
+        /// What: changing the literal an already added field is initialized with is warned about
+        /// too, because the stored value keeps the literal the earlier reload ran.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldLiteralInitializerChanged_WarnsAndKeepsStoredValue()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldLiteralInitializerFive.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+
+            HotReloadAddedFieldApplyFixture existingHost = new HotReloadAddedFieldApplyFixture();
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(5));
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldLiteralInitializerSeven.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 7;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                second.Warnings,
+                Does.Contain(ExpectedAddedFieldInitializerChangedWarning("AddedCount")),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(5));
+        }
+
+        /// <summary>
         /// What: reading an added instance field as this.field patches the existing method
         /// instead of failing shim compile with CS0026.
         /// </summary>
@@ -7440,11 +7571,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string WithAddedFieldAccesses(string onDisk)
         {
+            return WithAddedFieldDeclaredAs(onDisk, "public int AddedCount;");
+        }
+
+        // The declaration is a parameter so a test can reload the same field with a different
+        // initializer, which is what makes the initializer of an already added field observable.
+        private static string WithAddedFieldDeclaredAs(string onDisk, string declaration)
+        {
             return onDisk.Replace(
                 "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n        }",
-                "        public int AddedCount;\n\n"
+                "        " + declaration + "\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
@@ -7998,6 +8136,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     File.Move(_hiddenPath, _snapshotPath);
                 }
             }
+        }
+
+        private static string ExpectedAddedFieldInitializerChangedWarning(string fieldName)
+        {
+            return string.Format(
+                HotReloadConstants.AddedFieldInitializerChangedWarningFormat,
+                typeof(HotReloadAddedFieldApplyFixture).FullName + "." + fieldName);
+        }
+
+        // The token is the one sentence only this warning carries, so an unrelated warning that
+        // also mentions an initializer cannot satisfy a negative pin.
+        private static int CountAddedFieldInitializerChangedWarnings(IReadOnlyList<string> warnings)
+        {
+            return CountWarningsContaining(warnings, "does not reach a value that already exists");
         }
 
         private static int CountWarningsContaining(IReadOnlyList<string> warnings, string token)

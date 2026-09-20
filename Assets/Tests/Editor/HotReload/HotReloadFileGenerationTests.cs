@@ -274,7 +274,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
             generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" });
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null);
 
             generation.BeginAddedMemberGeneration();
 
@@ -425,12 +425,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" });
-            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" });
+            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" }, null);
 
             Assert.That(
                 CollectFields(generation, HostType),
                 Is.EquivalentTo(new[] { "keptField", "newField" }));
+        }
+
+        /// <summary>
+        /// What: a field the generation already holds is reported when this run declares it with
+        /// a different initializer, and stays unreported when the initializer is the same or was
+        /// dropped, or when the field is new to this run.
+        /// </summary>
+        [Test]
+        public void CollectAddedFieldsWithChangedInitializer_ReportsOnlyAChangedInitializer()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(
+                new[] { HostType + ".changed", HostType + ".stable", HostType + ".dropped" },
+                new[] { "1", "2", "3" });
+
+            List<string> changed = new List<string>();
+            generation.CollectAddedFieldsWithChangedInitializer(
+                new[] { HostType + ".changed", HostType + ".stable", HostType + ".dropped", HostType + ".fresh" },
+                new[] { "9", "2", string.Empty, "4" },
+                changed);
+
+            Assert.That(changed, Is.EqualTo(new[] { HostType + ".changed" }));
+        }
+
+        /// <summary>
+        /// What: an initializer row that does not line up with the names is ignored, so a worker
+        /// that did not report initializers cannot produce a warning about the wrong field.
+        /// </summary>
+        [Test]
+        public void CollectAddedFieldsWithChangedInitializer_MisalignedInitializers_ReportsNothing()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, new[] { "1" });
+
+            List<string> changed = new List<string>();
+            generation.CollectAddedFieldsWithChangedInitializer(
+                new[] { HostType + ".alpha" },
+                Array.Empty<string>(),
+                changed);
+
+            Assert.That(changed, Is.Empty);
         }
 
         /// <summary>
@@ -441,9 +484,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" });
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null);
 
-            generation.ReplaceAddedFields(Array.Empty<string>());
+            generation.ReplaceAddedFields(Array.Empty<string>(), null);
 
             Assert.That(CollectFields(generation, HostType), Is.Empty);
             Assert.That(DescribeFields(generation), Is.Empty);
@@ -458,7 +501,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" });
+            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" }, null);
 
             Assert.That(
                 CollectFields(generation, NestedReflectionType),

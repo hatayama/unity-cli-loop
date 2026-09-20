@@ -148,6 +148,7 @@ internal static class IntroducedTypePreparation
                 RemovedMembers = Array.Empty<WorkerRemovedMember>(),
                 RemovedMethodSignatures = Array.Empty<WorkerRemovedMethodSignature>(),
                 AddedFieldNames = Array.Empty<string>(),
+                AddedFieldInitializers = Array.Empty<string>(),
                 AddedConstNames = Array.Empty<string>(),
                 IntroducedTypes = unit.IntroducedTypes.ToArray(),
                 IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
