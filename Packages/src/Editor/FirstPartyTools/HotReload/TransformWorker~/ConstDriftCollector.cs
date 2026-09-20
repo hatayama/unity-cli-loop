@@ -18,10 +18,10 @@ using Microsoft.CodeAnalysis.Text;
 internal static class ConstDriftCollector
 {
     internal const string NewConstWarningFormat =
-        "const {0} exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run have the new value folded in, but bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
+        "const {0} exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run already have its value folded in, so this run needs no compile; only bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' when one of those files has to see it.";
 
     internal const string ChangedConstWarningFormat =
-        "const {0} is {1} in the edited source but {2} in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change.";
+        "const {0} is {1} in the edited source but {2} in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with {1} yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change.";
 
     /// <summary>
     /// Detects const declarations (including enum members) in the edited source whose values

@@ -449,7 +449,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(
                         "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
                         + "2 warning(s). See Warnings. "
-                        + "A single 'uloop compile' clears all of them at once."));
+                        + "A single 'uloop compile' clears all of them at once when you want them gone; none of them has to be cleared before you keep working."));
             }
             finally
             {

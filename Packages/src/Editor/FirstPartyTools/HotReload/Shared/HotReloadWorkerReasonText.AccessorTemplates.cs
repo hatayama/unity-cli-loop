@@ -174,7 +174,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 Plain(
                     "inaccessible method calls with ref/out/in parameters are not rewritten; the call is "
-                    + "refused whatever is passed, because the rewrite cannot forward ref/out/in parameters.",
+                    + "refused whatever is passed, because the rewrite cannot forward ref/out/in parameters. "
+                    + "A method added in the same reload is called directly instead of through that rewrite, "
+                    + "so moving the work into one, or routing the call through an API this code can already "
+                    + "access, keeps the edit applying without leaving Play Mode.",
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten,
