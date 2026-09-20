@@ -21,6 +21,7 @@ Choose the capture mode when enabling a pause point:
 
 - Operators are `==`, `!=`, `>`, `>=`, `<`, `<=`. Literals are `null`, `true`/`false`, an invariant-culture number, or a quoted string (`'…'` or `"…"`, no escape syntax). Ordering operators require a numeric literal.
 - The comparison runs against the live runtime value, not the serialized `Value` string: string literals compare ordinally to string variables, and numeric literals compare to numeric primitives (enums and chars do not qualify). Numeric comparisons are evaluated in `double`, so `==` on floats or on integers beyond double's exact integer range can miss — prefer `>=`/`<=` ranges there.
+- The condition is evaluated at the point the snapshot is taken, so it follows `--snapshot-timing`: with the default `pre-line` it sees the value the variable held before the resolved line ran, and with `post-line` it sees the value that line produced. Which point `post-line` resolves to depends on the statement shape - follow the Snapshot Timing rules in [captured-variables.md](captured-variables.md) rather than assuming it is always after the whole line executed.
 - Evaluation problems fail open: a missing variable name or a type mismatch still captures the hit, and `HitWhenErrorNote` reports the first such error.
 - Responses echo the armed condition in `HitWhen`. When the line executed but nothing matched, `pause-point-status` adds `HitWhenNote`, and `await-pause-point` timeout/expiry errors report the skip count instead of claiming the line never ran.
 
