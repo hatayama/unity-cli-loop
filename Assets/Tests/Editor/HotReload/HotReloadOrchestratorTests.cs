@@ -4919,6 +4919,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(1),
                 "The earlier replacement must stay in the added-member registry.");
             Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
+
+            // The reason already says the earlier replacement is still active, so the warning
+            // that carries the same fact must not name it again. The caller this run skipped
+            // does keep its earlier patch, so that label may appear.
+            Assert.That(
+                string.Join("\n", FindKeepsActivePatchWarnings(second.Warnings)),
+                Does.Not.Contain(expectedLabel),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
         }
 
         /// <summary>
@@ -5067,6 +5075,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.Unrelated(3), Is.EqualTo(4));
             Assert.That(host.Target(3), Is.EqualTo(3));
             Assert.That(host.SameFileCaller(3), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a run that skips a method an earlier reload patched reports that the earlier
+        /// patch is still what runs, and names only the skipped methods that actually keep one.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedMethodKeepsEarlierPatch_WarnsThatItStaysActive()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string bodyEdit = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public int Target(int value)\n        {\n            return value + 5;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(bodyEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedKeepsEarlierPatch1.cs", bodyEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeExternalHost.Target));
+
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            Assert.That(host.Target(3), Is.EqualTo(8));
+
+            string returnTypeChange = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(returnTypeChange, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedKeepsEarlierPatch2.cs", returnTypeChange),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                FindSkippedReason(second, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Is.Not.Null,
+                FormatOutcomes(second));
+
+            // The first run's patch is still what compiled callers reach, even though the source
+            // on disk no longer declares that method at all.
+            Assert.That(host.Target(3), Is.EqualTo(8));
+
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeExternalHost).FullName),
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                new[] { "System.Int32" },
+                0);
+            Assert.That(
+                second.Warnings,
+                Does.Contain(
+                    string.Format(
+                        HotReloadConstants.SkippedMethodKeepsActivePatchWarningFormat,
+                        expectedLabel)),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+            Assert.That(FindKeepsActivePatchWarnings(second.Warnings), Has.Count.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a skip on a method no earlier reload patched keeps quiet, because nothing
+        /// other than the compiled body runs for it.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedMethodWithoutEarlierPatch_DoesNotWarnAboutAnActivePatch()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string edited = File.ReadAllText(fixturePath)
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedWithoutEarlierPatch.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(result);
+            Assert.That(
+                FindSkippedReason(result, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Is.Not.Null,
+                FormatOutcomes(result));
+            Assert.That(
+                FindKeepsActivePatchWarnings(result.Warnings),
+                Is.Empty,
+                "Warnings were:\n" + string.Join("\n", result.Warnings));
         }
 
         /// <summary>
@@ -6474,6 +6580,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(0),
                 "Restoring the source must clear the stale patch.\n"
                 + FormatOutcomes(restoreRun.Methods));
+        }
+
+        // Picks the "an earlier reload's body still runs" warnings by a phrase no other warning
+        // uses, so a reworded sentence fails the assertion instead of matching twice.
+        private static List<string> FindKeepsActivePatchWarnings(IReadOnlyList<string> warnings)
+        {
+            List<string> found = new List<string>();
+            foreach (string warning in warnings)
+            {
+                if (warning.Contains("still the body an earlier hot", StringComparison.Ordinal))
+                {
+                    found.Add(warning);
+                }
+            }
+
+            return found;
         }
 
         private static string FormatOutcomes(IReadOnlyList<HotReloadMethodOutcome> outcomes)

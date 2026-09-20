@@ -290,6 +290,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendPatchWarningLines(warnings, deactivatedPatches, skippedLabels);
         }
 
+        /// <summary>
+        /// Reports the methods this run skipped whose earlier patch is still what runs.
+        /// </summary>
+        /// <remarks>
+        /// Why separate from the deactivation warnings: this one has to reach the paths that
+        /// apply nothing at all - a run every entry of which the signature-change gate removed
+        /// builds its file results without ever asking what it deactivated. Every terminal
+        /// calls this exactly once, so the line is never emitted twice for one file.
+        /// </remarks>
+        internal static void AppendSkippedKeepsEarlierPatchWarning(
+            HotReloadDomain domain,
+            List<string> warnings,
+            HashSet<string> snapshotLabels,
+            HashSet<string> snapshotAddedLabels,
+            string projectRelativePath,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(warnings != null, "warnings must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+
+            // A file the run never reached the group's apply entry for has no snapshot, so
+            // nothing is known to have been active before it.
+            if (snapshotLabels == null || snapshotAddedLabels == null)
+            {
+                return;
+            }
+
+            AppendDeactivatedWarningLine(
+                warnings,
+                CollectSkippedLabelsKeepingEarlierPatch(
+                    CollectSkippedLabels(outcomes),
+                    snapshotLabels,
+                    snapshotAddedLabels,
+                    CollectActiveLabelsForFile(domain, projectRelativePath)),
+                HotReloadConstants.SkippedMethodKeepsActivePatchWarningFormat,
+                null);
+        }
+
+        // Why the label has to be in all three sets: one this run deactivated is covered by the
+        // deactivation sentences, one that was not active before the run keeps nothing, and one
+        // whose earlier apply was an added member already has that fact in its Methods[].Reason.
+        private static List<string> CollectSkippedLabelsKeepingEarlierPatch(
+            HashSet<string> skippedLabels,
+            HashSet<string> snapshotLabels,
+            HashSet<string> snapshotAddedLabels,
+            HashSet<string> currentLabels)
+        {
+            List<string> labels = new List<string>();
+            foreach (string label in skippedLabels)
+            {
+                if (!snapshotLabels.Contains(label)
+                    || snapshotAddedLabels.Contains(label)
+                    || !currentLabels.Contains(label))
+                {
+                    continue;
+                }
+
+                labels.Add(label);
+            }
+
+            return labels;
+        }
+
         // Why the two sentences are emitted separately rather than merged: a member this run
         // skipped comes back only after its reason is addressed, and the ordinary sentence tells
         // the reader to reload again - which skips it again. A run that deactivated both kinds

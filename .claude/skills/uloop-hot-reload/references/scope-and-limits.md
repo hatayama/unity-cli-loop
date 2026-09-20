@@ -298,6 +298,10 @@ delegate type is not visible outside the assembly, and an event added in this ed
 Raising through a conditional receiver (`other?.E?.Invoke(x)`) and `nameof(E)` also
 stay `Skipped`.
 
+A `Skipped` row never undoes what an earlier reload applied to the same method: that
+patch keeps running, so the method matches neither the compiled assembly nor the
+source on disk. When a run skips a method it had patched before, `Warnings` names it.
+
 ## Skipped — reported per method and in `Warnings`, never flips `Success`
 
 | Condition | Why |

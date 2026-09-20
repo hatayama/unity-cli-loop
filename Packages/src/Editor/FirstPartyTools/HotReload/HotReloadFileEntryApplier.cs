@@ -195,6 +195,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(file != null, "file must not be null.");
 
             HotReloadFileSinks sinks = file.Sinks;
+            // Why here too: a run the signature-change gate left without a single entry never
+            // reaches FinishFileResult, and a skip that keeps an earlier patch alive is exactly
+            // what that run produces.
+            HotReloadAppliedSourceLifecycle.AppendSkippedKeepsEarlierPatchWarning(
+                _domain,
+                sinks.Warnings,
+                file.SnapshotLabels,
+                file.SnapshotAddedLabels,
+                file.ProjectRelativePath,
+                sinks.Outcomes);
             return new HotReloadFileProcessResult(
                 outcomes: sinks.Outcomes,
                 warnings: sinks.Warnings,
@@ -244,6 +254,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.SnapshotForwardedUnityMessageLabels,
                 file.ProjectRelativePath,
                 context.WorkerOutput,
+                sinks.Outcomes);
+            HotReloadAppliedSourceLifecycle.AppendSkippedKeepsEarlierPatchWarning(
+                _domain,
+                sinks.Warnings,
+                file.SnapshotLabels,
+                file.SnapshotAddedLabels,
+                file.ProjectRelativePath,
                 sinks.Outcomes);
             return new HotReloadFileProcessResult(
                 outcomes: sinks.Outcomes,
