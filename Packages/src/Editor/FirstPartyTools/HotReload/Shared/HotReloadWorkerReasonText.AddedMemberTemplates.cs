@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
-                Plain("Calls an added method that hot reload cannot emit. " + CompileCallToAction, 0));
+                Plain("Calls the added method '{0}', which hot reload cannot emit. " + CompileCallToAction, 1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced,
                 Plain(

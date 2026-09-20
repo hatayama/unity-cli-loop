@@ -126,7 +126,14 @@ internal static class AddedCallSiteGuard
 
             if (addedMethodCatalog.IsUnavailableAdded(calledKey))
             {
-                return (WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall), calledKey);
+                // Why the display string and not calledKey: the key spells a nested type the way
+                // metadata does, and the reader has to find the call in C# source. ToDisplayString
+                // is the source spelling, nested types included.
+                return (
+                    WorkerReason.Of(
+                        HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        methodSymbol.ToDisplayString()),
+                    calledKey);
             }
         }
 

@@ -1429,6 +1429,94 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a file-level failure reaches Message even when cascading method failures are
+        /// listed before it, so the cause is read before the symptoms.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithFileLevelFailureAfterCascade_LeadsWithTheFileReason()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("T.M", "CS0103: the name 'Added' does not exist", "file.cs"),
+                    HotReloadMethodOutcome.Failed(
+                        "(file)",
+                        "The assembly definition 'Assets/Feature/New.asmdef' changed on disk but is not imported.",
+                        "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload finished with one or more Failed method outcomes. First file-level failure: "
+                    + "The assembly definition 'Assets/Feature/New.asmdef' changed on disk but is not imported."
+                    + " See Methods."));
+            Assert.That(response.Methods[0].Method, Is.EqualTo("T.M"));
+            Assert.That(response.Methods[1].Method, Is.EqualTo("(file)"));
+        }
+
+        /// <summary>
+        /// What: several file-level failures report only the first reason plus how many there are,
+        /// so a long reason cannot push the rest of Message out of sight.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithSeveralFileLevelFailures_ReportsFirstReasonAndCount()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("(file)", "first reason", "a.cs"),
+                    HotReloadMethodOutcome.Failed("(file)", "second reason", "b.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload finished with one or more Failed method outcomes. "
+                    + "First of 2 file-level failures: first reason. See Methods."));
+        }
+
+        /// <summary>
+        /// What: a multi-line file-level reason (a parse error listing every diagnostic, or a shim
+        /// compilation failure with its hint) contributes only its first line to Message; the rest
+        /// stays on the Methods row.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithMultiLineFileLevelReason_PrefixesOnlyItsFirstLine()
+        {
+            const string multiLineReason =
+                "Compilation of the shim assembly failed.\nAssets/A.cs(3,5): error CS0103: unknown\n"
+                + "Add the new member with 'uloop compile'.";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("(file)", multiLineReason, "a.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload finished with one or more Failed method outcomes. "
+                    + "First file-level failure: Compilation of the shim assembly failed. See Methods."));
+            Assert.That(response.Methods[0].Reason, Is.EqualTo(multiLineReason));
+        }
+
+        /// <summary>
         /// What: every apply-message branch appends the warning-count suffix when Warnings is
         /// non-empty, and the applied branch mentions Skipped before that suffix.
         /// </summary>

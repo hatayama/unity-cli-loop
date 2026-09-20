@@ -243,6 +243,11 @@ restarting Play Mode. JIT-inlined call sites are the exception — the reload re
 `Warnings` lists the at-risk methods (see [troubleshooting.md](troubleshooting.md)).
 Keep `const` for values you never tune at runtime.
 
+Add the getter under a new name rather than replacing an already compiled `const` with a
+getter of the same name: to the compiled assembly that name is still a field, so the edit
+is `Skipped` and the old constant keeps being inlined. Leave the `const` in place, add
+`HeightAmplitudeValue` (or any unused name) beside it, and point the call sites at it.
+
 This works only for consumers that read the getter on a live call path — a per-frame
 `Update`, a physics step, an event handler. A consumer that read the getter once during
 initialization and cached the value in a field never observes the new value: the patch

@@ -280,9 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int addedCount = CountAddedOutcomes(result);
             if (hasFailure)
             {
-                return AppendStaleSummary(
-                    "Hot reload finished with one or more Failed method outcomes. See Methods.",
-                    result);
+                return AppendStaleSummary(BuildFailureMessage(result), result);
             }
 
             if (result.Methods.Count == 0)
@@ -336,6 +334,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return AppendStaleSummary(message, result);
+        }
+
+        // Why the reason is lifted into Message: a file-level refusal (an unimported .asmdef, a
+        // membership guard) fails every row of the file, and the CS0103 rows that cascade from it
+        // can sit above it in Methods, so a reader who only sees Message otherwise starts from a
+        // symptom instead of the cause.
+        private static string BuildFailureMessage(HotReloadOrchestratorResult result)
+        {
+            const string failureMessage = "Hot reload finished with one or more Failed method outcomes.";
+            if (!HotReloadFileLevelFailureSummary.TryDescribe(result.Methods, out string fileLevelFailure))
+            {
+                return failureMessage + " See Methods.";
+            }
+
+            return failureMessage + " " + fileLevelFailure + " See Methods.";
         }
 
         // Why the sibling clause is separate: the Added rows of this run belong to a file the

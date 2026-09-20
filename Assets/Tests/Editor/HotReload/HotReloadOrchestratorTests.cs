@@ -51,8 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.AddedMemberTemplates.cs.
         // The literal is spelled out here so a template edit fails this test instead of silently
         // changing what a skipped caller reports.
-        private const string UnavailableAddedCallSkipReason =
-            "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
+        private static string UnavailableAddedCallSkipReason(string calledMethodDisplayName)
+        {
+            return "Calls the added method '" + calledMethodDisplayName
+                + "', which hot reload cannot emit. Run 'uloop compile'.";
+        }
 
         // Mirrors the MethodTransformGenericMethodOrType template in
         // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.MethodTransformTemplates.cs.
@@ -4182,7 +4185,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.StartWith("The added member's body could not be fully bound in the hot-reload compilation"));
             Assert.That(
                 FindSkippedReason(second, nameof(HotReloadAddedMethodApplyFixture.ExistingCaller)),
-                Is.EqualTo("Calls an added method that hot reload cannot emit. Run 'uloop compile'."));
+                Is.EqualTo(
+                    UnavailableAddedCallSkipReason(
+                        typeof(HotReloadAddedMethodApplyFixture).FullName + ".AddedPing(int)")));
             Assert.That(
                 CountOutcomeKind(second, HotReloadMethodOutcomeKind.Failed),
                 Is.EqualTo(0),
@@ -5167,7 +5172,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Mid()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Broken()" }
                     },
                     calledAddedMethodKey = "Host::Broken()"
                 },
@@ -5178,7 +5184,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Outer()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Mid()" }
                     },
                     calledAddedMethodKey = "Host::Mid()"
                 }
@@ -5212,7 +5219,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Mid()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Broken()" }
                     },
                     calledAddedMethodKey = "Host::Broken()"
                 },
@@ -5223,7 +5231,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Outer()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Mid()" }
                     },
                     calledAddedMethodKey = "Host::Mid()"
                 }
@@ -5237,8 +5246,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(2));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
-            Assert.That(outcomes[1].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason("Host.Broken()")));
+            Assert.That(outcomes[1].Reason, Is.EqualTo(UnavailableAddedCallSkipReason("Host.Mid()")));
         }
 
         /// <summary>
@@ -5257,7 +5266,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Caller()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Unrelated()" }
                     },
                     calledAddedMethodKey = "Host::Unrelated()"
                 }
@@ -5271,7 +5281,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(1));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason("Host.Unrelated()")));
         }
 
         /// <summary>
@@ -6466,7 +6476,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindSkippedReason(
                     result,
                     nameof(HotReloadSignatureChangeExternalHost.SameFileCaller)),
-                Is.EqualTo(UnavailableAddedCallSkipReason));
+                Is.EqualTo(
+                    UnavailableAddedCallSkipReason(
+                        typeof(HotReloadSignatureChangeExternalHost).FullName + ".AddedBridge(int)")));
             AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
         }
 
@@ -7687,10 +7699,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedSiblingTuningDriftWarning =
-            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change.";
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with 7 yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change.";
 
         private const string ExpectedAddedSiblingTuningWarning =
-            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run have the new value folded in, but bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run already have its value folded in, so this run needs no compile; only bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' when one of those files has to see it.";
 
         private static IDisposable MutateSiblingTuningValue(int newValue)
         {

@@ -397,7 +397,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "{0} change(s) have not been invoked since their patch was applied; see Methods[].Reason.";
 
         public const string MultiWarningSingleCompileResolutionMessage =
-            "A single 'uloop compile' clears all of them at once.";
+            "A single 'uloop compile' clears all of them at once when you want them gone; none of them has to be cleared before you keep working.";
 
         // Format: continuing file count, then comma-separated project-relative paths (ordinal).
         public const string ContinuingLineShiftWarningFormat =

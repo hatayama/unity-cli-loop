@@ -88,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "--files was omitted; 1 changed file(s) since the last compile were selected: Assets/Selected.cs."
                     + " New files that have never been compiled are not selected automatically. "
                     + "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. 2 warning(s). See Warnings. "
-                    + "A single 'uloop compile' clears all of them at once."));
+                    + "A single 'uloop compile' clears all of them at once when you want them gone; none of them has to be cleared before you keep working."));
             Assert.That(
                 response.Warnings,
                 Is.EqualTo(new[] { "orchestrator warning", "scan limit warning" }));
