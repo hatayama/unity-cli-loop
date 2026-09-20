@@ -373,6 +373,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return (introducedTypeHint, introducedTypeSuggestions);
             }
 
+            // A member hot reload added is the same kind of design limit, and it is explained after
+            // the introduced type: a CS0103 can name either, and the type is the larger fact.
+            if (TryBuildAddedMemberHint(
+                    error,
+                    out string addedMemberHint,
+                    out List<string> addedMemberSuggestions))
+            {
+                return (addedMemberHint, addedMemberSuggestions);
+            }
+
             switch (error.ErrorCode)
             {
                 case "CS0246":
@@ -470,6 +480,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // diagnostic cannot tell which of the two the caller meant.
             AppendAmbiguousCandidateSuggestions(error, ambiguousCandidates, suggestions);
             return true;
+        }
+
+        private static bool TryBuildAddedMemberHint(
+            CompilationError error,
+            out string hint,
+            out List<string> suggestions)
+        {
+            IReadOnlyList<string> addedMemberNames =
+                HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames?.Invoke();
+            return AddedMemberDiagnosticHint.TryBuild(
+                error.ErrorCode,
+                error.Message,
+                addedMemberNames,
+                out hint,
+                out suggestions);
         }
 
         private static void AppendAmbiguousCandidateSuggestions(

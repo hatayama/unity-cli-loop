@@ -199,6 +199,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTranspilerDomainGateway.Current = domain;
             HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames =
                 () => DescribeActiveTypeNames(domain);
+            HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames =
+                () => DescribeActiveAddedMemberNames(domain);
             HotReloadPausePointCoordination.HotReloadSide = new HotReloadPausePointPort(domain);
             // Attaching last keeps the invariant across the gap: the resolver only starts
             // answering binds once every gateway already points at the domain behind it.
@@ -216,6 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // The sibling tools are told "no domain installed" here too: leaving the port behind
             // would keep answering pause point from the domain the uninstall is about to dispose.
             HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames = null;
+            HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames = null;
             HotReloadPausePointCoordination.HotReloadSide = null;
         }
 
@@ -250,6 +253,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return names;
+        }
+
+        private static IReadOnlyList<string> DescribeActiveAddedMemberNames(HotReloadDomain domain)
+        {
+            HashSet<string> names = HotReloadActiveAddedMemberNames.Collect(
+                domain.DescribeAddedMembers(),
+                domain.DescribeAddedFields());
+            return new List<string>(names);
         }
 
         private sealed class ReplacementScope : IDisposable
