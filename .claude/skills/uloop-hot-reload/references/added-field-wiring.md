@@ -59,13 +59,31 @@ never happened. Use the wiring entry point, which refuses all of those.
 
 ## Wired values are not durable
 
-The side table belongs to the current domain and the current reload. A wiring is gone after:
+The side table belongs to the current domain and the current reload, and re-running the script is
+not enough on its own: `uloop compile`, a domain reload, and `--revert-all` all drop the field's
+*declaration* as well, and the wiring call then refuses with
 
-- `uloop compile`,
-- any domain reload — **entering play mode included**,
-- `uloop hot-reload --revert-all`, which drops the declarations too, so the same call then
-  fails as an unknown field.
+```
+'_target' is not an added field of <Type>, which has no active added fields at all. Run a hot
+reload that adds the field first; a compile or a domain reload drops the added fields.
+```
 
-Keep the wiring as an `execute-dynamic-code` script and re-run it after any of those. Once the
-field is compiled for real, wire it the normal way — through the Inspector or through the
-compiled field — and delete the script: the added-field side table is no longer involved.
+So the recovery order is always **re-apply the hot reload first, then re-run the wiring script**.
+`uloop hot-reload` with no `--files` re-selects the files changed since the last compile, which is
+usually the one you want; it works while play mode is running.
+
+After `uloop compile` there is a second case: if the compile included the edit that added the
+field, the field is a real compiled field now. Set it through the Inspector or as a normal field
+and delete the wiring script — the side table is no longer involved.
+
+### Entering play mode
+
+What play mode costs depends on the project's Enter Play Mode Options.
+
+| Setting | What survives | What to do |
+|---------|---------------|------------|
+| Domain reload on (Unity's default) | Nothing. `--status` reports `0 change(s) currently active` and says the changes were discarded when play mode was entered | Re-apply the hot reload, then re-run the wiring script — both work from inside play mode |
+| Domain reload disabled | The declarations. `--status` still lists the `Active` and `AddedField` rows, and the wiring call is accepted with no re-apply | Re-run the wiring script only |
+
+Values never survive either way: play mode builds the scene's objects again, and an added field on
+a new instance starts at its initializer. Wire the instance you are actually looking at.
