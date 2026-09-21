@@ -243,8 +243,14 @@ What the spike **refuted**:
 - `Q3_MonoScript_ExistsWithoutAnAssetBehindIt` — the expectation that
   `MonoScript.FromMonoBehaviour` returns null is refuted: it returns a `MonoScript` whose
   `GetClass()` is the introduced type. What is missing is the asset behind it — empty `name`,
-  empty asset path, empty `text`. This is the one measured difference from a compiled
-  MonoBehaviour, whose script path resolves to its source file.
+  empty asset path, empty `text`.
+- `Q3_CompiledBehaviourWithoutItsOwnScriptAsset_HasTheSameEmptyMonoScript` — the further
+  expectation that the empty `MonoScript` is a symptom of byte loading is refuted too. A
+  compiled MonoBehaviour that happens to own no script asset (it shares a file named after
+  another type) measures exactly the same: non-null `MonoScript`, resolving `GetClass()`,
+  empty `name`, empty asset path, empty `text`. The emptiness tracks the absent asset, not the
+  origin of the assembly. A compiled MonoBehaviour that *does* own its file resolves its asset
+  path to that file, but that was seen only in a manual probe, not pinned by these tests.
 
 **Manual measurement** (play mode, not covered by any test, measured once through
 `execute-dynamic-code` while the Editor was in play mode; the objects were created at runtime
@@ -279,7 +285,10 @@ what the measurements say would have to be built.
    `AddComponent` from the UI — goes through the asset that the measurements show is absent.
 3. Handle the two-generation case explicitly. Q5 shows a second generation coexists rather
    than replacing the first, so re-introducing an edited declaration would leave the old
-   component alive on the object unless something removes it.
+   component alive on the object unless something removes it. The measured condition was two
+   *different* assembly names, which is also what production does: each preparation batch gets
+   a fresh assembly name from `HotReloadIntroducedTypeArtifactPathFactory`, so two generations
+   never share one.
 4. Decide the refusal's new boundary: `MonoBehaviour` and `ScriptableObject` behave the same
    in these measurements, but nothing here covers types Unity instantiates from an asset
    (`Editor`, `EditorWindow`, `ScriptedImporter`).

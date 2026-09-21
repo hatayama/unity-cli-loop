@@ -10,6 +10,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload;
 using Assembly = System.Reflection.Assembly;
 using Object = UnityEngine.Object;
 
@@ -267,6 +268,24 @@ namespace SpikeS6
 
             Assert.That(monoScript, Is.Not.Null, "No MonoScript was produced for the component.");
             Assert.That(monoScript.GetClass(), Is.SameAs(artifact.BehaviourType));
+            Assert.That(monoScript.name, Is.Empty);
+            Assert.That(AssetDatabase.GetAssetPath(monoScript), Is.Empty);
+            Assert.That(monoScript.text, Is.Empty);
+        }
+
+        /// <summary>What: Q3 control - a compiled MonoBehaviour that has no script asset of its own
+        /// produces exactly the same empty MonoScript, so the emptiness above tracks the missing
+        /// asset rather than the type having come from bytes.</summary>
+        [Test]
+        public void Q3_CompiledBehaviourWithoutItsOwnScriptAsset_HasTheSameEmptyMonoScript()
+        {
+            GameObject host = NewGameObject("SpikeS6Q3CompiledControl");
+            MonoBehaviour behaviour = host.AddComponent<HotReloadAddedUnityMessageFixture>();
+
+            MonoScript monoScript = MonoScript.FromMonoBehaviour(behaviour);
+
+            Assert.That(monoScript, Is.Not.Null, "No MonoScript was produced for the compiled component.");
+            Assert.That(monoScript.GetClass(), Is.SameAs(typeof(HotReloadAddedUnityMessageFixture)));
             Assert.That(monoScript.name, Is.Empty);
             Assert.That(AssetDatabase.GetAssetPath(monoScript), Is.Empty);
             Assert.That(monoScript.text, Is.Empty);
