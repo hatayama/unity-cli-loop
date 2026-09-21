@@ -51,22 +51,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// The Type.field names, spelled as C# source spells them, of the rows whose declaration
-        /// carries a serialization attribute.
+        /// The rows whose declaration carries a serialization attribute, still named by the
+        /// metadata form of the declaring type.
         /// </summary>
-        /// <remarks>
-        /// Why the source spelling rather than the reflection one: these names only reach a
-        /// reader, who wrote the type as Outer.Inner, and nothing looks a field up by them.
-        /// </remarks>
-        internal static string[] ListSerializedFieldDisplayNames(
+        internal static HotReloadSerializedAddedField[] ListSerializedFields(
             TransformWorkerAddedFieldDeclarationDto[] rows)
         {
             if (rows == null || rows.Length == 0)
             {
-                return Array.Empty<string>();
+                return Array.Empty<HotReloadSerializedAddedField>();
             }
 
-            List<string> names = new List<string>();
+            List<HotReloadSerializedAddedField> fields = new List<HotReloadSerializedAddedField>();
             foreach (TransformWorkerAddedFieldDeclarationDto row in rows)
             {
                 if (row == null
@@ -77,12 +73,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                names.Add(
-                    new HotReloadMetadataTypeName(row.declaringTypeMetadataName).ToDisplayShortName()
-                    + "." + row.fieldName);
+                fields.Add(
+                    new HotReloadSerializedAddedField(
+                        new HotReloadMetadataTypeName(row.declaringTypeMetadataName),
+                        row.fieldName));
             }
 
-            return names.ToArray();
+            return fields.ToArray();
         }
     }
 }

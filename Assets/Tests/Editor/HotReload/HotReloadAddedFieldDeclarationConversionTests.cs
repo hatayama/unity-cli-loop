@@ -10,12 +10,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadAddedFieldDeclarationConversionTests
     {
         /// <summary>
-        /// What: a serialized added field of a nested type is named the way C# source spells it,
-        /// with neither the worker's '/' nor reflection's '+', and a row without the attribute is
-        /// left out.
+        /// What: a serialized added field of a nested type keeps the worker's metadata name for
+        /// telling fields apart, is shown the way C# source spells it, and a row without the
+        /// attribute is left out.
         /// </summary>
         [Test]
-        public void ListSerializedFieldDisplayNames_NestedDeclaringType_UsesSourceSpelling()
+        public void ListSerializedFields_NestedDeclaringType_KeepsTheMetadataNameAndShowsTheSourceSpelling()
         {
             TransformWorkerAddedFieldDeclarationDto[] rows =
             {
@@ -35,9 +35,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            Assert.That(
-                HotReloadAddedFieldDeclarationConversion.ListSerializedFieldDisplayNames(rows),
-                Is.EqualTo(new[] { "Game.Outer.Inner._target" }));
+            HotReloadSerializedAddedField[] fields =
+                HotReloadAddedFieldDeclarationConversion.ListSerializedFields(rows);
+
+            Assert.That(fields.Length, Is.EqualTo(1));
+            Assert.That(fields[0].DeclaringTypeName.Value, Is.EqualTo("Game.Outer/Inner"));
+            Assert.That(fields[0].ToDisplayName(), Is.EqualTo("Game.Outer.Inner._target"));
         }
     }
 }

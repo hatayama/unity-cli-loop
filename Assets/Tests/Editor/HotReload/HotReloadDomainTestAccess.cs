@@ -96,6 +96,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 null);
         }
 
+        /// <summary>
+        /// Replaces the added fields of one file with serialized ones, as a run whose worker
+        /// marked every declaration with a serialization attribute would.
+        /// </summary>
+        internal void ReplaceSerializedAddedFields(
+            string projectRelativePath,
+            IReadOnlyList<HotReloadSerializedAddedField> serializedFields)
+        {
+            List<string> fullNames = new List<string>();
+            foreach (HotReloadSerializedAddedField field in serializedFields)
+            {
+                fullNames.Add(field.DeclaringTypeName.ToReflectionName().Value + "." + field.FieldName);
+            }
+
+            GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(
+                fullNames,
+                null,
+                null,
+                serializedFields);
+        }
+
         internal void RecordSupersededSignature(
             string projectRelativePath,
             string oldMethodKey,

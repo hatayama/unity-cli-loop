@@ -163,19 +163,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> addedFieldFullNames,
             IReadOnlyList<string> addedFieldInitializers,
             IReadOnlyList<HotReloadAddedFieldDeclaration> addedFieldDeclarations,
-            IReadOnlyList<string> serializedFieldDisplayNames)
+            IReadOnlyList<HotReloadSerializedAddedField> serializedFields)
         {
             _addedFields.Replace(
                 addedFieldFullNames,
                 addedFieldInitializers,
                 addedFieldDeclarations,
-                serializedFieldDisplayNames);
+                serializedFields);
         }
 
-        internal void CollectSerializedAddedFields(HashSet<string> displayNames)
-        {
-            _addedFields.CollectSerializedFields(displayNames);
-        }
+        internal IReadOnlyList<HotReloadSerializedAddedField> SerializedAddedFields => _addedFields.SerializedFields;
 
         /// <summary>
         /// Adds to <paramref name="changedFullNames"/> each added field this generation already

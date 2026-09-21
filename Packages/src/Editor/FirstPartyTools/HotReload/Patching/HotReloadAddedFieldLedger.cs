@@ -32,18 +32,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, HotReloadAddedFieldDeclaration> _declarationsByLookupKey =
             new Dictionary<string, HotReloadAddedFieldDeclaration>(StringComparer.Ordinal);
 
-        // The added fields whose declaration carries a serialization attribute, spelled as C#
-        // source spells them. Kept apart from the declarations because those rows are the public
+        // The added fields whose declaration carries a serialization attribute. Kept apart from the declarations because those rows are the public
         // wiring contract, and whether Unity would have serialized a field is only ours to report.
-        private readonly HashSet<string> _serializedFieldDisplayNames =
-            new HashSet<string>(StringComparer.Ordinal);
+        private readonly List<HotReloadSerializedAddedField> _serializedFields =
+            new List<HotReloadSerializedAddedField>();
 
         internal void Clear()
         {
             _fieldsByTypeKey.Clear();
             _initializerByFullName.Clear();
             _declarationsByLookupKey.Clear();
-            _serializedFieldDisplayNames.Clear();
+            _serializedFields.Clear();
         }
 
         /// <summary>
@@ -53,24 +52,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// the same order, and is ignored when it does not line up with the names.
         /// <paramref name="addedFieldDeclarations"/> carries the store key, declared type and
         /// staticness of each field; a run that reports none leaves no field a caller can wire
-        /// from outside a shim. <paramref name="serializedFieldDisplayNames"/> names the fields
+        /// from outside a shim. <paramref name="serializedFields"/> names the fields
         /// declared with a serialization attribute; null means none.
         /// </summary>
         internal void Replace(
             IReadOnlyList<string> addedFieldFullNames,
             IReadOnlyList<string> addedFieldInitializers,
             IReadOnlyList<HotReloadAddedFieldDeclaration> addedFieldDeclarations,
-            IReadOnlyList<string> serializedFieldDisplayNames)
+            IReadOnlyList<HotReloadSerializedAddedField> serializedFields)
         {
             Debug.Assert(addedFieldFullNames != null, "addedFieldFullNames must not be null.");
 
             _fieldsByTypeKey.Clear();
             _initializerByFullName.Clear();
             ReplaceDeclarations(addedFieldDeclarations);
-            _serializedFieldDisplayNames.Clear();
-            if (serializedFieldDisplayNames != null)
+            _serializedFields.Clear();
+            if (serializedFields != null)
             {
-                _serializedFieldDisplayNames.UnionWith(serializedFieldDisplayNames);
+                _serializedFields.AddRange(serializedFields);
             }
 
             bool hasInitializers =
@@ -157,11 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 out declaration);
         }
 
-        internal void CollectSerializedFields(HashSet<string> displayNames)
-        {
-            Debug.Assert(displayNames != null, "displayNames must not be null.");
-            displayNames.UnionWith(_serializedFieldDisplayNames);
-        }
+        internal IReadOnlyList<HotReloadSerializedAddedField> SerializedFields => _serializedFields;
 
         internal void CollectFieldsForType(string normalizedTypeName, HashSet<string> fieldNames)
         {

@@ -161,7 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 addedFieldNames ?? Array.Empty<string>(),
                 addedFieldInitializers,
                 HotReloadAddedFieldDeclarationConversion.FromWorkerRows(addedFieldDeclarations),
-                HotReloadAddedFieldDeclarationConversion.ListSerializedFieldDisplayNames(addedFieldDeclarations));
+                HotReloadAddedFieldDeclarationConversion.ListSerializedFields(addedFieldDeclarations));
         }
 
         // The fields a previous reload already added and this run declares with a different
