@@ -458,15 +458,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "verify ResolvedMethod, or pass a line outside patched methods' edited spans.";
 
         // Why this wording: agents that followed the old "read via execute-dynamic-code"
-        // guidance wasted two round-trips; that command compiles against the compiled
-        // assembly and cannot see shim-only added fields (CS1061).
+        // guidance wasted two round-trips on CS1061, since that command compiles against the
+        // compiled assembly; agents told to read from a patched body instead edited code just to
+        // look. The wiring entry point reads the shim's value by name from a snippet directly.
         // Format: declaring type name, added-field count, comma-separated simple field names.
         public const string HotReloadAddedFieldsNotCapturedWarningFormat =
-            "Hot reload added {1} field(s) to '{0}' ({2}); their values live in the hot-reload "
-            + "shim, never appear in CapturedVariables, and are not visible to 'uloop "
-            + "execute-dynamic-code' (it compiles against the compiled assembly, so those names "
-            + "fail with CS1061). Read them from a patched method body instead, e.g. log them or "
-            + "surface them in a patched OnGUI/Update.";
+            "Hot reload added {1} field(s) to '{0}' ({2}); they never appear in CapturedVariables, "
+            + "and naming them as members in 'uloop execute-dynamic-code' fails with CS1061 "
+            + "because it compiles against the compiled assembly. Read one there with "
+            + "HotReloadAddedFieldWiring.TryReadInstanceField (TryReadStaticField for a static "
+            + "field); references/added-field-wiring.md in the uloop-hot-reload skill shows how.";
 
         // Why fill on success: a successful enable currently leaves RecommendedNextAction empty,
         // so agents arm a marker and then stall instead of running the path or using --await.

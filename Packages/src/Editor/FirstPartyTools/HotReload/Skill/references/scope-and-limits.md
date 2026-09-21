@@ -78,9 +78,11 @@ writer. An added auto-property without an initializer gets the same check, with 
 that starts `Added auto-property`. Added `const` values are folded into edited bodies as literals,
 like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
-resolved type has any — their values live in the hot-reload shim and are not visible
-to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
-names fail with CS1061). Read them from a patched method body instead. When such a
+resolved type has any — their values live in the hot-reload shim, and a
+`uloop execute-dynamic-code` snippet cannot name them as members (it compiles against
+the compiled assembly, so that fails with CS1061). Read one there with
+`HotReloadAddedFieldWiring.TryReadInstanceField` (`TryReadStaticField` for a static
+field) instead. When such a
 failure quotes the name of an active added member, the diagnostic's `Hint` says so
 rather than leaving the error reading as a typo. Naming the field is what fails, not
 reaching it: an `execute-dynamic-code` snippet can still read and write an added field

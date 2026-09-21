@@ -42,8 +42,11 @@ Every check runs before anything is stored, so a refused call leaves an earlier 
 |-----------|--------------|
 | Field name no active reload added | Throws, listing the added fields that type does have |
 | Type has no added fields at all | Throws, saying so and that a reload has to run first |
+| Name of a compiled field of the type or a base type | Throws, saying it is an ordinary field to read or set like any other |
 | Value the field's declared type would not accept | Throws, naming the declared type and the type passed |
-| A widening numeric (`int` into a `long` field) | Throws: the reader compares with `is`, so cast first |
+| A widening numeric (`int` into a `long` field) | Throws: the reader compares with `is`, so cast first (said only when both types are numeric) |
+| A `GameObject` into a `Component`-typed field | Throws, suggesting `gameObject.GetComponent<T>()` |
+| A `Component` into a `GameObject` field | Throws, suggesting `component.gameObject` |
 | `null` into a non-nullable value-type field | Throws |
 | Static field through an instance, or the reverse | Throws, naming the call to use instead |
 | A destroyed `UnityEngine.Object` as the instance | Throws: its patched methods never run again |
@@ -67,7 +70,8 @@ not enough on its own: `uloop compile`, a domain reload, and `--revert-all` all 
 
 ```
 '_target' is not an added field of <Type>, which has no active added fields at all. Run a hot
-reload that adds the field first; a compile or a domain reload drops the added fields.
+reload that adds the field first; a compile, a domain reload, or 'uloop hot-reload --revert-all'
+drops the added fields.
 ```
 
 So the recovery order is always **re-apply the hot reload first, then re-run the wiring script**.
@@ -77,8 +81,9 @@ reload introduced is never a changed file, but after entering play mode or `--re
 selected again too, so the field it declares comes back with the rest.
 
 After `uloop compile` there is a second case: if the compile included the edit that added the
-field, the field is a real compiled field now. Set it through the Inspector or as a normal field
-and delete the wiring script — the side table is no longer involved.
+field, the field is a real compiled field now, and the wiring call says so instead of the message
+above. Set it through the Inspector or as a normal field and delete the wiring script — the side
+table is no longer involved.
 
 ### Entering play mode
 
