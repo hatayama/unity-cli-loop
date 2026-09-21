@@ -36,7 +36,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // The added methods are gone with the revert, so the proxies that forward Unity
             // messages into them come off in the same step rather than at the next update tick.
             _unityMessageForwarding.Clear();
-            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+            // Read after the revert, so the ledger lists the types it left loaded rather than the
+            // state it reverted.
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources(_domain));
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
             List<string> warnings = new List<string>();

@@ -3,8 +3,9 @@ using System;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// One introduced type discarded by Play entry, paired with the project-relative file that
-    /// declares it so an omitted --files run can select that file again.
+    /// One introduced type Play entry discarded, or whose later additions revert-all dropped,
+    /// paired with the project-relative file that declares it so an omitted --files run can
+    /// select that file again.
     /// </summary>
     internal sealed class HotReloadPlayModeEntryDropSource
     {

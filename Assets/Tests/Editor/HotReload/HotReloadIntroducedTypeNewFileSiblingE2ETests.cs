@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 using NUnit.Framework;
 
+using UnityEngine;
+
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -26,6 +28,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // The path the reload is asked for. Nothing is ever written here.
         private const string OwnerRequestedPath =
             "Assets/Tests/Editor/HotReload/UncompiledIntroducedOwner.cs";
+
+        // The one owner path a test writes to disk, because an omitted --files run only selects a
+        // file that exists. The test deletes it before Unity could import it.
+        private const string RevertedOwnerPath =
+            "Assets/Tests/Editor/HotReload/UncompiledRevertedIntroducedOwner.cs";
 
         private const string CallerBodyAnchor = "return host.Value();";
         private const string IntroducedTypeSimpleName = "HotReloadNewFileIntroducedValue";
@@ -221,6 +228,94 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssertIntroducedTypedFieldsAreWiredAndRead(
                     readArtifact, firstGenerationValue, EditedPingValue, "the body-edit reload");
             });
+        }
+
+        /// <summary>
+        /// What: after --revert-all, an omitted --files run selects the owner file of the type the
+        /// revert left loaded again, so the caller that uses a member a later reload added to that
+        /// type is patched instead of failing with CS1061. The revert drops that added member while
+        /// the type stays loaded, and the file was never compiled, so without the reselection
+        /// nothing would bring the member back.
+        /// </summary>
+        [Test]
+        public async Task RevertAllThenOmittedFiles_SelectsTheOwnerFileAgainAndTheCallerReachesItsAddedMember()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            string callerWithPong = HotReloadTestSourceWriter.WriteEditedSource(
+                "RevertedOwnerCallerWithPong.cs",
+                CallIntroducedType(
+                    File.ReadAllText(callerPath),
+                    "new " + IntroducedTypeSimpleName + "().Ping() + new "
+                    + IntroducedTypeSimpleName + "().Pong() * " + PongFactor.ToString()));
+            string ownerAbsolutePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", RevertedOwnerPath.Replace('/', Path.DirectorySeparatorChar)));
+            HotReloadPlayModeEntryDropLedgerSessionScope ledgerScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
+            try
+            {
+                File.WriteAllText(ownerAbsolutePath, BuildOwnerSource(EditedPingValue, PongMember));
+                await RunInIntroducedTypeDomainAsync(async _ =>
+                {
+                    await RunReloadAsync(
+                        RevertedOwnerPath,
+                        callerPath,
+                        new Dictionary<string, string>
+                        {
+                            [RevertedOwnerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                                "RevertedOwnerIntroducing.cs",
+                                BuildOwnerSource(PingValue, NoExtraMembers)),
+                            [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                                "RevertedOwnerCaller.cs",
+                                CallIntroducedType(File.ReadAllText(callerPath), "new " + IntroducedTypeSimpleName + "().Ping()"))
+                        });
+                    await RunReloadAsync(
+                        RevertedOwnerPath,
+                        callerPath,
+                        new Dictionary<string, string> { [callerPath] = callerWithPong });
+                    Assert.That(
+                        CallTheCaller(),
+                        Is.EqualTo(EditedPingValue + (PongValue * PongFactor) + HostValue),
+                        "Precondition: the second reload must have added the member the caller calls.");
+
+                    HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
+                    Assert.That(CallTheCaller(), Is.EqualTo(HostValue), "Precondition: the revert must restore the compiled caller.");
+
+                    HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
+                        null,
+                        () => new HotReloadChangedFileAggregationResult(
+                            hasBaseline: true,
+                            changedProjectRelativePaths: new List<string> { callerPath },
+                            scanLimitWarnings: new List<string>()),
+                        HotReloadDroppedIntroducedSourceFiles.ListExistingOnDisk());
+
+                    Assert.That(
+                        selection.Files,
+                        Is.EqualTo(new[] { callerPath, RevertedOwnerPath }),
+                        "The owner file of the type the revert left loaded must be selected after the changed file.");
+                    Assert.That(
+                        selection.SelectionMessage,
+                        Does.Contain("entering Play Mode or 'uloop hot-reload --revert-all' dropped what earlier reloads had applied from them: " + RevertedOwnerPath + "."));
+
+                    HotReloadOrchestratorResult reselected = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                        selection.Files,
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        new Dictionary<string, string> { [callerPath] = callerWithPong });
+
+                    Assert.That(CountFailures(reselected), Is.EqualTo(0), DescribeOutcomes(reselected));
+                    AssertIntroducedTypeRow(reselected, HotReloadIntroducedTypeOutcomeKind.AlreadyActive);
+                    AssertOutcome(reselected, HotReloadMethodOutcomeKind.Added, "Pong");
+                    Assert.That(
+                        CallTheCaller(),
+                        Is.EqualTo(EditedPingValue + (PongValue * PongFactor) + HostValue),
+                        "The caller must reach the member the reselected owner file adds again.\n"
+                        + DescribeOutcomes(reselected));
+                });
+            }
+            finally
+            {
+                File.Delete(ownerAbsolutePath);
+                ledgerScope.Restore();
+            }
         }
 
         // Why not RunReloadAsync: this reload is the one that does not name the file declaring

@@ -13,6 +13,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// revert-all, or recovered apply outcomes. Event handlers stay thin; decisions are
     /// tested through the Notify/Should methods.
     /// </summary>
+    /// <remarks>
+    /// The owner-file ledger has a second writer despite its name: revert-all records the owner
+    /// files of the introduced types it leaves loaded. A revert drops what later reloads added to
+    /// those types, and a file that was never compiled is not a changed file, so without that row
+    /// an omitted --files run would leave every caller of an added member failing to compile.
+    /// </remarks>
     internal static class HotReloadPlayModeEntryDropRecorder
     {
         private static int _currentCompilationErrorCount;
@@ -31,6 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // in the same domain therefore means Play entry was cancelled and the just-recorded
         // identities must leave the ledger so live patches are not reported as dropped.
         private static List<string> _pendingIdentitiesRecordedInThisDomain;
+
+        // Why apart from the identities: a revert-all may already have recorded an owner row for
+        // a type Play entry records again. A cancelled entry takes back only the rows it added,
+        // or the revert's row would go and the next omitted --files run would miss that file.
+        private static List<string> _pendingSourceIdentitiesRecordedInThisDomain;
 
         public static void Initialize()
         {
@@ -115,14 +126,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RemoveFromLedgers(recoveredIdentities);
         }
 
-        internal static void NotifyRevertAll()
+        // Why only the owner-file ledger takes the surviving types: the identity ledger reports
+        // what Play entry discarded, and the revert discarded none of these types.
+        internal static void NotifyRevertAll(IReadOnlyList<HotReloadPlayModeEntryDropSource> survivingIntroducedSources)
         {
+            Debug.Assert(survivingIntroducedSources != null, "survivingIntroducedSources must not be null");
             ClearLedgers();
+            HotReloadPlayModeEntryDropSourceLedger.Record(survivingIntroducedSources);
         }
 
         internal static void ResetPendingForTesting()
         {
             _pendingIdentitiesRecordedInThisDomain = null;
+            _pendingSourceIdentitiesRecordedInThisDomain = null;
         }
 
         internal static void NotifyPlayModeStateChanged(
@@ -139,9 +155,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            List<string> newSourceIdentities = ListSourceIdentitiesNotYetRecorded(introducedSources);
             HotReloadPlayModeEntryDropLedger.Record(identities);
             HotReloadPlayModeEntryDropSourceLedger.Record(introducedSources);
-            RememberPending(identities);
+            RememberPending(identities, newSourceIdentities);
+        }
+
+        private static List<string> ListSourceIdentitiesNotYetRecorded(
+            IReadOnlyList<HotReloadPlayModeEntryDropSource> introducedSources)
+        {
+            HashSet<string> recorded = new HashSet<string>(
+                HotReloadPlayModeEntryDropSourceLedger.GetIdentities(),
+                StringComparer.Ordinal);
+            List<string> notYetRecorded = new List<string>();
+            for (int index = 0; index < introducedSources.Count; index++)
+            {
+                string identity = introducedSources[index].Identity;
+                if (!recorded.Contains(identity))
+                {
+                    notYetRecorded.Add(identity);
+                }
+            }
+
+            return notYetRecorded;
         }
 
         // Why both ledgers move together: a source line names the type identity it was recorded
@@ -164,7 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             NotifyPlayModeStateChanged(
                 state,
                 CollectActiveIdentities(),
-                CollectActiveIntroducedSources(),
+                CollectActiveIntroducedSources(GetServices().Domain),
                 IsDomainReloadDisabledOnEnterPlayMode());
         }
 
@@ -176,11 +212,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            RemoveFromLedgers(_pendingIdentitiesRecordedInThisDomain);
+            HotReloadPlayModeEntryDropLedger.Remove(_pendingIdentitiesRecordedInThisDomain);
+            HotReloadPlayModeEntryDropSourceLedger.Remove(_pendingSourceIdentitiesRecordedInThisDomain);
             _pendingIdentitiesRecordedInThisDomain = null;
+            _pendingSourceIdentitiesRecordedInThisDomain = null;
         }
 
-        private static void RememberPending(IReadOnlyList<string> identities)
+        private static void RememberPending(IReadOnlyList<string> identities, List<string> newSourceIdentities)
         {
             List<string> pending = new List<string>();
             for (int index = 0; index < identities.Count; index++)
@@ -195,6 +233,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _pendingIdentitiesRecordedInThisDomain = pending;
+            _pendingSourceIdentitiesRecordedInThisDomain = newSourceIdentities;
         }
 
         private static void HandleCompilationStarted(object context)
@@ -263,14 +302,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// The owner file of each introduced type the next domain reload would discard, keyed by
-        /// the same identity CollectActiveIdentities gives that type.
+        /// The owner file of each introduced type the domain holds, keyed by the same identity
+        /// CollectActiveIdentities gives that type. Read at Play entry for the types the domain
+        /// reload is about to discard, and after revert-all for the types the revert left loaded.
         /// </summary>
-        internal static IReadOnlyList<HotReloadPlayModeEntryDropSource> CollectActiveIntroducedSources()
+        internal static IReadOnlyList<HotReloadPlayModeEntryDropSource> CollectActiveIntroducedSources(
+            HotReloadDomain domain)
         {
-            Debug.Assert(GetServices != null, "GetServices must be set before sources are collected.");
+            Debug.Assert(domain != null, "domain must not be null");
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> introducedTypes =
-                GetServices().Domain.IntroducedTypes.DescribeActive();
+                domain.IntroducedTypes.DescribeActive();
             List<HotReloadPlayModeEntryDropSource> sources =
                 new List<HotReloadPlayModeEntryDropSource>(introducedTypes.Count);
             for (int index = 0; index < introducedTypes.Count; index++)

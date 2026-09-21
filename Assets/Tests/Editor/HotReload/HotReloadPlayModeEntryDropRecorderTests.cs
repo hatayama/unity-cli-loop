@@ -138,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadPlayModeEntryDropLedger.Record(new[] { "Type.A()" });
 
-            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new HotReloadPlayModeEntryDropSource[0]);
 
             Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
         }
@@ -218,6 +218,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a cancelled Play entry keeps an owner file revert-all recorded for a type it left
+        /// loaded, even though Play entry recorded the same type again, and leaves the identity
+        /// ledger empty. The revert's row is not the cancelled entry's to take back, and losing it
+        /// would leave the next omitted --files run without the file its callers need.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenPlayEntryAfterRevertAllIsCancelled_KeepsTheRevertsOwnerFile()
+        {
+            HotReloadPlayModeEntryDropSource stillLoaded =
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/StillLoaded.cs");
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new[] { stillLoaded });
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { stillLoaded },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.EnteredEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { stillLoaded },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/StillLoaded.cs" }));
+            Assert.That(HotReloadPlayModeEntryDropLedger.GetIdentities(), Is.Empty);
+        }
+
+        /// <summary>
         /// What: an apply forgets the owner files of types it introduced or found already active,
         /// and keeps the file of a type it failed to introduce.
         /// </summary>
@@ -275,9 +305,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs")
             });
 
-            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new HotReloadPlayModeEntryDropSource[0]);
 
             Assert.That(HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: revert-all replaces every recorded owner file with the owner files of the types it
+        /// leaves loaded, and records no identity for them. A revert drops what later reloads added
+        /// to those types, so an omitted --files run has to select their files again; the identity
+        /// ledger only reports what Play entry discarded, which a revert did not.
+        /// </summary>
+        [Test]
+        public void NotifyRevertAll_RecordsOnlyTheOwnerFilesOfTypesThatStayLoaded()
+        {
+            HotReloadPlayModeEntryDropLedger.Record(new[] { IntroducedIdentityA });
+            HotReloadPlayModeEntryDropSourceLedger.Record(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Earlier.cs")
+            });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityB, "Assets/StillLoaded.cs")
+            });
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/StillLoaded.cs" }));
+            Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -339,7 +395,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "The patched method must still be collected next to the type.");
 
                     IReadOnlyList<HotReloadPlayModeEntryDropSource> sources =
-                        HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources();
+                        HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources(
+                            HotReloadCompositionRoot.Services.Domain);
 
                     Assert.That(sources.Count, Is.EqualTo(1), "The introduced type must offer its owner file.");
                     Assert.That(

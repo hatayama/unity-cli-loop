@@ -70,7 +70,9 @@ reload that adds the field first; a compile or a domain reload drops the added f
 
 So the recovery order is always **re-apply the hot reload first, then re-run the wiring script**.
 `uloop hot-reload` with no `--files` re-selects the files changed since the last compile, which is
-usually the one you want; it works while play mode is running.
+usually the one you want; it works while play mode is running. A new file that declares a type hot
+reload introduced is never a changed file, but after entering play mode or `--revert-all` it is
+selected again too, so the field it declares comes back with the rest.
 
 After `uloop compile` there is a second case: if the compile included the edit that added the
 field, the field is a real compiled field now. Set it through the Inspector or as a normal field
