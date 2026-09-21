@@ -199,6 +199,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Removed members stay present in the compiled assembly until 'uloop compile'; "
             + "edited bodies no longer call them: {0}.";
 
+        // Format: count of removed members, then the comma-separated names (ordinal).
+        // Why a line of its own rather than the full warning again: the full text reappears on
+        // every run until 'uloop compile', and a reader who already acted on it reads the reprint
+        // as news, which buries the warnings the run produced for the first time.
+        public const string ContinuingRemovedMembersWarningFormat =
+            "Continuing from an earlier run: the same {0} removed member(s) are still in the "
+            + "compiled assembly and still uncalled by the edited bodies ({1}); 'uloop compile' "
+            + "is what removes them.";
+
         // Reason on a Stale row: the source no longer declares the method, but the patch is still
         // installed, so compiled callers keep running the patched body.
         public const string StalePatchRemovedFromSourceReason =

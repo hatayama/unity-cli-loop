@@ -64,13 +64,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // Why after the gate: a gated replacement is not applied, so listing it under
                 // "Removed members stay present... edited bodies no longer call them" is false.
-                string removedMembersWarning = HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
-                    file.FileOutput.removedMembers,
-                    file.FileOutput.removedMethodSignatures,
-                    gateResult.GatedReplacementMethodKeys);
-                if (removedMembersWarning != null)
+                IReadOnlyList<string> displayedRemovedMembers =
+                    HotReloadRemovedMembersWarning.SelectDisplayedRemovedMemberNames(
+                        file.FileOutput.removedMembers,
+                        file.FileOutput.removedMethodSignatures,
+                        gateResult.GatedReplacementMethodKeys);
+                // Why the record is written even when nothing is reported: the set is the file's,
+                // not this run's, so a run that reports none has to end the continuation.
+                bool isSameAsLastDisplayed = patcher.RecordDisplayedRemovedMembers(
+                    file.ProjectRelativePath,
+                    displayedRemovedMembers);
+                if (displayedRemovedMembers.Count > 0)
                 {
-                    file.Sinks.Warnings.Add(removedMembersWarning);
+                    file.Sinks.Warnings.Add(
+                        isSameAsLastDisplayed
+                            ? HotReloadRemovedMembersWarning.FormatContinuingRemovedMembersWarning(
+                                displayedRemovedMembers)
+                            : HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
+                                displayedRemovedMembers));
                 }
 
                 HotReloadStalePatchOutcomes.Append(

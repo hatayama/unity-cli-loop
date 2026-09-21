@@ -291,6 +291,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.DescribeActivePatches();
         }
 
+        /// <summary>
+        /// Records the removed-member names this run reports for one file, and returns true when
+        /// the last run that reported any for it reported exactly the same set.
+        /// </summary>
+        public bool RecordDisplayedRemovedMembers(
+            string projectRelativePath,
+            IReadOnlyList<string> displayedNames)
+        {
+            return _domain.RecordDisplayedRemovedMembers(projectRelativePath, displayedNames);
+        }
+
         // Why projectRelativePath, not DescribeActivePatches FilePath filtering by callers: a
         // patch belongs to the generation of the orchestrator's project-relative path.
         public IReadOnlyList<string> ListActiveMethodKeys(string projectRelativePath)
