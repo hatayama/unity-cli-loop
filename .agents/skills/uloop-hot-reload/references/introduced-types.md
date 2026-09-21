@@ -65,6 +65,12 @@ type. Editing it in the same reload (a method body change is enough) lets both b
 edit, so the run applies; passing its file without editing it changes nothing. Otherwise run
 `uloop compile`.
 
+The same split refuses a change to an introduced type when a new file in the same reload
+introduces a type naming it in its signatures: the new type is compiled against the loaded
+definition before the edit is applied. The refusal names the new type as introduced by this
+reload. Reload in two steps: first without the change, which introduces the new type, then the
+change together with an edit of the new type (a method body change is enough).
+
 `--revert-all` reverts patches and added members but cannot unload an introduced type; the
 response says how many stayed. Auto Refresh stays held while any introduced type is active —
 `uloop compile` always releases it, `--revert-all` only when no introduced type remains.
