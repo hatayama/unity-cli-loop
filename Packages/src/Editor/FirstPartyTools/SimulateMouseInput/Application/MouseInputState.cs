@@ -108,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 InputUpdateType updateType = InputUpdateTypeResolver.Resolve();
-                InputState.Change(mouse, eventPtr, updateType);
+                InputStateChangeApplier.Apply(mouse, eventPtr, updateType);
             }
 
             _heldButtons.Clear();
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 writePayload(eventPtr);
-                InputState.Change(mouse, eventPtr, updateType);
+                InputStateChangeApplier.Apply(mouse, eventPtr, updateType);
             }
         }
 
