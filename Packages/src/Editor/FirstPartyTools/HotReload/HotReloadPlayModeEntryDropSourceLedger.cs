@@ -11,6 +11,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// domain reload, so an omitted --files run can select those files again after the in-memory
     /// registry that knew them is gone.
     /// </summary>
+    /// <remarks>
+    /// Revert-all writes here too, despite the name: it records the owner files of the introduced
+    /// types it leaves loaded, because the revert drops what later reloads added to them and a
+    /// file that was never compiled is not otherwise selected again.
+    /// </remarks>
     internal static class HotReloadPlayModeEntryDropSourceLedger
     {
         internal const char FieldSeparator = '\t';

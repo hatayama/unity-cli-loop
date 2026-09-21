@@ -22,10 +22,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private HotReloadDomainTestScope _scope;
 
+        // Why a ledger scope: a revert records the owner files of the types it leaves loaded in
+        // SessionState, which outlives the test and would be selected by the next omitted run.
+        private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerScope;
+
         [SetUp]
         public void SetUp()
         {
             _scope = new HotReloadDomainTestScope();
+            _ledgerScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
             ReleaseTheHold();
         }
 
@@ -34,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
+            _ledgerScope.Restore();
             _scope.Dispose();
             ReleaseTheHold();
         }

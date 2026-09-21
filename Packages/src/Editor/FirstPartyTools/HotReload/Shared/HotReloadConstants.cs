@@ -584,10 +584,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "--files was omitted; no file changed since the last compile.";
 
         // Format: {0} = count, {1} = comma-separated project-relative paths of the owner files of
-        // introduced types that the Play-entry domain reload discarded.
+        // introduced types that the Play-entry domain reload discarded, or whose later additions
+        // revert-all dropped. The wording names both, because the ledger does not say which.
         public const string DefaultSelectionReselectedDroppedFilesFormat =
-            " {0} new file(s) that hot reload had introduced before the Play Mode domain reload "
-            + "discarded them were selected again: {1}.";
+            " {0} new file(s) declaring a type hot reload introduced were selected again, because "
+            + "entering Play Mode or 'uloop hot-reload --revert-all' dropped what earlier reloads had "
+            + "applied from them: {1}.";
 
         // Replaces DefaultSelectionNewFilesNote when discarded new files were selected, so the
         // note does not read as if those files were left out too.
