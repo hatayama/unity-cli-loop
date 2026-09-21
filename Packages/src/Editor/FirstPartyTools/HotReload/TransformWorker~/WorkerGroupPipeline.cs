@@ -422,6 +422,8 @@ internal static class WorkerGroupPipeline
             AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(projectRelativePath),
             AddedFieldInitializers =
                 addedFieldCatalog.ListRewrittenAddedFieldInitializers(projectRelativePath),
+            AddedFieldDeclarations =
+                addedFieldCatalog.ListRewrittenAddedFieldDeclarations(projectRelativePath),
             AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
             IntroducedTypes = unit.IntroducedTypes.ToArray(),
             IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),

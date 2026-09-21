@@ -54,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CommitAddedFieldsForFile(
                 file.ProjectRelativePath,
                 file.AddedFieldNames,
-                file.AddedFieldInitializers);
+                file.AddedFieldInitializers,
+                file.AddedFieldDeclarations);
             AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
             List<string> inlineRiskMethodLabels = new List<string>();
             List<string> unforwardedUnityMessageLabels = new List<string>();
@@ -113,6 +114,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] addedFieldNames = file.AddedFieldNames ?? file.FileOutput.addedFieldNames;
             string[] addedFieldInitializers =
                 file.AddedFieldInitializers ?? file.FileOutput.addedFieldInitializers;
+            TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations =
+                file.AddedFieldDeclarations ?? file.FileOutput.addedFieldDeclarations;
             List<string> initializerChangedFields = CollectInitializerChangedAddedFields(
                 file.ProjectRelativePath,
                 addedFieldNames,
@@ -121,7 +124,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CommitAddedFieldsForFile(
                 file.ProjectRelativePath,
                 addedFieldNames,
-                addedFieldInitializers);
+                addedFieldInitializers,
+                addedFieldDeclarations);
             AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
             // Why recorded: a file that only declares an added member has no entry of its own,
             // yet a sibling file's applied body uses that field, so the run must report it.
@@ -150,11 +154,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void CommitAddedFieldsForFile(
             string projectRelativePath,
             string[] addedFieldNames,
-            string[] addedFieldInitializers)
+            string[] addedFieldInitializers,
+            TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations)
         {
             _domain.FindGeneration(projectRelativePath)?.ReplaceAddedFields(
                 addedFieldNames ?? Array.Empty<string>(),
-                addedFieldInitializers);
+                addedFieldInitializers,
+                HotReloadAddedFieldDeclarationConversion.FromWorkerRows(addedFieldDeclarations));
         }
 
         // The fields a previous reload already added and this run declares with a different

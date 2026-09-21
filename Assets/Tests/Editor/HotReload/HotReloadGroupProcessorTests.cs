@@ -484,17 +484,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadGroupFile file = CreateFile(BrokenSourcePath, projectRoot, compilationAssembly);
             file.AddedFieldNames = new[] { "Sample.Host.firstPassField" };
             file.AddedConstNames = new[] { "Sample.Host.FirstPassConst" };
+            file.AddedFieldDeclarations = new[]
+            {
+                CreateDeclarationDto("Sample.Host", "firstPassField", typeof(int), isStatic: false)
+            };
             TransformWorkerFileOutputDto retryFile = new TransformWorkerFileOutputDto
             {
                 projectRelativePath = BrokenSourcePath,
                 addedFieldNames = new[] { "Sample.Host.retryField" },
-                addedConstNames = new[] { "Sample.Host.RetryConst" }
+                addedConstNames = new[] { "Sample.Host.RetryConst" },
+                addedFieldDeclarations = new[]
+                {
+                    CreateDeclarationDto("Sample.Host", "retryField", typeof(string), isStatic: true)
+                }
             };
 
             HotReloadShimFirstCompile.AdoptRetryAddedMemberNames(new[] { file }, new[] { retryFile });
 
             Assert.That(file.AddedFieldNames, Is.EqualTo(new[] { "Sample.Host.retryField" }));
             Assert.That(file.AddedConstNames, Is.EqualTo(new[] { "Sample.Host.RetryConst" }));
+            Assert.That(file.AddedFieldDeclarations.Length, Is.EqualTo(1));
+            Assert.That(file.AddedFieldDeclarations[0].fieldName, Is.EqualTo("retryField"));
+            Assert.That(file.AddedFieldDeclarations[0].isStatic, Is.True);
         }
 
         /// <summary>
@@ -541,6 +552,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
             Assert.That(file.ClearedAddedFieldNames, Is.EqualTo(new[] { "Sample.Host.retryField" }));
+        }
+
+        /// <summary>
+        /// What: the declarations a retry re-classified reach the ledger through the apply, with
+        /// the store key the worker formed, and a nested declaring type is found by the reflection
+        /// spelling the Editor looks it up with.
+        /// </summary>
+        [Test]
+        public async Task ResolveEntriesToPatchAsync_WhenARetryReplacedTheNames_CommitsTheRetryDeclarations()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
+            HotReloadApplyContext context = CreateEmptyEntriesContext(evidence);
+            HotReloadGroupFile file = context.Files[0];
+            file.FileOutput.addedFieldNames = new[] { "Sample.Outer+Inner.workerField" };
+            file.FileOutput.addedFieldDeclarations = new[]
+            {
+                CreateDeclarationDto("Sample.Outer/Inner", "workerField", typeof(int), isStatic: false)
+            };
+            file.AddedFieldNames = new[] { "Sample.Outer+Inner.retryField" };
+            file.AddedFieldDeclarations = new[]
+            {
+                CreateDeclarationDto("Sample.Outer/Inner", "retryField", typeof(string), isStatic: true)
+            };
+
+            HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                HotReloadCompositionRoot.Services.GroupStageCollaborators,
+                context,
+                CreateEmptyGateResult(),
+                CancellationToken.None);
+
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetAddedFieldDeclaration(
+                    "Sample.Outer+Inner",
+                    "retryField",
+                    out HotReloadAddedFieldDeclaration committed),
+                Is.True,
+                "The apply must commit the retry's declarations.");
+            Assert.That(committed.StoreFieldKey, Is.EqualTo("Sample.Outer/Inner::retryField"));
+            Assert.That(
+                committed.DeclaredTypeAssemblyQualifiedName,
+                Is.EqualTo(typeof(string).AssemblyQualifiedName));
+            Assert.That(committed.IsStatic, Is.True);
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetAddedFieldDeclaration(
+                    "Sample.Outer+Inner",
+                    "workerField",
+                    out HotReloadAddedFieldDeclaration _),
+                Is.False,
+                "A first-pass declaration the retry replaced must not survive.");
         }
 
         /// <summary>
@@ -1072,6 +1133,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("Compilation assembly was not found.");
             return null;
+        }
+
+        // The worker spells the declaring type of a row the metadata way, so the fixture takes
+        // that spelling and builds the store key from it exactly as the worker does.
+        private static TransformWorkerAddedFieldDeclarationDto CreateDeclarationDto(
+            string declaringTypeMetadataName,
+            string fieldName,
+            Type declaredType,
+            bool isStatic)
+        {
+            return new TransformWorkerAddedFieldDeclarationDto
+            {
+                fieldKey = declaringTypeMetadataName + "::" + fieldName,
+                declaringTypeMetadataName = declaringTypeMetadataName,
+                fieldName = fieldName,
+                declaredTypeAssemblyQualifiedName = declaredType.AssemblyQualifiedName,
+                isStatic = isStatic
+            };
         }
 
         private static HotReloadGroupFile CreateFile(

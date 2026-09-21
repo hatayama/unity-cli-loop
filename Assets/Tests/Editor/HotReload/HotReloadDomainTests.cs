@@ -187,6 +187,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added field's declaration answers whichever file declared it, and a field no
+        /// file declares answers nothing.
+        /// </summary>
+        [Test]
+        public void TryGetAddedFieldDeclaration_FindsTheDeclaringFilesRow()
+        {
+            HotReloadAddedFieldDeclaration wired = new HotReloadAddedFieldDeclaration(
+                HostType + "::wired",
+                HostType,
+                "wired",
+                typeof(string).AssemblyQualifiedName,
+                isStatic: false);
+            _access.ReplaceAddedFields(FileOne, new[] { HostType + ".alpha" });
+            _access.ReplaceAddedFields(FileTwo, new[] { HostType + ".wired" }, new[] { wired });
+
+            Assert.That(
+                _access.Domain.TryGetAddedFieldDeclaration(
+                    HostType,
+                    "wired",
+                    out HotReloadAddedFieldDeclaration found),
+                Is.True);
+            Assert.That(found.StoreFieldKey, Is.EqualTo(HostType + "::wired"));
+            Assert.That(
+                _access.Domain.TryGetAddedFieldDeclaration(
+                    HostType,
+                    "alpha",
+                    out HotReloadAddedFieldDeclaration _),
+                Is.False);
+        }
+
+        /// <summary>
         /// What: replacing one file's added fields with an empty list drops that file's rows and
         /// leaves the other file's fields answering.
         /// </summary>

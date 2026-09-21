@@ -142,6 +142,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // did not report them, and the run compares nothing.
         public string[] addedFieldInitializers;
 
+        // One entry per addedFieldNames entry, in the same order: everything an added field has to
+        // be named and type-checked by outside a shim. A shorter row means the worker did not
+        // report them, and no added field of this file can be validated.
+        public TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations;
+
         // Source-level names of added consts folded into edited bodies as literals.
         // Null/omitted deserializes as empty after client coalesce.
         public string[] addedConstNames;
@@ -154,6 +159,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly for them. Reported so a reload can name the types it bound from an active
         // artifact; introducing them again is what the transform refuses.
         public TransformWorkerIntroducedTypeReuseDto[] introducedTypeReuses;
+    }
+
+    /// <summary>
+    /// One added field, described well enough to validate a value written into the store from
+    /// outside a shim.
+    /// </summary>
+    [Serializable]
+    internal sealed class TransformWorkerAddedFieldDeclarationDto
+    {
+        // The key the shims pass to the added-field store; nested types use '/'.
+        public string fieldKey;
+
+        // The declaring type as the key spells it; nested types use '/'.
+        public string declaringTypeMetadataName;
+
+        public string fieldName;
+
+        // Assembly-qualified name of the field's declared type. Empty when the worker could not
+        // name the type, which is what stops a caller from wiring it.
+        public string declaredTypeAssemblyQualifiedName;
+
+        public bool isStatic;
     }
 
     /// <summary>
