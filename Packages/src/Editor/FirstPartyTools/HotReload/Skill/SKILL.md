@@ -23,7 +23,7 @@ uloop hot-reload --files Assets/Scripts/Enemy.cs --compile-on-skip off
 uloop hot-reload --revert-all
 ```
 
-Multiple files are passed as one comma-separated value (or a JSON array); array options
+Multiple files are one comma-separated value (or a JSON array); array options
 consume exactly one value token.
 
 A script under a brand-new `.asmdef` cannot be hot-reloaded before its first import: Unity
@@ -43,10 +43,10 @@ automatically — pass it with `--files`.
 ## Status
 
 `uloop hot-reload --status` lists the currently active changes; it cannot be combined with
-`--files` or `--revert-all`. Every kind of change is static Editor state, so after a domain
-reload it authoritatively reports zero. Each `Active` row's `InvocationCount` counts calls
-into the patched body since the patch was applied — a reachability signal only while the code
-is being driven.
+`--files` or `--revert-all`. Every change is static Editor state, so after a domain reload
+it reports zero. Each `Active` row's `InvocationCount` counts calls
+into the patched body since it was applied — a reachability signal only while the code is
+being driven.
 
 ## How It Works
 
@@ -83,14 +83,14 @@ changed are patched (`UnchangedTotal` counts the rest).
 
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase:
 keep edits inside the edited files, collect structural changes, and compile once —
-every compile drops all patches and pause points and resets the PlayMode session (the compile response's Warning states how many were live).
+every compile drops all patches and pause points and resets the PlayMode session (the compile response's Warning says how many).
 While hot-reload changes are active, `AutoRefreshHeld` is true so returning focus does not
 recompile; `uloop compile` releases the hold, and `--revert-all` only when no introduced type
 remains.
-One-shot methods (`Awake`, `Start`, initialization helpers) patch successfully but show
-no effect on the call that already ran; the response marks them with `LifecycleNote`.
-For values you expect to tune while playing, expose a static property getter instead of
-a `const`; its body is patched on a compiled type and on an introduced type alike.
+One-shot methods (`Awake`, `Start`, init helpers) patch but show no effect on the call that
+already ran; the response marks them with `LifecycleNote`.
+To tune a value while playing, expose a static property getter instead of a `const`; its
+body is patched on compiled and introduced types alike.
 
 ## Reference Guides
 
@@ -101,4 +101,5 @@ All files live in `references/` beside this skill; read the one whose trigger ma
 - `references/troubleshooting.md` — `Patched` but no behavior change, JIT inlining, reading `--status` and `InvocationCount`.
 - `references/pause-point-interaction.md` — how patches re-target or suppress armed pause points; one-way reachability checks.
 - `references/introduced-types.md` — new types a reload can introduce: supported shapes, refusal wording, identity and lifetime, why a new file is never selected automatically.
+- `references/added-field-wiring.md` — putting a value into an added field without a compile.
 - `references/output.md` — every response field: `ErrorCode`, `NextActions`, `Methods` rows, `Warnings`, totals.
