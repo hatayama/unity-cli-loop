@@ -125,9 +125,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(error.Message, Is.EqualTo(CompiledFieldMessage()));
         }
 
+        /// <summary>
+        /// What: a compiled static field named through its type is refused with the same message,
+        /// which offers SerializedObject only for a field Unity serializes, and its value stays.
+        /// </summary>
+        [Test]
+        public void SetStaticField_NameOfACompiledStaticField_SaysItIsAnOrdinaryField()
+        {
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetStaticField(typeof(DerivedWiringHost), nameof(WiringHost.CompiledStatic), 7));
+
+            Assert.That(error.Message, Is.EqualTo(CompiledFieldMessage(nameof(WiringHost.CompiledStatic))));
+            Assert.That(WiringHost.CompiledStatic, Is.EqualTo(1), "The refusal must not write the compiled field.");
+        }
+
         private static string CompiledFieldMessage()
         {
-            return "'CompiledValue' is a compiled field of " + typeof(WiringHost).FullName
+            return CompiledFieldMessage(nameof(WiringHost.CompiledValue));
+        }
+
+        private static string CompiledFieldMessage(string fieldName)
+        {
+            return "'" + fieldName + "' is a compiled field of " + typeof(WiringHost).FullName
                 + ", not one hot reload added, so this entry point does not serve it. If hot reload "
                 + "added it earlier, a compile has since made it an ordinary field. Read or set it "
                 + "like any other field (directly, by reflection, or through SerializedObject when "
@@ -545,6 +564,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private class WiringHost
         {
             internal int CompiledValue = 1;
+
+            internal static int CompiledStatic = 1;
 
             internal class NestedHost
             {
