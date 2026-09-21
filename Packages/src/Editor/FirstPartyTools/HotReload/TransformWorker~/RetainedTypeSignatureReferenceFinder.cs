@@ -38,26 +38,65 @@ internal static class RetainedTypeSignatureReferenceFinder
             input.TargetAssemblyName,
             input.TargetAssemblyMvid,
             artifactMap);
-        Dictionary<string, HashSet<string>> signatureIdentitiesByReferrer =
-            CollectSignatureIdentitiesOfBoundTypes(compilation, input, artifactMap, walker, keptIdentities);
+        HashSet<string> preparedReferrers = new HashSet<string>(StringComparer.Ordinal);
+        Dictionary<string, HashSet<string>> signatureIdentitiesByReferrer = CollectSignatureIdentitiesOfBoundTypes(
+            compilation, input, artifactMap, walker, keptIdentities, preparedReferrers);
         foreach (RetainedDeclarationVerdict verdict in kept)
         {
             List<string> referrers = FindReferrers(BuildIdentity(verdict.Record), signatureIdentitiesByReferrer);
+            List<string> retainedReferrers = referrers.FindAll(referrer => !preparedReferrers.Contains(referrer));
+            if (retainedReferrers.Count > 0)
+            {
+                return FormatRetainedReferrerRefusal(verdict.MetadataName, retainedReferrers);
+            }
+
             if (referrers.Count > 0)
             {
-                string referrerList = "'" + string.Join("', '", referrers) + "'";
-                return "Introduced type '" + verdict.MetadataName + "' appears in member signatures of "
-                    + referrerList
-                    + ", which an earlier reload retained and this edit leaves unchanged; changing '"
-                    + verdict.MetadataName
-                    + "' would split it between the retained assembly and this edit. To keep hot reloading, also edit "
-                    + referrerList
-                    + " in this same reload (a method body change is enough); passing its file unchanged does not help. "
-                    + "Otherwise run 'uloop compile' to apply this edit.";
+                return FormatPreparedReferrerRefusal(verdict.MetadataName, referrers);
             }
         }
 
         return null;
+    }
+
+    private static string FormatRetainedReferrerRefusal(string metadataName, List<string> referrers)
+    {
+        string referrerList = FormatNameList(referrers);
+        return "Introduced type '" + metadataName + "' appears in member signatures of "
+            + referrerList
+            + ", which an earlier reload retained and this edit leaves unchanged; changing '"
+            + metadataName
+            + "' would split it between the retained assembly and this edit. To keep hot reloading, also edit "
+            + referrerList
+            + " in this same reload (a method body change is enough); passing its file unchanged does not help. "
+            + "Otherwise run 'uloop compile' to apply this edit.";
+    }
+
+    // A type this run introduces was compiled against the loaded definition before the edit could
+    // reach it, so editing it in this same reload cannot help. Once a reload has introduced it,
+    // it is a retained type that a body edit keeps in the source next to the changed one.
+    private static string FormatPreparedReferrerRefusal(string metadataName, List<string> referrers)
+    {
+        string referrerList = FormatNameList(referrers);
+        return "Introduced type '" + metadataName + "' appears in member signatures of "
+            + referrerList
+            + ", introduced by this reload from a new file and compiled against the '"
+            + metadataName
+            + "' an earlier reload loaded; changing '"
+            + metadataName
+            + "' in the same reload would split it between that assembly and this edit. To keep hot reloading, "
+            + "reload in two steps: first without the change to '"
+            + metadataName
+            + "', which introduces "
+            + referrerList
+            + ", then make the change together with an edit of "
+            + referrerList
+            + " (a method body change is enough). Otherwise run 'uloop compile' to apply this edit.";
+    }
+
+    private static string FormatNameList(List<string> names)
+    {
+        return "'" + string.Join("', '", names) + "'";
     }
 
     // Only a declaration the run keeps in the source is at risk: an unchanged one leaves the
@@ -83,13 +122,16 @@ internal static class RetainedTypeSignatureReferenceFinder
 
     // Every retained type the run does not keep, whichever artifact holds it: two types of one
     // artifact split the same way once only one of them is bound from source. Keyed by metadata
-    // name so the refusal can name the referrer the way the records do.
+    // name so the refusal can name the referrer the way the records do. The types of the artifact
+    // this run prepared split the same way, but are reported apart because no earlier reload
+    // retained them.
     private static Dictionary<string, HashSet<string>> CollectSignatureIdentitiesOfBoundTypes(
         CSharpCompilation compilation,
         WorkerInput input,
         IntroducedTypeArtifactMap artifactMap,
         IntroducedTypeDependencyWalker walker,
-        HashSet<string> keptIdentities)
+        HashSet<string> keptIdentities,
+        HashSet<string> preparedReferrers)
     {
         Dictionary<string, HashSet<string>> identitiesByReferrer =
             new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
@@ -107,9 +149,15 @@ internal static class RetainedTypeSignatureReferenceFinder
                     record.OriginalAssemblyName,
                     record.OriginalAssemblyMvid,
                     record.MetadataName);
-                if (boundType != null)
+                if (boundType == null)
                 {
-                    identitiesByReferrer[record.MetadataName] = CollectSignatureIdentities(boundType, walker);
+                    continue;
+                }
+
+                identitiesByReferrer[record.MetadataName] = CollectSignatureIdentities(boundType, walker);
+                if (artifact.PreparedByThisRun)
+                {
+                    preparedReferrers.Add(record.MetadataName);
                 }
             }
         }

@@ -25,6 +25,8 @@ internal sealed class WorkerIntroducedTypeArtifact
     public string ReferencePath { get; set; }
 
     public WorkerIntroducedTypeArtifactType[] Types { get; set; }
+
+    public bool PreparedByThisRun { get; set; }
 }
 
 // One retained type inside an artifact assembly, with the original identity it normalizes back to.

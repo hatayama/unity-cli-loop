@@ -62,6 +62,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Types this artifact holds, with the original identity each one must normalize back to.
         public TransformWorkerIntroducedTypeArtifactTypeDto[] types;
+
+        // True for the artifact this run prepared from its new files. Its types are introduced by
+        // this reload, so a refusal must not describe them as retained by an earlier one.
+        public bool preparedByThisRun;
     }
 
     /// <summary>

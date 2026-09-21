@@ -136,7 +136,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadIntroducedTypeRegistry registry = _domain.IntroducedTypes;
             List<TransformWorkerIntroducedTypeArtifactDto> records =
                 new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
-            records.Add(HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact));
+            TransformWorkerIntroducedTypeArtifactDto preparedRecord =
+                HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact);
+            preparedRecord.preparedByThisRun = true;
+            records.Add(preparedRecord);
             workerInput.introducedTypeArtifacts = records.ToArray();
 
             // The scope answers binds for the prepared assembly while nothing has activated it, so
