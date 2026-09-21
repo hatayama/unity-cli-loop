@@ -231,6 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 () => HotReloadAddedFieldWiring.SetInstanceField(host, FieldName, 1));
 
             Assert.That(error.Message, Does.Contain(FieldName));
+            Assert.That(error.Message, Does.Contain("hot reload could not name the declared type of"));
         }
 
         /// <summary>
