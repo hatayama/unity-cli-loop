@@ -81,6 +81,11 @@ internal static class ShimMethodEmitter
                 addedMethodCatalog,
                 addedFieldCatalog,
                 addedPropertyCatalog);
+            if (queued.IsAddedMethod)
+            {
+                rewrittenMethod = ShimMethodFactory.GuardAddedMemberReceiver(rewrittenMethod, queued.MethodSymbol);
+            }
+
             queued.ShimType.AddMethod(rewrittenMethod, queued.ShimMethodName);
 
             SyntaxNode bodyNode =

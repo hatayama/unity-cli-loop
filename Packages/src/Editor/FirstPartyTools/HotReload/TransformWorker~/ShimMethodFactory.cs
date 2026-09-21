@@ -50,6 +50,63 @@ internal static class ShimMethodFactory
             : shim.WithSemicolonToken(default);
     }
 
+    /// <summary>
+    /// Makes the shim of an instance member hot reload added throw NullReferenceException on a
+    /// null receiver before its body runs, the way a call to a compiled member does.
+    /// </summary>
+    /// <remarks>
+    /// Why in the shim and not at the call site: compiled code evaluates the arguments before the
+    /// null receiver throws, and a check at the call site would throw before them. Why the object
+    /// cast: a UnityEngine.Object receiver would otherwise use Unity's == and also refuse a
+    /// destroyed object, which a compiled call still reaches. An async or iterator shim throws
+    /// when its body starts rather than at the call, which is still closer than running it.
+    /// </remarks>
+    public static MethodDeclarationSyntax GuardAddedMemberReceiver(
+        MethodDeclarationSyntax shim,
+        IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol.IsStatic || methodSymbol.ContainingType.IsValueType)
+        {
+            return shim;
+        }
+
+        StatementSyntax guard = SyntaxFactory.ParseStatement(
+            "if ((object)" + TransformWorkerProgramMarker.InstanceParameterName
+            + " == null) throw new global::System.NullReferenceException();");
+        if (shim.Body != null)
+        {
+            return shim.WithBody(shim.Body.WithStatements(shim.Body.Statements.Insert(0, guard)));
+        }
+
+        ArrowExpressionClauseSyntax arrow = shim.ExpressionBody;
+        StatementSyntax bodyStatement = ReturnsValue(methodSymbol)
+            ? SyntaxFactory.ReturnStatement(arrow.Expression)
+            : SyntaxFactory.ExpressionStatement(arrow.Expression);
+        // Why the arrow's annotations move to the statement: the #line mapping is injected from
+        // them, and the arrow node itself does not survive the change to a block.
+        bodyStatement = (StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(arrow, bodyStatement);
+        return shim
+            .WithExpressionBody(null)
+            .WithSemicolonToken(default)
+            .WithBody(SyntaxFactory.Block(guard, bodyStatement));
+    }
+
+    // An async method returning a non-generic awaitable returns nothing from its body either.
+    private static bool ReturnsValue(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol.ReturnsVoid)
+        {
+            return false;
+        }
+
+        if (!methodSymbol.IsAsync)
+        {
+            return true;
+        }
+
+        return methodSymbol.ReturnType is INamedTypeSymbol namedReturnType && namedReturnType.IsGenericType;
+    }
+
     // Why strip directives: #if sits on the method's leading trivia while its matching #endif
     // belongs to the next token, so copied directives are unbalanced in the shim; #line mapping
     // is injected later from annotations and needs no user directives. Disabled text from an

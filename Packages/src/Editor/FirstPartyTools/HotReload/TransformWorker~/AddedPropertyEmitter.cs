@@ -241,7 +241,10 @@ internal static class AddedPropertyEmitter
                 accessor.ShimMethodName)
             .WithParameterList(isGetter ? SyntaxFactory.ParameterList() : CreateSetterParameterList(binding));
         method = ApplyBody(method, rewrittenBody);
-        return ShimMethodFactory.ToShimMethod(method, isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod);
+        IMethodSymbol accessorSymbol = isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod;
+        return ShimMethodFactory.GuardAddedMemberReceiver(
+            ShimMethodFactory.ToShimMethod(method, accessorSymbol),
+            accessorSymbol);
     }
 
     private static ParameterListSyntax CreateSetterParameterList(AddedPropertyBinding binding)
