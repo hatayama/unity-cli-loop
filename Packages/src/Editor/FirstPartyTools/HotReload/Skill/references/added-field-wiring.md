@@ -42,9 +42,9 @@ Every check runs before anything is stored, so a refused call leaves an earlier 
 |-----------|--------------|
 | Field name no active reload added | Throws, listing the added fields that type does have |
 | Type has no added fields at all | Throws, saying so and that a reload has to run first |
-| Name of a compiled field (a compile included the edit) | Throws, saying to set it through SerializedObject or the Inspector and delete the wiring script |
+| Name of a compiled field of the type or a base type | Throws, saying it is an ordinary field to read or set like any other |
 | Value the field's declared type would not accept | Throws, naming the declared type and the type passed |
-| A widening numeric (`int` into a `long` field) | Throws: the reader compares with `is`, so cast first |
+| A widening numeric (`int` into a `long` field) | Throws: the reader compares with `is`, so cast first (said only when both types are numeric) |
 | A `GameObject` into a `Component`-typed field | Throws, suggesting `gameObject.GetComponent<T>()` |
 | A `Component` into a `GameObject` field | Throws, suggesting `component.gameObject` |
 | `null` into a non-nullable value-type field | Throws |

@@ -94,26 +94,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a name that is a real compiled field of the type's base chain is refused with the
-        /// hint that a compile made it an ordinary field, not with the "no added fields" hint that
-        /// would send the caller to re-run a hot reload.
+        /// What: a name that is a real compiled field of the type's base chain is refused, on the
+        /// write path, by saying it is an ordinary field rather than with the "no added fields"
+        /// hint that would send the caller to re-run a hot reload.
         /// </summary>
         [Test]
-        public void SetInstanceField_NameOfACompiledField_SaysToSetItAsAnOrdinaryField()
+        public void SetInstanceField_NameOfACompiledField_SaysItIsAnOrdinaryField()
         {
             DerivedWiringHost host = new DerivedWiringHost();
 
             InvalidOperationException error = Assert.Throws<InvalidOperationException>(
                 () => HotReloadAddedFieldWiring.SetInstanceField(host, nameof(WiringHost.CompiledValue), 7));
 
-            Assert.That(
-                error.Message,
-                Is.EqualTo(
-                    "'CompiledValue' is a compiled field of " + typeof(WiringHost).FullName
-                    + " now, not one hot reload added: a compile included the edit that declared it. "
-                    + "Set it through SerializedObject or the Inspector like any other field, and "
-                    + "delete the wiring script."));
+            Assert.That(error.Message, Is.EqualTo(CompiledFieldMessage()));
             Assert.That(host.CompiledValue, Is.EqualTo(1), "The refusal must not write the compiled field.");
+        }
+
+        /// <summary>
+        /// What: the read path refuses a compiled field's name with the same message, which names
+        /// no write-only step.
+        /// </summary>
+        [Test]
+        public void TryReadInstanceField_NameOfACompiledField_SaysItIsAnOrdinaryField()
+        {
+            DerivedWiringHost host = new DerivedWiringHost();
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.TryReadInstanceField(host, nameof(WiringHost.CompiledValue), out object _));
+
+            Assert.That(error.Message, Is.EqualTo(CompiledFieldMessage()));
+        }
+
+        private static string CompiledFieldMessage()
+        {
+            return "'CompiledValue' is a compiled field of " + typeof(WiringHost).FullName
+                + ", not one hot reload added, so this entry point does not serve it. If hot reload "
+                + "added it earlier, a compile has since made it an ordinary field. Read or set it "
+                + "like any other field (directly, by reflection, or through SerializedObject when "
+                + "Unity serializes it); the added-field calls for it are no longer needed.";
         }
 
         /// <summary>
@@ -137,6 +155,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadAddedFieldStore.GetOrInit(host, FakeAddedFieldPort.KeyOf(typeof(WiringHost), FieldName), () => 0L),
                 Is.EqualTo(5L),
                 "A refused write must leave the slot as it was.");
+        }
+
+        /// <summary>
+        /// What: a non-numeric value for a numeric field names both types without the cast advice,
+        /// since no cast turns that value into a number.
+        /// </summary>
+        [Test]
+        public void SetInstanceField_TextForANumericField_OmitsTheCastAdvice()
+        {
+            _port.AddInstanceField(typeof(WiringHost), FieldName, typeof(int));
+            WiringHost host = new WiringHost();
+
+            ArgumentException error = Assert.Throws<ArgumentException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, FieldName, "7"));
+
+            Assert.That(
+                error.Message,
+                Is.EqualTo(
+                    "'" + typeof(WiringHost).FullName + "." + FieldName + "' is declared System.Int32, "
+                    + "and a System.String is not one."));
+        }
+
+        /// <summary>
+        /// What: the GetComponent suggestion spells a nested generic component type the way C#
+        /// source writes it, so it can be pasted.
+        /// </summary>
+        [Test]
+        public void SetInstanceField_GameObjectForANestedGenericComponentField_SpellsTheTypeAsSource()
+        {
+            _port.AddInstanceField(typeof(WiringHost), FieldName, typeof(GenericWiringComponent<WiringHost>));
+            WiringHost host = new WiringHost();
+            GameObject value = new GameObject("AddedFieldWiringValue");
+            try
+            {
+                ArgumentException error = Assert.Throws<ArgumentException>(
+                    () => HotReloadAddedFieldWiring.SetInstanceField(host, FieldName, value));
+
+                Assert.That(
+                    error.Message,
+                    Does.Contain(
+                        "GetComponent<HotReloadAddedFieldWiringTests.GenericWiringComponent<"
+                        + "HotReloadAddedFieldWiringTests.WiringHost>>()"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(value);
+            }
         }
 
         /// <summary>
@@ -487,6 +552,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private sealed class DerivedWiringHost : WiringHost
+        {
+        }
+
+        private sealed class GenericWiringComponent<T> : MonoBehaviour
         {
         }
     }

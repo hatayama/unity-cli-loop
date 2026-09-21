@@ -162,16 +162,19 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
         private static string FormatUnknownFieldMessage(IHotReloadAddedFieldPort port, Type type, string fieldName)
         {
-            // Why the compiled field is checked first: after a compile that included the edit, the
-            // name is an ordinary field and re-running a hot reload would never make it an added
-            // one again, so the "run a hot reload first" advice below would loop the caller.
+            // Why the compiled field is checked first: a compiled field is never an added one, so
+            // the "run a hot reload first" advice below would loop the caller. Why the message
+            // only states facts: this runs for reads and writes alike, and the field may have been
+            // compiled all along, so neither a write-only step nor a past compile is assumed.
             FieldInfo compiledField = FindCompiledField(type, fieldName);
             if (compiledField != null)
             {
                 return "'" + fieldName + "' is a compiled field of " + compiledField.DeclaringType.FullName
-                    + " now, not one hot reload added: a compile included the edit that declared it. "
-                    + "Set it through SerializedObject or the Inspector like any other field, and "
-                    + "delete the wiring script.";
+                    + ", not one hot reload added, so this entry point does not serve it. If hot "
+                    + "reload added it earlier, a compile has since made it an ordinary field. Read "
+                    + "or set it like any other field (directly, by reflection, or through "
+                    + "SerializedObject when Unity serializes it); the added-field calls for it are "
+                    + "no longer needed.";
             }
 
             List<string> names = CollectAddedFieldNames(port, type);
@@ -260,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // both types is all it says rather than advice that does not apply.
         private static string DescribeMismatchRemedy(Type declaredType, object value)
         {
-            if (IsNumeric(declaredType))
+            if (IsNumeric(declaredType) && IsNumeric(value.GetType()))
             {
                 return " The field is read back with 'is', so even a widening numeric value is "
                     + "refused: cast the value to the declared type before wiring it.";
@@ -268,7 +271,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             if (typeof(UnityEngine.Component).IsAssignableFrom(declaredType) && value is UnityEngine.GameObject)
             {
-                return " Pass the component instead: gameObject.GetComponent<" + declaredType.Name + ">().";
+                return " Pass the component instead: gameObject.GetComponent<"
+                    + SourceNameOf(declaredType, declaredType.GetGenericArguments()) + ">().";
             }
 
             if (declaredType == typeof(UnityEngine.GameObject) && value is UnityEngine.Component)
@@ -279,9 +283,34 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             return string.Empty;
         }
 
-        private static bool IsNumeric(Type declaredType)
+        // The type as C# source writes it without its namespace: nesting joined with '.', and
+        // generic arguments in angle brackets instead of the `N arity suffix. A nested type's
+        // arguments start with those of its declaring types, which is why the whole list is passed
+        // down and each level takes only its own slice.
+        private static string SourceNameOf(Type type, Type[] arguments)
         {
-            Type type = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+            string prefix = type.IsNested ? SourceNameOf(type.DeclaringType, arguments) + "." : string.Empty;
+            int arityMark = type.Name.IndexOf('`');
+            if (arityMark < 0)
+            {
+                return prefix + type.Name;
+            }
+
+            int inherited = type.IsNested ? type.DeclaringType.GetGenericArguments().Length : 0;
+            int own = type.GetGenericArguments().Length - inherited;
+            string[] names = new string[own];
+            for (int index = 0; index < own; index++)
+            {
+                Type argument = arguments[inherited + index];
+                names[index] = SourceNameOf(argument, argument.GetGenericArguments());
+            }
+
+            return prefix + type.Name.Substring(0, arityMark) + "<" + string.Join(", ", names) + ">";
+        }
+
+        private static bool IsNumeric(Type candidate)
+        {
+            Type type = Nullable.GetUnderlyingType(candidate) ?? candidate;
             if (type.IsEnum)
             {
                 return false;
