@@ -23,5 +23,6 @@ internal static class AddedFieldSkipReasons
 {
     public const string SerializeWarningFormat =
         "Added field '{0}' has a serialization attribute, so it will not appear in the Inspector "
-        + "or serialize until 'uloop compile'.";
+        + "or serialize until 'uloop compile'. To put a value in it now, see the added-field "
+        + "wiring recipe in the hot-reload skill references.";
 }

@@ -8,7 +8,7 @@ description: "Execute C# with Unity APIs when existing uloop tools cannot inspec
 
 Run focused C# snippets in the active Unity Editor with `uloop execute-dynamic-code`.
 
-For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
+For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode selected` first. Use this tool when the built-in inspection tools are not enough or when you need to modify Unity state.
 
 This tool can inspect reachable Unity state — GameObjects, components, public properties, static values, method results — but it cannot read local variables or intermediate calculations inside an already-running method. When those values matter, follow the `uloop-pause-point` skill: a pause point's `CapturedVariables` carries the locals, parameters, and instance fields at that line with no code edit or recompile, and while Unity stays paused `UloopPausePoint.TryGetCapturedValue(name)` gives this tool live captured references (it returns `(bool Found, object Value)`; see its `references/captured-variables.md`). That skill also covers the reverse combination — registering an `EditorApplication.update` watcher from this tool that freezes Unity on the first frame a runtime condition holds. Never poll or sleep inside a snippet; the body runs synchronously on the main thread.
 
@@ -37,9 +37,9 @@ float x = Mathf.PI;
 return x;
 ```
 
-Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
+Prefer terminal commands for file operations; keep snippets focused on Unity Editor state existing uloop tools cannot inspect or change.
 
-A type an active hot reload introduced is nameable here; write its full name. Members hot reload *added* to a type are not.
+A type an active hot reload introduced is nameable here; write its full name. Members hot reload *added* to a type are not; see the hot-reload skill's `added-field-wiring.md`.
 
 This snippet runs in the Editor execution context: `Screen.width` and `Screen.height` are Editor pixels, not the Game View resolution. For a ray through the Game View center, use `cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))`.
 
@@ -85,6 +85,6 @@ To retain an intermediate value across a later exception, opt in before the risk
 UloopDynamicCodePartialResults.Set("completedSteps", completedSteps);
 ```
 
-`PartialResults` contains only values explicitly saved this way. Ordinary local variables cannot be recovered after an exception unwinds the snippet. A cancellation that occurs before the snippet produces an execution result also returns no `PartialResults`.
+`PartialResults` contains only values explicitly saved this way. Ordinary local variables cannot be recovered after an exception unwinds the snippet. A cancellation before the snippet produces an execution result also returns no `PartialResults`.
 
-On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
+On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported — the snippet runs in whichever mode the Editor is in.

@@ -82,7 +82,11 @@ resolved type has any — their values live in the hot-reload shim and are not v
 to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
 names fail with CS1061). Read them from a patched method body instead. When such a
 failure quotes the name of an active added member, the diagnostic's `Hint` says so
-rather than leaving the error reading as a typo.
+rather than leaving the error reading as a typo. Naming the field is what fails, not
+reaching it: an `execute-dynamic-code` snippet can still read and write an added field
+by name through the wiring entry point, which is how a value or scene reference gets
+into an added `[SerializeField]` without a compile — see
+[added-field-wiring.md](added-field-wiring.md).
 
 A type introduced in the same reload cannot use added members of a compiled type: its
 artifact is compiled against the compiled assemblies, so such a reference fails with

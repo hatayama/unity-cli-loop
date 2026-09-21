@@ -1581,13 +1581,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 if (warning != null
                     && warning.Contains("AddedSerialized")
-                    && warning.Contains("Inspector"))
+                    && warning.Contains("Inspector")
+                    // The warning has to say what to do instead, or the reader is left with a
+                    // limitation and no way past it before a compile.
+                    && warning.Contains("wiring recipe"))
                 {
                     foundWarning = true;
                 }
             }
 
-            Assert.That(foundWarning, Is.True, "SerializeField added fields must warn about Inspector visibility.");
+            Assert.That(
+                foundWarning,
+                Is.True,
+                "SerializeField added fields must warn about Inspector visibility and point at the wiring recipe.");
         }
 
         /// <summary>
