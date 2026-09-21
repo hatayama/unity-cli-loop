@@ -3827,6 +3827,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the validated wiring entry point writes a value into a really applied added
+        /// field, the patched reader returns it, and a field name no reload added is refused.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedField_ValidatedWiringReachesThePatchedReader()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult applied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldWiringE2E.cs", WithAddedFieldAccesses(onDisk)),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(applied);
+            AssertHasPatched(applied, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            Assert.That(
+                HotReloadAddedFieldWiring.TryReadInstanceField(host, "AddedCount", out object beforeWiring),
+                Is.False,
+                "Nothing has stored a value for this instance yet.");
+            Assert.That(beforeWiring, Is.Null);
+
+            HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 33);
+
+            Assert.That(host.ReadAdded(), Is.EqualTo(33), "The patched reader must see the wired value.");
+            Assert.That(
+                HotReloadAddedFieldWiring.TryReadInstanceField(host, "AddedCount", out object afterWiring),
+                Is.True);
+            Assert.That(afterWiring, Is.EqualTo(33));
+
+            // A misspelling reaches the real ledger, so the refusal names the field that is there.
+            InvalidOperationException unknownField = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCoun", 1));
+            Assert.That(unknownField.Message, Does.Contain("AddedCount"));
+
+            // The declared type comes from the worker, so a value the reader would reject is
+            // refused here and the wired value stays.
+            Assert.Throws<ArgumentException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 33L));
+            Assert.That(host.ReadAdded(), Is.EqualTo(33));
+
+            // Reverting drops the generation that declared the field, so the wiring has nothing
+            // left to write into and says so rather than storing a value nothing reads.
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            InvalidOperationException afterRevert = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 1));
+            Assert.That(afterRevert.Message, Does.Contain("no active added fields"));
+        }
+
+        /// <summary>
         /// What: an initializer added to a field an earlier reload already added is named in
         /// Warnings, leaves the value an existing instance holds alone, and still runs for an
         /// instance that has not read the field yet.

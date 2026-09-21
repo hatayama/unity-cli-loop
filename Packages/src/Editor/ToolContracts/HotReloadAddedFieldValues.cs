@@ -57,6 +57,25 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         }
 
         /// <summary>
+        /// Reports whether an instance field holds a stored value, and what it is, without
+        /// creating the slot. A field nothing has written yet stays unwritten, so the reading shim
+        /// still runs its initializer.
+        /// </summary>
+        public bool TryGet(object instance, string fieldKey, out object value)
+        {
+            Debug.Assert(instance != null, "instance must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
+
+            value = null;
+            if (!_instanceTables.TryGetValue(instance, out Dictionary<string, object> fields))
+            {
+                return false;
+            }
+
+            return fields.TryGetValue(fieldKey, out value);
+        }
+
+        /// <summary>
         /// Returns the stored static field, running <paramref name="initializer"/> (or
         /// default(T) when it is null) on first access or after a stored type mismatch.
         /// </summary>
@@ -82,6 +101,16 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         {
             Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
             _staticValues[fieldKey] = value;
+        }
+
+        /// <summary>
+        /// The static counterpart of <see cref="TryGet"/>: reports a stored static value without
+        /// creating the slot.
+        /// </summary>
+        public bool TryGetStatic(string fieldKey, out object value)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
+            return _staticValues.TryGetValue(fieldKey, out value);
         }
 
         /// <summary>

@@ -196,6 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadDomain domain = services.Domain;
             HotReloadAddedFieldStore.Current = domain.AddedFieldValues;
+            HotReloadAddedFieldCoordination.ActiveFields = new HotReloadAddedFieldPort(domain);
             HotReloadInvocationRegistry.Current = domain.Invocations;
             HotReloadTranspilerDomainGateway.Current = domain;
             HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames =
@@ -216,6 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void ClearWiring()
         {
             HotReloadAddedFieldStore.Current = null;
+            HotReloadAddedFieldCoordination.ActiveFields = null;
             HotReloadInvocationRegistry.Current = null;
             HotReloadTranspilerDomainGateway.Current = null;
             // The sibling tools are told "no domain installed" here too: leaving the port behind
