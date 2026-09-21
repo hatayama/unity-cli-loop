@@ -36,6 +36,10 @@ internal sealed class AddedFieldBinding
 
     public bool IsConst { get; set; }
 
+    // Why only recorded, never warned about here: whether the field ever becomes active is
+    // decided by the Editor's apply, so the Editor is what names it.
+    public bool HasSerializationAttribute { get; set; }
+
     public object ConstantValue { get; set; }
 
     public ExpressionSyntax Initializer { get; set; }

@@ -116,7 +116,8 @@ internal sealed class AddedFieldCatalog : AddedMemberCatalog<AddedFieldBinding>
             FieldName = binding.FieldName,
             DeclaredTypeAssemblyQualifiedName =
                 declaredTypeNames.ToAssemblyQualifiedName(binding.FieldType),
-            IsStatic = binding.IsStatic
+            IsStatic = binding.IsStatic,
+            HasSerializationAttribute = binding.HasSerializationAttribute
         };
     }
 

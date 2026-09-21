@@ -2,7 +2,9 @@
 
 A field a reload added has no compiled storage: its values live in a side table, and it is
 invisible to the Inspector until `uloop compile`. Nothing serializes into it, so an added
-`[SerializeField] GameObject _target;` starts at `default(T)` for every instance.
+`[SerializeField] GameObject _target;` starts at `default(T)` for every instance. The run that
+first makes such a field active says so in one `Warnings` line naming `Namespace.Type.field`;
+later reloads of the same field stay quiet.
 
 To put a value or a scene reference in it without compiling, call the wiring entry point from
 `uloop execute-dynamic-code`. The reading shim picks the value up on the next access.

@@ -87,11 +87,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             // Null initializers: these tests pin which fields a type holds, not what a previous
             // reload initialized them with. Declarations default to none for the same reason: a
-            // test that needs them passes its own rows.
+            // test that needs them passes its own rows. No field is marked serialized: the
+            // warning that reads that mark is covered end to end instead.
             GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(
                 addedFieldFullNames,
                 null,
-                addedFieldDeclarations);
+                addedFieldDeclarations,
+                null);
+        }
+
+        /// <summary>
+        /// Replaces the added fields of one file with serialized ones, as a run whose worker
+        /// marked every declaration with a serialization attribute would.
+        /// </summary>
+        internal void ReplaceSerializedAddedFields(
+            string projectRelativePath,
+            IReadOnlyList<HotReloadSerializedAddedField> serializedFields)
+        {
+            List<string> fullNames = new List<string>();
+            foreach (HotReloadSerializedAddedField field in serializedFields)
+            {
+                fullNames.Add(field.DeclaringTypeName.ToReflectionName().Value + "." + field.FieldName);
+            }
+
+            GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(
+                fullNames,
+                null,
+                null,
+                serializedFields);
         }
 
         internal void RecordSupersededSignature(

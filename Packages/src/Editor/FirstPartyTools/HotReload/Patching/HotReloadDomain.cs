@@ -44,6 +44,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, HashSet<string>> _displayedRemovedMembersByPath =
             new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
+        // The identity keys of the serialized added fields the last run left active. Why the whole
+        // active set and not an append-only history: a field that stops being active (removed,
+        // attribute dropped, file reverted) is new again when it comes back, and the reader
+        // should hear about it.
+        private readonly HashSet<string> _reportedSerializedAddedFields =
+            new HashSet<string>(StringComparer.Ordinal);
+
         internal HotReloadDomain(
             HotReloadIntroducedTypeRegistry introducedTypes,
             HotReloadIntroducedTypeAssemblyResolver introducedTypeResolver)
@@ -593,6 +600,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return isSameAsLastDisplayed;
         }
 
+        /// <summary>
+        /// The display names of the active added fields declared with a serialization attribute
+        /// that no earlier run has reported, sorted ordinal; the active set becomes the new record.
+        /// Two fields that read the same in C# are both listed.
+        /// </summary>
+        /// <remarks>
+        /// Why the owner path is part of the key rather than the assembly name: a generation knows
+        /// its file and not its assembly, and a file belongs to exactly one assembly, so the path
+        /// tells apart two assemblies that declare the same type and field names.
+        /// </remarks>
+        internal IReadOnlyList<string> TakeUnreportedSerializedAddedFields()
+        {
+            HashSet<string> activeKeys = new HashSet<string>(StringComparer.Ordinal);
+            List<string> unreported = new List<string>();
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                foreach (HotReloadSerializedAddedField field in pair.Value.SerializedAddedFields)
+                {
+                    string key = field.ToIdentityKey(pair.Key);
+                    if (activeKeys.Add(key) && !_reportedSerializedAddedFields.Contains(key))
+                    {
+                        unreported.Add(field.ToDisplayName());
+                    }
+                }
+            }
+
+            unreported.Sort(StringComparer.Ordinal);
+            _reportedSerializedAddedFields.Clear();
+            _reportedSerializedAddedFields.UnionWith(activeKeys);
+            return unreported;
+        }
+
         // Why the evidence is dropped here rather than through its own method: it only means
         // anything alongside the applied record, so the two share one lifetime.
         internal void ClearAppliedSource(string projectRelativePath)
@@ -633,6 +672,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _appliedSourceByPath.Clear();
             _newSourceMembershipEvidenceByPath.Clear();
             _displayedRemovedMembersByPath.Clear();
+            _reportedSerializedAddedFields.Clear();
             AddedFieldValues.Clear();
             Invocations.Clear();
             return revertedMethods;

@@ -218,6 +218,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
 
+        // Why one line naming Type.field: two types can gain a field of the same name, and the
+        // recipe file is named because the reader has no other way to find it.
+        public const string SerializedAddedFieldWarningFormat =
+            "Added field(s) with a serialization attribute will not appear in the Inspector or "
+            + "serialize until 'uloop compile': {0}. To put a value in one now, follow "
+            + "references/added-field-wiring.md in the uloop-hot-reload skill.";
+
         // Why a warning rather than a re-run of the initializer: a stored value cannot be told
         // apart from one the edited code assigned, so re-running would overwrite live state. The
         // run reports the mismatch instead, because nothing else in the response shows it.

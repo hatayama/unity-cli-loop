@@ -122,13 +122,6 @@ internal static class CompiledMemberMatcher
         return CompiledFieldMatch.NotFound;
     }
 
-    internal static bool IsCompiledFieldDeclarationChange(CompiledFieldMatch fieldMatch)
-    {
-        return fieldMatch == CompiledFieldMatch.FieldTypeChanged
-            || fieldMatch == CompiledFieldMatch.FieldModifiersChanged
-            || fieldMatch == CompiledFieldMatch.MemberKindChanged;
-    }
-
     internal static WorkerReason TryBuildCompiledFieldDeclarationChangeReason(
         CompiledFieldMatch fieldMatch,
         string fieldName)

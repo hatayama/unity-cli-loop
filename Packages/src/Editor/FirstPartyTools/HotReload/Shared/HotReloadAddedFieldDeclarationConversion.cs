@@ -49,5 +49,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return declarations.ToArray();
         }
+
+        /// <summary>
+        /// The rows whose declaration carries a serialization attribute, still named by the
+        /// metadata form of the declaring type.
+        /// </summary>
+        internal static HotReloadSerializedAddedField[] ListSerializedFields(
+            TransformWorkerAddedFieldDeclarationDto[] rows)
+        {
+            if (rows == null || rows.Length == 0)
+            {
+                return Array.Empty<HotReloadSerializedAddedField>();
+            }
+
+            List<HotReloadSerializedAddedField> fields = new List<HotReloadSerializedAddedField>();
+            foreach (TransformWorkerAddedFieldDeclarationDto row in rows)
+            {
+                if (row == null
+                    || !row.hasSerializationAttribute
+                    || string.IsNullOrEmpty(row.declaringTypeMetadataName)
+                    || string.IsNullOrEmpty(row.fieldName))
+                {
+                    continue;
+                }
+
+                fields.Add(
+                    new HotReloadSerializedAddedField(
+                        new HotReloadMetadataTypeName(row.declaringTypeMetadataName),
+                        row.fieldName));
+            }
+
+            return fields.ToArray();
+        }
     }
 }

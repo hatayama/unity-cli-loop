@@ -274,7 +274,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
             generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null, null);
 
             generation.BeginAddedMemberGeneration();
 
@@ -425,8 +425,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" }, null, null);
-            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" }, null, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" }, null, null, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" }, null, null, null);
 
             Assert.That(
                 CollectFields(generation, HostType),
@@ -446,6 +446,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.ReplaceAddedFields(
                 new[] { HostType + ".changed", HostType + ".stable", HostType + ".dropped" },
                 new[] { "1", "2", "3" },
+                null,
                 null);
 
             List<string> changed = new List<string>();
@@ -466,7 +467,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, new[] { "1" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, new[] { "1" }, null, null);
 
             List<string> changed = new List<string>();
             generation.CollectAddedFieldsWithChangedInitializer(
@@ -485,9 +486,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null, null);
 
-            generation.ReplaceAddedFields(Array.Empty<string>(), null, null);
+            generation.ReplaceAddedFields(Array.Empty<string>(), null, null, null);
 
             Assert.That(CollectFields(generation, HostType), Is.Empty);
             Assert.That(DescribeFields(generation), Is.Empty);
@@ -502,7 +503,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" }, null, null);
+            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" }, null, null, null);
 
             Assert.That(
                 CollectFields(generation, NestedReflectionType),
@@ -527,7 +528,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.ReplaceAddedFields(
                 new[] { HostType + ".wired" },
                 null,
-                new[] { CreateDeclaration(HostType, "wired", typeof(string), isStatic: false) });
+                new[] { CreateDeclaration(HostType, "wired", typeof(string), isStatic: false) },
+                null);
 
             Assert.That(
                 generation.TryGetAddedFieldDeclaration(
@@ -556,12 +558,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.ReplaceAddedFields(
                 new[] { HostType + ".dropped" },
                 null,
-                new[] { CreateDeclaration(HostType, "dropped", typeof(int), isStatic: true) });
+                new[] { CreateDeclaration(HostType, "dropped", typeof(int), isStatic: true) },
+                null);
 
             generation.ReplaceAddedFields(
                 new[] { HostType + ".kept" },
                 null,
-                new[] { CreateDeclaration(HostType, "kept", typeof(int), isStatic: true) });
+                new[] { CreateDeclaration(HostType, "kept", typeof(int), isStatic: true) },
+                null);
 
             Assert.That(
                 generation.TryGetAddedFieldDeclaration(HostType, "dropped", out HotReloadAddedFieldDeclaration _),
@@ -583,7 +587,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.ReplaceAddedFields(
                 new[] { NestedCecilType + ".count" },
                 null,
-                new[] { CreateDeclaration(NestedReflectionType, "count", typeof(int), isStatic: false) });
+                new[] { CreateDeclaration(NestedReflectionType, "count", typeof(int), isStatic: false) },
+                null);
 
             Assert.That(
                 generation.TryGetAddedFieldDeclaration(

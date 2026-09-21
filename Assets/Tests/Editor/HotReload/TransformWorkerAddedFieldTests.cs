@@ -1619,18 +1619,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a [SerializeField] added field still rewrites to the store and emits an
-        /// Inspector/serialization warning.
+        /// What: a [SerializeField] added field still rewrites to the store, and the worker marks
+        /// its declaration row instead of warning, so the Editor can name it only once it is
+        /// active; a plain added field beside it stays unmarked.
         /// </summary>
         [Test]
-        public async Task Warning_SerializeField_StillRewrites()
+        public async Task SerializeField_StillRewritesAndMarksTheDeclaration()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
-            string edited = WithHostMembers(onDisk, "[SerializeField] public int AddedSerialized;");
+            string edited = WithHostMembers(
+                onDisk,
+                "[SerializeField] public int AddedSerialized;\n        public int AddedPlain;");
             edited = edited.Replace(
                 ExistingCallerOriginal,
                 "        public int ExistingCaller(int value)\n        {\n"
-                + "            AddedSerialized = value;\n            return AddedSerialized;\n        }",
+                + "            AddedSerialized = value;\n            AddedPlain = value;\n"
+                + "            return AddedSerialized + AddedPlain;\n        }",
                 StringComparison.Ordinal);
 
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
@@ -1645,24 +1649,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Contain("HotReloadAddedFieldStore"));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
 
-            bool foundWarning = false;
-            foreach (string warning in result.Output.files[0].declarationDriftWarnings)
+            Assert.That(FindDeclaration(result, "AddedSerialized").hasSerializationAttribute, Is.True);
+            Assert.That(FindDeclaration(result, "AddedPlain").hasSerializationAttribute, Is.False);
+            // The worker cannot know whether the file will apply, so a warning worded here would
+            // name a field a failed or skipped file never made active.
+            AssertHasNoAddedFieldSerializeWarning(result);
+        }
+
+        private static TransformWorkerAddedFieldDeclarationDto FindDeclaration(
+            TransformWorkerClientResult result,
+            string fieldName)
+        {
+            foreach (TransformWorkerAddedFieldDeclarationDto declaration in result.Output.files[0].addedFieldDeclarations)
             {
-                if (warning != null
-                    && warning.Contains("AddedSerialized")
-                    && warning.Contains("Inspector")
-                    // The warning has to say what to do instead, or the reader is left with a
-                    // limitation and no way past it before a compile.
-                    && warning.Contains("wiring recipe"))
+                if (declaration.fieldName == fieldName)
                 {
-                    foundWarning = true;
+                    return declaration;
                 }
             }
 
-            Assert.That(
-                foundWarning,
-                Is.True,
-                "SerializeField added fields must warn about Inspector visibility and point at the wiring recipe.");
+            Assert.Fail("Expected an added-field declaration row for " + fieldName + ".");
+            return null;
         }
 
         /// <summary>
@@ -2055,6 +2062,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingFail)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
             AssertHasNoAddedFieldSerializeWarning(result);
+            AssertNoSerializedDeclarationRow(result);
         }
 
         private static async Task AssertCompiledMemberKindChangeSkipsTouchingMethodsAsync(
@@ -2097,6 +2105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, nameof(HotReloadFieldKindChangeFixture.WriteKind)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
             AssertHasNoAddedFieldSerializeWarning(result);
+            AssertNoSerializedDeclarationRow(result);
         }
 
         private static async Task AssertCompiledPropertyOrEventWarningAsync(
@@ -2423,10 +2432,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (warning != null && warning.Contains("will not appear in the Inspector"))
                 {
                     Assert.Fail(
-                        "Declaration-changed compiled fields must not emit the added-field "
-                        + "Inspector warning. Warnings="
+                        "The worker must not word the added-field Inspector warning. Warnings="
                         + string.Join("\n", result.Output.files[0].declarationDriftWarnings));
                 }
+            }
+        }
+
+        // The Editor names a serialized added field only from these rows, so a field refused for a
+        // changed compiled declaration must not reach them marked serialized.
+        private static void AssertNoSerializedDeclarationRow(TransformWorkerClientResult result)
+        {
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations ?? Array.Empty<TransformWorkerAddedFieldDeclarationDto>();
+            foreach (TransformWorkerAddedFieldDeclarationDto declaration in declarations)
+            {
+                Assert.That(
+                    declaration.hasSerializationAttribute,
+                    Is.False,
+                    "A refused field must not reach the Editor as a serialized added field: "
+                    + declaration.fieldKey);
             }
         }
 
