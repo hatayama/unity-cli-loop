@@ -132,13 +132,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: when a type an earlier reload retained also names the changed type, the refusal
-        /// names only that retained type with the same-reload edit advice, because that is the
-        /// referrer an edit in this reload can fix; the type this reload introduces is not listed
-        /// as retained.
+        /// What: when a type an earlier reload retained and a type this reload introduces both
+        /// name the changed type, the refusal names each with its own reason and recommends the
+        /// two-step order, because editing only the retained type in this reload leaves the new
+        /// type split. Following that order, introducing the new type first and then changing the
+        /// type together with an edit of both referrers, lets the caller reach the added method.
         /// </summary>
         [Test]
-        public async Task Run_MemberAddedWhileARetainedAndANewTypeBothReturnIt_RefusesNamingOnlyTheRetainedType()
+        public async Task Run_MemberAddedWhileARetainedAndANewTypeBothReturnIt_RefusesNamingBothAndTheTwoStepOrderWorks()
         {
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
@@ -163,11 +164,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(CountFailures(combined), Is.GreaterThan(0), description);
                 Assert.That(
                     description,
-                    Does.Contain("appears in member signatures of '" + KeeperMetadataName
-                        + "', which an earlier reload retained"),
+                    Does.Contain("'" + KeeperMetadataName + "', which an earlier reload retained"),
                     description);
-                Assert.That(description, Does.Not.Contain("'" + FactoryMetadataName + "'"), description);
-                Assert.That(description, Does.Not.Contain("introduced by this reload"), description);
+                Assert.That(
+                    description,
+                    Does.Contain("'" + FactoryMetadataName + "', introduced by this reload"),
+                    description);
+                Assert.That(description, Does.Contain("reload in two steps"), description);
+
+                HotReloadOrchestratorResult factoryFirst = await RunAsync(
+                    callerPath,
+                    Owners(BuildValueSource(NoExtraMembers), BuildFactorySource(DefaultMakeBody)),
+                    "new " + FactorySimpleName + "().Make().Ping()",
+                    "MixedStepFactory");
+                Assert.That(CountFailures(factoryFirst), Is.EqualTo(0), DescribeOutcomes(factoryFirst));
+
+                Dictionary<string, string> memberAddedOwners =
+                    Owners(BuildValueSource(PongMember), BuildFactorySource(EditedMakeBody));
+                memberAddedOwners[KeeperOwnerPath] = BuildReturningTypeSource(KeeperSimpleName, EditedMakeBody);
+                HotReloadOrchestratorResult memberAdded = await RunAsync(
+                    callerPath,
+                    memberAddedOwners,
+                    "new " + FactorySimpleName + "().Make().Pong() + new " + KeeperSimpleName + "().Make().Pong()",
+                    "MixedStepMemberAdded");
+
+                Assert.That(CountFailures(memberAdded), Is.EqualTo(0), DescribeOutcomes(memberAdded));
+                Assert.That(
+                    CallTheCaller(),
+                    Is.EqualTo(PongValue + PongValue + HostValue),
+                    "The added method must run on values both referrers made.\n" + DescribeOutcomes(memberAdded));
             });
         }
 

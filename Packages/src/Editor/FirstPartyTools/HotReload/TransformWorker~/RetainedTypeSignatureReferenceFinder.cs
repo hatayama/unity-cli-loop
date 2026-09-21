@@ -45,14 +45,15 @@ internal static class RetainedTypeSignatureReferenceFinder
         {
             List<string> referrers = FindReferrers(BuildIdentity(verdict.Record), signatureIdentitiesByReferrer);
             List<string> retainedReferrers = referrers.FindAll(referrer => !preparedReferrers.Contains(referrer));
+            List<string> sameRunReferrers = referrers.FindAll(referrer => preparedReferrers.Contains(referrer));
+            if (sameRunReferrers.Count > 0)
+            {
+                return FormatSameRunReferrerRefusal(verdict.MetadataName, retainedReferrers, sameRunReferrers);
+            }
+
             if (retainedReferrers.Count > 0)
             {
                 return FormatRetainedReferrerRefusal(verdict.MetadataName, retainedReferrers);
-            }
-
-            if (referrers.Count > 0)
-            {
-                return FormatPreparedReferrerRefusal(verdict.MetadataName, referrers);
             }
         }
 
@@ -74,12 +75,23 @@ internal static class RetainedTypeSignatureReferenceFinder
 
     // A type this run introduces was compiled against the loaded definition before the edit could
     // reach it, so editing it in this same reload cannot help. Once a reload has introduced it,
-    // it is a retained type that a body edit keeps in the source next to the changed one.
-    private static string FormatPreparedReferrerRefusal(string metadataName, List<string> referrers)
+    // it is a retained type that a body edit keeps in the source next to the changed one. Why a
+    // retained referrer is folded into the same two steps rather than refused on its own first:
+    // editing only it in this reload still leaves the new type split, so that advice cannot work.
+    private static string FormatSameRunReferrerRefusal(
+        string metadataName,
+        List<string> retainedReferrers,
+        List<string> sameRunReferrers)
     {
-        string referrerList = FormatNameList(referrers);
+        string sameRunList = FormatNameList(sameRunReferrers);
+        List<string> allReferrers = new List<string>(retainedReferrers);
+        allReferrers.AddRange(sameRunReferrers);
+        string retainedClause = retainedReferrers.Count == 0
+            ? string.Empty
+            : FormatNameList(retainedReferrers) + ", which an earlier reload retained and this edit leaves unchanged, and of ";
         return "Introduced type '" + metadataName + "' appears in member signatures of "
-            + referrerList
+            + retainedClause
+            + sameRunList
             + ", introduced by this reload from a new file and compiled against the '"
             + metadataName
             + "' an earlier reload loaded; changing '"
@@ -88,9 +100,9 @@ internal static class RetainedTypeSignatureReferenceFinder
             + "reload in two steps: first without the change to '"
             + metadataName
             + "', which introduces "
-            + referrerList
+            + sameRunList
             + ", then make the change together with an edit of "
-            + referrerList
+            + FormatNameList(allReferrers)
             + " (a method body change is enough). Otherwise run 'uloop compile' to apply this edit.";
     }
 
