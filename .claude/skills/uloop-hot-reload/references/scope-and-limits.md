@@ -49,10 +49,13 @@ refused with a message naming the added method (see
 An added field's values live in a side table that follows each instance's lifetime
 (statics live per domain). Its initializer does not run at construction time; it runs
 on the field's first access from edited code — once per instance, or once per domain
-for statics. Initializer expressions are limited to literals and externally visible
-static calls (`= 5`, `= Math.Abs(x)`); object creation (`= new List<int>()`) and
-anything touching the host type or instance state skips the field's readers and
-writers with a per-method reason. The one object creation that applies is a type an
+for statics. Initializer expressions are limited to what a static lambda on a separate
+shim type can evaluate: literals, externally visible static calls (`= 5`,
+`= Math.Abs(x)`), and array creation whose elements are themselves such expressions
+(`= new int[] { 1, 2, 3 }`). Object creation (`= new List<int>()`) and anything touching
+the host type or instance state skips the field's readers and writers with a per-method
+reason — including an array element that is itself a refused object creation. The one
+object creation that applies is a type an
 earlier reload introduced and this Editor session still keeps active, through a
 constructor the retained assembly holds as `public` — including in the reload that also
 edits a body of that type. A constructor this reload adds to it, or one whose parameters

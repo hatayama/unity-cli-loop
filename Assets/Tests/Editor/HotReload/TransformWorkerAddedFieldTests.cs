@@ -652,6 +652,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an array-creation initializer of literals on an added static field applies. The
+        /// initializer gate refuses 'new T(...)' specifically, not every expression that starts
+        /// with 'new', so an array the static lambda can build on its own is emittable.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_ArrayCreationInitializer_PatchesAndListsAddedField()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public static int[] AddedTable = new int[] { 1, 2, 3 };");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedTable.Length + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldArrayCreationInit.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Not.Null,
+                "An array-creation initializer must not skip the method. Skipped="
+                + FormatSkipped(result.Output.skipped));
+            Assert.That(
+                result.Output.files[0].addedFieldNames,
+                Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedTable" }));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
         /// What: '??=' on an added field stays skipped because the compound assignment is not
         /// rewritable, and the reason names the field and the rewrite that works instead, so a
         /// reader does not have to find which of several added fields the operator was used on.
