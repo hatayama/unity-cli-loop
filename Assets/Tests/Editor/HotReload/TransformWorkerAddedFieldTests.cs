@@ -24,6 +24,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
 
+        private const string ApplyFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadAddedFieldApplyFixture.cs";
+
         private const string HostCloseMarker =
             "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }";
 
@@ -374,6 +377,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Type.GetType(declarations[1].declaredTypeAssemblyQualifiedName),
                 Is.EqualTo(typeof(GameObject[])),
                 declarations[1].declaredTypeAssemblyQualifiedName);
+        }
+
+        /// <summary>
+        /// What: an added field whose declared type is declared in the reloaded source itself —
+        /// directly, as an array element, as a generic argument, or as a nested type — is named
+        /// with the assembly that type is compiled into, not the worker's own compilation.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFieldsOfTypesDeclaredInTheReloadedSource_NameTheCompiledAssembly()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public HotReloadAddedMemberHost AddedPeer;\n"
+                + "        public HotReloadAddedMemberHost[] AddedPeers;\n"
+                + "        public System.Collections.Generic.List<HotReloadAddedMemberHost> AddedPeerList;\n"
+                + "        public NestedAddedFieldHost AddedNestedPeer;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedPeer == null ? 0 : 1) + (AddedPeers == null ? 0 : AddedPeers.Length)\n"
+                + "                + (AddedPeerList == null ? 0 : AddedPeerList.Count)\n"
+                + "                + (AddedNestedPeer == null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedSourceDeclaredTypeFieldDeclarations.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(4));
+            AssertDeclaredType(declarations, "AddedNestedPeer", typeof(HotReloadAddedMemberHost.NestedAddedFieldHost));
+            AssertDeclaredType(declarations, "AddedPeer", typeof(HotReloadAddedMemberHost));
+            AssertDeclaredType(declarations, "AddedPeerList", typeof(List<HotReloadAddedMemberHost>));
+            AssertDeclaredType(declarations, "AddedPeers", typeof(HotReloadAddedMemberHost[]));
+        }
+
+        /// <summary>
+        /// What: an added field whose declared type lives in another file of the same reload is
+        /// named with the assembly that file is compiled into, because that file is bound from
+        /// source in the worker's compilation just like the edited one.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFieldOfTypeDeclaredInAnotherReloadedFile_NamesTheCompiledAssembly()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public HotReloadAddedFieldApplyFixture AddedApplyPeer;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedApplyPeer == null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedOtherFileTypeFieldDeclaration.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk,
+                siblingProjectRelativePath: ApplyFixtureProjectRelativePath);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto hostOutput = FindFileOutput(result, HostProjectRelativePath);
+            AssertDeclaredType(
+                hostOutput.addedFieldDeclarations,
+                "AddedApplyPeer",
+                typeof(HotReloadAddedFieldApplyFixture));
         }
 
         /// <summary>
@@ -2117,10 +2186,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        private static void AssertDeclaredType(
+            TransformWorkerAddedFieldDeclarationDto[] declarations,
+            string fieldName,
+            Type expectedType)
+        {
+            Assert.That(declarations, Is.Not.Null);
+            foreach (TransformWorkerAddedFieldDeclarationDto declaration in declarations)
+            {
+                if (declaration.fieldName != fieldName)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    Type.GetType(declaration.declaredTypeAssemblyQualifiedName),
+                    Is.EqualTo(expectedType),
+                    declaration.declaredTypeAssemblyQualifiedName);
+                return;
+            }
+
+            Assert.Fail("No declaration for added field '" + fieldName + "'.");
+        }
+
+        private static TransformWorkerFileOutputDto FindFileOutput(
+            TransformWorkerClientResult result,
+            string projectRelativePath)
+        {
+            foreach (TransformWorkerFileOutputDto fileOutput in result.Output.files)
+            {
+                if (fileOutput.projectRelativePath == projectRelativePath)
+                {
+                    return fileOutput;
+                }
+            }
+
+            Assert.Fail("No file output for " + projectRelativePath + ".");
+            return null;
+        }
+
+        // Why an optional unchanged sibling: a type declared in another file of the same reload is
+        // bound from that file's source, which is the case a single-source run never reaches.
         private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
             string sourcePath,
             string projectRelativePath,
-            string snapshotSource = null)
+            string snapshotSource = null,
+            string siblingProjectRelativePath = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -2142,17 +2253,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(compilationAssembly, Is.Not.Null, "CompilationPipeline assembly not found.");
 
+            List<TransformWorkerSourceDto> sources = new List<TransformWorkerSourceDto>
+            {
+                new TransformWorkerSourceDto
+                {
+                    sourcePath = sourcePath,
+                    projectRelativePath = projectRelativePath,
+                    snapshotSource = snapshotSource
+                }
+            };
+            if (siblingProjectRelativePath != null)
+            {
+                string siblingPath = Path.Combine(projectRoot, siblingProjectRelativePath);
+                sources.Add(new TransformWorkerSourceDto
+                {
+                    sourcePath = siblingPath,
+                    projectRelativePath = siblingProjectRelativePath,
+                    snapshotSource = File.ReadAllText(siblingPath)
+                });
+            }
+
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = sourcePath,
-                        projectRelativePath = projectRelativePath,
-                        snapshotSource = snapshotSource
-                    }
-                },
+                sources = sources.ToArray(),
+                targetAssemblyName = TestAssemblyName,
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = BuildAbsoluteReferencePaths(
                     compilationAssembly.allReferences,

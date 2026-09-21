@@ -215,7 +215,8 @@ internal static class WorkerGroupPipeline
             skipped,
             unchangedMethods,
             siblingConstDriftWarnings,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            new AddedFieldDeclaredTypeNames(compilation.Assembly, home));
     }
 
     // Keeps only the units a transform may read. A unit with parse errors is dropped: Roslyn's
@@ -373,7 +374,8 @@ internal static class WorkerGroupPipeline
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
         List<string> siblingConstDriftWarnings,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedFieldDeclaredTypeNames declaredTypeNames)
     {
         bool hasAccessorDelegates = false;
         foreach (ShimTypeBuilder shimType in shimTypes)
@@ -389,7 +391,7 @@ internal static class WorkerGroupPipeline
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         for (int index = 0; index < units.Count; index++)
         {
-            files[index] = BuildFileOutput(units[index], addedFieldCatalog);
+            files[index] = BuildFileOutput(units[index], addedFieldCatalog, declaredTypeNames);
         }
 
         return new WorkerOutput
@@ -405,7 +407,10 @@ internal static class WorkerGroupPipeline
         };
     }
 
-    private static WorkerFileOutput BuildFileOutput(WorkerSourceUnit unit, AddedFieldCatalog addedFieldCatalog)
+    private static WorkerFileOutput BuildFileOutput(
+        WorkerSourceUnit unit,
+        AddedFieldCatalog addedFieldCatalog,
+        AddedFieldDeclaredTypeNames declaredTypeNames)
     {
         string projectRelativePath = unit.Input.ProjectRelativePath;
         return new WorkerFileOutput
@@ -423,7 +428,7 @@ internal static class WorkerGroupPipeline
             AddedFieldInitializers =
                 addedFieldCatalog.ListRewrittenAddedFieldInitializers(projectRelativePath),
             AddedFieldDeclarations =
-                addedFieldCatalog.ListRewrittenAddedFieldDeclarations(projectRelativePath),
+                addedFieldCatalog.ListRewrittenAddedFieldDeclarations(projectRelativePath, declaredTypeNames),
             AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
             IntroducedTypes = unit.IntroducedTypes.ToArray(),
             IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),

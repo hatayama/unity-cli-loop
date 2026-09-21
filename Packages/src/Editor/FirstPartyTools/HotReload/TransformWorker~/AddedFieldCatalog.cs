@@ -91,19 +91,23 @@ internal sealed class AddedFieldCatalog : AddedMemberCatalog<AddedFieldBinding>
     /// Why the same rewritten set as the names: a field that no emitted body reads is not served
     /// by the store, so describing it would offer the Editor a field nothing can read back.
     /// </remarks>
-    public WorkerAddedFieldDeclaration[] ListRewrittenAddedFieldDeclarations(string projectRelativePath)
+    public WorkerAddedFieldDeclaration[] ListRewrittenAddedFieldDeclarations(
+        string projectRelativePath,
+        AddedFieldDeclaredTypeNames declaredTypeNames)
     {
         List<AddedFieldBinding> bindings = ListSortedBindingsOfFile(_rewrittenAddedFieldKeys, projectRelativePath);
         WorkerAddedFieldDeclaration[] declarations = new WorkerAddedFieldDeclaration[bindings.Count];
         for (int index = 0; index < bindings.Count; index++)
         {
-            declarations[index] = DescribeBinding(bindings[index]);
+            declarations[index] = DescribeBinding(bindings[index], declaredTypeNames);
         }
 
         return declarations;
     }
 
-    private static WorkerAddedFieldDeclaration DescribeBinding(AddedFieldBinding binding)
+    private static WorkerAddedFieldDeclaration DescribeBinding(
+        AddedFieldBinding binding,
+        AddedFieldDeclaredTypeNames declaredTypeNames)
     {
         return new WorkerAddedFieldDeclaration
         {
@@ -111,7 +115,7 @@ internal sealed class AddedFieldCatalog : AddedMemberCatalog<AddedFieldBinding>
             DeclaringTypeMetadataName = ExtractTypeMetadataName(binding.FieldKey),
             FieldName = binding.FieldName,
             DeclaredTypeAssemblyQualifiedName =
-                AddedFieldDeclaredTypeNames.ToAssemblyQualifiedName(binding.FieldType),
+                declaredTypeNames.ToAssemblyQualifiedName(binding.FieldType),
             IsStatic = binding.IsStatic
         };
     }

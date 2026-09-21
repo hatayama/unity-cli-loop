@@ -25,10 +25,24 @@ using Microsoft.CodeAnalysis.Text;
 /// a type the worker cannot name (an open type parameter, a pointer, an error type) is a type the
 /// Editor could not resolve either, and a caller is better told that than handed a name that
 /// resolves to something else.
+/// Why it holds the binding compilation and the type home: a type declared in a reloaded source
+/// is bound from that source, so the compiler reports the worker's own throwaway compilation as
+/// its assembly. The Editor can only resolve the assembly the type is compiled into.
 /// </remarks>
-internal static class AddedFieldDeclaredTypeNames
+internal sealed class AddedFieldDeclaredTypeNames
 {
-    public static string ToAssemblyQualifiedName(ITypeSymbol typeSymbol)
+    private readonly IAssemblySymbol _bindingAssembly;
+    private readonly WorkerTypeHome _home;
+
+    public AddedFieldDeclaredTypeNames(IAssemblySymbol bindingAssembly, WorkerTypeHome home)
+    {
+        Debug.Assert(bindingAssembly != null, "The binding compilation always has an assembly symbol.");
+        Debug.Assert(home != null, "Every transform run builds a type home before emitting output.");
+        _bindingAssembly = bindingAssembly;
+        _home = home;
+    }
+
+    public string ToAssemblyQualifiedName(ITypeSymbol typeSymbol)
     {
         string reflectionName = BuildReflectionName(typeSymbol);
         if (string.IsNullOrEmpty(reflectionName))
@@ -47,7 +61,7 @@ internal static class AddedFieldDeclaredTypeNames
 
     // Reflection spells nested types with '+', keeps the arity suffix of a generic definition,
     // and lists the arguments of a constructed generic as bracketed assembly-qualified names.
-    private static string BuildReflectionName(ITypeSymbol typeSymbol)
+    private string BuildReflectionName(ITypeSymbol typeSymbol)
     {
         if (typeSymbol == null || typeSymbol.TypeKind == TypeKind.Error)
         {
@@ -74,7 +88,7 @@ internal static class AddedFieldDeclaredTypeNames
         return string.Empty;
     }
 
-    private static string BuildNamedReflectionName(INamedTypeSymbol namedType)
+    private string BuildNamedReflectionName(INamedTypeSymbol namedType)
     {
         string head = CecilTypeNames.ToMetadataName(namedType.OriginalDefinition).Replace('/', '+');
         List<ITypeSymbol> typeArguments = new List<ITypeSymbol>();
@@ -112,7 +126,7 @@ internal static class AddedFieldDeclaredTypeNames
 
     // An array is named by the assembly of its element type, and a constructed generic by the
     // assembly of its definition, so both walk down to the type that actually has one.
-    private static string FindAssemblySimpleName(ITypeSymbol typeSymbol)
+    private string FindAssemblySimpleName(ITypeSymbol typeSymbol)
     {
         ITypeSymbol current = typeSymbol;
         while (current is IArrayTypeSymbol arrayType)
@@ -120,13 +134,32 @@ internal static class AddedFieldDeclaredTypeNames
             current = arrayType.ElementType;
         }
 
-        IAssemblySymbol assembly = current?.OriginalDefinition?.ContainingAssembly;
+        ITypeSymbol definition = current?.OriginalDefinition;
+        IAssemblySymbol assembly = definition?.ContainingAssembly;
         if (assembly == null)
         {
             return string.Empty;
         }
 
-        return assembly.Identity.Name;
+        if (!SymbolEqualityComparer.Default.Equals(assembly, _bindingAssembly))
+        {
+            return assembly.Identity.Name;
+        }
+
+        return FindCompiledAssemblySimpleName(definition as INamedTypeSymbol);
+    }
+
+    // A source-bound type is named by its compiled counterpart. One with no counterpart has no
+    // assembly the Editor can resolve it from, so it is left unnamed rather than guessed.
+    private string FindCompiledAssemblySimpleName(INamedTypeSymbol sourceType)
+    {
+        INamedTypeSymbol compiledType = _home.FindCompiledType(sourceType);
+        if (compiledType == null)
+        {
+            return string.Empty;
+        }
+
+        return compiledType.ContainingAssembly.Identity.Name;
     }
 
     private static void CollectConstructedTypeArgumentsOuterToInner(
