@@ -28,18 +28,31 @@ using Microsoft.CodeAnalysis.Text;
 /// Why it holds the binding compilation and the type home: a type declared in a reloaded source
 /// is bound from that source, so the compiler reports the worker's own throwaway compilation as
 /// its assembly. The Editor can only resolve the assembly the type is compiled into.
+/// Why it also holds the run's retained body-edit records: an introduced type whose body this
+/// edit changed stays declared in the binding tree, so it is bound from source too, and the only
+/// assembly that holds it is the artifact a previous reload loaded.
 /// </remarks>
 internal sealed class AddedFieldDeclaredTypeNames
 {
     private readonly IAssemblySymbol _bindingAssembly;
     private readonly WorkerTypeHome _home;
+    private readonly IReadOnlyList<WorkerRetainedBodyEditType> _retainedBodyEditTypes;
+    private readonly IntroducedTypeArtifactMap _artifactMap;
 
-    public AddedFieldDeclaredTypeNames(IAssemblySymbol bindingAssembly, WorkerTypeHome home)
+    public AddedFieldDeclaredTypeNames(
+        IAssemblySymbol bindingAssembly,
+        WorkerTypeHome home,
+        IReadOnlyList<WorkerRetainedBodyEditType> retainedBodyEditTypes,
+        IntroducedTypeArtifactMap artifactMap)
     {
         Debug.Assert(bindingAssembly != null, "The binding compilation always has an assembly symbol.");
         Debug.Assert(home != null, "Every transform run builds a type home before emitting output.");
+        Debug.Assert(retainedBodyEditTypes != null, "A run with no retained body edit passes an empty list.");
+        Debug.Assert(artifactMap != null, "A run with no retained artifact passes the empty map.");
         _bindingAssembly = bindingAssembly;
         _home = home;
+        _retainedBodyEditTypes = retainedBodyEditTypes;
+        _artifactMap = artifactMap;
     }
 
     public string ToAssemblyQualifiedName(ITypeSymbol typeSymbol)
@@ -146,20 +159,46 @@ internal sealed class AddedFieldDeclaredTypeNames
             return assembly.Identity.Name;
         }
 
-        return FindCompiledAssemblySimpleName(definition as INamedTypeSymbol);
+        return FindSourceBoundAssemblySimpleName(definition as INamedTypeSymbol);
     }
 
-    // A source-bound type is named by its compiled counterpart. One with no counterpart has no
-    // assembly the Editor can resolve it from, so it is left unnamed rather than guessed.
-    private string FindCompiledAssemblySimpleName(INamedTypeSymbol sourceType)
+    // A source-bound type is named by its compiled counterpart, or by the artifact a retained
+    // body-edit record says serves it. One with neither has no assembly the Editor can resolve it
+    // from, so it is left unnamed rather than guessed.
+    private string FindSourceBoundAssemblySimpleName(INamedTypeSymbol sourceType)
     {
         INamedTypeSymbol compiledType = _home.FindCompiledType(sourceType);
-        if (compiledType == null)
+        if (compiledType != null)
+        {
+            return compiledType.ContainingAssembly.Identity.Name;
+        }
+
+        return FindRetainedArtifactAssemblySimpleName(sourceType);
+    }
+
+    private string FindRetainedArtifactAssemblySimpleName(INamedTypeSymbol sourceType)
+    {
+        if (sourceType == null)
         {
             return string.Empty;
         }
 
-        return compiledType.ContainingAssembly.Identity.Name;
+        string metadataName = CecilTypeNames.ToMetadataName(sourceType);
+        foreach (WorkerRetainedBodyEditType bodyEditType in _retainedBodyEditTypes)
+        {
+            if (!string.Equals(bodyEditType.MetadataName, metadataName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string artifactAssemblyName = _artifactMap.FindArtifactAssemblyName(
+                bodyEditType.OriginalAssemblyName,
+                bodyEditType.OriginalAssemblyMvid,
+                bodyEditType.MetadataName);
+            return artifactAssemblyName ?? string.Empty;
+        }
+
+        return string.Empty;
     }
 
     private static void CollectConstructedTypeArgumentsOuterToInner(

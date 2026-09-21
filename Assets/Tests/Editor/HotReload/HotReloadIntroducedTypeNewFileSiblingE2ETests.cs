@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -36,6 +37,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const int PongFactor = 2;
         private const int HostValue = 1;
         private const string NoExtraMembers = "";
+        private const string CallerDeclarationAnchor =
+            "        [MethodImpl(MethodImplOptions.NoInlining)]\n        public int Call(";
+        private const int UnwiredRead = -100;
+        private const int ArrayWeight = 10;
+        private const int ListWeight = 100;
+
+        // The fields the wiring test adds to the caller: the introduced type itself, an array of
+        // it, and a generic argument of it. No field is typed by a type nested in it, because a
+        // type that declares a nested one is refused introduction outright.
+        private static readonly string IntroducedTypedFieldMembers =
+            "        public " + IntroducedTypeSimpleName + " AddedIntroduced;\n"
+            + "        public " + IntroducedTypeSimpleName + "[] AddedIntroducedArray;\n"
+            + "        public System.Collections.Generic.List<" + IntroducedTypeSimpleName + "> AddedIntroducedList;\n\n";
+
+        private static readonly string IntroducedTypedFieldsReadExpression =
+            "(AddedIntroduced == null ? " + UnwiredRead.ToString() + " : AddedIntroduced.Ping())"
+            + " + (AddedIntroducedArray == null ? 0 : AddedIntroducedArray.Length * " + ArrayWeight.ToString() + ")"
+            + " + (AddedIntroducedList == null ? 0 : AddedIntroducedList.Count * " + ListWeight.ToString() + ")";
 
         // The member the second reload adds to the introduced type, which lands in that reload's
         // shim rather than in the artifact the first reload retained.
@@ -169,6 +188,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// What: added fields typed by an introduced type (plain, array element, and generic
+        /// argument) accept a wired value and the patched caller reads it, on the reload
+        /// that introduces the type, on a reload that retains it unchanged, and on a reload that
+        /// edits a body of the retained type. The last one keeps the declaration in the worker's
+        /// binding tree, so the type is bound from source there and has to be named by the
+        /// artifact that serves it; an instance made before that edit must still be accepted.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldsTypedByAnIntroducedType_AreWiredAndReadAcrossRetainingReloads()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult introducing = await RunIntroducedTypedFieldsReloadAsync(
+                    callerPath, PingValue, "Introducing");
+                AssertIntroducedTypeRow(introducing, HotReloadIntroducedTypeOutcomeKind.Introduced);
+                object firstGenerationValue = AssertIntroducedTypedFieldsAreWiredAndRead(
+                    readArtifact, null, PingValue, "the introducing reload");
+
+                HotReloadOrchestratorResult retaining = await RunIntroducedTypedFieldsReloadAsync(
+                    callerPath, PingValue, "Retaining");
+                AssertIntroducedTypeRow(retaining, HotReloadIntroducedTypeOutcomeKind.AlreadyActive);
+                AssertIntroducedTypedFieldsAreWiredAndRead(readArtifact, null, PingValue, "the retaining reload");
+
+                HotReloadOrchestratorResult bodyEdit = await RunIntroducedTypedFieldsReloadAsync(
+                    callerPath, EditedPingValue, "BodyEdit");
+                AssertIntroducedTypeRow(bodyEdit, HotReloadIntroducedTypeOutcomeKind.AlreadyActive);
+                AssertOutcome(bodyEdit, HotReloadMethodOutcomeKind.Patched, "Ping");
+                AssertIntroducedTypedFieldsAreWiredAndRead(
+                    readArtifact, firstGenerationValue, EditedPingValue, "the body-edit reload");
+            });
+        }
+
         // Why not RunReloadAsync: this reload is the one that does not name the file declaring
         // the type, which is the whole point of it. The declaration's content stays in the
         // override map because the file never exists on disk; a run that pulls it back in as a
@@ -196,6 +250,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadTestSourceWriter.WriteEditedSource(
                 "NewFileIntroducedOwnerWithPong.cs",
                 BuildOwnerSource(EditedPingValue, PongMember));
+        }
+
+        // Every reload of the wiring test declares the same fields, so each one either introduces,
+        // retains, or body-edits the type without also changing what the caller adds.
+        private static Task<HotReloadOrchestratorResult> RunIntroducedTypedFieldsReloadAsync(
+            string callerPath,
+            int pingValue,
+            string label)
+        {
+            string callerSource = File.ReadAllText(callerPath);
+            Assert.That(callerSource, Does.Contain(CallerDeclarationAnchor), "Precondition: caller declaration anchor must exist.");
+            string withFields = callerSource.Replace(
+                CallerDeclarationAnchor,
+                IntroducedTypedFieldMembers + CallerDeclarationAnchor,
+                StringComparison.Ordinal);
+            return RunReloadAsync(
+                OwnerRequestedPath,
+                callerPath,
+                new Dictionary<string, string>
+                {
+                    [OwnerRequestedPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "IntroducedTypedFieldsOwner" + label + ".cs",
+                        BuildOwnerSource(pingValue, NoExtraMembers)),
+                    [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "IntroducedTypedFieldsCaller" + label + ".cs",
+                        CallIntroducedType(withFields, IntroducedTypedFieldsReadExpression))
+                });
+        }
+
+        // Wires all three fields and returns the value wired into the plain one, so a later reload
+        // can hand an instance made before it back in. A null instance means "make a new one".
+        private static object AssertIntroducedTypedFieldsAreWiredAndRead(
+            Func<HotReloadIntroducedTypeArtifact> readArtifact,
+            object instance,
+            int expectedPing,
+            string reload)
+        {
+            Type introducedType = readArtifact().Assembly.GetType(IntroducedTypeMetadataName, true);
+            object value = instance ?? Activator.CreateInstance(introducedType);
+            Array array = Array.CreateInstance(introducedType, 2);
+            System.Collections.IList list = (System.Collections.IList)Activator.CreateInstance(
+                typeof(List<>).MakeGenericType(introducedType));
+            list.Add(value);
+            list.Add(value);
+            list.Add(value);
+            HotReloadCrossFileAddedMemberCaller caller = new HotReloadCrossFileAddedMemberCaller();
+            HotReloadCrossFileAddedMemberHost host = new HotReloadCrossFileAddedMemberHost();
+            Assert.That(caller.Call(host), Is.EqualTo(UnwiredRead + HostValue), "Precondition: nothing is wired yet after " + reload + ".");
+
+            HotReloadAddedFieldWiring.SetInstanceField(caller, "AddedIntroduced", value);
+            HotReloadAddedFieldWiring.SetInstanceField(caller, "AddedIntroducedArray", array);
+            HotReloadAddedFieldWiring.SetInstanceField(caller, "AddedIntroducedList", list);
+
+            Assert.That(
+                caller.Call(host),
+                Is.EqualTo(expectedPing + (2 * ArrayWeight) + (3 * ListWeight) + HostValue),
+                "The patched caller must read every value wired after " + reload + ".");
+            return value;
         }
 
         private static int CallTheCaller()

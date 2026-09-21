@@ -216,7 +216,25 @@ internal static class WorkerGroupPipeline
             unchangedMethods,
             siblingConstDriftWarnings,
             addedFieldCatalog,
-            new AddedFieldDeclaredTypeNames(compilation.Assembly, home));
+            CreateDeclaredTypeNames(compilation, home, transformUnits));
+    }
+
+    // Every unit of a run holds the same run-wide retained records and artifact map, so any one
+    // of them answers for the group. A run with no transformable unit has neither.
+    private static AddedFieldDeclaredTypeNames CreateDeclaredTypeNames(
+        CSharpCompilation compilation,
+        WorkerTypeHome home,
+        List<WorkerSourceUnit> transformUnits)
+    {
+        if (transformUnits.Count == 0)
+        {
+            return new AddedFieldDeclaredTypeNames(
+                compilation.Assembly, home, new WorkerRetainedBodyEditType[0], IntroducedTypeArtifactMap.Empty);
+        }
+
+        WorkerSourceUnit anyUnit = transformUnits[0];
+        return new AddedFieldDeclaredTypeNames(
+            compilation.Assembly, home, anyUnit.RunRetainedBodyEditTypes, anyUnit.ArtifactMap);
     }
 
     // Keeps only the units a transform may read. A unit with parse errors is dropped: Roslyn's
