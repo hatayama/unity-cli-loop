@@ -196,6 +196,108 @@ three of the gaps it named:
    pdb paths and the descriptors, and a descriptor's Mvid
    (`IntroducedType/HotReloadIntroducedTypeDescriptor.cs:12`) is the original assembly's.
 
+### S6 — a MonoBehaviour type introduced from a byte-loaded assembly
+
+Test file: `HotReloadSpikeS6IntroducedMonoBehaviourTests.cs`. The spike changed no production
+code. Hot reload refuses an introduced type deriving from `UnityEngine.Object` with "Unity
+object introduced type requires a compile", and this spike measures what the Editor would
+actually do if that refusal were lifted — nothing here says it should be.
+
+The snippet is compiled by the external compiler and loaded with the two-argument
+`Assembly.Load(dllBytes, pdbBytes)`, exactly the shape every introduced type has. It declares
+two MonoBehaviours that differ only in `[ExecuteAlways]`, so a message count measured on one
+cannot be explained away by edit mode alone.
+
+What the spike **proved** (edit mode, pinned by tests):
+
+- `Q1_AddComponent_AcceptsByteLoadedMonoBehaviour` — `AddComponent(type)` returns a live
+  component of that exact type and logs nothing. Having no script asset is not what
+  `AddComponent` refuses.
+- `Q1_CreateInstance_AcceptsByteLoadedScriptableObject` — `ScriptableObject.CreateInstance`
+  accepts such a type too, equally silently.
+- `Q2_ExecuteAlwaysIntroducedType_ReceivesLifecycleMessagesInEditMode` — Unity itself delivers
+  `Awake` and `OnEnable` on `AddComponent`, `OnDisable`/`OnEnable` when the `enabled` flag is
+  driven, and `OnDisable` then `OnDestroy` on `DestroyImmediate`. Native message dispatch
+  reaches a type with no script asset behind it.
+- `Q2_PlainIntroducedType_ReceivesNoLifecycleMessagesInEditMode` — the sibling without the
+  attribute receives none of them, which is the ordinary edit-mode rule rather than anything
+  about the assembly.
+- `Q3_IntroducedComponent_IsFoundByComponentLookups` — `GetComponent(type)` and
+  `GetComponents<MonoBehaviour>()` both find it.
+- `Q3_StartCoroutine_RunsUntilTheFirstYieldInEditMode` — `StartCoroutine` accepts a coroutine
+  declared on the type and runs it to the first yield; edit mode does not drive it further.
+- `Q4_Instantiate_ClonesTheComponentWithItsFieldValues` — `Object.Instantiate` clones the
+  component and carries both the `[SerializeField]` private field and the public field across.
+  Unity's serializer handles the type's fields despite the missing script asset.
+- `Q4_JsonUtility_SerializesTheIntroducedComponentFields` — `JsonUtility.ToJson` writes both
+  fields.
+- `Q5_TwoGenerationsOfTheSameTypeName_CoexistAndStayDistinct` — two artifact assemblies
+  declaring the same fully qualified type name yield two distinct `Type` objects; both
+  components sit on one object at the same time, and `GetComponent` returns each generation's
+  own instance. Nothing merges or replaces the older one by name.
+
+What the spike **refuted**:
+
+- The premise that a component with no script asset cannot exist is wrong for every operation
+  above. The refusal is not enforced by the Unity runtime at `AddComponent` time.
+- `Q3_MonoScript_ExistsWithoutAnAssetBehindIt` — the expectation that
+  `MonoScript.FromMonoBehaviour` returns null is refuted: it returns a `MonoScript` whose
+  `GetClass()` is the introduced type. What is missing is the asset behind it — empty `name`,
+  empty asset path, empty `text`. This is the one measured difference from a compiled
+  MonoBehaviour, whose script path resolves to its source file.
+
+**Manual measurement** (play mode, not covered by any test, measured once through
+`execute-dynamic-code` while the Editor was in play mode; the objects were created at runtime
+and the scene was never saved):
+
+- The same artifact loaded in play mode and added to a new object: `Awake` and `OnEnable`
+  arrived synchronously on `AddComponent`, then `Start` once and `Update` on every frame
+  (13,739 `Update` calls across 13,739 frames). Both behaviours were delivered to, the
+  `[ExecuteAlways]` one and the plain one alike — in play mode the attribute is irrelevant.
+  So Unity's native per-frame dispatch works for a byte-loaded MonoBehaviour.
+- A `Reflection.Emit` MonoBehaviour subclass — the shape the existing Unity-message proxy
+  builder produces — was measured the same way in the same session and behaved identically:
+  `Awake` on add, then `Start` once and `Update` every frame. **No difference between the two
+  routes was observed**, so the proxy mechanism has no delivery advantage over loading the
+  type from bytes.
+- After leaving play mode the probe objects were gone (`find-game-objects` found none) and the
+  active scene was not dirty. That only reflects the ordinary discarding of play-mode scene
+  state; it is not evidence about what a *saved* scene would do.
+
+The fallback the plan held in reserve — forwarding messages through the existing proxy builder
+instead — **is not needed**: native delivery works, and the proxy route was measured to behave
+identically rather than better.
+
+**Production work items if this becomes a feature.** None of this is implemented; the list is
+what the measurements say would have to be built.
+
+1. Decide what happens to instances at the next real compile. After a compile the artifact
+   assembly is gone and the type is a normal compiled type; nothing today transfers a live
+   component from the artifact type to the compiled one.
+2. Give the introduced type a script asset, or accept that it has none. Everything that
+   resolves a component through `m_Script` — the Inspector, prefab and scene serialization,
+   `AddComponent` from the UI — goes through the asset that the measurements show is absent.
+3. Handle the two-generation case explicitly. Q5 shows a second generation coexists rather
+   than replacing the first, so re-introducing an edited declaration would leave the old
+   component alive on the object unless something removes it.
+4. Decide the refusal's new boundary: `MonoBehaviour` and `ScriptableObject` behave the same
+   in these measurements, but nothing here covers types Unity instantiates from an asset
+   (`Editor`, `EditorWindow`, `ScriptedImporter`).
+
+**Expected limitations.** Marked as inference where they were not measured:
+
+- *Inference.* A scene or prefab saved while such a component is attached would write no script
+  reference, because the `MonoScript` has no asset and therefore no guid; reopening it would
+  show a missing script. Not measured — measuring it means saving a scene, which this spike
+  did not do.
+- *Inference.* The Inspector cannot draw the component the way it draws a compiled one, for the
+  same missing-asset reason.
+- *Inference.* An assembly loaded from bytes lives only in the current domain, so a domain
+  reload leaves any component of an introduced type without its type. This spike did not
+  measure a domain reload.
+- Not covered: play-mode behaviour is a single manual measurement, not a regression test. If
+  this becomes a feature it needs a play-mode test of its own.
+
 ## Mechanism Decision
 
 **Transplant-primary.** Stage (5) applies a Harmony transpiler per patched method that
