@@ -218,6 +218,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a cancelled Play entry keeps an owner file revert-all recorded for a type it left
+        /// loaded, even though Play entry recorded the same type again, and leaves the identity
+        /// ledger empty. The revert's row is not the cancelled entry's to take back, and losing it
+        /// would leave the next omitted --files run without the file its callers need.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenPlayEntryAfterRevertAllIsCancelled_KeepsTheRevertsOwnerFile()
+        {
+            HotReloadPlayModeEntryDropSource stillLoaded =
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/StillLoaded.cs");
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new[] { stillLoaded });
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { stillLoaded },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.EnteredEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { stillLoaded },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/StillLoaded.cs" }));
+            Assert.That(HotReloadPlayModeEntryDropLedger.GetIdentities(), Is.Empty);
+        }
+
+        /// <summary>
         /// What: an apply forgets the owner files of types it introduced or found already active,
         /// and keeps the file of a type it failed to introduce.
         /// </summary>

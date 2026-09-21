@@ -579,7 +579,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             " New files that have never been compiled are not selected automatically.";
 
         // Opens the selection message of an omitted --files run that found no changed file but
-        // still selects files Play entry discarded.
+        // still selects the files of introduced types Play entry or revert-all dropped.
         public const string DefaultSelectionNoChangedFilesPrefix =
             "--files was omitted; no file changed since the last compile.";
 
@@ -603,7 +603,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIdentities";
 
         // SessionState key for the owner files of introduced types discarded by the Play-entry
-        // domain reload, one "identity<TAB>project-relative path" line per type.
+        // domain reload, or left loaded by revert-all with their later additions dropped, one
+        // "identity<TAB>project-relative path" line per type.
         public const string PlayModeEntryDropSourcesSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIntroducedSources";
 

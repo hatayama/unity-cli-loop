@@ -38,6 +38,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // identities must leave the ledger so live patches are not reported as dropped.
         private static List<string> _pendingIdentitiesRecordedInThisDomain;
 
+        // Why apart from the identities: a revert-all may already have recorded an owner row for
+        // a type Play entry records again. A cancelled entry takes back only the rows it added,
+        // or the revert's row would go and the next omitted --files run would miss that file.
+        private static List<string> _pendingSourceIdentitiesRecordedInThisDomain;
+
         public static void Initialize()
         {
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
@@ -133,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void ResetPendingForTesting()
         {
             _pendingIdentitiesRecordedInThisDomain = null;
+            _pendingSourceIdentitiesRecordedInThisDomain = null;
         }
 
         internal static void NotifyPlayModeStateChanged(
@@ -149,9 +155,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            List<string> newSourceIdentities = ListSourceIdentitiesNotYetRecorded(introducedSources);
             HotReloadPlayModeEntryDropLedger.Record(identities);
             HotReloadPlayModeEntryDropSourceLedger.Record(introducedSources);
-            RememberPending(identities);
+            RememberPending(identities, newSourceIdentities);
+        }
+
+        private static List<string> ListSourceIdentitiesNotYetRecorded(
+            IReadOnlyList<HotReloadPlayModeEntryDropSource> introducedSources)
+        {
+            HashSet<string> recorded = new HashSet<string>(
+                HotReloadPlayModeEntryDropSourceLedger.GetIdentities(),
+                StringComparer.Ordinal);
+            List<string> notYetRecorded = new List<string>();
+            for (int index = 0; index < introducedSources.Count; index++)
+            {
+                string identity = introducedSources[index].Identity;
+                if (!recorded.Contains(identity))
+                {
+                    notYetRecorded.Add(identity);
+                }
+            }
+
+            return notYetRecorded;
         }
 
         // Why both ledgers move together: a source line names the type identity it was recorded
@@ -186,11 +212,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            RemoveFromLedgers(_pendingIdentitiesRecordedInThisDomain);
+            HotReloadPlayModeEntryDropLedger.Remove(_pendingIdentitiesRecordedInThisDomain);
+            HotReloadPlayModeEntryDropSourceLedger.Remove(_pendingSourceIdentitiesRecordedInThisDomain);
             _pendingIdentitiesRecordedInThisDomain = null;
+            _pendingSourceIdentitiesRecordedInThisDomain = null;
         }
 
-        private static void RememberPending(IReadOnlyList<string> identities)
+        private static void RememberPending(IReadOnlyList<string> identities, List<string> newSourceIdentities)
         {
             List<string> pending = new List<string>();
             for (int index = 0; index < identities.Count; index++)
@@ -205,6 +233,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _pendingIdentitiesRecordedInThisDomain = pending;
+            _pendingSourceIdentitiesRecordedInThisDomain = newSourceIdentities;
         }
 
         private static void HandleCompilationStarted(object context)
