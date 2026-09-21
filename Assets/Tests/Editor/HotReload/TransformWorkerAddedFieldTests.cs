@@ -2062,6 +2062,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingFail)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
             AssertHasNoAddedFieldSerializeWarning(result);
+            AssertNoSerializedDeclarationRow(result);
         }
 
         private static async Task AssertCompiledMemberKindChangeSkipsTouchingMethodsAsync(
@@ -2104,6 +2105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, nameof(HotReloadFieldKindChangeFixture.WriteKind)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
             AssertHasNoAddedFieldSerializeWarning(result);
+            AssertNoSerializedDeclarationRow(result);
         }
 
         private static async Task AssertCompiledPropertyOrEventWarningAsync(
@@ -2433,6 +2435,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "The worker must not word the added-field Inspector warning. Warnings="
                         + string.Join("\n", result.Output.files[0].declarationDriftWarnings));
                 }
+            }
+        }
+
+        // The Editor names a serialized added field only from these rows, so a field refused for a
+        // changed compiled declaration must not reach them marked serialized.
+        private static void AssertNoSerializedDeclarationRow(TransformWorkerClientResult result)
+        {
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations ?? Array.Empty<TransformWorkerAddedFieldDeclarationDto>();
+            foreach (TransformWorkerAddedFieldDeclarationDto declaration in declarations)
+            {
+                Assert.That(
+                    declaration.hasSerializationAttribute,
+                    Is.False,
+                    "A refused field must not reach the Editor as a serialized added field: "
+                    + declaration.fieldKey);
             }
         }
 
