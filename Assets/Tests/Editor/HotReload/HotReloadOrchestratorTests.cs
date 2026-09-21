@@ -3878,6 +3878,76 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added field whose declared type is declared in another file passed to the
+        /// same reload can be wired, and the patched reader sees the wired reference.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldOfTypeFromAnotherRequestedFile_IsWiredAndRead()
+        {
+            string e2ePath = ResolveE2EFixturePath();
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string applyEdited = WithAddedSiblingTypedPeer(File.ReadAllText(applyPath));
+
+            HotReloadOrchestratorResult applied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { e2ePath, applyPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [applyPath] = WriteEditedSource("AddedPeerFromRequestedFile.cs", applyEdited)
+                });
+            AssertNoFileLevelFailure(applied);
+            AssertHasPatched(applied, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+
+            AssertWiredPeerReachesThePatchedReader();
+        }
+
+        /// <summary>
+        /// What: an added field whose declared type is declared in a file an earlier reload made
+        /// active can be wired when only the field's own file is requested, because that earlier
+        /// file is pulled back into the reload as a sibling and bound from source again.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldOfTypeFromReappliedSiblingFile_IsWiredAndRead()
+        {
+            string e2ePath = ResolveE2EFixturePath();
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string siblingEditedPath = WriteEditedSource(
+                "PeerTypeSiblingActive.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 1;\n        }"));
+            HotReloadOrchestratorResult siblingApplied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { e2ePath },
+                siblingEditedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(siblingApplied);
+            AssertHasPatched(siblingApplied, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            // The sibling is re-applied only while its text still matches what was applied, so
+            // the second run reads it from the same edited copy.
+            HotReloadOrchestratorResult applied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { applyPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [applyPath] = WriteEditedSource(
+                        "AddedPeerFromSibling.cs",
+                        WithAddedSiblingTypedPeer(File.ReadAllText(applyPath))),
+                    [e2ePath] = siblingEditedPath
+                });
+            AssertNoFileLevelFailure(applied);
+            AssertHasPatched(applied, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(
+                applied.ReappliedSiblingPaths,
+                Has.Some.EndsWith("HotReloadE2EFixtures.cs"),
+                "The declaring file must reach the worker as a re-applied sibling for this case to exist.");
+
+            AssertWiredPeerReachesThePatchedReader();
+        }
+
+        /// <summary>
         /// What: an initializer added to a field an earlier reload already added is named in
         /// Warnings, leaves the value an existing instance holds alone, and still runs for an
         /// instance that has not read the field yet.
@@ -7779,6 +7849,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
                 StringComparison.Ordinal);
+        }
+
+        // The declared type lives in HotReloadE2EFixtures.cs, so the field's type is bound from
+        // source only when that file is part of the same reload.
+        private static string WithAddedSiblingTypedPeer(string onDisk)
+        {
+            string edited = onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }",
+                "        public HotReloadE2ESibling AddedPeer;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AddedPeer == null ? -1 : AddedPeer.Value;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static void AssertWiredPeerReachesThePatchedReader()
+        {
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            Assert.That(host.ReadAdded(), Is.EqualTo(-1), "The added field starts unwired.");
+
+            HotReloadAddedFieldWiring.SetInstanceField(host, "AddedPeer", new HotReloadE2ESibling { Value = 42 });
+
+            Assert.That(host.ReadAdded(), Is.EqualTo(42), "The patched reader must see the wired reference.");
         }
 
         private static string WithAddedFieldAndConstAccesses(string onDisk)
