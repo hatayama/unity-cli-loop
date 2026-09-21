@@ -35,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 { typeof(TransformWorkerSourceDto), "WorkerSourceInput" },
                 { typeof(TransformWorkerFileOutputDto), "WorkerFileOutput" },
+                { typeof(TransformWorkerAddedFieldDeclarationDto), "WorkerAddedFieldDeclaration" },
                 { typeof(TransformWorkerIntroducedTypeReuseDto), "WorkerIntroducedTypeReuse" },
                 { typeof(TransformWorkerIntroducedTypeDto), "WorkerIntroducedType" },
                 { typeof(TransformWorkerOutputDto), "WorkerOutput" },
