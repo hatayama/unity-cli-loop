@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
@@ -161,17 +162,46 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
         private static string FormatUnknownFieldMessage(IHotReloadAddedFieldPort port, Type type, string fieldName)
         {
+            // Why the compiled field is checked first: after a compile that included the edit, the
+            // name is an ordinary field and re-running a hot reload would never make it an added
+            // one again, so the "run a hot reload first" advice below would loop the caller.
+            FieldInfo compiledField = FindCompiledField(type, fieldName);
+            if (compiledField != null)
+            {
+                return "'" + fieldName + "' is a compiled field of " + compiledField.DeclaringType.FullName
+                    + " now, not one hot reload added: a compile included the edit that declared it. "
+                    + "Set it through SerializedObject or the Inspector like any other field, and "
+                    + "delete the wiring script.";
+            }
+
             List<string> names = CollectAddedFieldNames(port, type);
             if (names.Count == 0)
             {
                 return "'" + fieldName + "' is not an added field of " + type.FullName
                     + ", which has no active added fields at all. Run a hot reload that adds the "
-                    + "field first; a compile or a domain reload drops the added fields.";
+                    + "field first; a compile, a domain reload, or 'uloop hot-reload --revert-all' "
+                    + "drops the added fields.";
             }
 
             names.Sort(StringComparer.Ordinal);
             return "'" + fieldName + "' is not an added field of " + type.FullName
                 + ". Active added fields: " + string.Join(", ", names.ToArray()) + ".";
+        }
+
+        private static FieldInfo FindCompiledField(Type type, string fieldName)
+        {
+            const BindingFlags DeclaredFields = BindingFlags.Instance | BindingFlags.Static
+                | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            for (Type current = type; current != null; current = current.BaseType)
+            {
+                FieldInfo field = current.GetField(fieldName, DeclaredFields);
+                if (field != null)
+                {
+                    return field;
+                }
+            }
+
+            return null;
         }
 
         private static List<string> CollectAddedFieldNames(IHotReloadAddedFieldPort port, Type type)
@@ -222,9 +252,43 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             throw new ArgumentException(
                 Describe(declaration) + " is declared " + declaredType.FullName + ", and a "
-                + value.GetType().FullName + " is not one. The field is read back with 'is', so "
-                + "even a widening numeric value is refused: cast the value to the declared type "
-                + "before wiring it.");
+                + value.GetType().FullName + " is not one." + DescribeMismatchRemedy(declaredType, value));
+        }
+
+        // Why a remedy only for these shapes: each names a conversion that always yields a value
+        // the field accepts. Any other mismatch has no fix this entry point can know, so naming
+        // both types is all it says rather than advice that does not apply.
+        private static string DescribeMismatchRemedy(Type declaredType, object value)
+        {
+            if (IsNumeric(declaredType))
+            {
+                return " The field is read back with 'is', so even a widening numeric value is "
+                    + "refused: cast the value to the declared type before wiring it.";
+            }
+
+            if (typeof(UnityEngine.Component).IsAssignableFrom(declaredType) && value is UnityEngine.GameObject)
+            {
+                return " Pass the component instead: gameObject.GetComponent<" + declaredType.Name + ">().";
+            }
+
+            if (declaredType == typeof(UnityEngine.GameObject) && value is UnityEngine.Component)
+            {
+                return " Pass the GameObject it is on instead: component.gameObject.";
+            }
+
+            return string.Empty;
+        }
+
+        private static bool IsNumeric(Type declaredType)
+        {
+            Type type = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+            if (type.IsEnum)
+            {
+                return false;
+            }
+
+            TypeCode code = Type.GetTypeCode(type);
+            return code >= TypeCode.SByte && code <= TypeCode.Decimal;
         }
 
         private static Type ResolveDeclaredType(HotReloadAddedFieldDeclaration declaration)
