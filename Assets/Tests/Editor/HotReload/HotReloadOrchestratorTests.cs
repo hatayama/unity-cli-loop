@@ -3790,6 +3790,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
             AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
 
+            // Why here and not only in a ledger unit test: this is the only path that proves the
+            // apply hands the worker's declarations to the ledger. Replacing them with an empty
+            // set anywhere between the worker output and the commit leaves this assertion failing.
+            string fixtureTypeName = typeof(HotReloadAddedFieldApplyFixture).FullName;
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetAddedFieldDeclaration(
+                    fixtureTypeName,
+                    "AddedCount",
+                    out HotReloadAddedFieldDeclaration appliedDeclaration),
+                Is.True,
+                "The apply must leave the added field's declaration in the ledger.");
+            Assert.That(appliedDeclaration.StoreFieldKey, Is.EqualTo(fixtureTypeName + "::AddedCount"));
+            Assert.That(
+                Type.GetType(appliedDeclaration.DeclaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(int)),
+                appliedDeclaration.DeclaredTypeAssemblyQualifiedName);
+            Assert.That(appliedDeclaration.IsStatic, Is.False);
+
             HotReloadAddedFieldApplyFixture firstHost = new HotReloadAddedFieldApplyFixture();
             HotReloadAddedFieldApplyFixture secondHost = new HotReloadAddedFieldApplyFixture();
             firstHost.WriteAdded(10);

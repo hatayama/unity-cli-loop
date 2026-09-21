@@ -307,6 +307,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a field whose declared type reflection cannot name is described with an empty
+        /// declared type name, which is the answer a caller has to fail closed on rather than
+        /// resolving some other type under the same name.
+        /// </summary>
+        /// <remarks>
+        /// Why dynamic and not an open type parameter: a method on a generic type is skipped with
+        /// MethodTransformGenericMethodOrType, so a type-parameter-typed field never reaches the
+        /// rewritten set. dynamic is the unnameable declared type this path does reach.
+        /// </remarks>
+        [Test]
+        public async Task Classify_AddedFieldOfUnnameableType_LeavesTheDeclaredTypeNameEmpty()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public dynamic AddedDyn;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedDyn is null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedUnnameableFieldDeclaration.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(1));
+            Assert.That(declarations[0].fieldName, Is.EqualTo("AddedDyn"));
+            Assert.That(declarations[0].declaredTypeAssemblyQualifiedName, Is.Empty);
+        }
+
+        /// <summary>
         /// What: a generic and an array declared type are named so reflection resolves them, which
         /// is the boundary a caller wiring a value has to stay inside.
         /// </summary>
