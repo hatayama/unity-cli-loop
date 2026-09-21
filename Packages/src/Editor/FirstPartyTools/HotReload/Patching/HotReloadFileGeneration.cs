@@ -31,14 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, HotReloadAddedMemberInfo> _addedMembersByMethodKey =
             new Dictionary<string, HotReloadAddedMemberInfo>(StringComparer.Ordinal);
 
-        private readonly Dictionary<string, List<string>> _addedFieldsByTypeKey =
-            new Dictionary<string, List<string>>(StringComparer.Ordinal);
-
-        // The initializer text each added field was last committed with, keyed by its display
-        // name. Kept beside the type map because it answers a question about the previous
-        // reload, not about which fields a type currently holds.
-        private readonly Dictionary<string, string> _addedFieldInitializerByFullName =
-            new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly HotReloadAddedFieldLedger _addedFields = new HotReloadAddedFieldLedger();
 
         private readonly Dictionary<MethodBase, HotReloadActivePatchEntry> _patchesByMethod =
             new Dictionary<MethodBase, HotReloadActivePatchEntry>();
@@ -94,8 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void BeginAddedMemberGeneration()
         {
             _addedMembersByMethodKey.Clear();
-            _addedFieldsByTypeKey.Clear();
-            _addedFieldInitializerByFullName.Clear();
+            _addedFields.Clear();
             HasAddedMemberGeneration = true;
         }
 
@@ -165,37 +157,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Replaces every added-field entry with <paramref name="addedFieldFullNames"/>
-        /// (Type.field display names). Type keys are stored in reflection form (nested types
-        /// use '+'). <paramref name="addedFieldInitializers"/> holds the initializer text of each
-        /// name in the same order, and is ignored when it does not line up with the names.
+        /// Replaces every added-field entry of this file with the rows the run committed.
         /// </summary>
         internal void ReplaceAddedFields(
             IReadOnlyList<string> addedFieldFullNames,
-            IReadOnlyList<string> addedFieldInitializers)
+            IReadOnlyList<string> addedFieldInitializers,
+            IReadOnlyList<HotReloadAddedFieldDeclaration> addedFieldDeclarations)
         {
-            Debug.Assert(addedFieldFullNames != null, "addedFieldFullNames must not be null.");
-
-            _addedFieldsByTypeKey.Clear();
-            _addedFieldInitializerByFullName.Clear();
-            bool hasInitializers =
-                addedFieldInitializers != null
-                && addedFieldInitializers.Count == addedFieldFullNames.Count;
-            for (int index = 0; index < addedFieldFullNames.Count; index++)
-            {
-                AddAddedField(addedFieldFullNames[index]);
-                if (hasInitializers && !string.IsNullOrEmpty(addedFieldFullNames[index]))
-                {
-                    _addedFieldInitializerByFullName[addedFieldFullNames[index]] =
-                        addedFieldInitializers[index] ?? string.Empty;
-                }
-            }
+            _addedFields.Replace(addedFieldFullNames, addedFieldInitializers, addedFieldDeclarations);
         }
 
         /// <summary>
-        /// Adds to <paramref name="changedFullNames"/> each name of
-        /// <paramref name="addedFieldFullNames"/> this generation already holds an initializer
-        /// for that differs from <paramref name="addedFieldInitializers"/>.
+        /// Adds to <paramref name="changedFullNames"/> each added field this generation already
+        /// holds a different initializer for.
         /// </summary>
         /// <remarks>
         /// Why it has to run before the generation starts: BeginAddedMemberGeneration drops the
@@ -206,70 +180,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> addedFieldInitializers,
             List<string> changedFullNames)
         {
-            Debug.Assert(changedFullNames != null, "changedFullNames must not be null.");
-            if (addedFieldFullNames == null
-                || addedFieldInitializers == null
-                || addedFieldInitializers.Count != addedFieldFullNames.Count)
-            {
-                return;
-            }
-
-            for (int index = 0; index < addedFieldFullNames.Count; index++)
-            {
-                // Why a declaration that lost its initializer is not reported: the run has no
-                // initializer to run anywhere, so there is nothing that fails to reach a value.
-                if (string.IsNullOrEmpty(addedFieldInitializers[index]))
-                {
-                    continue;
-                }
-
-                if (!_addedFieldInitializerByFullName.TryGetValue(
-                        addedFieldFullNames[index],
-                        out string committedInitializer))
-                {
-                    continue;
-                }
-
-                if (string.Equals(
-                        committedInitializer,
-                        addedFieldInitializers[index],
-                        StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                changedFullNames.Add(addedFieldFullNames[index]);
-            }
+            _addedFields.CollectFieldsWithChangedInitializer(
+                addedFieldFullNames,
+                addedFieldInitializers,
+                changedFullNames);
         }
 
-        private void AddAddedField(string fullName)
+        /// <summary>
+        /// The row describing one added field of <paramref name="typeName"/>, which may be spelled
+        /// either way a nested type is spelled.
+        /// </summary>
+        internal bool TryGetAddedFieldDeclaration(
+            string typeName,
+            string fieldName,
+            out HotReloadAddedFieldDeclaration declaration)
         {
-            if (string.IsNullOrEmpty(fullName))
-            {
-                return;
-            }
-
-            int lastDot = fullName.LastIndexOf('.');
-            Debug.Assert(
-                lastDot > 0 && lastDot < fullName.Length - 1,
-                "added field display names are Type.field with a type segment.");
-            if (lastDot <= 0 || lastDot >= fullName.Length - 1)
-            {
-                return;
-            }
-
-            string typeKey = NormalizeTypeKey(fullName.Substring(0, lastDot));
-            string fieldName = fullName.Substring(lastDot + 1);
-            if (!_addedFieldsByTypeKey.TryGetValue(typeKey, out List<string> fields))
-            {
-                fields = new List<string>();
-                _addedFieldsByTypeKey[typeKey] = fields;
-            }
-
-            if (!fields.Contains(fieldName))
-            {
-                fields.Add(fieldName);
-            }
+            return _addedFields.TryGetDeclaration(typeName, fieldName, out declaration);
         }
 
         /// <summary>
@@ -532,32 +458,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal void CollectAddedFieldsForType(string normalizedTypeName, HashSet<string> fieldNames)
         {
-            Debug.Assert(fieldNames != null, "fieldNames must not be null.");
-            if (!_addedFieldsByTypeKey.TryGetValue(normalizedTypeName, out List<string> fields))
-            {
-                return;
-            }
-
-            for (int index = 0; index < fields.Count; index++)
-            {
-                fieldNames.Add(fields[index]);
-            }
+            _addedFields.CollectFieldsForType(normalizedTypeName, fieldNames);
         }
 
         internal void DescribeAddedFields(List<HotReloadAddedFieldDescription> descriptions)
         {
-            Debug.Assert(descriptions != null, "descriptions must not be null.");
-            foreach (KeyValuePair<string, List<string>> typePair in _addedFieldsByTypeKey)
-            {
-                for (int index = 0; index < typePair.Value.Count; index++)
-                {
-                    descriptions.Add(
-                        new HotReloadAddedFieldDescription(
-                            NormalizedPath,
-                            typePair.Key,
-                            typePair.Value[index]));
-                }
-            }
+            _addedFields.DescribeFields(NormalizedPath, descriptions);
         }
 
         internal bool TryGetSupersededReplacement(string oldMethodKey, out string replacementDisplayName)
@@ -656,11 +562,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadShimFileLookup(_assemblyBytes, _pdbBytes, _loadedAssembly, methods);
-        }
-
-        private static string NormalizeTypeKey(string typeName)
-        {
-            return typeName.Replace('/', '+');
         }
     }
 }

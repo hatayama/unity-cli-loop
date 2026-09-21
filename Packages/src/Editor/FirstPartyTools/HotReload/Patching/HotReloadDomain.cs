@@ -415,6 +415,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return names;
         }
 
+        /// <summary>
+        /// The row describing one added field of <paramref name="typeName"/>, searched across every
+        /// file's generation. The type may be spelled either way a nested type is spelled.
+        /// </summary>
+        internal bool TryGetAddedFieldDeclaration(
+            string typeName,
+            string fieldName,
+            out HotReloadAddedFieldDeclaration declaration)
+        {
+            declaration = null;
+            if (string.IsNullOrEmpty(typeName) || string.IsNullOrEmpty(fieldName))
+            {
+                return false;
+            }
+
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                if (pair.Value.TryGetAddedFieldDeclaration(typeName, fieldName, out declaration))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>Every live added-field row: file path, then type, then field, all ordinal.</summary>
         internal IReadOnlyList<HotReloadAddedFieldDescription> DescribeAddedFields()
         {

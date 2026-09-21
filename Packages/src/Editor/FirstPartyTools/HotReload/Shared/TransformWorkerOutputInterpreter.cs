@@ -112,6 +112,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
                 fileOutput.addedFieldNames ??= Array.Empty<string>();
                 fileOutput.addedFieldInitializers ??= Array.Empty<string>();
+                fileOutput.addedFieldDeclarations ??=
+                    Array.Empty<TransformWorkerAddedFieldDeclarationDto>();
                 fileOutput.addedConstNames ??= Array.Empty<string>();
                 fileOutput.introducedTypes ??= Array.Empty<TransformWorkerIntroducedTypeDto>();
                 fileOutput.introducedTypeDiagnostics ??= Array.Empty<TransformWorkerReasonDto>();

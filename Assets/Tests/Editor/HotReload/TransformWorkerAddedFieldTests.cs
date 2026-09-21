@@ -225,6 +225,125 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: every rewritten added field is described with the store key its shims use, its
+        /// declaring type, its field name, staticness, and a declared type name reflection
+        /// resolves, in the same order as addedFieldNames.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFields_DescribeStoreKeyDeclaredTypeAndStaticness()
+        {
+            string hostTypeName = typeof(HotReloadAddedMemberHost).FullName;
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public static int AddedTotal;\n        public UnityEngine.GameObject AddedWired;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedTotal + (AddedWired == null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldDeclarationsDescribed.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto fileOutput = result.Output.files[0];
+            Assert.That(
+                fileOutput.addedFieldNames,
+                Is.EqualTo(new[] { hostTypeName + ".AddedTotal", hostTypeName + ".AddedWired" }));
+            Assert.That(fileOutput.addedFieldDeclarations, Is.Not.Null);
+            Assert.That(fileOutput.addedFieldDeclarations.Length, Is.EqualTo(2));
+
+            TransformWorkerAddedFieldDeclarationDto staticField = fileOutput.addedFieldDeclarations[0];
+            Assert.That(staticField.fieldName, Is.EqualTo("AddedTotal"));
+            Assert.That(staticField.declaringTypeMetadataName, Is.EqualTo(hostTypeName));
+            Assert.That(staticField.fieldKey, Is.EqualTo(hostTypeName + "::AddedTotal"));
+            Assert.That(staticField.isStatic, Is.True);
+            Assert.That(
+                Type.GetType(staticField.declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(int)),
+                staticField.declaredTypeAssemblyQualifiedName);
+
+            TransformWorkerAddedFieldDeclarationDto instanceField = fileOutput.addedFieldDeclarations[1];
+            Assert.That(instanceField.fieldName, Is.EqualTo("AddedWired"));
+            Assert.That(instanceField.fieldKey, Is.EqualTo(hostTypeName + "::AddedWired"));
+            Assert.That(instanceField.isStatic, Is.False);
+            Assert.That(
+                Type.GetType(instanceField.declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(GameObject)),
+                instanceField.declaredTypeAssemblyQualifiedName);
+        }
+
+        /// <summary>
+        /// What: the declaration of an added field on a nested type keeps the metadata spelling
+        /// ('/') in both its store key and its declaring type name, so nothing has to rebuild the
+        /// key the shims read.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFieldOnNestedType_DescribesTheMetadataFormStoreKey()
+        {
+            string nestedMetadataName =
+                typeof(HotReloadAddedMemberHost.NestedAddedFieldHost).FullName.Replace('+', '/');
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "            public int ExistingNested()\n            {\n                return 1;\n            }",
+                "            public int AddedNested;\n\n"
+                + "            public int ExistingNested()\n            {\n                return AddedNested;\n            }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedNestedFieldDeclaration.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(1));
+            Assert.That(nestedMetadataName, Does.Contain("/"));
+            Assert.That(declarations[0].declaringTypeMetadataName, Is.EqualTo(nestedMetadataName));
+            Assert.That(declarations[0].fieldKey, Is.EqualTo(nestedMetadataName + "::AddedNested"));
+        }
+
+        /// <summary>
+        /// What: a generic and an array declared type are named so reflection resolves them, which
+        /// is the boundary a caller wiring a value has to stay inside.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedGenericAndArrayFields_NameDeclaredTypesReflectionResolves()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public System.Collections.Generic.List<int> AddedItems;\n"
+                + "        public UnityEngine.GameObject[] AddedTargets;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedItems == null ? 0 : AddedItems.Count)\n"
+                + "                + (AddedTargets == null ? 0 : AddedTargets.Length) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedGenericAndArrayFieldDeclarations.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(2));
+            Assert.That(
+                Type.GetType(declarations[0].declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(List<int>)),
+                declarations[0].declaredTypeAssemblyQualifiedName);
+            Assert.That(
+                Type.GetType(declarations[1].declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(GameObject[])),
+                declarations[1].declaredTypeAssemblyQualifiedName);
+        }
+
+        /// <summary>
         /// What: uses of an added const fold to a value literal so the shim does not need the
         /// missing const member, and the store flag stays false.
         /// </summary>

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Reflection;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -79,13 +80,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .RegisterAddedMethod(methodKey, shimMethod, filePath, "Added", "Fixture");
         }
 
-        internal void ReplaceAddedFields(string projectRelativePath, IReadOnlyList<string> addedFieldFullNames)
+        internal void ReplaceAddedFields(
+            string projectRelativePath,
+            IReadOnlyList<string> addedFieldFullNames,
+            IReadOnlyList<HotReloadAddedFieldDeclaration> addedFieldDeclarations = null)
         {
             // Null initializers: these tests pin which fields a type holds, not what a previous
-            // reload initialized them with.
+            // reload initialized them with. Declarations default to none for the same reason: a
+            // test that needs them passes its own rows.
             GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(
                 addedFieldFullNames,
-                null);
+                null,
+                addedFieldDeclarations);
         }
 
         internal void RecordSupersededSignature(

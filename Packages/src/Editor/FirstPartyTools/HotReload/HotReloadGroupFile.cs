@@ -145,6 +145,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The initializer text of each AddedFieldNames entry, in the same order.
         internal string[] AddedFieldInitializers { get; set; }
 
+        // What each added field of this file declares: its store key, declaring type, declared
+        // type and staticness. Resolved by the same stage that produced AddedFieldNames.
+        internal TransformWorkerAddedFieldDeclarationDto[] AddedFieldDeclarations { get; set; }
+
         internal string[] AddedConstNames { get; set; }
 
         // Added field names this file actually committed while its generation was cleared,

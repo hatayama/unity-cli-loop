@@ -274,7 +274,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
             generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null);
 
             generation.BeginAddedMemberGeneration();
 
@@ -425,8 +425,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" }, null);
-            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" }, null, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" }, null, null);
 
             Assert.That(
                 CollectFields(generation, HostType),
@@ -445,7 +445,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.BeginAddedMemberGeneration();
             generation.ReplaceAddedFields(
                 new[] { HostType + ".changed", HostType + ".stable", HostType + ".dropped" },
-                new[] { "1", "2", "3" });
+                new[] { "1", "2", "3" },
+                null);
 
             List<string> changed = new List<string>();
             generation.CollectAddedFieldsWithChangedInitializer(
@@ -465,7 +466,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, new[] { "1" });
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, new[] { "1" }, null);
 
             List<string> changed = new List<string>();
             generation.CollectAddedFieldsWithChangedInitializer(
@@ -484,9 +485,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null);
 
-            generation.ReplaceAddedFields(Array.Empty<string>(), null);
+            generation.ReplaceAddedFields(Array.Empty<string>(), null, null);
 
             Assert.That(CollectFields(generation, HostType), Is.Empty);
             Assert.That(DescribeFields(generation), Is.Empty);
@@ -501,7 +502,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" }, null);
+            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" }, null, null);
 
             Assert.That(
                 CollectFields(generation, NestedReflectionType),
@@ -512,6 +513,92 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(described[0].TypeName, Is.EqualTo(NestedReflectionType));
             Assert.That(described[0].FieldName, Is.EqualTo("count"));
             Assert.That(described[0].ProjectRelativePath, Is.EqualTo(FixtureProjectRelativePath));
+        }
+
+        /// <summary>
+        /// What: an added field's declaration is retrievable by its declaring type and field name
+        /// with the store key the worker formed, and a field this generation does not hold is not.
+        /// </summary>
+        [Test]
+        public void ReplaceAddedFields_KeepsDeclarationsLookedUpByTypeAndFieldName()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(
+                new[] { HostType + ".wired" },
+                null,
+                new[] { CreateDeclaration(HostType, "wired", typeof(string), isStatic: false) });
+
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(
+                    HostType,
+                    "wired",
+                    out HotReloadAddedFieldDeclaration declaration),
+                Is.True);
+            Assert.That(declaration.StoreFieldKey, Is.EqualTo(HostType + "::wired"));
+            Assert.That(declaration.DeclaredTypeAssemblyQualifiedName,
+                Is.EqualTo(typeof(string).AssemblyQualifiedName));
+            Assert.That(declaration.IsStatic, Is.False);
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(HostType, "missing", out HotReloadAddedFieldDeclaration _),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: replacing the added fields drops the declarations of the fields the new set
+        /// omits, so a stale declaration cannot outlive the field it described.
+        /// </summary>
+        [Test]
+        public void ReplaceAddedFields_DropsDeclarationsTheNewSetOmits()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(
+                new[] { HostType + ".dropped" },
+                null,
+                new[] { CreateDeclaration(HostType, "dropped", typeof(int), isStatic: true) });
+
+            generation.ReplaceAddedFields(
+                new[] { HostType + ".kept" },
+                null,
+                new[] { CreateDeclaration(HostType, "kept", typeof(int), isStatic: true) });
+
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(HostType, "dropped", out HotReloadAddedFieldDeclaration _),
+                Is.False);
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(HostType, "kept", out HotReloadAddedFieldDeclaration _),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: the declaration of a field on a nested type is found whether the caller spells
+        /// the type the Cecil way or the reflection way.
+        /// </summary>
+        [Test]
+        public void AddedFieldDeclarations_NestedType_AreFoundByEitherNameForm()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(
+                new[] { NestedCecilType + ".count" },
+                null,
+                new[] { CreateDeclaration(NestedReflectionType, "count", typeof(int), isStatic: false) });
+
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(
+                    NestedReflectionType,
+                    "count",
+                    out HotReloadAddedFieldDeclaration byReflectionName),
+                Is.True);
+            Assert.That(byReflectionName.DeclaringTypeName, Is.EqualTo(NestedReflectionType));
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(
+                    NestedCecilType,
+                    "count",
+                    out HotReloadAddedFieldDeclaration byCecilName),
+                Is.True);
+            Assert.That(byCecilName.StoreFieldKey, Is.EqualTo(NestedCecilType + "::count"));
         }
 
         /// <summary>
@@ -576,6 +663,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static HotReloadFileGeneration CreateGeneration()
         {
             return new HotReloadFileGeneration(FixtureProjectRelativePath);
+        }
+
+        // The store key spells nested types the metadata way, which is what the worker forms and
+        // the Editor carries unchanged, so the fixture builds it from the type name it was given.
+        private static HotReloadAddedFieldDeclaration CreateDeclaration(
+            string declaringTypeName,
+            string fieldName,
+            Type declaredType,
+            bool isStatic)
+        {
+            return new HotReloadAddedFieldDeclaration(
+                declaringTypeName.Replace('+', '/') + "::" + fieldName,
+                declaringTypeName,
+                fieldName,
+                declaredType.AssemblyQualifiedName,
+                isStatic);
         }
 
         private static void BeginShimGeneration(HotReloadFileGeneration generation)

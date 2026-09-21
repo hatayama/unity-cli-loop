@@ -1,0 +1,146 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Collections.Immutable;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Runtime.Loader;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+
+/// <summary>
+/// What: names the declared type of an added field the way reflection spells it, so the Editor
+/// can resolve the type and check a value against it without reading the edited source.
+/// </summary>
+/// <remarks>
+/// Why assembly-qualified: the Editor holds no compilation, and a bare full name leaves it
+/// guessing which loaded assembly declares the type. Why an empty result is a legitimate answer:
+/// a type the worker cannot name (an open type parameter, a pointer, an error type) is a type the
+/// Editor could not resolve either, and a caller is better told that than handed a name that
+/// resolves to something else.
+/// </remarks>
+internal static class AddedFieldDeclaredTypeNames
+{
+    public static string ToAssemblyQualifiedName(ITypeSymbol typeSymbol)
+    {
+        string reflectionName = BuildReflectionName(typeSymbol);
+        if (string.IsNullOrEmpty(reflectionName))
+        {
+            return string.Empty;
+        }
+
+        string assemblyName = FindAssemblySimpleName(typeSymbol);
+        if (string.IsNullOrEmpty(assemblyName))
+        {
+            return string.Empty;
+        }
+
+        return reflectionName + ", " + assemblyName;
+    }
+
+    // Reflection spells nested types with '+', keeps the arity suffix of a generic definition,
+    // and lists the arguments of a constructed generic as bracketed assembly-qualified names.
+    private static string BuildReflectionName(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol == null || typeSymbol.TypeKind == TypeKind.Error)
+        {
+            return string.Empty;
+        }
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            string elementName = BuildReflectionName(arrayType.ElementType);
+            if (string.IsNullOrEmpty(elementName))
+            {
+                return string.Empty;
+            }
+
+            return elementName + FormatArraySuffix(arrayType.Rank);
+        }
+
+        if (typeSymbol is INamedTypeSymbol namedType)
+        {
+            return BuildNamedReflectionName(namedType);
+        }
+
+        // Type parameters, pointers, function pointers and dynamic have no resolvable name here.
+        return string.Empty;
+    }
+
+    private static string BuildNamedReflectionName(INamedTypeSymbol namedType)
+    {
+        string head = CecilTypeNames.ToMetadataName(namedType.OriginalDefinition).Replace('/', '+');
+        List<ITypeSymbol> typeArguments = new List<ITypeSymbol>();
+        CollectConstructedTypeArgumentsOuterToInner(namedType, typeArguments);
+        if (typeArguments.Count == 0)
+        {
+            return head;
+        }
+
+        List<string> qualifiedArguments = new List<string>(typeArguments.Count);
+        foreach (ITypeSymbol argument in typeArguments)
+        {
+            string qualifiedArgument = ToAssemblyQualifiedName(argument);
+            if (string.IsNullOrEmpty(qualifiedArgument))
+            {
+                return string.Empty;
+            }
+
+            qualifiedArguments.Add("[" + qualifiedArgument + "]");
+        }
+
+        return head + "[" + string.Join(",", qualifiedArguments) + "]";
+    }
+
+    // Reflection writes a vector array as "[]" and a rank-n array as n-1 commas in one bracket.
+    private static string FormatArraySuffix(int rank)
+    {
+        if (rank <= 1)
+        {
+            return "[]";
+        }
+
+        return "[" + new string(',', rank - 1) + "]";
+    }
+
+    // An array is named by the assembly of its element type, and a constructed generic by the
+    // assembly of its definition, so both walk down to the type that actually has one.
+    private static string FindAssemblySimpleName(ITypeSymbol typeSymbol)
+    {
+        ITypeSymbol current = typeSymbol;
+        while (current is IArrayTypeSymbol arrayType)
+        {
+            current = arrayType.ElementType;
+        }
+
+        IAssemblySymbol assembly = current?.OriginalDefinition?.ContainingAssembly;
+        if (assembly == null)
+        {
+            return string.Empty;
+        }
+
+        return assembly.Identity.Name;
+    }
+
+    private static void CollectConstructedTypeArgumentsOuterToInner(
+        INamedTypeSymbol namedType,
+        List<ITypeSymbol> typeArguments)
+    {
+        if (namedType.ContainingType != null)
+        {
+            CollectConstructedTypeArgumentsOuterToInner(namedType.ContainingType, typeArguments);
+        }
+
+        if (namedType.IsGenericType && !namedType.IsUnboundGenericType)
+        {
+            typeArguments.AddRange(namedType.TypeArguments);
+        }
+    }
+}

@@ -41,6 +41,10 @@ internal sealed class WorkerFileOutput
     // empty when the field is declared without one.
     public string[] AddedFieldInitializers { get; set; }
 
+    // One entry per AddedFieldNames entry, in the same order: the store key, the declaring type,
+    // the declared type and staticness of that field.
+    public WorkerAddedFieldDeclaration[] AddedFieldDeclarations { get; set; }
+
     public string[] AddedConstNames { get; set; }
 
     public WorkerIntroducedType[] IntroducedTypes { get; set; }
