@@ -30,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 throw new ArgumentNullException(nameof(instance));
             }
 
+            RequireLiveInstance(instance);
             HotReloadAddedFieldDeclaration declaration = ResolveDeclaration(instance.GetType(), fieldName, false);
             RequireAssignable(declaration, value);
             RequireInstalledValues().Set(instance, declaration.StoreFieldKey, value);
@@ -66,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 throw new ArgumentNullException(nameof(instance));
             }
 
+            RequireLiveInstance(instance);
             HotReloadAddedFieldDeclaration declaration = ResolveDeclaration(instance.GetType(), fieldName, false);
             return RequireInstalledValues().TryGet(instance, declaration.StoreFieldKey, out value);
         }
@@ -83,6 +85,23 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             HotReloadAddedFieldDeclaration declaration = ResolveDeclaration(declaringType, fieldName, true);
             return RequireInstalledValues().TryGetStatic(declaration.StoreFieldKey, out value);
+        }
+
+        // Why a destroyed object is refused rather than written: a destroyed UnityEngine.Object is
+        // only null through Unity's own operator, so `instance == null` above lets it through, and
+        // the side table would happily hold a value for a host whose patched methods will never
+        // run again. Refusing says so while the caller still remembers which reference it used.
+        private static void RequireLiveInstance(object instance)
+        {
+            if (!(instance is UnityEngine.Object unityObject) || unityObject != null)
+            {
+                return;
+            }
+
+            throw new ArgumentException(
+                "The instance is a destroyed UnityEngine.Object, so a value wired into it would "
+                + "never be read. Wire the live object instead.",
+                nameof(instance));
         }
 
         // Why the base chain is walked with Type.FullName and no generic-definition step: the

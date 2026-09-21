@@ -3868,6 +3868,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.Throws<ArgumentException>(
                 () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 33L));
             Assert.That(host.ReadAdded(), Is.EqualTo(33));
+
+            // Reverting drops the generation that declared the field, so the wiring has nothing
+            // left to write into and says so rather than storing a value nothing reads.
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            InvalidOperationException afterRevert = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 1));
+            Assert.That(afterRevert.Message, Does.Contain("no active added fields"));
         }
 
         /// <summary>

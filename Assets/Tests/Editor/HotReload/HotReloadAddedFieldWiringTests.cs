@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 using NUnit.Framework;
 
+using UnityEngine;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -271,6 +273,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return 42;
                 });
             Assert.That(initializerRuns, Is.EqualTo(1), "The read must not have filled the slot.");
+        }
+
+        /// <summary>
+        /// What: a destroyed UnityEngine.Object is refused, even though it is not null to the
+        /// plain reference check, because nothing would ever read the value.
+        /// </summary>
+        [Test]
+        public void SetInstanceField_DestroyedUnityObject_IsRefused()
+        {
+            _port.AddInstanceField(typeof(GameObject), FieldName, typeof(int));
+            GameObject host = new GameObject("AddedFieldWiringHost");
+            UnityEngine.Object.DestroyImmediate(host);
+            Assert.That(ReferenceEquals(host, null), Is.False, "The managed reference is still there.");
+
+            ArgumentException error = Assert.Throws<ArgumentException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, FieldName, 1));
+
+            Assert.That(error.Message, Does.Contain("destroyed"));
+            int initializerRuns = 0;
+            HotReloadAddedFieldStore.GetOrInit(
+                host,
+                FakeAddedFieldPort.KeyOf(typeof(GameObject), FieldName),
+                () =>
+                {
+                    initializerRuns++;
+                    return 0;
+                });
+            Assert.That(initializerRuns, Is.EqualTo(1), "The refused write must not have filled the slot.");
         }
 
         /// <summary>
