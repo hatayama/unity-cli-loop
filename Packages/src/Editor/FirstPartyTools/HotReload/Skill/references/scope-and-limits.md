@@ -80,7 +80,9 @@ like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
 resolved type has any — their values live in the hot-reload shim and are not visible
 to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
-names fail with CS1061). Read them from a patched method body instead. When such a
+names fail with CS1061). Read one from a snippet with
+`HotReloadAddedFieldWiring.TryReadInstanceField` (`TryReadStaticField` for a static
+field) instead. When such a
 failure quotes the name of an active added member, the diagnostic's `Hint` says so
 rather than leaving the error reading as a typo. Naming the field is what fails, not
 reaching it: an `execute-dynamic-code` snippet can still read and write an added field

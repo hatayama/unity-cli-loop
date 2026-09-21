@@ -73,11 +73,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 response.Success,
                 Is.True,
                 response.ErrorCode + " / " + response.Message);
-            string addedFieldsWarning = string.Format(
-                SourcePausePointConstants.HotReloadAddedFieldsNotCapturedWarningFormat,
-                typeName,
-                2,
-                "alpha, beta");
+            string addedFieldsWarning =
+                "Hot reload added 2 field(s) to '" + typeName + "' (alpha, beta); they never appear "
+                + "in CapturedVariables, and naming them as members in 'uloop execute-dynamic-code' "
+                + "fails with CS1061 because it compiles against the compiled assembly. Read one there "
+                + "with HotReloadAddedFieldWiring.TryReadInstanceField (TryReadStaticField for a "
+                + "static field); references/added-field-wiring.md in the uloop-hot-reload skill "
+                + "shows how.";
             string expectedWarning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.MergeWarnings(
                     PausePointEnableWarnings.CreateEnableWarning(),
@@ -87,11 +89,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: the added-fields warning does not recommend execute-dynamic-code as a read
-        /// path and instead states that those names are invisible to it.
+        /// What: the added-fields warning neither recommends plain member access from
+        /// execute-dynamic-code nor a patched method body, and names the wiring reader instead.
         /// </summary>
         [Test]
-        public void Enable_WhenDeclaringTypeHasAddedFields_WarningDoesNotRecommendExecuteDynamicCode()
+        public void Enable_WhenDeclaringTypeHasAddedFields_WarningPointsAtTheWiringReader()
         {
             string typeName = typeof(EnableBySourceLocationFixture).FullName;
             PublishAddedFields(typeName, new[] { "alpha", "beta" });
@@ -114,10 +116,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "Read them via a patched method body or 'uloop execute-dynamic-code' instead"));
             Assert.That(
                 response.Warning,
-                Does.Contain("not visible to 'uloop execute-dynamic-code'"));
+                Does.Not.Contain("Read them from a patched method body"));
             Assert.That(
                 response.Warning,
-                Does.Contain("Read them from a patched method body"));
+                Does.Contain(
+                    "Read one there with HotReloadAddedFieldWiring.TryReadInstanceField "
+                    + "(TryReadStaticField for a static field)"));
         }
 
         /// <summary>
