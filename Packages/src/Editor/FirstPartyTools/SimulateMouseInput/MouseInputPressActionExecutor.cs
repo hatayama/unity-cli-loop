@@ -85,45 +85,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
-                {
-                    MouseInputMainThreadCleanup.ScheduleTimedOutButtonCleanup(mouse, button, pressWasApplied);
-                }
-                else if (pressWasApplied)
-                {
-                    InputSimulationWaitOutcome releaseOutcome =
-                        await MouseInputMainThreadCleanup.ReleaseButtonIfPossible(
-                            mouse,
-                            button,
-                            CancellationToken.None).ConfigureAwait(false);
-                    if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
-                    {
-                        waitOutcome = InputSimulationWaitOutcome.TimedOut;
-                        MouseInputMainThreadCleanup.ScheduleTimedOutButtonCleanup(mouse, button, false);
-                    }
-                    else
-                    {
-                        await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                        MouseInputState.SetButtonUp(button);
-                    }
-                }
-                else
-                {
-                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                    MouseInputState.SetButtonUp(button);
-                }
-
-                if (waitOutcome != InputSimulationWaitOutcome.TimedOut)
-                {
-                    if (waitOutcome == InputSimulationWaitOutcome.Paused)
-                    {
-                        SimulateMouseInputOverlayState.Clear();
-                    }
-                    else
-                    {
-                        SimulateMouseInputOverlayState.SetButtonHeld(button, false);
-                    }
-                }
+                waitOutcome = await FinishHeldButton(mouse, button, waitOutcome, pressWasApplied)
+                    .ConfigureAwait(false);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
@@ -216,45 +179,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
-                {
-                    MouseInputMainThreadCleanup.ScheduleTimedOutButtonCleanup(mouse, button, pressWasApplied);
-                }
-                else if (pressWasApplied)
-                {
-                    InputSimulationWaitOutcome releaseOutcome =
-                        await MouseInputMainThreadCleanup.ReleaseButtonIfPossible(
-                            mouse,
-                            button,
-                            CancellationToken.None).ConfigureAwait(false);
-                    if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
-                    {
-                        waitOutcome = InputSimulationWaitOutcome.TimedOut;
-                        MouseInputMainThreadCleanup.ScheduleTimedOutButtonCleanup(mouse, button, false);
-                    }
-                    else
-                    {
-                        await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                        MouseInputState.SetButtonUp(button);
-                    }
-                }
-                else
-                {
-                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                    MouseInputState.SetButtonUp(button);
-                }
-
-                if (waitOutcome != InputSimulationWaitOutcome.TimedOut)
-                {
-                    if (waitOutcome == InputSimulationWaitOutcome.Paused)
-                    {
-                        SimulateMouseInputOverlayState.Clear();
-                    }
-                    else
-                    {
-                        SimulateMouseInputOverlayState.SetButtonHeld(button, false);
-                    }
-                }
+                waitOutcome = await FinishHeldButton(mouse, button, waitOutcome, pressWasApplied)
+                    .ConfigureAwait(false);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
@@ -280,6 +206,80 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 buttonName,
                 inputPos,
                 conversion);
+        }
+
+        /// <summary>
+        /// Releases a button that a finished press left held and returns the outcome the caller must
+        /// report; a release that timed out downgrades the outcome to TimedOut.
+        /// </summary>
+        private static async Task<InputSimulationWaitOutcome> FinishHeldButton(
+            Mouse mouse,
+            RuntimeMouseButton button,
+            InputSimulationWaitOutcome waitOutcome,
+            bool pressWasApplied)
+        {
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                MouseInputMainThreadCleanup.ScheduleTimedOutButtonCleanup(mouse, button, pressWasApplied);
+                return waitOutcome;
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.Paused && pressWasApplied)
+            {
+                return await ReleaseHeldButtonAfterPause(mouse, button).ConfigureAwait(false);
+            }
+
+            if (pressWasApplied)
+            {
+                InputSimulationWaitOutcome releaseOutcome =
+                    await MouseInputMainThreadCleanup.ReleaseButtonIfPossible(
+                        mouse,
+                        button,
+                        CancellationToken.None).ConfigureAwait(false);
+                if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
+                {
+                    MouseInputMainThreadCleanup.ScheduleTimedOutButtonCleanup(mouse, button, false);
+                    return InputSimulationWaitOutcome.TimedOut;
+                }
+
+                // The pause can also arrive while this release is queued, which discards it the same way.
+                if (releaseOutcome == InputSimulationWaitOutcome.Paused)
+                {
+                    return await ReleaseHeldButtonAfterPause(mouse, button).ConfigureAwait(false);
+                }
+            }
+
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            MouseInputState.SetButtonUp(button);
+            if (waitOutcome == InputSimulationWaitOutcome.Paused)
+            {
+                SimulateMouseInputOverlayState.Clear();
+            }
+            else
+            {
+                SimulateMouseInputOverlayState.SetButtonHeld(button, false);
+            }
+
+            return waitOutcome;
+        }
+
+        /// <summary>
+        /// Writes the release straight into the device after a pause discarded the queued one, and
+        /// reports the paused outcome.
+        /// </summary>
+        private static async Task<InputSimulationWaitOutcome> ReleaseHeldButtonAfterPause(
+            Mouse mouse,
+            RuntimeMouseButton button)
+        {
+            // Why: ApplyOnNextConfiguredUpdate already disposed the pending apply subscription when it
+            // returned Paused, so a release routed through it again is discarded and the button stays
+            // held until the next command. Writing after that dispose also keeps a queued edge from
+            // re-applying the press once the Editor resumes.
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            MouseInputMainThreadCleanup.ReleaseButtonImmediatelyAfterPauseInterruption(mouse, button);
+            MouseInputState.SetButtonUp(button);
+            SimulateMouseInputOverlayState.Clear();
+            return InputSimulationWaitOutcome.Paused;
         }
 
         private static RuntimeMouseButton ToRuntimeMouseButton(UnityCliLoopMouseButton button)

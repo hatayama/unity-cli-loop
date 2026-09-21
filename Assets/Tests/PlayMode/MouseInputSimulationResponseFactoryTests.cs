@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "Mouse input stopped because Unity paused during Pause Point inspection. Button 'Left' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded."));
+                    "Mouse input stopped because Unity paused during Pause Point inspection. Button 'Left' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded before any gameplay update processed it, so the game never observed a press and it is safe to retry after resume."));
             Assert.That(response.Action, Is.EqualTo(UnityCliLoopMouseInputAction.Click.ToString()));
             Assert.That(response.Button, Is.EqualTo("Left"));
             Assert.That(response.PositionX, Is.EqualTo(inputPosition.x));
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "Mouse input stopped because Unity paused during Pause Point inspection. Button 'Right' press was already delivered to the game before the pause; Unity CLI Loop released it from bookkeeping, so the game may have registered the press."));
+                    "Mouse input stopped because Unity paused during Pause Point inspection. Button 'Right' press was delivered to the game before the pause: the Input System processed the press edge in a gameplay update, so game code polling that frame observed it and the world state may already have changed. Do not retry the press; re-check the affected state (and pause-point-status) before deciding the next step."));
             Assert.That(response.Action, Is.EqualTo(UnityCliLoopMouseInputAction.LongPress.ToString()));
             Assert.That(response.Button, Is.EqualTo("Right"));
             Assert.That(response.PositionX, Is.EqualTo(inputPosition.x));

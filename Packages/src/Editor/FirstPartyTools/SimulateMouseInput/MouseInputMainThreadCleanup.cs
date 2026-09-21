@@ -59,6 +59,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ReleaseButtonImmediately(mouse, button);
         }
 
+        /// <summary>
+        /// Releases the button right away after a pause interrupted the press, once the pending apply
+        /// subscription has been disposed.
+        /// </summary>
+        internal static void ReleaseButtonImmediatelyAfterPauseInterruption(Mouse mouse, RuntimeMouseButton button)
+        {
+            ReleaseButtonImmediately(mouse, button);
+        }
+
         private static void ReleaseButtonImmediately(Mouse mouse, RuntimeMouseButton button)
         {
             Debug.Assert(CanInjectMouseState(mouse), "mouse button can only be released while PlayMode has a mouse");
