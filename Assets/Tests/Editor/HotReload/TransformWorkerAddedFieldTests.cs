@@ -652,6 +652,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an array-creation initializer of literals on an added static field applies. The
+        /// initializer gate refuses 'new T(...)' specifically, not every expression that starts
+        /// with 'new', so an array the static lambda can build on its own is emittable.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_ArrayCreationInitializer_PatchesAndListsAddedField()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public static int[] AddedTable = new int[] { 1, 2, 3 };");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedTable.Length + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldArrayCreationInit.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Not.Null,
+                "An array-creation initializer must not skip the method. Skipped="
+                + FormatSkipped(result.Output.skipped));
+            Assert.That(
+                result.Output.files[0].addedFieldNames,
+                Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedTable" }));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// What: an array-creation initializer whose element is itself an object creation skips.
+        /// The gate scans the whole initializer, so the refusal of 'new T(...)' is not escaped by
+        /// wrapping it in an array the static lambda could otherwise build.
+        /// </summary>
+        [Test]
+        public async Task Skip_ObjectCreationInsideArrayInitializer_ReasonNamesLazyAssignmentWorkaround()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                // Why object[]: the element type is plainly resolvable and externally visible, so
+                // the only thing left for the gate to refuse is the element's own object creation.
+                "public static object[] AddedRows"
+                + " = new object[] { new System.Collections.Generic.List<int>() };");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedRows.Length + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldArrayOfObjectCreationInit.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                "Drop the initializer and assign the field inside the patched method");
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
         /// What: '??=' on an added field stays skipped because the compound assignment is not
         /// rewritable, and the reason names the field and the rewrite that works instead, so a
         /// reader does not have to find which of several added fields the operator was used on.

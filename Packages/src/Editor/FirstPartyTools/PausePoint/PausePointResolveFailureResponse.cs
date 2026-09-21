@@ -29,7 +29,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return CreateIntroducedTypeResolveFailure(
                     parameters,
-                    resolveResult,
                     patchedMethodPdbUnavailableWarning);
             }
 
@@ -74,20 +73,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : SourcePausePointConstants.AddedMethodResolveFailureNextAction);
         }
 
-        // Keeps the resolver's own sentence so the caller still sees which line failed, under a
-        // first line that says why no line in this file can resolve yet. The pdb warning travels
-        // along because "hot reload it and try again" hides the real cause when the method the
-        // caller means is already patched and its pdb is the part that is missing.
+        // Why the resolver's own sentence is dropped: it names a line and reads as a second,
+        // competing reason, so the caller retries with other line numbers instead of hot reloading
+        // the method. The first sentence already covers every line in the file. The pdb warning
+        // travels along because "hot reload it and try again" hides the real cause when the method
+        // the caller means is already patched and its pdb is the part that is missing.
         private static PausePointResponse CreateIntroducedTypeResolveFailure(
             EnablePausePointSchema parameters,
-            SourcePausePointResolveResult resolveResult,
             string patchedMethodPdbUnavailableWarning)
         {
             string message = string.Format(
-                    SourcePausePointConstants.IntroducedTypeResolveFailureMessageFormat,
-                    parameters.File)
-                + "\n"
-                + resolveResult.ErrorMessage;
+                SourcePausePointConstants.IntroducedTypeResolveFailureMessageFormat,
+                parameters.File);
             PausePointResponse response = PausePointFailureResponse.Create(
                 message,
                 SourcePausePointConstants.ErrorCodeResolveFailed,
