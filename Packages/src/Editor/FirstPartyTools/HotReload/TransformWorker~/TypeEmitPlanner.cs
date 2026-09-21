@@ -185,8 +185,7 @@ internal static class TypeEmitPlanner
             semanticModel,
             compiledType,
             home,
-            addedFieldCatalog,
-            declarationDriftWarnings);
+            addedFieldCatalog);
 
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())

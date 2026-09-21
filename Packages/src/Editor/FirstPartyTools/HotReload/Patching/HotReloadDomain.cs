@@ -44,6 +44,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, HashSet<string>> _displayedRemovedMembersByPath =
             new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
+        // The serialized added fields the last run left active. Why the whole active set and not
+        // an append-only history: a field that stops being active (removed, attribute dropped,
+        // file reverted) is new again when it comes back, and the reader should hear about it.
+        private readonly HashSet<string> _reportedSerializedAddedFields =
+            new HashSet<string>(StringComparer.Ordinal);
+
         internal HotReloadDomain(
             HotReloadIntroducedTypeRegistry introducedTypes,
             HotReloadIntroducedTypeAssemblyResolver introducedTypeResolver)
@@ -593,6 +599,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return isSameAsLastDisplayed;
         }
 
+        /// <summary>
+        /// The active added fields declared with a serialization attribute that no earlier run
+        /// has reported, sorted ordinal; the active set becomes the new record.
+        /// </summary>
+        internal IReadOnlyList<string> TakeUnreportedSerializedAddedFields()
+        {
+            HashSet<string> active = new HashSet<string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                pair.Value.CollectSerializedAddedFields(active);
+            }
+
+            List<string> unreported = new List<string>();
+            foreach (string name in active)
+            {
+                if (!_reportedSerializedAddedFields.Contains(name))
+                {
+                    unreported.Add(name);
+                }
+            }
+
+            unreported.Sort(StringComparer.Ordinal);
+            _reportedSerializedAddedFields.Clear();
+            _reportedSerializedAddedFields.UnionWith(active);
+            return unreported;
+        }
+
         // Why the evidence is dropped here rather than through its own method: it only means
         // anything alongside the applied record, so the two share one lifetime.
         internal void ClearAppliedSource(string projectRelativePath)
@@ -633,6 +666,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _appliedSourceByPath.Clear();
             _newSourceMembershipEvidenceByPath.Clear();
             _displayedRemovedMembersByPath.Clear();
+            _reportedSerializedAddedFields.Clear();
             AddedFieldValues.Clear();
             Invocations.Clear();
             return revertedMethods;

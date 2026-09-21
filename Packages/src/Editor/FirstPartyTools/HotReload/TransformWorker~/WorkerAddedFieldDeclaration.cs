@@ -39,4 +39,7 @@ internal sealed class WorkerAddedFieldDeclaration
     public string DeclaredTypeAssemblyQualifiedName { get; set; }
 
     public bool IsStatic { get; set; }
+
+    // SerializeField, SerializeReference or FormerlySerializedAs on the declaration.
+    public bool HasSerializationAttribute { get; set; }
 }

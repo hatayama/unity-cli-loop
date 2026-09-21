@@ -181,6 +181,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string declaredTypeAssemblyQualifiedName;
 
         public bool isStatic;
+
+        // Whether the declaration carries SerializeField, SerializeReference or
+        // FormerlySerializedAs, which Unity cannot honor for a field it never compiled.
+        public bool hasSerializationAttribute;
     }
 
     /// <summary>

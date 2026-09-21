@@ -165,6 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _siblingBaselineNotices.AppendTo(_warnings);
             AppendInlineRiskWarning();
             AppendAddedFieldsLifetimeWarning();
+            AppendSerializedAddedFieldWarning();
             AppendUnforwardedUnityMessageWarning();
             // Why at the end of the run and on the main thread: the added methods this run brought
             // in are in the domain by now, and building a proxy type touches Unity APIs that only
@@ -244,6 +245,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     CultureInfo.InvariantCulture,
                     HotReloadConstants.AddedFieldsLifetimeWarningFormat,
                     string.Join(", ", _addedFields)));
+        }
+
+        // Why from the domain rather than this run's files: only the fields the run left active
+        // are named, and a field an earlier run already named is not repeated, so a failed or
+        // skipped file cannot report a field that never reached the Editor.
+        private void AppendSerializedAddedFieldWarning()
+        {
+            IReadOnlyList<string> unreported = _domain.TakeUnreportedSerializedAddedFields();
+            if (unreported.Count == 0)
+            {
+                return;
+            }
+
+            _warnings.Add(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.SerializedAddedFieldWarningFormat,
+                    string.Join(", ", unreported)));
         }
 
         private void LogSummary(string correlationId)
