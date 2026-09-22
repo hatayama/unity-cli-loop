@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AddedMethodInaccessibleAccessNoRewrite,
         AddedMethodBodyUnbound,
         AddedMethodBodyBindsCompiledSignature,
+        AddedMethodCallsIntroducedMemberBoundToCompiledType,
         AddedFieldStructHost,
         AddedFieldInitializerNotLiteralOrExternalStatic,
         AddedFieldFieldTypeNotExternallyVisible,

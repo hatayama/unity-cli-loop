@@ -156,7 +156,8 @@ internal static class AddedPropertyAccessorGuard
             bodyNode,
             typeState.SourceUnit.SemanticModel,
             decision,
-            addedMemberAccess: null);
+            addedMemberAccess: null,
+            typeState.SourceUnit.ArtifactMap);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

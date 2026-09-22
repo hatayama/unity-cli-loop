@@ -18,11 +18,11 @@ internal static class CompiledSignatureSplitCollector
     internal static CompiledSignatureSplit Collect(
         SemanticModel semanticModel,
         SyntaxNode body,
-        IReadOnlyList<TextSpan> bindingErrorSpans)
+        IReadOnlyList<TextSpan> bindingErrorSpans,
+        IntroducedTypeArtifactMap artifactMap)
     {
         IAssemblySymbol sourceAssembly = semanticModel.Compilation.Assembly;
-        SortedSet<string> splitTypes = new SortedSet<string>(StringComparer.Ordinal);
-        SortedSet<string> declaringTypes = new SortedSet<string>(StringComparer.Ordinal);
+        CompiledSignatureSplitNames names = new CompiledSignatureSplitNames();
         foreach (SyntaxNode node in body.DescendantNodesAndSelf())
         {
             // Why only uses an error touches: a compiled API elsewhere in the body that binds is
@@ -34,11 +34,15 @@ internal static class CompiledSignatureSplitCollector
 
             foreach (ISymbol member in FindUsedMembers(semanticModel, node))
             {
-                AddSplit(member, sourceAssembly, splitTypes, declaringTypes);
+                AddSplit(member, sourceAssembly, artifactMap, names);
             }
         }
 
-        return new CompiledSignatureSplit(new List<string>(splitTypes), new List<string>(declaringTypes));
+        return new CompiledSignatureSplit(
+            new List<string>(names.SplitTypes),
+            new List<string>(names.DeclaringTypes),
+            new List<string>(names.ArtifactBoundTypes),
+            new List<string>(names.ArtifactHosts));
     }
 
     private static bool IsMemberUse(SyntaxNode node)
@@ -125,8 +129,8 @@ internal static class CompiledSignatureSplitCollector
     private static void AddSplit(
         ISymbol member,
         IAssemblySymbol sourceAssembly,
-        SortedSet<string> splitTypes,
-        SortedSet<string> declaringTypes)
+        IntroducedTypeArtifactMap artifactMap,
+        CompiledSignatureSplitNames names)
     {
         INamedTypeSymbol declaringType = member?.ContainingType;
         if (declaringType == null || IsFromSource(declaringType, sourceAssembly))
@@ -134,27 +138,49 @@ internal static class CompiledSignatureSplitCollector
             return;
         }
 
+        bool declaredByArtifact = IsFromArtifact(declaringType, artifactMap);
         List<INamedTypeSymbol> signatureTypes = new List<INamedTypeSymbol>();
         CollectSignatureTypes(member, signatureTypes);
         bool found = false;
         foreach (INamedTypeSymbol signatureType in signatureTypes)
         {
-            // Only a type of the declaring type's own assembly can be rebuilt by passing the
-            // declaring file: that file compiles into the same assembly as the copy it names.
-            if (!SymbolEqualityComparer.Default.Equals(signatureType.ContainingAssembly, declaringType.ContainingAssembly)
-                || !HasSourceCopy(signatureType, sourceAssembly))
+            if (!HasSourceCopy(signatureType, sourceAssembly))
             {
                 continue;
             }
 
-            splitTypes.Add(CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition));
+            // Why apart from the same-assembly split: an introduced type was compiled once, against
+            // whichever copy of the type was compiled then, and no file this reload passes rebuilds
+            // it, so only a compile makes both sides name the same type again.
+            if (declaredByArtifact && !IsFromArtifact(signatureType, artifactMap))
+            {
+                names.ArtifactBoundTypes.Add(CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition));
+                names.ArtifactHosts.Add(CecilTypeNames.ToMetadataName(declaringType.OriginalDefinition));
+                continue;
+            }
+
+            // Only a type of the declaring type's own assembly can be rebuilt by passing the
+            // declaring file: that file compiles into the same assembly as the copy it names.
+            if (!SymbolEqualityComparer.Default.Equals(signatureType.ContainingAssembly, declaringType.ContainingAssembly))
+            {
+                continue;
+            }
+
+            names.SplitTypes.Add(CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition));
             found = true;
         }
 
         if (found)
         {
-            declaringTypes.Add(CecilTypeNames.ToMetadataName(declaringType.OriginalDefinition));
+            names.DeclaringTypes.Add(CecilTypeNames.ToMetadataName(declaringType.OriginalDefinition));
         }
+    }
+
+    private static bool IsFromArtifact(INamedTypeSymbol type, IntroducedTypeArtifactMap artifactMap)
+    {
+        return artifactMap.FindNormalizedIdentity(
+            type.ContainingAssembly,
+            CecilTypeNames.ToMetadataName(type.OriginalDefinition)) != null;
     }
 
     private static bool IsFromSource(INamedTypeSymbol type, IAssemblySymbol sourceAssembly)
@@ -234,19 +260,45 @@ internal static class CompiledSignatureSplitCollector
     }
 }
 
+// The sorted names one collection gathers, kept together so each use adds to all of them.
+internal sealed class CompiledSignatureSplitNames
+{
+    internal SortedSet<string> SplitTypes { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+    internal SortedSet<string> DeclaringTypes { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+    internal SortedSet<string> ArtifactBoundTypes { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+    internal SortedSet<string> ArtifactHosts { get; } = new SortedSet<string>(StringComparer.Ordinal);
+}
+
 /// <summary>
 /// The compiled types a body's compiled signatures name while this run declares them from source,
-/// and the compiled types declaring those signatures, both as sorted metadata names.
+/// and the compiled types declaring those signatures, both as sorted metadata names. Signatures
+/// of introduced types are kept apart, because passing a file never rebuilds those.
 /// </summary>
 internal sealed class CompiledSignatureSplit
 {
-    internal CompiledSignatureSplit(List<string> splitTypeMetadataNames, List<string> declaringTypeMetadataNames)
+    internal CompiledSignatureSplit(
+        List<string> splitTypeMetadataNames,
+        List<string> declaringTypeMetadataNames,
+        List<string> artifactBoundTypeMetadataNames,
+        List<string> artifactHostMetadataNames)
     {
         SplitTypeMetadataNames = splitTypeMetadataNames;
         DeclaringTypeMetadataNames = declaringTypeMetadataNames;
+        ArtifactBoundTypeMetadataNames = artifactBoundTypeMetadataNames;
+        ArtifactHostMetadataNames = artifactHostMetadataNames;
     }
 
     internal List<string> SplitTypeMetadataNames { get; }
 
     internal List<string> DeclaringTypeMetadataNames { get; }
+
+    // The compiled types an introduced type's signatures were bound to, which this run declares
+    // from source.
+    internal List<string> ArtifactBoundTypeMetadataNames { get; }
+
+    // The introduced types whose signatures name those compiled types.
+    internal List<string> ArtifactHostMetadataNames { get; }
 }

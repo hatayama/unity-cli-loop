@@ -78,6 +78,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "the compiled {1}, so it is skipped. Pass {3} to this reload as well so both bind to "
                     + "the same type. Otherwise run 'uloop compile'.",
                     4));
+            // Why no --files advice: the file declaring the compiled type is carried into every
+            // reload that keeps the introduced type's binding, so dropping it does not help and
+            // passing it is what already happened.
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
+                Plain(
+                    "The added member's body could not be fully bound in the hot-reload compilation ({0}): "
+                    + "the members of the introduced type {1} were bound to the compiled {2} when that type "
+                    + "was introduced, while this reload builds {2} from source ({3}, passed or carried in to "
+                    + "keep an earlier reload's binding), so the {2} this body uses no longer matches and it "
+                    + "is skipped. Run 'uloop compile'; changing --files does not avoid this, because {3} is "
+                    + "carried in again.",
+                    4));
 
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
