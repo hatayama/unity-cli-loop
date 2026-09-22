@@ -78,6 +78,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadInvocationCounts Invocations { get; } = new HotReloadInvocationCounts();
 
         /// <summary>
+        /// The unchanged files earlier reloads were given beside what they applied. Kept across a
+        /// revert-all and restored across a Domain Reload from SessionState, unlike every other
+        /// store here, because the next reload of those patches needs them exactly as much.
+        /// </summary>
+        internal HotReloadCompanionSourceLedger CompanionSources { get; } = new HotReloadCompanionSourceLedger();
+
+        /// <summary>
         /// Where the types of <paramref name="assemblyName"/> live for this domain: the artifact
         /// this domain retains when the name belongs to one, and the project's compiled assembly
         /// otherwise.
@@ -533,6 +540,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _appliedSourceByPath[projectRelativePath] = (sourceContentSha256, isFullyApplied);
         }
 
+        /// <summary>The files whose last reload left Skipped or Failed rows.</summary>
+        internal IReadOnlyList<string> ListNotFullyAppliedSourcePaths()
+        {
+            List<string> paths = new List<string>();
+            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in _appliedSourceByPath)
+            {
+                if (!pair.Value.IsFullyApplied)
+                {
+                    paths.Add(pair.Key);
+                }
+            }
+
+            return paths;
+        }
+
         internal (string Hash, bool IsFullyApplied)? TryGetAppliedSource(string projectRelativePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
@@ -655,6 +677,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Why HotReloadIntroducedTypeRegistry is not emptied: an introduced type's identity is
         /// fixed until the next Domain Reload, so a revert cannot drop it
         /// (docs/hot-reload-introduced-types.md).
+        /// Why CompanionSources is not emptied: the files it names are what a reload applying the
+        /// reverted changes again has to be given, and nothing reverted changed them.
         /// Why HotReloadPlayModeEntryDropLedger is not emptied: it lives on SessionState, and
         /// HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll clears it through
         /// NotifyRevertAll, which then records the owner files of the introduced types this method

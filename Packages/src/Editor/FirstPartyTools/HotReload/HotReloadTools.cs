@@ -251,6 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
                 result.Methods,
                 result.IntroducedTypes);
+            HotReloadCompanionSourceSessionStore.Save(services.Domain.CompanionSources);
 
             HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                 services,

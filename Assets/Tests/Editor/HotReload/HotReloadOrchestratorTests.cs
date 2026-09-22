@@ -4431,8 +4431,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: after an added method applies, a later run whose added body does not bind is
         /// refused by the worker before any shim is compiled: the added method and its caller are
         /// Skipped with the worker's reasons, nothing fails, and the run deactivates the earlier
-        /// AddedPing registration with one warning naming it and telling the reader that another
-        /// reload of the same shape skips it again. A third run with the body fixed
+        /// AddedPing registration with one warning naming it and telling the reader to change what
+        /// the skip reason names before reloading. A third run with the body fixed
         /// registers AddedPing again and the caller returns the new value.
         /// </summary>
         [Test]
@@ -4708,7 +4708,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: after an added method applies, a later run that skips it as virtual while
         /// still patching an unrelated method warns with the added method's label and the
-        /// wording that says another reload of the same shape skips it again.
+        /// wording that says to change what the skip reason names before reloading.
         /// </summary>
         [Test]
         public async Task Run_VirtualAddedMethodAfterSuccess_WarnsDeactivatedPatches()

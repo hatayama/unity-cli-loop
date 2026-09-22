@@ -46,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadDomain _domain;
         private readonly HotReloadPatcher _patcher;
         private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
+        private readonly HotReloadRunSiblingLedgerUpdates _siblingLedgerUpdates;
         private int _patchedTotal;
         private int _unchangedTotal;
         private int _revertedUnchangedTotal;
@@ -68,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _patcher = patcher;
             _unityMessageForwarding = unityMessageForwarding;
             _autoRefreshHeldAtStart = autoRefreshHeldAtStart;
+            _siblingLedgerUpdates = new HotReloadRunSiblingLedgerUpdates(domain);
         }
 
         /// <summary>Warning sink shared with the per-file stage for sibling-derived notices.</summary>
@@ -79,6 +81,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Candidate sink shared with the per-file stage for one-shot lifecycle notes.</summary>
         public List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates =>
             _oneShotCallerNoteCandidates;
+
+        /// <summary>Remembers why a sibling came back, for its report and its ledger updates.</summary>
+        public void NoteSiblingInclusion(string projectRelativePath, HotReloadSiblingInclusionReason reason)
+        {
+            _siblingLedgerUpdates.NoteInclusion(projectRelativePath, reason);
+        }
+
+        public HotReloadSiblingInclusionReason SiblingInclusionReasonOf(string projectRelativePath)
+        {
+            return _siblingLedgerUpdates.ReasonOf(projectRelativePath);
+        }
 
         /// <summary>Merges one processed file into the run.</summary>
         public void Add(string projectRelativePath, HotReloadFileProcessResult fileResult)
@@ -106,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileResult.SourceContentSha256,
                 fileResult.Outcomes,
                 fileResult.NewSourceMembershipEvidence);
+            _siblingLedgerUpdates.Observe(projectRelativePath, fileResult);
         }
 
         /// <summary>
@@ -119,7 +133,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _reappliedSiblingPaths.Add(projectRelativePath);
         }
 
-        /// <summary>Writes the staged applied-source hashes to the ledger. Call once after every file was added.</summary>
+        /// <summary>
+        /// Writes the staged applied-source hashes and the run's sibling records to the domain.
+        /// Call once after every file was added.
+        /// </summary>
         public void RecordAppliedSourceHashes()
         {
             foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>
@@ -138,6 +155,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _domain.RecordNewSourceMembershipEvidence(pair.Key, pair.Value.Evidence);
                 }
             }
+
+            _siblingLedgerUpdates.ApplyTo(_domain);
         }
 
         /// <summary>

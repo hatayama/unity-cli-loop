@@ -54,6 +54,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : HotReloadConstants.ActiveSiblingRebindFailedWarningFormat;
         }
 
+        /// <summary>Whether the reload patched or added anything in the file.</summary>
+        public static bool AppliedAnyChange(HotReloadFileProcessResult result)
+        {
+            Debug.Assert(result != null, "result must not be null.");
+
+            foreach (HotReloadMethodOutcome outcome in result.Outcomes)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    || outcome.Kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         // Why the revert count is checked too: unchanged patches are reverted before the shim
         // compile, and a later group failure only appends file-level rows without restoring them,
         // so file-level rows alone do not prove the sibling's active patches are unchanged.

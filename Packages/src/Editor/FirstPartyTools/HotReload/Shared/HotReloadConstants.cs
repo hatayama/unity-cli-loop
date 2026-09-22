@@ -88,6 +88,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "'{0}' has active patches but its source changed since they were applied, so it was "
             + "not re-applied; pass it to hot-reload to update it.";
 
+        // Format: retried file count, assembly name, comma-separated paths. Why apart from the
+        // re-applied summary: these files held no active patch, so "so their patches bind" would
+        // misstate why they came back.
+        public const string RetriedSiblingsWarningFormat =
+            "Also retried {0} unchanged file(s) in assembly '{1}' that an earlier reload left Skipped "
+            + "or Failed, and this reload applied them: {2}.";
+
+        // Why the reader is told it will not come back: the retry is a single one, so a reload
+        // that fixes the reason elsewhere has to pass this file again for it to apply.
+        public const string RetriedSiblingNotAppliedWarningFormat =
+            "'{0}' was retried because an earlier reload left it Skipped or Failed, but this reload "
+            + "did not apply it either; see its rows for the reasons. It is not retried again, so "
+            + "pass it to hot-reload once the reason is fixed.";
+
+        public const string RetrySiblingChangedSinceSkipWarningFormat =
+            "'{0}' was left Skipped or Failed by an earlier reload and its source changed since, so "
+            + "it was not retried; pass it to hot-reload to apply it.";
+
+        // Format: companion file count, assembly name, comma-separated paths.
+        public const string CompanionSiblingsWarningFormat =
+            "Also brought back {0} unchanged file(s) in assembly '{1}' that an earlier reload was "
+            + "given beside its changes, so this reload binds the same way: {2}.";
+
+        public const string CompanionSiblingChangedWarningFormat =
+            "'{0}' was given to an earlier reload beside its changes, but its source changed since, "
+            + "so it was not brought back; pass it to hot-reload too if an added member needs it to "
+            + "bind.";
+
         // Why a second wording: the failed-rebind sentence sends the reader to the sibling's own
         // rows, and a reload that stopped before re-applying anything wrote none. Pointing at
         // rows that do not exist reads as a lost report rather than as a run that changed nothing.
@@ -165,12 +193,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This run deactivated previously active added members: {0}. They are no longer registered, but patches this run left active may still reach their previous shim bodies. Edit and reload again to re-apply them, or run 'uloop compile'.";
 
         // Why a separate sentence for the members this run skipped: the ordinary wording invites
-        // another reload, and another reload of the same shape skips them again. What has to
-        // change first is the shape their Methods[] reason names.
+        // an edit to them, while what has to change first is what their Methods[] reason names,
+        // often in another file. The next reload of the assembly retries the unchanged file once
+        // by itself, so the reader only has to pass the file the reason names.
         public const string DeactivatedSkippedPatchesWarningFormat =
             "This run deactivated previously active patches by skipping them: {0}. They reverted to the "
-            + "compiled behavior, and reloading the same shape skips them again; change what their "
-            + "Methods[].Reason names and reload, or run 'uloop compile'.";
+            + "compiled behavior. The next reload of this assembly retries their file once while it stays "
+            + "unchanged, so change what their Methods[].Reason names and reload, or run 'uloop compile'.";
 
         // Why this is reported at all: a skip that leaves an earlier patch active produces no
         // Skipped-versus-compiled difference the reader can see. The method keeps running the
@@ -185,8 +214,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string DeactivatedSkippedAddedMembersWarningFormat =
             "This run deactivated previously active added members by skipping them: {0}. They are no longer "
             + "registered, but patches this run left active may still reach their previous shim bodies. "
-            + "Reloading the same shape skips them again; change what their Methods[].Reason names and "
-            + "reload, or run 'uloop compile'.";
+            + "The next reload of this assembly retries their file once while it stays unchanged, so "
+            + "change what their Methods[].Reason names and reload, or run 'uloop compile'.";
 
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/RemovedMemberKinds.cs.
@@ -614,6 +643,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // "identity<TAB>project-relative path" line per type.
         public const string PlayModeEntryDropSourcesSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIntroducedSources";
+
+        // SessionState key for the unchanged files earlier reloads were given beside what they
+        // applied, one "project-relative path<TAB>hash" line per file, so a Play-entry domain
+        // reload does not forget them.
+        public const string CompanionSourcesSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.companionSources";
 
         // Format: remaining discarded identity count. Used only when --status active count is 0.
         public const string PlayModeEntryDropStatusMessageFormat =
