@@ -242,37 +242,14 @@ internal static class AccessorEligibility
                 continue;
             }
 
-            ExpressionSyntax operand = null;
-            if (node is PostfixUnaryExpressionSyntax postfix
-                && (postfix.IsKind(SyntaxKind.PostIncrementExpression)
-                    || postfix.IsKind(SyntaxKind.PostDecrementExpression)))
-            {
-                operand = postfix.Operand;
-            }
-            else if (node is PrefixUnaryExpressionSyntax prefix
-                && (prefix.IsKind(SyntaxKind.PreIncrementExpression)
-                    || prefix.IsKind(SyntaxKind.PreDecrementExpression)))
-            {
-                operand = prefix.Operand;
-            }
-
+            ExpressionSyntax operand = FindIncrementOrDecrementOperand(node);
             if (operand == null)
             {
                 continue;
             }
 
-            ISymbol symbol = semanticModel.GetSymbolInfo(operand).Symbol;
-            // Why an added property is left to the added-property scan: its reason names the one
-            // rewrite that works there ('X = X + 1'), while this one also suggests 'X += 1',
-            // which that scan skips for an added property.
-            if (symbol is IPropertySymbol addedProperty
-                && addedMemberAccess != null
-                && addedMemberAccess.IsAddedProperty(addedProperty))
-            {
-                continue;
-            }
-
-            if (symbol is IPropertySymbol propertySymbol
+            if (semanticModel.GetSymbolInfo(operand).Symbol is IPropertySymbol propertySymbol
+                && !IsLeftToAddedPropertyScan(propertySymbol, addedMemberAccess)
                 && (AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
                     || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod)))
             {
@@ -281,6 +258,35 @@ internal static class AccessorEligibility
         }
 
         return false;
+    }
+
+    private static ExpressionSyntax FindIncrementOrDecrementOperand(SyntaxNode node)
+    {
+        if (node is PostfixUnaryExpressionSyntax postfix
+            && (postfix.IsKind(SyntaxKind.PostIncrementExpression)
+                || postfix.IsKind(SyntaxKind.PostDecrementExpression)))
+        {
+            return postfix.Operand;
+        }
+
+        if (node is PrefixUnaryExpressionSyntax prefix
+            && (prefix.IsKind(SyntaxKind.PreIncrementExpression)
+                || prefix.IsKind(SyntaxKind.PreDecrementExpression)))
+        {
+            return prefix.Operand;
+        }
+
+        return null;
+    }
+
+    // Why an added property is left to the added-property scan: its reason names the one
+    // rewrite that works there ('X = X + 1'), while this one also suggests 'X += 1', which that
+    // scan skips for an added property.
+    private static bool IsLeftToAddedPropertyScan(
+        IPropertySymbol propertySymbol,
+        AddedMemberAccessLookup addedMemberAccess)
+    {
+        return addedMemberAccess != null && addedMemberAccess.IsAddedProperty(propertySymbol);
     }
 
     internal static bool IsSupportedCompoundAssignmentKind(SyntaxKind kind)
