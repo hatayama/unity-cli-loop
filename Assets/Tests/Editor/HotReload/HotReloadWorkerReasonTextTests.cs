@@ -249,8 +249,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
                 new[] { "Outer.Inner.Ping()" },
-                "Calls the added method 'Outer.Inner.Ping()', which hot reload cannot emit. "
-                + "Run 'uloop compile'.");
+                "Calls the added method 'Outer.Inner.Ping()', which this reload skipped; the Skipped row "
+                + "for that member names the fix. Apply it and rerun; run 'uloop compile' only if that "
+                + "row asks for it.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced,
                 NoArgs,

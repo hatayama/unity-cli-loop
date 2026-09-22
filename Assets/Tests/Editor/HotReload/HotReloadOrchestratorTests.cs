@@ -54,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string UnavailableAddedCallSkipReason(string calledMethodDisplayName)
         {
             return "Calls the added method '" + calledMethodDisplayName
-                + "', which hot reload cannot emit. Run 'uloop compile'.";
+                + "', which this reload skipped; the Skipped row for that member names the fix. "
+                + "Apply it and rerun; run 'uloop compile' only if that row asks for it.";
         }
 
         // Mirrors the MethodTransformGenericMethodOrType template in
@@ -6834,7 +6835,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a signature-change gate retry that excludes an added replacement and its
         /// direct added caller still reports the transitive caller as Skipped with
-        /// UnavailableAddedCall, while an independent edited method still patches.
+        /// UnavailableAddedCall, while an independent edited method still patches. The added
+        /// method the transitive caller names has a Skipped row of its own in the same response,
+        /// and so does the gated replacement, which is the row the chained reason points at.
         /// </summary>
         [Test]
         public async Task Run_SignatureChangeGateRetry_ReportsTransitiveCallerOfExcludedAddedMethodAsSkipped()
@@ -6874,6 +6877,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     UnavailableAddedCallSkipReason(
                         typeof(HotReloadSignatureChangeExternalHost).FullName + ".AddedBridge(int)")));
+            Assert.That(
+                FindSkippedReason(result, "AddedBridge"),
+                Does.StartWith("Calls a method whose signature change was not applied"),
+                FormatOutcomes(result));
+            Assert.That(
+                FindSkippedReason(result, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Does.StartWith("The return type of '"),
+                FormatOutcomes(result));
             AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
         }
 
