@@ -68,6 +68,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the skipped writer has an active patch from an earlier reload, the warning
+        /// names that patch instead of claiming the field keeps its default value, because the
+        /// earlier body may still assign it.
+        /// </summary>
+        [Test]
+        public async Task SkippedOnlyWriter_WithEarlierPatch_NamesTheEarlierPatch()
+        {
+            TransformWorkerClientResult result = await RunWithActivePatchesAsync(
+                HostWithReader(AddedField + SkippedWriter, "return AddedValue;"),
+                ReadOnDisk(CallerFileName),
+                new[] { HostLabelPrefix + "AddedSetUp()" });
+
+            AssertWriterSkipped(result);
+            List<string> warnings = FindWarnings(result);
+            Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Added field 'AddedValue' is assigned only in " + HostLabelPrefix + "AddedSetUp(), "
+                    + "which this reload skipped, but " + HostLabelPrefix + "Value() was applied and reads it; "
+                    + "an earlier hot reload applied " + HostLabelPrefix + "AddedSetUp(), so while that body "
+                    + "stays active the field holds what it assigns, and if it assigns nothing the field keeps "
+                    + "its default value until 'uloop compile'."));
+        }
+
+        /// <summary>
+        /// What: an active earlier patch on a method that is not the skipped writer leaves the
+        /// default-value wording as it is, so only a writer's own earlier patch softens it.
+        /// </summary>
+        [Test]
+        public async Task SkippedOnlyWriter_WithEarlierPatchOnAnotherMethod_KeepsTheDefaultValueWording()
+        {
+            TransformWorkerClientResult result = await RunWithActivePatchesAsync(
+                HostWithReader(AddedField + SkippedWriter, "return AddedValue;"),
+                ReadOnDisk(CallerFileName),
+                new[] { HostLabelPrefix + "Value()" });
+
+            AssertWriterSkipped(result);
+            List<string> warnings = FindWarnings(result);
+            Assert.That(warnings, Has.Count.EqualTo(1), string.Join(" | ", warnings));
+            Assert.That(warnings[0], Does.EndWith("reads it; the field keeps its default value until 'uloop compile'."));
+        }
+
+        /// <summary>
         /// What: an added field with an initializer does not warn, because it does not keep its
         /// default value when its only writer is skipped.
         /// </summary>
@@ -502,6 +546,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static async Task<TransformWorkerClientResult> RunAsync(string editedHostSource, string editedCallerSource)
         {
+            return await RunWithActivePatchesAsync(editedHostSource, editedCallerSource, null);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWithActivePatchesAsync(
+            string editedHostSource,
+            string editedCallerSource,
+            string[] activePatchedMethodLabels)
+        {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
                 projectRoot,
@@ -556,7 +608,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetTypesAssemblyPath = targetDllPath,
                 assemblySourcePaths = BuildAbsoluteAssemblySourcePaths(compilationAssembly.sourceFiles),
                 excludedMethodKeys = Array.Empty<string>(),
-                excludedAddedMethodKeys = Array.Empty<string>()
+                excludedAddedMethodKeys = Array.Empty<string>(),
+                activePatchedMethodLabels = activePatchedMethodLabels
             };
 
             return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);

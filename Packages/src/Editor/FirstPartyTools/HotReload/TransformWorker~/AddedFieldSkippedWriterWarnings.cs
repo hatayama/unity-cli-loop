@@ -28,6 +28,21 @@ internal static class AddedFieldSkippedWriterWarnings
         "Added auto-property '{0}' is assigned only in {1}, which this reload skipped, but {2} was applied "
         + "and reads it; the property keeps its default value until 'uloop compile'.";
 
+    // Why a second wording: a skipped writer whose earlier reload's patch is still active keeps
+    // running that body, and whether that body assigns the value is not recorded anywhere, so
+    // neither "keeps its default value" nor "is set" can be claimed.
+    public const string FieldEarlierPatchWarningFormat =
+        "Added field '{0}' is assigned only in {1}, which this reload skipped, but {2} was applied "
+        + "and reads it; an earlier hot reload applied {3}, so while that body stays active the field "
+        + "holds what it assigns, and if it assigns nothing the field keeps its default value until "
+        + "'uloop compile'.";
+
+    public const string AutoPropertyEarlierPatchWarningFormat =
+        "Added auto-property '{0}' is assigned only in {1}, which this reload skipped, but {2} was applied "
+        + "and reads it; an earlier hot reload applied {3}, so while that body stays active the property "
+        + "holds what it assigns, and if it assigns nothing the property keeps its default value until "
+        + "'uloop compile'.";
+
     private const int MaxListedWriters = 3;
 
     // Adds one warning per qualifying field or auto-property declared in unit. Writers and readers
@@ -39,7 +54,8 @@ internal static class AddedFieldSkippedWriterWarnings
         List<TypeEmitState> allTypeEmitStates,
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog,
-        List<WorkerSkipped> skipped)
+        List<WorkerSkipped> skipped,
+        HashSet<string> activePatchedLabels)
     {
         if (skipped.Count == 0)
         {
@@ -69,7 +85,8 @@ internal static class AddedFieldSkippedWriterWarnings
         {
             if (candidate.Value.ShouldWarn)
             {
-                unit.DeclarationDriftWarnings.Add(FormatWarning(candidate.Key, candidate.Value));
+                unit.DeclarationDriftWarnings.Add(
+                    FormatWarning(candidate.Key, candidate.Value, activePatchedLabels));
             }
         }
     }
@@ -215,14 +232,27 @@ internal static class AddedFieldSkippedWriterWarnings
         return node is TupleExpressionSyntax && node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node;
     }
 
-    private static string FormatWarning(ISymbol candidate, FieldUses uses)
+    private static string FormatWarning(ISymbol candidate, FieldUses uses, HashSet<string> activePatchedLabels)
     {
+        List<string> writersWithEarlierPatch = uses.SkippedWriters.Where(activePatchedLabels.Contains).ToList();
+        bool isProperty = candidate is IPropertySymbol;
+        if (writersWithEarlierPatch.Count == 0)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                isProperty ? AutoPropertyWarningFormat : FieldWarningFormat,
+                candidate.Name,
+                FormatList(uses.SkippedWriters, MaxListedWriters),
+                FormatList(uses.AppliedReaders, 1));
+        }
+
         return string.Format(
             CultureInfo.InvariantCulture,
-            candidate is IPropertySymbol ? AutoPropertyWarningFormat : FieldWarningFormat,
+            isProperty ? AutoPropertyEarlierPatchWarningFormat : FieldEarlierPatchWarningFormat,
             candidate.Name,
             FormatList(uses.SkippedWriters, MaxListedWriters),
-            FormatList(uses.AppliedReaders, 1));
+            FormatList(uses.AppliedReaders, 1),
+            FormatList(writersWithEarlierPatch, MaxListedWriters));
     }
 
     private static string FormatList(List<string> labels, int maxListed)
