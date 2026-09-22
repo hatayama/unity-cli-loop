@@ -28,6 +28,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
         /// <summary>
+        /// Whether the run applied an added field or const of this file, which writes no method
+        /// row yet is a change the file brought to the run.
+        /// </summary>
+        public bool AppliedAddedFieldsOrConsts => AddedFieldNames.Length > 0 || AddedConstNames.Length > 0;
+
+        /// <summary>
         /// What proved this file belongs to the assembly it was patched into, for a file the
         /// last compile did not list. Null for every file the compiler already accounts for.
         /// </summary>

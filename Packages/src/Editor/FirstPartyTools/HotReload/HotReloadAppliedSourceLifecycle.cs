@@ -85,6 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             string sourceContentSha256,
             IReadOnlyList<HotReloadMethodOutcome> outcomes,
+            bool appliedAddedFieldsOrConsts,
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
         {
             Debug.Assert(appliedSourceHashByPath != null, "appliedSourceHashByPath must not be null.");
@@ -93,7 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             (string Hash, bool IsFullyApplied)? record = DecideAppliedSourceRecord(
                 sourceContentSha256,
-                outcomes);
+                outcomes,
+                appliedAddedFieldsOrConsts);
             if (record == null)
             {
                 appliedSourceHashByPath.Remove(projectRelativePath);
@@ -107,14 +109,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why not record "everything that is not fully applied": deleting an added method and
         // converging to compiled IL yields empty outcomes on the empty-entries path. Recording
         // that as non-baseline would make the next identical reload claim a prior Skipped/Failed
-        // that never happened.
+        // that never happened. Why a file with no rows but applied added fields or consts is
+        // recorded: that file is still active, and a later reload that brings it back as a
+        // sibling needs this hash to tell its bytes are the ones those members came from.
         private static (string Hash, bool IsFullyApplied)? DecideAppliedSourceRecord(
             string sourceContentSha256,
-            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+            IReadOnlyList<HotReloadMethodOutcome> outcomes,
+            bool appliedAddedFieldsOrConsts)
         {
-            if (string.IsNullOrEmpty(sourceContentSha256) || outcomes.Count == 0)
+            if (string.IsNullOrEmpty(sourceContentSha256))
             {
                 return null;
+            }
+
+            if (outcomes.Count == 0)
+            {
+                return appliedAddedFieldsOrConsts ? (sourceContentSha256, true) : null;
             }
 
             bool hasSkippedOrFailed = false;
