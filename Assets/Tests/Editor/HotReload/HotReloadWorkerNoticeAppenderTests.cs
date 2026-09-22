@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 0,
                 HotReloadSnapshotMissReason.NoSnapshotFile,
                 false,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -62,6 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 0,
                 HotReloadSnapshotMissReason.NoSnapshotFile,
                 false,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -90,6 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 1,
                 HotReloadSnapshotMissReason.NoSnapshotFile,
                 true,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -122,6 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 1,
                 HotReloadSnapshotMissReason.NoSnapshotFile,
                 true,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -150,6 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 1,
                 HotReloadSnapshotMissReason.NoSnapshotFile,
                 false,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -176,6 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
                 HotReloadSnapshotMissReason.NoDocumentInPdb,
+                false,
                 false,
                 ProjectRelativePath,
                 AssemblyName,
@@ -209,6 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 1,
                 HotReloadSnapshotMissReason.NoDocumentInPdb,
                 true,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -235,6 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<TransformWorkerSkippedDto>(),
                 1,
                 HotReloadSnapshotMissReason.None,
+                false,
                 false,
                 ProjectRelativePath,
                 AssemblyName,
@@ -263,6 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 1,
                 HotReloadSnapshotMissReason.NoSnapshotFile,
                 false,
+                false,
                 ProjectRelativePath,
                 AssemblyName,
                 AssemblyResolvePath,
@@ -278,6 +287,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 summary[0],
                 Does.StartWith("1 re-applied sibling file(s) have no verified source snapshot"));
             Assert.That(summary[0], Does.Contain(ProjectRelativePath));
+        }
+
+        /// <summary>
+        /// What: a file declaring a type hot reload refused to introduce gets no missing-baseline
+        /// warning, because the refusal notice already says the file needs a compile and "patching
+        /// all methods" would promise a patch the refusal rules out.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenFileDeclaresARefusedIntroducedType_AddsNoMissingBaselineWarning()
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+            HotReloadSiblingBaselineNotices siblingBaselineNotices = new HotReloadSiblingBaselineNotices();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
+                false,
+                true,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings,
+                null);
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                HotReloadSnapshotMissReason.NoSnapshotFile,
+                false,
+                true,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings,
+                siblingBaselineNotices);
+
+            Assert.That(warnings, Is.Empty, string.Join(" | ", warnings));
+            List<string> summary = new List<string>();
+            siblingBaselineNotices.AppendTo(summary);
+            Assert.That(summary, Is.Empty, "A re-applied sibling that declares one is left out of the summary too.");
         }
 
         private static TransformWorkerFileOutputDto CreateFileOutput(string[] parseErrors)

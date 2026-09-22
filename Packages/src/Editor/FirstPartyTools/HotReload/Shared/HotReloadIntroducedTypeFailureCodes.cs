@@ -18,5 +18,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return code == HotReloadWorkerReasonCode.IntroducedTypeChanged
                 || code == HotReloadWorkerReasonCode.IntroducedTypeMemberBodyChanged;
         }
+
+        /// <summary>
+        /// Whether the diagnostic is about the whole run rather than a declaration. The worker
+        /// attaches such a diagnostic to every file it parsed, so the file it lands on need not
+        /// declare any type.
+        /// </summary>
+        internal static bool IsRunScoped(HotReloadWorkerReasonCode code)
+        {
+            return code == HotReloadWorkerReasonCode.IntroducedTypeArtifactUnusable
+                || code == HotReloadWorkerReasonCode.IntroducedTypeInputsUnreadable
+                || code == HotReloadWorkerReasonCode.IntroducedTypeIdentityMismatch;
+        }
     }
 }

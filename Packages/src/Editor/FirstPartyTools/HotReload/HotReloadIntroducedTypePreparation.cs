@@ -202,7 +202,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     notices.Add(
                         new HotReloadIntroducedTypeNotice(
                             file.projectRelativePath,
-                            HotReloadWorkerReasonText.Render(diagnostic)));
+                            HotReloadWorkerReasonText.Render(diagnostic),
+                            !HotReloadIntroducedTypeFailureCodes.IsRunScoped(diagnostic.code)));
                 }
             }
 

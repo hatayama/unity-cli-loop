@@ -541,6 +541,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// Verifies that a file without a verified snapshot that declares a type this stage cannot
+        /// introduce gets the notice and no missing-baseline warning, because the notice already
+        /// asks for a compile and "patching all methods" would read as if the file were patched.
+        /// </summary>
+        [Test]
+        public async Task Build_DeclarationCannotBeIntroducedInAFileWithoutABaseline_AddsNoMissingBaselineWarning()
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            using (HotReloadVerifiedSnapshotHideScope.Hide(HostProjectRelativePath))
+            {
+                string hostPath = FixturePath(HostFileName);
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { hostPath },
+                    HotReloadTestSourceWriter.WriteEditedSource(
+                        "IntroducedTypeNoticeHostWithoutBaseline.cs",
+                        InsertUnintroducibleDeclaration(File.ReadAllText(hostPath))),
+                    CancellationToken.None);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
+
+                Assert.That(
+                    FindWarning(response, "requires a compile"),
+                    Is.Not.Null,
+                    "Precondition: the run must report the notice. " + string.Join(" | ", response.Warnings));
+                Assert.That(
+                    FindWarning(response, "patching all methods"),
+                    Is.Null,
+                    "The notice already asks for a compile, so the file gets no missing-baseline "
+                        + "warning. " + string.Join(" | ", response.Warnings));
+            }
+        }
+
         private static string FindWarning(HotReloadResponse response, string fragment)
         {
             foreach (string warning in response.Warnings)
@@ -642,7 +674,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             {
                                 new HotReloadIntroducedTypeNotice(
                                     "Assets/Example.cs",
-                                    InjectedNoticeText)
+                                    InjectedNoticeText,
+                                    namesDeclaration: true)
                             }))))
                 {
                     HotReloadResponse response = await RunAgainstTheHostAsync();
@@ -860,6 +893,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string HostFileName = "HotReloadCrossFileAddedMemberHost.cs";
+
+        private const string HostProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/" + HostFileName;
 
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
 
