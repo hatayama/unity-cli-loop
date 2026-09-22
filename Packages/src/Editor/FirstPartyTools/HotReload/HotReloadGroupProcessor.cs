@@ -472,14 +472,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     firstFile.ProjectRoot,
                     firstFile.CompilationAssembly.sourceFiles),
                 changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths,
-                activePatchedMethodLabels = CollectActivePatchedMethodLabels(files, domain)
+                activeMethodLabels = CollectActiveMethodLabels(files, domain)
             };
         }
 
-        // Why only patched methods and not added members: a skipped method keeps running the body
-        // an earlier reload patched into it, while a skipped added member is not what the
-        // skipped-writer warning can be wrong about.
-        private static string[] CollectActivePatchedMethodLabels(
+        // Why added members too: a skipped method keeps running the body an earlier reload
+        // patched into it, and a skipped added member is deactivated but stays reachable, because
+        // a patch this run leaves active can still call its earlier shim body. Either way the
+        // skipped writer may still assign the field. Both lists hold display labels, which is
+        // the form the worker's skipped rows use.
+        private static string[] CollectActiveMethodLabels(
             IReadOnlyList<HotReloadGroupFile> files,
             HotReloadDomain domain)
         {
@@ -487,6 +489,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (HotReloadGroupFile file in files)
             {
                 labels.AddRange(domain.ListActiveMethodKeys(file.ProjectRelativePath));
+                labels.AddRange(domain.ListActiveAddedMethodKeys(file.ProjectRelativePath));
             }
 
             return labels.ToArray();

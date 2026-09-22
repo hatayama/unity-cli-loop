@@ -45,11 +45,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // it. Null/omitted is treated as empty.
         public TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts;
 
-        // Labels (see HotReloadMethodKeys.FormatMethodLabel) of the edited files' methods whose
-        // patch from an earlier reload is active when this run starts. A skipped writer among them
-        // may still assign an added field through that patch, so the skipped-writer warning does
-        // not claim the default value. Null/omitted is treated as empty (no earlier patch).
-        public string[] activePatchedMethodLabels;
+        // Labels (see HotReloadMethodKeys.FormatMethodLabel) of the edited files' methods that an
+        // earlier reload patched or added and that are still active when this run starts. A
+        // skipped writer among them may still assign an added field through that earlier body, so
+        // the skipped-writer warning does not claim the default value. Null/omitted is treated as
+        // empty (no earlier patch or added method).
+        public string[] activeMethodLabels;
     }
 
     /// <summary>

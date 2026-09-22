@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // siblingConstDriftWarnings stay populated on the retry worker output.
                 changedSiblingSourcePaths = workerInput.changedSiblingSourcePaths,
                 // Why copy: the retry reports the skipped-writer warnings in place of the first run.
-                activePatchedMethodLabels = workerInput.activePatchedMethodLabels
+                activeMethodLabels = workerInput.activeMethodLabels
             };
 
             TransformWorkerClientResult retryWorkerResult =

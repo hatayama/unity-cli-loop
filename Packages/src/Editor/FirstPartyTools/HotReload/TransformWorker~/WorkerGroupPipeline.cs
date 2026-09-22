@@ -187,8 +187,8 @@ internal static class WorkerGroupPipeline
             assemblyGlobalUsings,
             shimNames);
 
-        HashSet<string> activePatchedLabels =
-            new HashSet<string>(input.ActivePatchedMethodLabels, StringComparer.Ordinal);
+        HashSet<string> activeLabels =
+            new HashSet<string>(input.ActiveMethodLabels, StringComparer.Ordinal);
         foreach (WorkerSourceUnit unit in transformUnits)
         {
             // Why registered here and not where the type is planned: planning is a separate
@@ -208,7 +208,7 @@ internal static class WorkerGroupPipeline
                 addedFieldCatalog,
                 addedPropertyCatalog,
                 skipped,
-                activePatchedLabels);
+                activeLabels);
         }
 
         return BuildWorkerOutput(

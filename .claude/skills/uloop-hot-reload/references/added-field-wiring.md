@@ -35,6 +35,11 @@ HotReloadAddedFieldWiring.TryReadStaticField(typeof(Enemy), "_shared", out objec
 The field name is the name as written in the edited source. The declaring type comes from the
 instance, and a field a base class declares is reached through a derived instance.
 
+Do not read a wired field from an added `Start`. Its row says `The added Start runs once on each
+existing instance when the proxy attaches.`, and the proxy attaches during the reload, before any
+wiring script can run, so that `Start` sees the field's default. Put that initialization in
+`Update` behind a first-use check instead.
+
 ## What it refuses, and why that matters
 
 Every check runs before anything is stored, so a refused call leaves an earlier wiring intact.
@@ -51,6 +56,10 @@ Every check runs before anything is stored, so a refused call leaves an earlier 
 | `null` into a non-nullable value-type field | Throws |
 | Static field through an instance, or the reverse | Throws, naming the call to use instead |
 | A destroyed `UnityEngine.Object` as the instance | Throws: its patched methods never run again |
+
+The try-read calls refuse the same way for every row that is about the field or the instance
+rather than the value: on a type with no added fields, or after a `uloop compile`, they throw
+instead of returning `false`.
 
 `TryReadInstanceField` / `TryReadStaticField` return `false` until the field's slot exists. A
 patched method that reads the field creates the slot with the field's initializer value (or its
