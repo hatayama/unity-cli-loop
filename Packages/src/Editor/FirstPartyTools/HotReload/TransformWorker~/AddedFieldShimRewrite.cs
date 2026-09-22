@@ -229,11 +229,27 @@ internal sealed class AddedFieldShimRewrite
             return SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression);
         }
 
-        ExpressionSyntax cloned = SyntaxFactory.ParseExpression(binding.Initializer.ToString());
+        ExpressionSyntax cloned = SyntaxFactory.ParseExpression(ToStandaloneInitializerText(binding));
         return SyntaxFactory.ParenthesizedLambdaExpression(
                 SyntaxFactory.ParameterList(),
                 cloned)
             .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
+    }
+
+    // Why an array creation: '= { 1, 2 }' is only valid beside an array declaration, and as a
+    // lambda body it parses as a statement block. The declared type carries the rank of every
+    // dimension, so a jagged or rectangular initializer keeps its nested rows as they are. Only
+    // the emitted text changes: the recorded initializer stays the one the source spells.
+    private static string ToStandaloneInitializerText(AddedFieldBinding binding)
+    {
+        string initializerText = binding.Initializer.ToString();
+        if (!binding.Initializer.IsKind(SyntaxKind.ArrayInitializerExpression)
+            || !(binding.FieldType is IArrayTypeSymbol arrayType))
+        {
+            return initializerText;
+        }
+
+        return "new " + arrayType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + " " + initializerText;
     }
 
     internal static InvocationExpressionSyntax CreateAddedFieldStoreInvocation(
