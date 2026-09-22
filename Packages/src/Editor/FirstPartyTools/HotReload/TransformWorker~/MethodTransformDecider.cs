@@ -232,6 +232,37 @@ internal static class MethodTransformDecider
         return bodies;
     }
 
+    // Why name the compiled types: when the body fails because a compiled API still takes the
+    // compiled copy of a type this run declares, passing the API's file as well is a recovery
+    // short of a compile, and only the declaring types tell the reader which file that is.
+    private static WorkerReason DescribeUnboundBody(
+        SemanticModel semanticModel,
+        SyntaxNode methodBodyNode,
+        Diagnostic bindingError)
+    {
+        string diagnosticText = bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture);
+        CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(
+            semanticModel,
+            methodBodyNode,
+            AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode));
+        if (split.DeclaringTypeMetadataNames.Count == 0)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodBodyUnbound, diagnosticText);
+        }
+
+        return WorkerReason.NamingCompiledTypes(
+            HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
+            split.DeclaringTypeMetadataNames.ToArray(),
+            diagnosticText,
+            QuoteNames(split.SplitTypeMetadataNames),
+            QuoteNames(split.DeclaringTypeMetadataNames));
+    }
+
+    private static string QuoteNames(List<string> names)
+    {
+        return "'" + string.Join("', '", names) + "'";
+    }
+
     // Why a second plan pass: DecideMethodTransform only sets UsesDelegation for
     // async/iterator/closure bodies. An ordinary added method JIT-compiles in the
     // shim assembly, so inaccessible compiled members must take the same accessor
@@ -249,10 +280,7 @@ internal static class MethodTransformDecider
         Diagnostic bindingError = AddedMemberBindingGuard.FindFirstBindingError(semanticModel, methodBodyNode);
         if (bindingError != null)
         {
-            return MethodTransformDecision.Skip(
-                WorkerReason.Of(
-                    HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
-                    bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture)));
+            return MethodTransformDecision.Skip(DescribeUnboundBody(semanticModel, methodBodyNode, bindingError));
         }
 
         if (current.UsesDelegation)
