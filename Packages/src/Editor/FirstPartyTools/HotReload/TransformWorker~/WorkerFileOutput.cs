@@ -57,7 +57,8 @@ internal sealed class WorkerFileOutput
     // that the type does not hold yet. Empty from the transform run.
     public string[] PlannedAddedMemberNames { get; set; }
 
-    // Prepare run only: names of members this source adds to a compiled enum. Kept apart from
+    // Prepare run only: members this source adds to a compiled enum, each as "<enum C# display
+    // name>.<member>" so the Editor can match the type of a CS0117 too. Kept apart from
     // PlannedAddedMemberNames because hot reload cannot add an enum member at all, so a failed
     // introduced-type compilation has to point at the enum-member warning instead.
     public string[] PlannedAddedEnumMemberNames { get; set; }

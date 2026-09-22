@@ -265,9 +265,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that a CS0117 naming an enum member this reload adds to a compiled enum points
-        /// at the enum-member warning instead of the added-member hint, even when an added member
-        /// shares the name: no reordering of the reload makes an added enum member visible.
+        /// Verifies that a CS0117 naming both the enum type and the member this reload adds to it
+        /// points at the enum-member warning instead of leaving the bare compiler error.
         /// </summary>
         [Test]
         public void Build_DiagnosticNamesAnAddedEnumMember_AppendsTheEnumMemberHint()
@@ -287,12 +286,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Third" }, new[] { "Third" }));
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), new[] { "Example.Shape.Third" }));
 
             Assert.That(rows, Has.Count.EqualTo(1));
-            Assert.That(rows[0].Reason, Does.Contain("an enum member this reload adds to a compiled enum"));
+            Assert.That(rows[0].Reason, Does.Contain(EnumMemberHintMarker));
             Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));
         }
+
+        /// <summary>
+        /// Verifies that a CS1061 naming a member that shares its name with an added enum member
+        /// gets the added-member hint, not the enum one: an instance member lookup never reads an
+        /// enum member.
+        /// </summary>
+        [Test]
+        public void Build_InstanceMemberSharesNameWithAddedEnumMember_DoesNotAppendTheEnumMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS1061: 'Host' does not contain a definition for 'Reset' and no accessible "
+                        + "extension method 'Reset' accepting a first argument of type 'Host' could be found",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Reset" }, new[] { "Example.Mode.Reset" }));
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Not.Contain(EnumMemberHintMarker));
+            Assert.That(rows[0].Reason, Does.Contain("hot reload addition"));
+        }
+
+        /// <summary>
+        /// Verifies that a CS0117 whose type is not the enum gaining the member keeps the bare
+        /// compiler error, even when the missing name matches the added enum member.
+        /// </summary>
+        [Test]
+        public void Build_StaticMemberOfAnotherTypeSharesNameWithAddedEnumMember_DoesNotAppendTheEnumMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS0117: 'Palette' does not contain a definition for 'Third'",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), new[] { "Example.Shape.Third" }));
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Not.Contain(EnumMemberHintMarker));
+        }
+
+        private const string EnumMemberHintMarker = "an enum member this reload adds to a compiled enum";
 
         /// <summary>
         /// Verifies that an owner path holding an apostrophe does not swallow the quoted member

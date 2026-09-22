@@ -181,8 +181,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // member this reload adds from a typo. Null/omitted deserializes as empty.
         public string[] plannedAddedMemberNames;
 
-        // Prepare run only: names of members the file adds to a compiled enum, which hot reload
-        // cannot add, so a failed introduced-type compilation can point at the enum-member
+        // Prepare run only: members the file adds to a compiled enum, which hot reload cannot
+        // add, each as "<enum C# display name>.<member>" so a failed introduced-type compilation
+        // can match both the type and the member of a CS0117 before pointing at the enum-member
         // warning. Null/omitted deserializes as empty.
         public string[] plannedAddedEnumMemberNames;
 

@@ -202,9 +202,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadIntroducedTypeAddedMemberNames addedMemberNames)
         {
             string reason = ReasonPrefix + string.Join("; ", messages);
-            // Why the enum hint first: a name both lists hold is missing because of the enum
-            // member, which no reordering of the reload can make visible.
-            if (MentionsAnyOf(messages, addedMemberNames.EnumMembers))
+            // Why a separate check: Members never holds an enum member, so without it a CS0117 on
+            // an added enum member would stay the bare compiler error.
+            if (MentionsAddedEnumMember(messages, addedMemberNames.EnumMembers))
             {
                 return reason + " " + AddedEnumMemberInvisibleHint;
             }
@@ -233,8 +233,66 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string member = FindSecondQuotedToken(message, searchStart);
+                string member = FindQuotedToken(message, searchStart, 1);
                 if (member != null && Contains(names, member))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Why CS0117 only and the type as well: an enum member is reached through the enum type
+        // alone, and a CS1061 or a CS0117 on another type that shares the member name is missing
+        // for another reason, so the enum hint would send the reader the wrong way.
+        private static bool MentionsAddedEnumMember(
+            List<string> messages,
+            IReadOnlyCollection<string> qualifiedEnumMembers)
+        {
+            if (qualifiedEnumMembers.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (string message in messages)
+            {
+                int codeIndex = message.IndexOf(MissingStaticMemberErrorCode, StringComparison.Ordinal);
+                if (codeIndex < 0)
+                {
+                    continue;
+                }
+
+                string typeName = FindQuotedToken(message, codeIndex + MissingStaticMemberErrorCode.Length, 0);
+                string member = FindQuotedToken(message, codeIndex + MissingStaticMemberErrorCode.Length, 1);
+                if (typeName != null && member != null && NamesEnumMember(qualifiedEnumMembers, typeName, member))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Why a suffix match on the type: the compiler prints the enum as the source spells it,
+        // often without its namespace, while the worker sends the fully qualified display name.
+        private static bool NamesEnumMember(
+            IReadOnlyCollection<string> qualifiedEnumMembers,
+            string typeName,
+            string member)
+        {
+            foreach (string qualified in qualifiedEnumMembers)
+            {
+                int lastDot = qualified.LastIndexOf('.');
+                if (lastDot <= 0
+                    || !string.Equals(qualified.Substring(lastDot + 1), member, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string enumName = qualified.Substring(0, lastDot);
+                if (string.Equals(enumName, typeName, StringComparison.Ordinal)
+                    || enumName.EndsWith("." + typeName, StringComparison.Ordinal))
                 {
                     return true;
                 }
@@ -262,35 +320,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        // The missing member is the second quoted token of these diagnostics; the first one names
-        // the type that does not hold it.
-        private static string FindSecondQuotedToken(string message, int searchStart)
+        // In these diagnostics the first quoted token names the type that does not hold the member
+        // and the second names the missing member.
+        private static string FindQuotedToken(string message, int searchStart, int tokenIndex)
         {
-            int firstOpen = message.IndexOf('\'', searchStart);
-            if (firstOpen < 0)
+            int open = message.IndexOf('\'', searchStart);
+            for (int skipped = 0; open >= 0; skipped++)
             {
-                return null;
+                int close = message.IndexOf('\'', open + 1);
+                if (close < 0)
+                {
+                    return null;
+                }
+
+                if (skipped == tokenIndex)
+                {
+                    return message.Substring(open + 1, close - open - 1);
+                }
+
+                open = message.IndexOf('\'', close + 1);
             }
 
-            int firstClose = message.IndexOf('\'', firstOpen + 1);
-            if (firstClose < 0)
-            {
-                return null;
-            }
-
-            int secondOpen = message.IndexOf('\'', firstClose + 1);
-            if (secondOpen < 0)
-            {
-                return null;
-            }
-
-            int secondClose = message.IndexOf('\'', secondOpen + 1);
-            if (secondClose < 0)
-            {
-                return null;
-            }
-
-            return message.Substring(secondOpen + 1, secondClose - secondOpen - 1);
+            return null;
         }
 
         private static bool Contains(IReadOnlyCollection<string> names, string member)

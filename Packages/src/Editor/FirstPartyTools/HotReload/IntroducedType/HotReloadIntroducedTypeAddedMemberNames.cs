@@ -27,7 +27,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal IReadOnlyCollection<string> Members { get; }
 
-        /// <summary>Members this reload's sources add to a compiled enum.</summary>
+        /// <summary>
+        /// Members this reload's sources add to a compiled enum, each as the enum's C# display
+        /// name and the member name joined by a dot.
+        /// </summary>
         internal IReadOnlyCollection<string> EnumMembers { get; }
     }
 }

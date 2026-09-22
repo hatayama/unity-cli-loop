@@ -171,6 +171,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string warning = FindWarning(result, "enum member");
                 Assert.That(warning, Does.Contain(nameof(HotReloadSiblingEnum) + ")3"), warning);
                 Assert.That(warning, Does.Not.Contain("needs no compile"), warning);
+                Assert.That(
+                    CountWarnings(result, "enum member"),
+                    Is.EqualTo(1),
+                    "The enum-member warning must be reported once.\n" + string.Join("\n", result.Warnings));
             });
         }
 
@@ -195,6 +199,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("No introduced type failed with " + errorCode + ".\n" + DescribeOutcomes(result));
             return null;
+        }
+
+        private static int CountWarnings(HotReloadOrchestratorResult result, string fragment)
+        {
+            int count = 0;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains(fragment, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static string FindWarning(HotReloadOrchestratorResult result, string fragment)

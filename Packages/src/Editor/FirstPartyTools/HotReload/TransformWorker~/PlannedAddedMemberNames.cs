@@ -47,8 +47,9 @@ internal static class PlannedAddedMemberNames
     }
 
     /// <summary>
-    /// Lists the members a unit's sources add to a compiled enum. Hot reload never adds an enum
-    /// member, so these stay absent from every compilation until a compile.
+    /// Lists the members a unit's sources add to a compiled enum, each as the enum's C# display
+    /// name and the member name joined by a dot. Hot reload never adds an enum member, so these
+    /// stay absent from every compilation until a compile.
     /// </summary>
     internal static string[] CollectCompiledEnumMembers(WorkerSourceUnit unit, WorkerTypeHome home)
     {
@@ -66,7 +67,7 @@ internal static class PlannedAddedMemberNames
             {
                 if (member is IFieldSymbol && !member.IsImplicitlyDeclared && compiledType.GetMembers(member.Name).IsEmpty)
                 {
-                    names.Add(member.Name);
+                    names.Add(sourceType.ToDisplayString() + "." + member.Name);
                 }
             }
         }
