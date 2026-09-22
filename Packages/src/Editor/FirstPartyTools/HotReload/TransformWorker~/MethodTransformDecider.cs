@@ -239,14 +239,16 @@ internal static class MethodTransformDecider
         SemanticModel semanticModel,
         SyntaxNode methodBodyNode,
         Diagnostic bindingError,
-        IntroducedTypeArtifactMap artifactMap)
+        IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly)
     {
         string diagnosticText = bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture);
         CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(
             semanticModel,
             methodBodyNode,
             AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode),
-            artifactMap);
+            artifactMap,
+            targetAssembly);
         // Checked first: a compile clears this split and any other one, while the advice to
         // pass a file would leave this one in place.
         if (split.ArtifactHostMetadataNames.Count > 0)
@@ -288,7 +290,8 @@ internal static class MethodTransformDecider
         SemanticModel semanticModel,
         MethodTransformDecision current,
         AddedMemberAccessLookup addedMemberAccess,
-        IntroducedTypeArtifactMap artifactMap)
+        IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly)
     {
         // Checked before the delegation path: a closure that binds one private access still takes
         // that path, and an unbound call beside it would reach the shim unrewritten.
@@ -296,7 +299,7 @@ internal static class MethodTransformDecider
         if (bindingError != null)
         {
             return MethodTransformDecision.Skip(
-                DescribeUnboundBody(semanticModel, methodBodyNode, bindingError, artifactMap));
+                DescribeUnboundBody(semanticModel, methodBodyNode, bindingError, artifactMap, targetAssembly));
         }
 
         if (current.UsesDelegation)

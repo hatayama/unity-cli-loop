@@ -587,7 +587,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerInputDto input = CreateInput(
                 fixture,
                 includeRetainedSource: false,
-                new[] { CreateSinkArtifact(fixture) },
+                new[] { CreateSinkArtifact(fixture, fixture.TargetAssemblyPath) },
                 Array.Empty<string>());
             // The skip is decided by a transform run; planning never reaches the method bodies.
             input.operation = null;
@@ -611,6 +611,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "The Editor names the file declaring the compiled type from these names.");
         }
 
+        /// <summary>
+        /// Verifies that an introduced member bound to a same-named type of another compiled
+        /// assembly keeps the generic unbound-body reason: the introduced type was compiled
+        /// against the patch target only, so that mismatch is a real one a compile does not clear.
+        /// </summary>
+        [Test]
+        public async Task Transform_AddedMethodPassesSourceTypeToIntroducedMemberBoundToOtherAssembly_KeepsUnboundReason()
+        {
+            BindingFixture fixture = CreateFixture(
+                "IntroducedMemberBoundToOtherAssembly",
+                HandingDependentSource,
+                includeCompiledDependent: true);
+            string otherAssemblyPath = Path.Combine(fixture.Directory, "OtherCompiled.dll");
+            CreateArtifactAssembly(otherAssemblyPath, "OtherCompiled", "Example", "Dependent");
+            TransformWorkerInputDto input = CreateInput(
+                fixture,
+                includeRetainedSource: false,
+                new[] { CreateSinkArtifact(fixture, otherAssemblyPath) },
+                new[] { otherAssemblyPath });
+            input.operation = null;
+
+            TransformWorkerClientResult result =
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Hand");
+            string text = skipped.reason.code + ": " + string.Join(" | ", skipped.reason.args ?? Array.Empty<string>());
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound), text);
+        }
+
         private static TransformWorkerSkippedDto FindSkipped(TransformWorkerClientResult result, string methodName)
         {
             foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
@@ -627,15 +657,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
-        // An introduced type whose member takes the compiled Dependent, the way a type introduced
-        // while Dependent's file was not part of the reload binds it.
-        private static TransformWorkerIntroducedTypeArtifactDto CreateSinkArtifact(BindingFixture fixture)
+        // An introduced type whose member takes the compiled Dependent of the given assembly, the
+        // way a type introduced while Dependent's file was not part of the reload binds it.
+        private static TransformWorkerIntroducedTypeArtifactDto CreateSinkArtifact(
+            BindingFixture fixture,
+            string dependentAssemblyPath)
         {
             string artifactPath = Path.Combine(fixture.Directory, "SinkArtifact.dll");
             AssemblyNameDefinition assemblyNameDefinition = new AssemblyNameDefinition(
                 "SinkArtifact",
                 new Version(1, 0, 0, 0));
-            using (AssemblyDefinition target = AssemblyDefinition.ReadAssembly(fixture.TargetAssemblyPath))
+            using (AssemblyDefinition target = AssemblyDefinition.ReadAssembly(dependentAssemblyPath))
             using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(
                 assemblyNameDefinition,
                 "SinkArtifact",

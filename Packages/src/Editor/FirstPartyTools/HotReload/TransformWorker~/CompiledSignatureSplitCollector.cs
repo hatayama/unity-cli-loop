@@ -19,7 +19,8 @@ internal static class CompiledSignatureSplitCollector
         SemanticModel semanticModel,
         SyntaxNode body,
         IReadOnlyList<TextSpan> bindingErrorSpans,
-        IntroducedTypeArtifactMap artifactMap)
+        IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly)
     {
         IAssemblySymbol sourceAssembly = semanticModel.Compilation.Assembly;
         CompiledSignatureSplitNames names = new CompiledSignatureSplitNames();
@@ -34,7 +35,7 @@ internal static class CompiledSignatureSplitCollector
 
             foreach (ISymbol member in FindUsedMembers(semanticModel, node))
             {
-                AddSplit(member, sourceAssembly, artifactMap, names);
+                AddSplit(member, sourceAssembly, artifactMap, targetAssembly, names);
             }
         }
 
@@ -130,6 +131,7 @@ internal static class CompiledSignatureSplitCollector
         ISymbol member,
         IAssemblySymbol sourceAssembly,
         IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly,
         CompiledSignatureSplitNames names)
     {
         INamedTypeSymbol declaringType = member?.ContainingType;
@@ -151,8 +153,14 @@ internal static class CompiledSignatureSplitCollector
 
             // Why apart from the same-assembly split: an introduced type was compiled once, against
             // whichever copy of the type was compiled then, and no file this reload passes rebuilds
-            // it, so only a compile makes both sides name the same type again.
-            if (declaredByArtifact && !IsFromArtifact(signatureType, artifactMap))
+            // it, so only a compile makes both sides name the same type again. Why only a type of
+            // the target assembly: the introduced type was compiled against that assembly, so a
+            // same-named type of another assembly is a real mismatch, not this split. Why by
+            // identity: the target symbol comes from a wider-import compilation, so it is never
+            // the same symbol instance as the one this body binds to.
+            if (declaredByArtifact
+                && targetAssembly != null
+                && signatureType.ContainingAssembly.Identity.Equals(targetAssembly.Identity))
             {
                 names.ArtifactBoundTypes.Add(CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition));
                 names.ArtifactHosts.Add(CecilTypeNames.ToMetadataName(declaringType.OriginalDefinition));
