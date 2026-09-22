@@ -107,7 +107,9 @@ struct, which is `Skipped` like any struct method; a call to a member an earlier
 reload *added* to a compiled type or to an earlier introduced type, because introduced types
 compile against the compiled assemblies and retained artifacts only, so the compile fails naming
 the missing member and says a hot reload addition shares its name (reloading the addition first
-does not help); and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
+does not help); an added method that passes a type declared from source in this reload to a
+member of an earlier introduced type whose signature was bound to the compiled copy, which is
+`Skipped` naming both types; and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
 the exception: every active artifact is referenced by that compilation, so the snippet can name an
 introduced type directly by its full name. When such a snippet still fails on the name, the
 diagnostic's `Hint` names the type and how to spell it.
