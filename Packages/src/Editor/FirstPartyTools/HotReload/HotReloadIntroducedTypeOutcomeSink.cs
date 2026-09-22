@@ -61,6 +61,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Appends each file's const and enum-member drift warnings to that file's warnings, for a
+        /// run whose introduced-type preparation refused it before the transform run could.
+        /// </summary>
+        internal static void AppendDeclarationDriftWarnings(
+            IReadOnlyList<HotReloadGroupFile> files,
+            IReadOnlyDictionary<string, string[]> warningsByOwner)
+        {
+            foreach (KeyValuePair<string, string[]> owner in warningsByOwner)
+            {
+                FindCarrier(files, owner.Key).Sinks.Warnings.AddRange(owner.Value);
+            }
+        }
+
         // The first file of the group carries what the group cannot attribute, which is also where
         // the group-level failure rows of the other stages travel.
         private static HotReloadGroupFile FindCarrier(

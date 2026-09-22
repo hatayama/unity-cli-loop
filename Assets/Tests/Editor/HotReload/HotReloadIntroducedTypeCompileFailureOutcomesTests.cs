@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Kind, Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed));
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.Second", "Assets/Second.cs")
                 },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -134,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.Companion", "Assets/First.cs")
                 },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Is.EqualTo(Prefix + "CS0246: missing type"));
@@ -187,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.Second", "Assets/Second.cs")
                 },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[1].Kind, Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed));
@@ -222,7 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Clear" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Clear" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
@@ -258,11 +258,101 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Other" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Other" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));
         }
+
+        /// <summary>
+        /// Verifies that a CS0117 naming both the enum type and the member this reload adds to it
+        /// points at the enum-member warning instead of leaving the bare compiler error.
+        /// </summary>
+        [Test]
+        public void Build_DiagnosticNamesAnAddedEnumMember_AppendsTheEnumMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS0117: 'Shape' does not contain a definition for 'Third'",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), new[] { "Example.Shape.Third" }));
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Contain(EnumMemberHintMarker));
+            Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));
+        }
+
+        /// <summary>
+        /// Verifies that a CS1061 naming a member that shares its name with an added enum member
+        /// gets the added-member hint, not the enum one: an instance member lookup never reads an
+        /// enum member.
+        /// </summary>
+        [Test]
+        public void Build_InstanceMemberSharesNameWithAddedEnumMember_DoesNotAppendTheEnumMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS1061: 'Host' does not contain a definition for 'Reset' and no accessible "
+                        + "extension method 'Reset' accepting a first argument of type 'Host' could be found",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Reset" }, new[] { "Example.Mode.Reset" }));
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Not.Contain(EnumMemberHintMarker));
+            Assert.That(rows[0].Reason, Does.Contain("hot reload addition"));
+        }
+
+        /// <summary>
+        /// Verifies that a CS0117 whose type is not the enum gaining the member keeps the bare
+        /// compiler error, even when the missing name matches the added enum member.
+        /// </summary>
+        [Test]
+        public void Build_StaticMemberOfAnotherTypeSharesNameWithAddedEnumMember_DoesNotAppendTheEnumMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS0117: 'Palette' does not contain a definition for 'Third'",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), new[] { "Example.Shape.Third" }));
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Not.Contain(EnumMemberHintMarker));
+        }
+
+        private const string EnumMemberHintMarker = "an enum member this reload adds to a compiled enum";
 
         /// <summary>
         /// Verifies that an owner path holding an apostrophe does not swallow the quoted member
@@ -287,7 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", ownerPath) },
                 "TargetAssembly",
-                new[] { "Clear" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Clear" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
@@ -315,7 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Reset" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Reset" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
@@ -343,7 +433,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Clear" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Clear" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));

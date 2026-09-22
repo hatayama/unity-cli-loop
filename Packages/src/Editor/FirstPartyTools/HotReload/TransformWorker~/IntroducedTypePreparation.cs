@@ -114,6 +114,8 @@ internal static class IntroducedTypePreparation
             compilation);
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         string[][] plannedAddedMemberNames = new string[units.Count][];
+        string[][] plannedAddedEnumMemberNames = new string[units.Count][];
+        string[][] declarationDriftWarnings = new string[units.Count][];
         for (int index = 0; index < units.Count; index++)
         {
             WorkerSourceUnit unit = units[index];
@@ -139,6 +141,13 @@ internal static class IntroducedTypePreparation
                         artifactMap,
                         input.TargetAssemblyName,
                         input.TargetAssemblyMvid);
+                    plannedAddedEnumMemberNames[index] = PlannedAddedMemberNames.CollectCompiledEnumMembers(unit, home);
+                    // Why collected here as well: a refused or failed introduced-type batch ends
+                    // the run before the transform run, which is what reports these otherwise.
+                    declarationDriftWarnings[index] = ConstDriftCollector.CollectConstDriftWarnings(
+                        unit.Root,
+                        unit.ConstDriftSemanticModel,
+                        home).ToArray();
                 }
                 else
                 {
@@ -162,7 +171,9 @@ internal static class IntroducedTypePreparation
                 IntroducedTypes = unit.IntroducedTypes.ToArray(),
                 IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
                 IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray(),
-                PlannedAddedMemberNames = plannedAddedMemberNames[index] ?? Array.Empty<string>()
+                PlannedAddedMemberNames = plannedAddedMemberNames[index] ?? Array.Empty<string>(),
+                PlannedAddedEnumMemberNames = plannedAddedEnumMemberNames[index] ?? Array.Empty<string>(),
+                PreparedDeclarationDriftWarnings = declarationDriftWarnings[index] ?? Array.Empty<string>()
             };
         }
 

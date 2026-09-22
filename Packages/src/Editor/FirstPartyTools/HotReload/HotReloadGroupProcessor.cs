@@ -99,6 +99,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (preparation.Failures.Count > 0)
                 {
                     HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.Failures);
+                    // Why here: the transform run that reports these for a run that continues
+                    // never runs, and an added enum member is a likely cause of the refusal.
+                    HotReloadIntroducedTypeOutcomeSink.AppendDeclarationDriftWarnings(
+                        files,
+                        preparation.DeclarationDriftWarnings);
                 }
                 else
                 {

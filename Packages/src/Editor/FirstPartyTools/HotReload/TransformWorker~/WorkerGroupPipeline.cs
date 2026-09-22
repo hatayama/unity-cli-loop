@@ -454,7 +454,9 @@ internal static class WorkerGroupPipeline
             IntroducedTypes = unit.IntroducedTypes.ToArray(),
             IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
             IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray(),
-            PlannedAddedMemberNames = Array.Empty<string>()
+            PlannedAddedMemberNames = Array.Empty<string>(),
+            PlannedAddedEnumMemberNames = Array.Empty<string>(),
+            PreparedDeclarationDriftWarnings = Array.Empty<string>()
         };
     }
 }

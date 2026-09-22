@@ -126,6 +126,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.introducedTypeDiagnostics ??= Array.Empty<TransformWorkerReasonDto>();
                 fileOutput.introducedTypeReuses ??= Array.Empty<TransformWorkerIntroducedTypeReuseDto>();
                 fileOutput.plannedAddedMemberNames ??= Array.Empty<string>();
+                fileOutput.plannedAddedEnumMemberNames ??= Array.Empty<string>();
+                fileOutput.preparedDeclarationDriftWarnings ??= Array.Empty<string>();
             }
 
             foreach (TransformWorkerEntryDto entry in output.entries)

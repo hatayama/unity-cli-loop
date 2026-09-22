@@ -46,6 +46,35 @@ internal static class PlannedAddedMemberNames
         return names.ToArray();
     }
 
+    /// <summary>
+    /// Lists the members a unit's sources add to a compiled enum, each as the enum's C# display
+    /// name and the member name joined by a dot. Hot reload never adds an enum member, so these
+    /// stay absent from every compilation until a compile.
+    /// </summary>
+    internal static string[] CollectCompiledEnumMembers(WorkerSourceUnit unit, WorkerTypeHome home)
+    {
+        HashSet<string> names = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (EnumDeclarationSyntax declaration in unit.Root.DescendantNodes().OfType<EnumDeclarationSyntax>())
+        {
+            INamedTypeSymbol sourceType = unit.SemanticModel.GetDeclaredSymbol(declaration);
+            INamedTypeSymbol compiledType = sourceType == null ? null : home.FindCompiledType(sourceType);
+            if (compiledType == null)
+            {
+                continue;
+            }
+
+            foreach (ISymbol member in sourceType.GetMembers())
+            {
+                if (member is IFieldSymbol && !member.IsImplicitlyDeclared && compiledType.GetMembers(member.Name).IsEmpty)
+                {
+                    names.Add(sourceType.ToDisplayString() + "." + member.Name);
+                }
+            }
+        }
+
+        return names.ToArray();
+    }
+
     // Why only top-level types are looked up in the artifacts: hot reload introduces top-level
     // types only, so a retained artifact never serves a nested one.
     private static INamedTypeSymbol FindExistingType(
