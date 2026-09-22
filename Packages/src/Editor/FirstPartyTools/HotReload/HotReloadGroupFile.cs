@@ -117,6 +117,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // every file and would answer no to a question the preparation already answered.
         internal bool DeclaresIntroducedType { get; set; }
 
+        // Set when a type notice names this file: it declares a type hot reload refused to
+        // introduce. Why apart from DeclaresIntroducedType: that one's warning calls the missing
+        // baseline expected, while here the notice already says the file needs a compile.
+        internal bool DeclaresRefusedIntroducedType { get; set; }
+
         // Patch labels already active for this file when the group's apply started. Snapshotted
         // because a run mutates the ledgers between files.
         internal HashSet<string> SnapshotLabels { get; set; }

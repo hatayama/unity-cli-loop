@@ -290,7 +290,8 @@ the first compile after installing or updating the package — every editable me
 the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
 to establish the baseline. Files the reload only re-applied as siblings share one
 such line per reason, `N re-applied sibling file(s) ...: <files>`, instead of one
-line each.
+line each. A file whose `Warnings` already say a type it declares requires a compile
+gets no such line, because that compile also establishes its baseline.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor
