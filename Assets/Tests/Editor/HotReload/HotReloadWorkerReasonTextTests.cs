@@ -508,7 +508,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape,
                 NoArgs,
-                "inaccessible property increment/decrement has no accessor rewrite shape.");
+                "inaccessible property increment/decrement has no accessor rewrite shape; write it as a "
+                + "statement 'X += 1' or 'X = X + 1', which the accessor rewrite handles.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorMethodReturnTypeUnresolved,
                 new[] { "Missing" },

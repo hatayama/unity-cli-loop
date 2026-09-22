@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string RefReturningPropertyNoShape = "inaccessible ref-returning properties have no accessor rewrite shape";
         private const string RefOutInNotRewritten = "inaccessible method calls with ref/out/in parameters are not rewritten";
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
+        private const string PropertyIncrementNoShape = "inaccessible property increment/decrement has no accessor rewrite shape";
 
         /// <summary>
         /// What: an added method that reads an added private static property is added, not
@@ -288,6 +289,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.shimSource,
                 Does.Match(@"__P_set_PrivateStaticCounter\(\(int\)\(__P_get_PrivateStaticCounter\(\)\s*\+\s*value\)\)"),
+                result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: an added method that increments a compiled private static property is skipped, and
+        /// its reason names the assignment statements that the accessor rewrite handles.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_IncrementingACompiledPrivateStaticProperty_IsSkippedNamingTheAssignmentRewrite()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedIncrementCompiledStatic()\n        {\n            PrivateStaticCounter++;\n        }");
+
+            AssertHasSkip(result, "AddedIncrementCompiledStatic", PropertyIncrementNoShape);
+            AssertHasSkip(result, "AddedIncrementCompiledStatic", "'X += 1' or 'X = X + 1'");
+        }
+
+        /// <summary>
+        /// What: the same increment written as the plain assignment statement the increment skip
+        /// reason suggests is added, and the shim sets the property from its getter result.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_IncrementWrittenAsAnAssignmentOfACompiledPrivateStaticProperty_IsAdded()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedAssignIncrementCompiledStatic()\n        {\n"
+                + "            PrivateStaticCounter = PrivateStaticCounter + 1;\n        }");
+
+            AssertAddedAndNotSkipped(result, "AddedAssignIncrementCompiledStatic");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Match(@"__P_set_PrivateStaticCounter\(__P_get_PrivateStaticCounter\(\)\s*\+\s*1\)"),
                 result.Output.shimSource);
         }
 
