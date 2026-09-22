@@ -5827,8 +5827,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: shim-compile-failure isolation rewrites a two-hop UnavailableAddedCall chain
-        /// to IsolatedAddedMethodCallerSkipReason.
+        /// What: shim-compile-failure isolation rewrites a two-hop UnavailableAddedCall chain to the
+        /// unapplied-callee reason, each row still naming the added method it calls.
         /// </summary>
         [Test]
         public void CollectRetryOnlySkippedOutcomes_ShimCompileFailure_RewritesTwoHopIndirectCallers()
@@ -5869,8 +5869,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(2));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
-            Assert.That(outcomes[1].Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+            Assert.That(
+                outcomes[0].Reason,
+                Is.EqualTo(string.Format(HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat, "Host.Broken()")));
+            Assert.That(
+                outcomes[1].Reason,
+                Is.EqualTo(string.Format(HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat, "Host.Mid()")));
         }
 
         /// <summary>

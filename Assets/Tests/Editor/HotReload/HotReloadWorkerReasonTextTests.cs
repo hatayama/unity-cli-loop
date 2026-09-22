@@ -733,9 +733,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Introduced types require a compile: the target assembly identity does not match the request.");
             yield return Case(
                 HotReloadWorkerReasonCode.EditorIsolatedAddedMethodCaller,
-                new string[0],
-                "Calls an added method whose shim failed to compile; the caller was left unpatched. "
-                + "Fix the compile error in the added method (see the Failed row in this response) and reload again, or run 'uloop compile'.");
+                new[] { "Host.Added()" },
+                "Calls the added method 'Host.Added()', which this reload did not apply; the caller was left unpatched. "
+                + "That method's own row gives the reason: fix its compile error when it Failed, or the failure "
+                + "elsewhere in its file when it was Skipped, and reload again, or run 'uloop compile'.");
         }
 
         private static TestCaseData Case(HotReloadWorkerReasonCode code, string[] args, string expected)

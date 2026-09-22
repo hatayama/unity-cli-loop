@@ -47,9 +47,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
+                    // Why the callee's name is carried over: the callee may be a healthy method
+                    // skipped only because another method of its file failed, so the caller has
+                    // to name it for the reader to find its row.
                     row.reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.EditorIsolatedAddedMethodCaller
+                        code = HotReloadWorkerReasonCode.EditorIsolatedAddedMethodCaller,
+                        args = row.reason.args
                     };
                     progressed = true;
                     if (!string.IsNullOrEmpty(row.methodKey))
