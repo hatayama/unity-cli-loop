@@ -229,6 +229,7 @@ func TestMatchLinuxUnityProcessExtractsProjectPath(t *testing.T) {
 		{"equals form with mixed case", []string{"/opt/Unity/Editor/Unity", "-projectPath=/work/p"}, "/work/p"},
 		{"project path containing batchmode", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/nightly-batchmode"}, "/work/nightly-batchmode"},
 		{"project path containing assetimportworker", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/AssetImportWorker-lab"}, "/work/AssetImportWorker-lab"},
+		{"unity hub hardlink name with lowercase projectpath", []string{"/home/user/Unity/Hub/Editor/2022.3.62f3/Editor/unityhub-unity-editor-2022.3.62f3", "-projectpath", "/home/user/project", "-acceptSoftwareTermsForThisRunOnly", "-useHub", "-hubIPC", "-cloudEnvironment", "production", "-licensingIpc", "LicenseClient-user", "-hubSessionId", "session-placeholder", "-accessToken", "token-placeholder"}, "/home/user/project"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -252,6 +253,8 @@ func TestMatchLinuxUnityProcessRejectsNonEditorProcesses(t *testing.T) {
 		{"batchmode", []string{"/opt/Unity/Editor/Unity", "-batchmode", "-projectpath", "/work/p"}},
 		{"asset import worker", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/p", "-name", "AssetImportWorker0"}},
 		{"executable name is not Unity", []string{"/opt/Unity/Editor/Data/Tools/UnityShaderCompiler", "-projectpath", "/work/p"}},
+		{"asset import worker with relative hub hardlink name", []string{"unityhub-unity-editor-2022.3.62f3", "-batchMode", "-name", "AssetImportWorker0", "-projectPath", "/home/user/project"}},
+		{"unrelated executable with unityhub prefix in directory only", []string{"/home/user/Unity/Hub/Editor/2022.3.62f3/Editor/Data/Tools/UnityShaderCompiler", "-projectpath", "/home/user/project"}},
 		{"no project path flag", []string{"/opt/Unity/Editor/Unity"}},
 		{"project path flag without value", []string{"/opt/Unity/Editor/Unity", "-projectpath"}},
 		{"empty argv", []string{}},
