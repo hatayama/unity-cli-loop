@@ -57,7 +57,7 @@ Make sure you have:
 
 **macOS, Linux (x86_64), Windows Git Bash:**
 
-On Linux, focus-window and compile-check are not supported.
+On Linux, focus-window is not supported.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
