@@ -52,7 +52,8 @@ internal static class TypeEmitPlanner
                 SourceUnit = sourceUnit,
                 TypeDeclaration = typeDeclaration,
                 TypeSymbol = typeSymbol,
-                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
+                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax,
+                TargetAssembly = home.AssemblySymbol
             };
 
             // Why the counterpart is resolved before anything is classified: every stage below

@@ -291,7 +291,9 @@ internal static class OrdinaryMethodQueue
                 methodBodyNode,
                 semanticModel,
                 decision,
-                typeState.AddedMemberAccess);
+                typeState.AddedMemberAccess,
+                typeState.SourceUnit.ArtifactMap,
+                typeState.TargetAssembly);
         }
 
         return decision;

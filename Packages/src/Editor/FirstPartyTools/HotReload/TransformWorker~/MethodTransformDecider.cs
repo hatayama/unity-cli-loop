@@ -238,13 +238,29 @@ internal static class MethodTransformDecider
     private static WorkerReason DescribeUnboundBody(
         SemanticModel semanticModel,
         SyntaxNode methodBodyNode,
-        Diagnostic bindingError)
+        Diagnostic bindingError,
+        IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly)
     {
         string diagnosticText = bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture);
         CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(
             semanticModel,
             methodBodyNode,
-            AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode));
+            AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode),
+            artifactMap,
+            targetAssembly);
+        // Checked first: a compile clears this split and any other one, while the advice to
+        // pass a file would leave this one in place.
+        if (split.ArtifactHostMetadataNames.Count > 0)
+        {
+            return WorkerReason.NamingCompiledTypes(
+                HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
+                split.ArtifactBoundTypeMetadataNames.ToArray(),
+                diagnosticText,
+                QuoteNames(split.ArtifactHostMetadataNames),
+                QuoteNames(split.ArtifactBoundTypeMetadataNames));
+        }
+
         if (split.DeclaringTypeMetadataNames.Count == 0)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodBodyUnbound, diagnosticText);
@@ -273,14 +289,17 @@ internal static class MethodTransformDecider
         SyntaxNode methodBodyNode,
         SemanticModel semanticModel,
         MethodTransformDecision current,
-        AddedMemberAccessLookup addedMemberAccess)
+        AddedMemberAccessLookup addedMemberAccess,
+        IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly)
     {
         // Checked before the delegation path: a closure that binds one private access still takes
         // that path, and an unbound call beside it would reach the shim unrewritten.
         Diagnostic bindingError = AddedMemberBindingGuard.FindFirstBindingError(semanticModel, methodBodyNode);
         if (bindingError != null)
         {
-            return MethodTransformDecision.Skip(DescribeUnboundBody(semanticModel, methodBodyNode, bindingError));
+            return MethodTransformDecision.Skip(
+                DescribeUnboundBody(semanticModel, methodBodyNode, bindingError, artifactMap, targetAssembly));
         }
 
         if (current.UsesDelegation)

@@ -31,6 +31,10 @@ internal sealed class TypeEmitState
 
     public string TypeMetadataNameFromSyntax { get; set; }
 
+    // The compiled assembly the request named as the patch target, or null when it could not be
+    // resolved. An introduced type is compiled against this assembly and retained artifacts only.
+    public IAssemblySymbol TargetAssembly { get; set; }
+
     // Which private members of this type the reload adds, set once its added properties are
     // classified. Method decisions read it so the accessor plan leaves those members to the
     // added-member rewrite.

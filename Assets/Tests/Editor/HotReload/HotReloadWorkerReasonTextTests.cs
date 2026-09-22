@@ -288,6 +288,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "so it is skipped. Pass 'Assets/Registry.cs' to this reload as well so both bind to the same type. "
                 + "Otherwise run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
+                new[] { "CS1503: Argument 1: cannot convert", "'Example.Sink'", "'Example.Payload'", "'Assets/Payload.cs'" },
+                "The added member's body could not be fully bound in the hot-reload compilation "
+                + "(CS1503: Argument 1: cannot convert): the members of the introduced type 'Example.Sink' were "
+                + "bound to the compiled 'Example.Payload' when that type was introduced, while this reload builds "
+                + "'Example.Payload' from source ('Assets/Payload.cs', passed or carried in to keep an earlier "
+                + "reload's binding), so the 'Example.Payload' this body uses no longer matches and it is skipped. "
+                + "Run 'uloop compile'; changing --files does not avoid this, because 'Assets/Payload.cs' is "
+                + "carried in again.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,
                 "Added fields on struct types are skipped; the store requires a reference-type instance. "

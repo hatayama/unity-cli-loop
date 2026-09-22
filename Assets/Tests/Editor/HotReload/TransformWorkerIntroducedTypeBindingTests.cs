@@ -35,6 +35,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        // Not part of the edited sources: the run only carries the artifact that file produced.
+        private const string SinkProjectRelativePath = "Assets/Sink.cs";
+
+        // The compiled Dependent plus an added method handing it to the introduced Sink.
+        private const string HandingDependentSource =
+            "namespace Example { public class Dependent { public int Value() { return 0; } "
+            + "public int Hand() { return new Sink().Take(this); } } }";
+
         private const string DirectDependentSource =
             "namespace Example { public class Dependent { public int Read(Retained retained) { return retained.Value; } } }";
 
@@ -561,6 +569,156 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(tampered.Success, Is.True, tampered.ErrorMessage);
             Assert.That(CountRowsMentioning(tampered, "Read"), Is.GreaterThan(0));
             Assert.That(CountRowsMentioning(matched, "Read"), Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: an added method that hands the edited compiled type to a member of an introduced
+        /// type, whose signature was bound to the compiled copy when that type was introduced, is
+        /// skipped with a reason naming the introduced type and the compiled type and sending the
+        /// reader to a compile, because no --files choice rebinds the introduced type.
+        /// </summary>
+        [Test]
+        public async Task Transform_AddedMethodPassesSourceTypeToIntroducedMemberBoundToCompiledCopy_NamesBothTypes()
+        {
+            BindingFixture fixture = CreateFixture(
+                "IntroducedMemberBoundToCompiledCopy",
+                HandingDependentSource,
+                includeCompiledDependent: true);
+            TransformWorkerInputDto input = CreateInput(
+                fixture,
+                includeRetainedSource: false,
+                new[] { CreateSinkArtifact(fixture, fixture.TargetAssemblyPath) },
+                Array.Empty<string>());
+            // The skip is decided by a transform run; planning never reaches the method bodies.
+            input.operation = null;
+
+            TransformWorkerClientResult result =
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Hand");
+            // Why not rendered: the Editor completes the file argument after the worker returns.
+            string text = skipped.reason.code + ": " + string.Join(" | ", skipped.reason.args ?? Array.Empty<string>());
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType),
+                text);
+            Assert.That(skipped.reason.args[1], Is.EqualTo("'Example.Sink'"), text);
+            Assert.That(skipped.reason.args[2], Is.EqualTo("'Example.Dependent'"), text);
+            Assert.That(
+                skipped.reason.typeMetadataNames,
+                Is.EqualTo(new[] { "Example.Dependent" }),
+                "The Editor names the file declaring the compiled type from these names.");
+        }
+
+        /// <summary>
+        /// Verifies that an introduced member bound to a same-named type of another compiled
+        /// assembly keeps the generic unbound-body reason: the introduced type was compiled
+        /// against the patch target only, so that mismatch is a real one a compile does not clear.
+        /// </summary>
+        [Test]
+        public async Task Transform_AddedMethodPassesSourceTypeToIntroducedMemberBoundToOtherAssembly_KeepsUnboundReason()
+        {
+            BindingFixture fixture = CreateFixture(
+                "IntroducedMemberBoundToOtherAssembly",
+                HandingDependentSource,
+                includeCompiledDependent: true);
+            string otherAssemblyPath = Path.Combine(fixture.Directory, "OtherCompiled.dll");
+            CreateArtifactAssembly(otherAssemblyPath, "OtherCompiled", "Example", "Dependent");
+            TransformWorkerInputDto input = CreateInput(
+                fixture,
+                includeRetainedSource: false,
+                new[] { CreateSinkArtifact(fixture, otherAssemblyPath) },
+                new[] { otherAssemblyPath });
+            input.operation = null;
+
+            TransformWorkerClientResult result =
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Hand");
+            string text = skipped.reason.code + ": " + string.Join(" | ", skipped.reason.args ?? Array.Empty<string>());
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound), text);
+        }
+
+        private static TransformWorkerSkippedDto FindSkipped(TransformWorkerClientResult result, string methodName)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null && skipped.method.Contains("." + methodName + "(", StringComparison.Ordinal))
+                {
+                    return skipped;
+                }
+            }
+
+            Assert.Fail(
+                "No skipped row for " + methodName + ". Entries: " + result.Output.entries.Length
+                + ", skipped: " + result.Output.skipped.Length);
+            return null;
+        }
+
+        // An introduced type whose member takes the compiled Dependent of the given assembly, the
+        // way a type introduced while Dependent's file was not part of the reload binds it.
+        private static TransformWorkerIntroducedTypeArtifactDto CreateSinkArtifact(
+            BindingFixture fixture,
+            string dependentAssemblyPath)
+        {
+            string artifactPath = Path.Combine(fixture.Directory, "SinkArtifact.dll");
+            AssemblyNameDefinition assemblyNameDefinition = new AssemblyNameDefinition(
+                "SinkArtifact",
+                new Version(1, 0, 0, 0));
+            using (AssemblyDefinition target = AssemblyDefinition.ReadAssembly(dependentAssemblyPath))
+            using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(
+                assemblyNameDefinition,
+                "SinkArtifact",
+                ModuleKind.Dll))
+            {
+                TypeReference compiledDependent =
+                    assembly.MainModule.ImportReference(target.MainModule.GetType("Example.Dependent"));
+                TypeDefinition sink = new TypeDefinition(
+                    "Example",
+                    "Sink",
+                    CecilTypeAttributes.Public | CecilTypeAttributes.Class,
+                    assembly.MainModule.TypeSystem.Object);
+                MethodDefinition constructor = new MethodDefinition(
+                    ".ctor",
+                    Mono.Cecil.MethodAttributes.Public
+                        | Mono.Cecil.MethodAttributes.HideBySig
+                        | Mono.Cecil.MethodAttributes.SpecialName
+                        | Mono.Cecil.MethodAttributes.RTSpecialName,
+                    assembly.MainModule.TypeSystem.Void);
+                constructor.Body.GetILProcessor().Append(Mono.Cecil.Cil.Instruction.Create(Mono.Cecil.Cil.OpCodes.Ret));
+                sink.Methods.Add(constructor);
+                MethodDefinition take = new MethodDefinition(
+                    "Take",
+                    Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.HideBySig,
+                    assembly.MainModule.TypeSystem.Int32);
+                take.Parameters.Add(
+                    new ParameterDefinition("dependent", Mono.Cecil.ParameterAttributes.None, compiledDependent));
+                Mono.Cecil.Cil.ILProcessor il = take.Body.GetILProcessor();
+                il.Append(il.Create(Mono.Cecil.Cil.OpCodes.Ldc_I4_0));
+                il.Append(il.Create(Mono.Cecil.Cil.OpCodes.Ret));
+                sink.Methods.Add(take);
+                assembly.MainModule.Types.Add(sink);
+                assembly.Write(artifactPath);
+            }
+
+            return new TransformWorkerIntroducedTypeArtifactDto
+            {
+                assemblyFullName = ReadAssemblyFullName(artifactPath),
+                referencePath = artifactPath,
+                types = new[]
+                {
+                    new TransformWorkerIntroducedTypeArtifactTypeDto
+                    {
+                        metadataName = "Example.Sink",
+                        originalAssemblyName = fixture.TargetAssemblyName,
+                        originalAssemblyMvid = fixture.TargetAssemblyMvid,
+                        ownerProjectRelativePath = SinkProjectRelativePath,
+                        declarationFingerprint = PlaceholderDeclarationFingerprint
+                    }
+                }
+            };
         }
 
         private static async Task<TransformWorkerClientResult> RunTransformAsync(
