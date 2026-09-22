@@ -276,6 +276,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "(CS1503: Argument 1: cannot convert); hot reload cannot verify a member it cannot bind, "
                 + "so it is skipped. Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
+                new[] { "CS1503: Argument 1: cannot convert", "'Example.Payload'", "'Example.Registry'", "'Assets/Registry.cs'" },
+                "The added member's body could not be fully bound in the hot-reload compilation "
+                + "(CS1503: Argument 1: cannot convert): this reload declares 'Example.Payload' from source, "
+                + "while the compiled signatures of 'Example.Registry' still name the compiled 'Example.Payload', "
+                + "so it is skipped. Pass 'Assets/Registry.cs' to this reload as well so both bind to the same type. "
+                + "Otherwise run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,
                 "Added fields on struct types are skipped; the store requires a reference-type instance. "

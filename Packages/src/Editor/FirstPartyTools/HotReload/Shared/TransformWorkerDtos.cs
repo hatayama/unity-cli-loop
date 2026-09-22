@@ -366,6 +366,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The fragment a composed reason ends with, such as the reason an accessor rewrite was
         // unavailable. Null when the code does not compose.
         public TransformWorkerReasonDto detail;
+
+        // Metadata names of the compiled types the sentence names, for the Editor to resolve to the
+        // files that declare them before the sentence is worded. Null when the reason names none.
+        public string[] typeMetadataNames;
     }
 
     [Serializable]

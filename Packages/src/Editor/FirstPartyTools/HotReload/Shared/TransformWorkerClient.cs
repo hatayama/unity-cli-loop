@@ -154,7 +154,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static TransformWorkerOutputInterpreter CreateOutputInterpreter()
         {
-            return new TransformWorkerOutputInterpreter(new TransformWorkerOutputValidator());
+            return new TransformWorkerOutputInterpreter(
+                new TransformWorkerOutputValidator(),
+                new TransformWorkerCompiledTypeFileCompleter());
         }
     }
 

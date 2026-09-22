@@ -7,5 +7,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadBindingSplitPayload
     {
         public int Value;
+
+        // A body a reload can patch, so this file stays active and comes back into a later reload
+        // of the assembly as a sibling.
+        public int Scaled()
+        {
+            return Value * 2;
+        }
     }
 }

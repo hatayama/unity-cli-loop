@@ -3565,7 +3565,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static TransformWorkerOutputInterpreter CreateOutputInterpreter()
         {
-            return new TransformWorkerOutputInterpreter(new TransformWorkerOutputValidator());
+            return new TransformWorkerOutputInterpreter(
+                new TransformWorkerOutputValidator(),
+                new TransformWorkerCompiledTypeFileCompleter());
         }
 
         private static string CreateMatchingPreparationOutputJson(string assemblyName, string assemblyMvid)

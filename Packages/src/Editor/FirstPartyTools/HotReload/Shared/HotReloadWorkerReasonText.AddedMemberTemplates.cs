@@ -62,6 +62,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "The added member's body could not be fully bound in the hot-reload compilation ({0}); "
                     + "hot reload cannot verify a member it cannot bind, so it is skipped. " + CompileCallToAction,
                     1));
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
+                Plain(
+                    "The added member's body could not be fully bound in the hot-reload compilation ({0}): "
+                    + "this reload declares {1} from source, while the compiled signatures of {2} still name "
+                    + "the compiled {1}, so it is skipped. Pass {3} to this reload as well so both bind to "
+                    + "the same type. Otherwise run 'uloop compile'.",
+                    4));
 
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
