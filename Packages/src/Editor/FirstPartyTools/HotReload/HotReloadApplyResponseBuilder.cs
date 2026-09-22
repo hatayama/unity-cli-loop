@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 using UnityEngine;
 
@@ -239,6 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     hasMethodFailure,
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
+                    CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Skipped),
                     out string typeMessage))
             {
                 return AppendWarningCount(typeMessage, warningCount, appendCompileResolution);
@@ -330,7 +332,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int skippedCount = CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Skipped);
             if (skippedCount > 0)
             {
-                message += " Skipped: " + skippedCount + ".";
+                message += string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.SkippedCountApplyMessageSuffixFormat,
+                    skippedCount);
             }
 
             return AppendStaleSummary(message, result);

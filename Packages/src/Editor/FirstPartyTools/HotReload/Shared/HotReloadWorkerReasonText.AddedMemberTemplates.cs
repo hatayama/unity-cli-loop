@@ -62,7 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "checks).",
                     0,
                     AccessorRewriteUnavailableSeparator,
-                    " " + CompileCallToAction));
+                    // Why "to keep the code as written": several fragments end with a no-compile
+                    // rewrite, and a bare compile call after it reads as the row asking for a compile.
+                    " Run 'uloop compile' to keep the code as written."));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
                 Plain(

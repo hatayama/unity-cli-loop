@@ -216,7 +216,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 NoArgs,
-                "Struct (value type) methods are skipped; byref instance transplant is unverified.");
+                "Struct (value type) methods are skipped; byref instance transplant is unverified. "
+                + "Keep the struct as compiled and put the new logic at the call site or in a non-struct "
+                + "helper, or run 'uloop compile' to change the struct.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType,
                 NoArgs,
@@ -269,7 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Added methods whose bodies access private/internal members are skipped when the access "
                 + "has no accessor rewrite (the added method JIT-compiles normally and fails accessibility "
                 + "checks). Accessor rewrite unavailable: " + GenericMethodFragment
-                + " Run 'uloop compile'.");
+                + " Run 'uloop compile' to keep the code as written.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
                 new[] { "CS1503: Argument 1: cannot convert" },

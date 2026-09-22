@@ -223,6 +223,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// An added method incrementing a private-set property added in the same reload gets the
+        /// added-property reason, which names only 'X = X + 1;', not the accessor-rewrite reason,
+        /// whose 'X += 1' is itself skipped for an added property.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedMethodIncrementingAnAddedPrivateSetProperty_NamesOnlyThePlainAssignment()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyIncrementInAddedMethod.cs",
+                "public int AddedCounter { get; private set; }\n\n"
+                + "        public void AddedBumpCounter()\n        {\n            AddedCounter++;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "AddedBumpCounter");
+            Assert.That(reason, Does.Contain("('X = X + 1;')"), FormatSkipped(result.Output.skipped));
+            Assert.That(reason, Does.Not.Contain("'X += 1'"));
+        }
+
+        /// <summary>
         /// A consumed simple assignment to an added property skips the caller because a setter returns void.
         /// </summary>
         [Test]
