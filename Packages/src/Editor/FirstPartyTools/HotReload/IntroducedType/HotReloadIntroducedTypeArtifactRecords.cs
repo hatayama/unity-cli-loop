@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -13,10 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// An artifact of another generation is left out, because its types were normalized back
         /// to an assembly this run no longer edits.
         /// </summary>
+        /// <param name="findFullyAppliedSourceHash">
+        /// The hash the last reload recorded for a project-relative file when it applied all of
+        /// it, or null.
+        /// </param>
         public static List<TransformWorkerIntroducedTypeArtifactDto> CollectActive(
             HotReloadIntroducedTypeRegistry registry,
             string targetAssemblyName,
-            string targetAssemblyMvid)
+            string targetAssemblyMvid,
+            Func<string, string> findFullyAppliedSourceHash)
         {
             List<TransformWorkerIntroducedTypeArtifactDto> records =
                 new List<TransformWorkerIntroducedTypeArtifactDto>();
@@ -25,10 +31,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetAssemblyMvid);
             foreach (HotReloadIntroducedTypeArtifact artifact in active)
             {
-                records.Add(CreateRecord(artifact));
+                TransformWorkerIntroducedTypeArtifactDto record = CreateRecord(artifact);
+                AttachOwnerAppliedSourceHashes(findFullyAppliedSourceHash, record);
+                records.Add(record);
             }
 
             return records;
+        }
+
+        // The worker compares the hash with the bytes it reads, so a source that still matches is
+        // known to hold only what earlier reloads applied.
+        private static void AttachOwnerAppliedSourceHashes(
+            Func<string, string> findFullyAppliedSourceHash,
+            TransformWorkerIntroducedTypeArtifactDto record)
+        {
+            foreach (TransformWorkerIntroducedTypeArtifactTypeDto type in record.types)
+            {
+                if (string.IsNullOrEmpty(type.ownerProjectRelativePath))
+                {
+                    continue;
+                }
+
+                type.ownerAppliedSourceHash = findFullyAppliedSourceHash(type.ownerProjectRelativePath);
+            }
         }
 
         public static TransformWorkerIntroducedTypeArtifactDto CreateRecord(

@@ -88,6 +88,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Fingerprint the retained type was planned with. A declaration may only be removed from
         // the tree the transform binds against when the source still produces this value.
         public string declarationFingerprint;
+
+        // Hash of the owner file as the last reload applied it, set only when that reload applied
+        // the whole file. Null otherwise. A source with the same hash holds no change of its own,
+        // only what earlier reloads already applied.
+        public string ownerAppliedSourceHash;
     }
 
     /// <summary>

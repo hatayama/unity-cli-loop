@@ -41,4 +41,7 @@ internal sealed class WorkerIntroducedTypeArtifactType
     public string OwnerProjectRelativePath { get; set; }
 
     public string DeclarationFingerprint { get; set; }
+
+    // The owner file's hash as the last reload applied it in full, or null.
+    public string OwnerAppliedSourceHash { get; set; }
 }
