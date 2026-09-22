@@ -21,14 +21,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why this has to be spelled out: an introduced type compiles against the compiled
         // assemblies on disk and the retained artifacts, so a member hot reload added, in this
         // reload or an earlier one, is genuinely absent there. The bare compiler error reads as a
-        // typo and sends the reader looking for one. Why splitting is ruled out: reloading the
-        // addition first still leaves it outside both, which is the obvious retry to try.
+        // typo and sends the reader looking for one. Why worded as a condition: only the name is
+        // matched, so a missing member of another type can share it. Why splitting is ruled out:
+        // reloading the addition first still leaves it outside both, which is the obvious retry.
         private const string AddedMemberInvisibleHint =
-            "One or more of the missing members are hot reload additions, from this reload or an "
-            + "earlier one, and an introduced type cannot see them: it compiles against the "
-            + "compiled assemblies and earlier introduced types only, so reloading the addition "
-            + "first does not help. Run 'uloop compile' to make the added members compiled, "
-            + "then rerun.";
+            "One or more of the missing members share a name with a hot reload addition, from this "
+            + "reload or an earlier one. If the missing member is that addition, an introduced type "
+            + "cannot see it: it compiles against the compiled assemblies and earlier introduced "
+            + "types only, so reloading the addition first does not help. Run 'uloop compile' to "
+            + "make the added members compiled, then rerun.";
 
         private const string MissingMemberErrorCode = "CS1061:";
 

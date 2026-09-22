@@ -38,8 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // The part of the hint that holds whether the addition came from this reload or an
         // earlier one, so each case below checks the same sentence.
         private const string HintCore =
-            "are hot reload additions, from this reload or an earlier one, and an introduced type "
-            + "cannot see them";
+            "share a name with a hot reload addition, from this reload or an earlier one";
 
         private static readonly string CompiledTypeAddedMember =
             "        public int " + CompiledTypeAddedMethodName + "()\n"
