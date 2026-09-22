@@ -231,6 +231,11 @@ func dispatcherReleaseAssetName(goos string, goarch string) (string, error) {
 			return "", fmt.Errorf("unsupported windows architecture: %s", goarch)
 		}
 		return assetPrefix + "-windows-amd64.zip", nil
+	case "linux":
+		if goarch != "amd64" {
+			return "", fmt.Errorf("unsupported platform: %s-%s", goos, goarch)
+		}
+		return assetPrefix + "-linux-amd64.tar.gz", nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s-%s", goos, goarch)
 	}

@@ -94,4 +94,3 @@ The process exits 1 when `ErrorCount` is greater than zero.
 - The predefined assemblies (`Assembly-CSharp` and friends) keep the source list of the last build,
   so a brand-new `.cs` file outside an `.asmdef` is not compiled until Unity imports it.
 - The produced DLLs are never loaded by Unity, and the command never contacts a running Editor.
-- Linux is not supported.

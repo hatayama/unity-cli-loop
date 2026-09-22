@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf16"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/install"
 )
 
 func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
@@ -36,6 +38,31 @@ func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
 		t.Fatalf("target path assignment missing: %s", uninstallScript)
 	}
 	if command.TargetPath != "/Users/ExampleUser/.local/bin/uloop" {
+		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+}
+
+func TestCommandForLinuxRemovesUloopFromInstallDirectory(t *testing.T) {
+	// Verifies Linux uninstall removes the dispatcher binary from the selected install directory.
+	command, err := CommandForOS("linux", Options{
+		InstallDir: "/home/tester/.local/bin",
+		CurrentPID: 1234,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	if command.Name != "sh" {
+		t.Fatalf("command name mismatch: %s", command.Name)
+	}
+	joinedArgs := strings.Join(command.Args, " ")
+	if !strings.Contains(joinedArgs, "/home/tester/.local/bin/uloop") {
+		t.Fatalf("target path missing: %s", joinedArgs)
+	}
+	if !strings.Contains(joinedArgs, "rm -f") {
+		t.Fatalf("remove command missing: %s", joinedArgs)
+	}
+	if command.TargetPath != "/home/tester/.local/bin/uloop" {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
 	}
 }
@@ -91,7 +118,7 @@ func TestPosixUninstallScriptReplacesTemplateValues(t *testing.T) {
 }
 
 func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
-	// Verifies macOS uninstall removes only the shell PATH blocks owned by the installer.
+	// Verifies POSIX uninstall removes only the shell PATH blocks owned by the installer, including the Linux ~/.bashrc block.
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX uninstall script is not available on Windows")
 	}
@@ -101,6 +128,76 @@ func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
 	runPosixUninstallCommand(t, home, installDir)
 	assertPosixUninstallRemovedBinary(t, targetPath)
 	assertPosixUninstallRemovedPathBlocks(t, profilePaths)
+}
+
+func TestPosixUninstallScriptRestoresBashrcBytesAfterInstall(t *testing.T) {
+	// Verifies uninstall after install leaves ~/.bashrc byte-identical to the original, including the blank line install adds before the block.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX uninstall script is not available on Windows")
+	}
+
+	cases := []struct {
+		name     string
+		original string
+	}{
+		{"trailing newline", "existing\n"},
+		{"trailing blank line", "existing\n\n"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			home, installDir, _ := createPosixUninstallHome(t)
+			bashrcPath := filepath.Join(home, ".bashrc")
+			if err := os.WriteFile(bashrcPath, []byte(testCase.original), 0o600); err != nil {
+				t.Fatalf("failed to write bashrc: %v", err)
+			}
+			runPosixInstallCommandOnLinux(t, home, installDir)
+			installedContent, err := os.ReadFile(bashrcPath)
+			if err != nil {
+				t.Fatalf("failed to read bashrc after install: %v", err)
+			}
+			if !strings.Contains(string(installedContent), "# >>> uloop PATH >>>") {
+				t.Fatalf("install did not add the uloop PATH block:\n%s", installedContent)
+			}
+
+			runPosixUninstallCommand(t, home, installDir)
+
+			restoredContent, err := os.ReadFile(bashrcPath)
+			if err != nil {
+				t.Fatalf("failed to read bashrc after uninstall: %v", err)
+			}
+			if string(restoredContent) != testCase.original {
+				t.Fatalf("bashrc not restored byte-for-byte:\nwant %q\ngot  %q", testCase.original, restoredContent)
+			}
+		})
+	}
+}
+
+// runPosixInstallCommandOnLinux runs the install shell setup as Linux bash, the
+// same way TestPosixInstallScriptWritesBashrcOnLinux does, so the PATH block lands
+// in ~/.bashrc with the blank line the installer writes before it.
+func runPosixInstallCommandOnLinux(t *testing.T, home string, installDir string) {
+	t.Helper()
+	fakeBinDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBinDir, "uname"), []byte("#!/bin/sh\necho Linux\n"), 0o755); err != nil {
+		t.Fatalf("failed to write fake uname: %v", err)
+	}
+	command, err := install.CommandForOS("linux", install.Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("install CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"SHELL=/bin/bash",
+		"PATH=" + fakeBinDir + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX install setup failed: %v\n%s", err, output)
+	}
 }
 
 func createPosixUninstallHome(t *testing.T) (string, string, string) {
@@ -121,6 +218,7 @@ func writePosixUninstallPathBlockProfiles(t *testing.T, home string, installDir 
 	t.Helper()
 	profilePaths := []string{
 		filepath.Join(home, ".bash_profile"),
+		filepath.Join(home, ".bashrc"),
 		filepath.Join(home, ".zshrc"),
 		filepath.Join(home, ".config", "fish", "config.fish"),
 	}
@@ -249,14 +347,14 @@ func TestCommandForWindowsRemovesUserPathBeforeDeletingDispatcher(t *testing.T) 
 
 func TestCommandForOSRejectsUnsupportedOS(t *testing.T) {
 	// Verifies unsupported platforms fail before building any destructive command.
-	_, err := CommandForOS("linux", Options{
+	_, err := CommandForOS("freebsd", Options{
 		InstallDir: "/tmp/bin",
 		CurrentPID: 1234,
 	})
 	if err == nil {
 		t.Fatal("expected unsupported OS error")
 	}
-	if !strings.Contains(err.Error(), "macOS and Windows") {
+	if !strings.Contains(err.Error(), "macOS, Linux, and Windows") {
 		t.Fatalf("unexpected unsupported OS error: %v", err)
 	}
 }

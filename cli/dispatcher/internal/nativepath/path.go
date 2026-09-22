@@ -48,7 +48,7 @@ func ResolveInstallDir(goos string, explicitInstallDir string, environment Envir
 // DefaultInstallDir returns the OS default package-owned dispatcher directory.
 func DefaultInstallDir(goos string, environment Environment) (string, error) {
 	switch goos {
-	case "darwin":
+	case "darwin", "linux":
 		home, err := userHomeDir(environment)
 		if err != nil {
 			return "", err

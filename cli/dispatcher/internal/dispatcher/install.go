@@ -140,7 +140,7 @@ func writeInstallCompletion(stdout io.Writer, goos string) {
 		clicore.WriteLine(stdout, "Legacy npm uloop-cli launchers were cleaned up when detected.")
 		return
 	}
-	if goos == "darwin" {
+	if goos == "darwin" || goos == "linux" {
 		clicore.WriteLine(stdout, "The package-owned shell PATH entry was configured.")
 		clicore.WriteLine(stdout, "Legacy npm uloop-cli launchers were cleaned up when detected.")
 		return
@@ -157,6 +157,7 @@ func printInstallHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Set ULOOP_INSTALL_DIR or pass --dir to choose the install directory.")
 	clicore.WriteLine(stdout, "On Windows, updates User PATH and removes legacy npm uloop-cli launchers.")
 	clicore.WriteLine(stdout, "On macOS, updates shell PATH and removes legacy npm uloop-cli launchers.")
+	clicore.WriteLine(stdout, "On Linux, updates shell PATH and removes legacy npm uloop-cli launchers.")
 }
 
 func resolveNativeInstallDir(goos string, explicitInstallDir string) (string, error) {

@@ -39,6 +39,12 @@ detect_user_shell_name() {
 }
 
 detect_bash_profile_path() {
+    # Linux terminal emulators start bash as a non-login shell, which reads
+    # ~/.bashrc and never ~/.bash_profile.
+    if [ "$(uname -s)" = "Linux" ]; then
+        echo "$HOME/.bashrc"
+        return
+    fi
     if [ -f "$HOME/.bash_profile" ]; then
         echo "$HOME/.bash_profile"
         return
