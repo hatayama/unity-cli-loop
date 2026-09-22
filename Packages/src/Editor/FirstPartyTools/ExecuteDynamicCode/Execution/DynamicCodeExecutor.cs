@@ -123,10 +123,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompilationRequest request = new()            {
                 Code = code,
                 ClassName = className,
-                Namespace = DynamicCodeConstants.DEFAULT_NAMESPACE
+                Namespace = DynamicCodeConstants.DEFAULT_NAMESPACE,
+                AdditionalReferences = CollectIntroducedTypeReferences()
             };
 
             return await _compiler.CompileAsync(request, ct).ConfigureAwait(false);
+        }
+
+        // Why the paths go on the request rather than into the reference set builder: the
+        // compilation cache keys on the request's additional references, so a result compiled
+        // against one generation of introduced types is not reused after that generation is gone.
+        private static List<string> CollectIntroducedTypeReferences()
+        {
+            IReadOnlyList<string> paths =
+                HotReloadIntroducedTypeCoordination.DescribeActiveArtifactReferencePaths?.Invoke();
+            return paths == null ? new List<string>() : new List<string>(paths);
         }
 
         private ExecutionResult TryCreateCompilationFailureResult(

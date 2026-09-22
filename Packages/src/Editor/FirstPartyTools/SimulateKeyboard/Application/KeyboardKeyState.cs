@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 keyboard[key].WriteValueIntoEvent(pressed ? 1f : 0f, eventPtr);
                 // Updating player state directly avoids editor focus-dependent routing.
-                InputState.Change(keyboard, eventPtr, updateType);
+                InputStateChangeApplier.Apply(keyboard, eventPtr, updateType);
             }
         }
 
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 InputUpdateType updateType = InputUpdateTypeResolver.Resolve();
-                InputState.Change(keyboard, eventPtr, updateType);
+                InputStateChangeApplier.Apply(keyboard, eventPtr, updateType);
             }
 
             _heldKeys.Clear();

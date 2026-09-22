@@ -142,6 +142,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // that produced the entries actually applied (first pass, gate retry or isolation retry).
         internal string[] AddedFieldNames { get; set; }
 
+        // The initializer text of each AddedFieldNames entry, in the same order.
+        internal string[] AddedFieldInitializers { get; set; }
+
         internal string[] AddedConstNames { get; set; }
 
         // Added field names this file actually committed while its generation was cleared,

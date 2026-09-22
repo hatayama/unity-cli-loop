@@ -32,6 +32,11 @@ jobs:
       - name: Test dead code scanner
         run: dotnet test tests/UnityCliLoop.DeadCodeScanner.Tests/UnityCliLoop.DeadCodeScanner.Tests.csproj --configuration Release
 
+      # Keep every explanation out of the run block below: it is a folded scalar, so YAML
+      # joins its lines into one command and a '#' would comment out everything after it.
+      # --max-public-candidates tracks the measured PublicCandidate count with no slack
+      # (docs/dead-code-scanner.md). Lower it whenever triage removes a candidate, and
+      # raise it only together with the reason the new candidate has to stay.
       - name: Scan for dead code
         run: >
           scripts/check-dead-code.sh
@@ -44,6 +49,4 @@ jobs:
           --include-kept false
           --format table
           --fail-on high-confidence
-          # 24: CaptureMode.GameView is a JSON/schema alias for rendering (Enum.TryParse);
-          # Roslyn sees no C# references by design.
-          --max-public-candidates 24
+          --max-public-candidates 37

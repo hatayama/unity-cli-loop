@@ -246,6 +246,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (HotReloadGroupFile file in files)
             {
                 file.AddedFieldNames = file.FileOutput.addedFieldNames;
+                file.AddedFieldInitializers = file.FileOutput.addedFieldInitializers;
                 file.AddedConstNames = file.FileOutput.addedConstNames;
             }
         }
@@ -286,6 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "A retry worker run must return one per-file output per edited file.");
                 TransformWorkerFileOutputDto retryFile = retryFilesByPath[file.ProjectRelativePath];
                 file.AddedFieldNames = retryFile.addedFieldNames;
+                file.AddedFieldInitializers = retryFile.addedFieldInitializers;
                 file.AddedConstNames = retryFile.addedConstNames;
             }
         }

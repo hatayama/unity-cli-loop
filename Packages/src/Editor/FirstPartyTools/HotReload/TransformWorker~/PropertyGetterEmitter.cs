@@ -43,12 +43,19 @@ internal static class PropertyGetterEmitter
                 continue;
             }
 
-            // Why a type a retained artifact serves never reaches the ordinary getter path: that
-            // path decides a getter is unchanged from a baseline snapshot, and a type introduced
-            // by an earlier reload has none - so every accessor of it would be emitted as an
-            // entry, in an assembly the row would not even name. The comparison that kept this
-            // declaration already reported that no accessor body changed.
-            if (typeState.RetainedChangedMethodKeys != null)
+            // Why a getter of a type a retained artifact serves is decided here rather than by
+            // the baseline comparison below: that comparison reads a snapshot of the assembly the
+            // type was compiled into, and a type introduced by an earlier reload has none - so
+            // every getter of it would be emitted as an entry. The fingerprint comparison that
+            // kept this declaration is the only account of which bodies changed, and it named the
+            // properties whose getter is their only bodied accessor. The rest run the getter the
+            // artifact holds.
+            bool isServedByRetainedArtifact = typeState.RetainedChangedMethodKeys != null;
+            if (isServedByRetainedArtifact
+                && !typeState.RetainedChangedGetterPropertyKeys.Contains(
+                    WorkerSyntaxIndex.BuildSyntaxPropertyKey(
+                        typeState.TypeMetadataNameFromSyntax,
+                        propertyDeclaration)))
             {
                 UnchangedOrdinaryMethodRecorder.RecordRetainedPropertyGetterAsUnchanged(
                     typeState,
@@ -78,7 +85,10 @@ internal static class PropertyGetterEmitter
                     root,
                     typeState.SourceUnit.Input.ProjectRelativePath,
                     input,
-                    baseline.HasBaseline,
+                    // Why no baseline for a retained type: the snapshot the comparison would read
+                    // belongs to the assembly the request named, which never held this getter.
+                    // Consulting it would answer about a member of a different type.
+                    !isServedByRetainedArtifact && baseline.HasBaseline,
                     baseline.SnapshotPropertyMap,
                     baseline.PlainCurrentPropertyMap,
                     entries,
@@ -90,7 +100,8 @@ internal static class PropertyGetterEmitter
                     assemblyGlobalUsings,
                     addedMethodCatalog,
                     addedFieldCatalog,
-                    addedPropertyCatalog);
+                    addedPropertyCatalog,
+                    typeState.HomeAssemblyName);
         }
     }
 
@@ -117,7 +128,8 @@ internal static class PropertyGetterEmitter
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
             AddedFieldCatalog addedFieldCatalog,
-            AddedPropertyCatalog addedPropertyCatalog)
+            AddedPropertyCatalog addedPropertyCatalog,
+            string homeAssemblyName)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -219,7 +231,8 @@ internal static class PropertyGetterEmitter
             assemblyGlobalUsings,
             addedMethodCatalog,
             addedFieldCatalog,
-            addedPropertyCatalog);
+            addedPropertyCatalog,
+            homeAssemblyName);
     }
 
     internal static ShimTypeBuilder EmitPropertyGetterShim(
@@ -241,7 +254,8 @@ internal static class PropertyGetterEmitter
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
             AddedFieldCatalog addedFieldCatalog,
-            AddedPropertyCatalog addedPropertyCatalog)
+            AddedPropertyCatalog addedPropertyCatalog,
+            string homeAssemblyName)
     {
         if (currentShimType == null)
         {
@@ -297,7 +311,11 @@ internal static class PropertyGetterEmitter
                 methodKey),
             SourceStartLine = sourceStartLine,
             SourceEndLine = sourceEndLine,
-            LifecycleNote = null
+            LifecycleNote = null,
+            // Null for a getter of a compiled type, which is patched in the assembly the request
+            // named. A getter of a type a retained artifact serves is patched in that artifact,
+            // and the row is the only place the Editor learns which assembly to look in.
+            HomeAssemblyName = homeAssemblyName
         });
 
         return currentShimType;

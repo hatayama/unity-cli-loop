@@ -197,6 +197,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             + "        }\n"
             + "\n";
 
+        // A property both of whose accessors have a body. One body hash covers the whole property,
+        // so an edit of either one reads as an edit of both - which is why such a property stays
+        // outside what a reload can patch.
+        private const string BothAccessorsMember =
+            "        public static int Both\n"
+            + "        {\n"
+            + "            get { return Value + 1; }\n"
+            + "            set { Value = value; }\n"
+            + "        }\n"
+            + "\n";
+
+        private const string BothAccessorsBodyEditedMember =
+            "        public static int Both\n"
+            + "        {\n"
+            + "            get { return Value + 2; }\n"
+            + "            set { Value = value; }\n"
+            + "        }\n"
+            + "\n";
+
         private const string AddedMethodMember =
             "        public static int Extra()\n"
             + "        {\n"
@@ -370,7 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                     "Changed member body of introduced type requires a compile: "
                     + RetainedTypeMetadataName
                     + " Changed members: " + ConstructorMemberKey
-                    + ". Only ordinary method bodies of an introduced type can be hot reloaded."));
+                    + ". Only ordinary method bodies and getter-only property bodies of an introduced type can be hot reloaded."));
         }
 
         /// <summary>What: a recorded fingerprint this version cannot read asks for a compile and
@@ -507,11 +526,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             Assert.That(reason, Does.Contain("added:"));
         }
 
-        /// <summary>What: adding a method while editing a property accessor body asks for a
-        /// compile and names the accessor, because the artifact can only host ordinary method
-        /// bodies.</summary>
+        /// <summary>What: editing only the body of a property whose getter is the sole accessor
+        /// with a body reuses the active type and reports the body edit, the same way an ordinary
+        /// method body edit does.</summary>
         [Test]
-        public async Task Plan_AddedMethodWithAnEditedPropertyBody_RequiresACompile()
+        public async Task Plan_GetterOnlyPropertyBodyEdit_ReusesTheActiveTypeAndReportsTheBodyEdit()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5GetterBody",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + NumberBodyEditedMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].metadataName, Is.EqualTo(RetainedTypeMetadataName));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.True);
+        }
+
+        /// <summary>What: editing the body of a property that also has a setter body still asks for
+        /// a compile and names the property, because one body hash covers both accessors and the
+        /// setter body the reload cannot patch may be the one that changed.</summary>
+        [Test]
+        public async Task Plan_PropertyWithASetterBodyEdited_RequiresACompile()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5SetterBody",
+                BuildRetainedSource(TwiceMember + BothAccessorsMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + BothAccessorsBodyEditedMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(file.introducedTypeReuses, Is.Empty);
+            string reason = FindSingleDiagnostic(file);
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "Changed member body of introduced type requires a compile: "
+                    + RetainedTypeMetadataName));
+            Assert.That(reason, Does.Contain("Both"));
+        }
+
+        /// <summary>What: adding a method while editing a getter-only property body reuses the
+        /// active type and reports the body edit, so both are applied in one reload.</summary>
+        [Test]
+        public async Task Plan_AddedMethodWithAnEditedGetterBody_ReusesTheActiveTypeAndReportsTheBodyEdit()
         {
             HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
                 "SpikeS5AddMethodAndProperty",
@@ -523,14 +591,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
 
             TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
 
-            Assert.That(file.introducedTypeReuses, Is.Empty);
-            string reason = FindSingleDiagnostic(file);
             Assert.That(
-                reason,
-                Does.StartWith(
-                    "Changed member body of introduced type requires a compile: "
-                    + RetainedTypeMetadataName));
-            Assert.That(reason, Does.Contain("Number"));
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.True);
+        }
+
+        /// <summary>What: writing an edited getter body back to what the record holds reports no
+        /// body edit, so the reload that follows takes the patch the previous one installed back
+        /// out instead of leaving it in place.</summary>
+        [Test]
+        public async Task Plan_GetterBodyRestoredToTheRecordedDeclaration_ReportsNoBodyEdit()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateAsync(
+                "SpikeS5GetterRestored",
+                BuildRetainedSource(TwiceMember + NumberMember));
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(
+                fixture.SourcePath,
+                BuildRetainedSource(TwiceMember + NumberBodyEditedMember));
+            File.WriteAllText(fixture.SourcePath, BuildRetainedSource(TwiceMember + NumberMember));
+
+            TransformWorkerFileOutputDto file = await PlanAgainstRecordAsync(fixture, recordedFingerprint);
+
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(file.introducedTypeDiagnostics),
+                Is.Empty);
+            Assert.That(file.introducedTypeReuses.Length, Is.EqualTo(1));
+            Assert.That(file.introducedTypeReuses[0].bodyEdited, Is.False);
         }
 
         /// <summary>What: removing a member from a retained introduced type asks for a compile
@@ -627,8 +716,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
         }
 
         /// <summary>What: removing one member while adding another asks for a compile and names
-        /// the removal only, counting the addition the reload could have applied, so the reader
-        /// does not read the addition as the reason and take it back out.</summary>
+        /// the removal as the reason, listing the addition the reload could have applied under a
+        /// wording that says it is not the cause, so the reader does not take the addition back
+        /// out.</summary>
         [Test]
         public async Task Plan_RemovedMethodWithAnAddedMethod_RequiresACompileAndNamesOnlyTheRemoval()
         {
@@ -651,7 +741,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                     + " Declaration differences: "));
             Assert.That(reason, Does.Contain("removed:"));
             Assert.That(reason, Does.Not.Contain("added:"));
-            Assert.That(reason, Does.Contain("1 applicable addition(s) omitted"));
+            Assert.That(reason, Does.Contain("1 applicable addition(s) omitted: Example.Retained::Extra()"));
         }
 
         /// <summary>What: adding a constructor ahead of the existing members asks for a compile and

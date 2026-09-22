@@ -9,6 +9,12 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 internal enum IntroducedTypeFingerprintMatchKind
 {
     Identical,
+
+    /// <summary>
+    /// Only bodies the reload can patch differ: ordinary method bodies, and the body of a property
+    /// whose getter is its only accessor with a body. The name predates the second of those, which
+    /// the artifact hosts the same way it hosts a method body.
+    /// </summary>
     MethodBodiesOnly,
     MembersAdded,
     OtherBodiesChanged,
@@ -29,6 +35,8 @@ internal sealed class IntroducedTypeFingerprintMatch
     // kind whose edit is known to move the header hash as well.
     private const string EnumMemberKeyPrefix = "enum:";
 
+    private const int MaxNamedOmittedAdditions = 3;
+
     private const string OrderDetail = "order";
 
     private const string HeaderDetail = "header";
@@ -40,11 +48,13 @@ internal sealed class IntroducedTypeFingerprintMatch
     private IntroducedTypeFingerprintMatch(
         IntroducedTypeFingerprintMatchKind kind,
         IReadOnlyList<string> changedMethodSyntaxKeys,
+        IReadOnlyList<string> changedGetterPropertySyntaxKeys,
         IReadOnlyList<string> changedOtherKeys,
         IReadOnlyList<string> details)
     {
         Kind = kind;
         ChangedMethodSyntaxKeys = changedMethodSyntaxKeys;
+        ChangedGetterPropertySyntaxKeys = changedGetterPropertySyntaxKeys;
         ChangedOtherKeys = changedOtherKeys;
         Details = details;
     }
@@ -58,7 +68,15 @@ internal sealed class IntroducedTypeFingerprintMatch
     /// </summary>
     internal IReadOnlyList<string> ChangedMethodSyntaxKeys { get; }
 
-    /// <summary>Members that are not ordinary methods whose body changed. Empty unless the kind is OtherBodiesChanged.</summary>
+    /// <summary>
+    /// Properties whose getter is their only accessor with a body and whose body changed, named by
+    /// the syntax property key the emit stages spell a property with. Empty unless the kind is
+    /// MethodBodiesOnly or MembersAdded. Held apart from the method keys because the two are
+    /// spelled in namespaces of their own.
+    /// </summary>
+    internal IReadOnlyList<string> ChangedGetterPropertySyntaxKeys { get; }
+
+    /// <summary>Members whose body changed and that the reload cannot patch. Empty unless the kind is OtherBodiesChanged.</summary>
     internal IReadOnlyList<string> ChangedOtherKeys { get; }
 
     /// <summary>Why the declaration or the record itself did not account for the edit.</summary>
@@ -77,6 +95,7 @@ internal sealed class IntroducedTypeFingerprintMatch
                 IntroducedTypeFingerprintMatchKind.Identical,
                 NoKeys,
                 NoKeys,
+                NoKeys,
                 NoKeys);
         }
 
@@ -92,6 +111,7 @@ internal sealed class IntroducedTypeFingerprintMatch
         {
             return new IntroducedTypeFingerprintMatch(
                 IntroducedTypeFingerprintMatchKind.RecordUnreadable,
+                NoKeys,
                 NoKeys,
                 NoKeys,
                 UnreadableRecordDetails);
@@ -143,15 +163,17 @@ internal sealed class IntroducedTypeFingerprintMatch
             comparison,
             memberIndex,
             out List<string> changedMethodSyntaxKeys,
+            out List<string> changedGetterPropertySyntaxKeys,
             out List<string> changedOtherKeys);
 
-        // Why a single non-method member settles it: the reload patches one body at a time, and a
-        // constructor or accessor body it cannot patch would be left running the artifact's version
-        // while its neighbours ran the edited one.
+        // Why a single member of the third group settles it: the reload patches one body at a
+        // time, and a constructor or setter body it cannot patch would be left running the
+        // artifact's version while its neighbours ran the edited one.
         if (changedOtherKeys.Count > 0)
         {
             return new IntroducedTypeFingerprintMatch(
                 IntroducedTypeFingerprintMatchKind.OtherBodiesChanged,
+                NoKeys,
                 NoKeys,
                 changedOtherKeys,
                 NoKeys);
@@ -162,21 +184,24 @@ internal sealed class IntroducedTypeFingerprintMatch
             return new IntroducedTypeFingerprintMatch(
                 IntroducedTypeFingerprintMatchKind.MembersAdded,
                 changedMethodSyntaxKeys,
+                changedGetterPropertySyntaxKeys,
                 NoKeys,
                 comparison.Details);
         }
 
-        if (changedMethodSyntaxKeys.Count > 0)
+        if (changedMethodSyntaxKeys.Count > 0 || changedGetterPropertySyntaxKeys.Count > 0)
         {
             return new IntroducedTypeFingerprintMatch(
                 IntroducedTypeFingerprintMatchKind.MethodBodiesOnly,
                 changedMethodSyntaxKeys,
+                changedGetterPropertySyntaxKeys,
                 NoKeys,
                 NoKeys);
         }
 
         return new IntroducedTypeFingerprintMatch(
             IntroducedTypeFingerprintMatchKind.Identical,
+            NoKeys,
             NoKeys,
             NoKeys,
             NoKeys);
@@ -214,13 +239,18 @@ internal sealed class IntroducedTypeFingerprintMatch
             StringComparison.Ordinal);
     }
 
+    // The three groups a changed body falls into: an ordinary method the reload patches, a
+    // property whose getter is its only accessor with a body and which it patches the same way,
+    // and everything else, which it cannot patch at all.
     private static void SplitChangedBodyKeys(
         HotReloadIntroducedTypeFingerprintComparison comparison,
         IntroducedTypeDeclarationMemberIndex memberIndex,
         out List<string> changedMethodSyntaxKeys,
+        out List<string> changedGetterPropertySyntaxKeys,
         out List<string> changedOtherKeys)
     {
         changedMethodSyntaxKeys = new List<string>();
+        changedGetterPropertySyntaxKeys = new List<string>();
         changedOtherKeys = new List<string>();
         foreach (string memberKey in comparison.ChangedBodyKeys)
         {
@@ -231,6 +261,13 @@ internal sealed class IntroducedTypeFingerprintMatch
                 continue;
             }
 
+            string syntaxGetterPropertyKey = memberIndex.FindSyntaxGetterPropertyKey(memberKey);
+            if (syntaxGetterPropertyKey != null)
+            {
+                changedGetterPropertySyntaxKeys.Add(syntaxGetterPropertyKey);
+                continue;
+            }
+
             changedOtherKeys.Add(memberKey);
         }
     }
@@ -238,8 +275,8 @@ internal sealed class IntroducedTypeFingerprintMatch
     // Why the comparison is filtered rather than reported as it stands: a reader told that an
     // addition this reload already applied is part of why a compile is required takes the addition
     // back out, which is the one edit that cannot help. Only the differences that actually block
-    // the reload are named; the applicable additions are counted so they are not mistaken for a
-    // silent omission either.
+    // the reload are named; the applicable additions are counted and named so they are not
+    // mistaken for a silent omission either.
     private static IntroducedTypeFingerprintMatch ReportDeclarationChanged(
         HotReloadIntroducedTypeFingerprintComparison comparison,
         HotReloadIntroducedTypeFingerprint recorded,
@@ -265,14 +302,14 @@ internal sealed class IntroducedTypeFingerprintMatch
             || hasEnumMemberEdit;
         bool omitHeader = hasEnumMemberEdit;
         List<string> blocking = new List<string>();
-        int omittedAdditions = 0;
+        List<string> omittedAdditions = new List<string>();
         foreach (string detail in comparison.Details)
         {
             if (detail.StartsWith(AddedDetailPrefix, StringComparison.Ordinal)
                 && memberIndex.FindMemberKind(detail.Substring(AddedDetailPrefix.Length))
                     != IntroducedTypeMemberKind.Other)
             {
-                omittedAdditions++;
+                omittedAdditions.Add(detail.Substring(AddedDetailPrefix.Length));
                 continue;
             }
 
@@ -289,9 +326,9 @@ internal sealed class IntroducedTypeFingerprintMatch
             blocking.Add(detail);
         }
 
-        if (omittedAdditions > 0)
+        if (omittedAdditions.Count > 0)
         {
-            blocking.Add(omittedAdditions + " applicable addition(s) omitted");
+            blocking.Add(DescribeOmittedAdditions(omittedAdditions));
         }
 
         Debug.Assert(
@@ -302,7 +339,24 @@ internal sealed class IntroducedTypeFingerprintMatch
             IntroducedTypeFingerprintMatchKind.DeclarationChanged,
             NoKeys,
             NoKeys,
+            NoKeys,
             blocking);
+    }
+
+    // Why the names and not the count alone: a reader who cannot tell which additions were left
+    // out has to diff the declaration against the artifact by hand to be sure the edit they made
+    // is among them. Why a head and a remainder: a declaration can gain many members at once, and
+    // the blocking differences this line sits next to are what the reader has to act on.
+    private static string DescribeOmittedAdditions(List<string> omittedAdditions)
+    {
+        int namedCount = Math.Min(omittedAdditions.Count, MaxNamedOmittedAdditions);
+        string names = string.Join(", ", omittedAdditions.GetRange(0, namedCount));
+        if (namedCount < omittedAdditions.Count)
+        {
+            names += " and " + (omittedAdditions.Count - namedCount) + " more";
+        }
+
+        return omittedAdditions.Count + " applicable addition(s) omitted: " + names;
     }
 
     private static bool HasDetailWithPrefix(

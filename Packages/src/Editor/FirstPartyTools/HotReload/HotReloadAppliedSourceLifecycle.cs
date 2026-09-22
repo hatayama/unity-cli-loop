@@ -210,6 +210,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             HashSet<string> labels = CollectAddedEntryLabels(workerOutput);
+            labels.UnionWith(CollectSkippedLabels(outcomes));
+            return labels;
+        }
+
+        private static HashSet<string> CollectSkippedLabels(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
             if (outcomes == null)
             {
                 return labels;
@@ -278,16 +285,142 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            HashSet<string> skippedLabels = CollectSkippedLabels(outcomes);
+            AppendAddedWarningLines(warnings, deactivatedAdded, skippedLabels, snapshotForwardedUnityMessageLabels);
+            AppendPatchWarningLines(warnings, deactivatedPatches, skippedLabels);
+        }
+
+        /// <summary>
+        /// Reports the methods this run skipped whose earlier patch is still what runs.
+        /// </summary>
+        /// <remarks>
+        /// Why separate from the deactivation warnings: this one has to reach the paths that
+        /// apply nothing at all - a run every entry of which the signature-change gate removed
+        /// builds its file results without ever asking what it deactivated. Every terminal
+        /// calls this exactly once, so the line is never emitted twice for one file.
+        /// </remarks>
+        internal static void AppendSkippedKeepsEarlierPatchWarning(
+            HotReloadDomain domain,
+            List<string> warnings,
+            HashSet<string> snapshotLabels,
+            HashSet<string> snapshotAddedLabels,
+            string projectRelativePath,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            Debug.Assert(domain != null, "domain must not be null.");
+            Debug.Assert(warnings != null, "warnings must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+
+            // A file the run never reached the group's apply entry for has no snapshot, so
+            // nothing is known to have been active before it.
+            if (snapshotLabels == null || snapshotAddedLabels == null)
+            {
+                return;
+            }
+
             AppendDeactivatedWarningLine(
                 warnings,
+                CollectSkippedLabelsKeepingEarlierPatch(
+                    CollectSkippedLabels(outcomes),
+                    snapshotLabels,
+                    snapshotAddedLabels,
+                    CollectActiveLabelsForFile(domain, projectRelativePath)),
+                HotReloadConstants.SkippedMethodKeepsActivePatchWarningFormat,
+                null);
+        }
+
+        // Why the label has to be in all three sets: one this run deactivated is covered by the
+        // deactivation sentences, one that was not active before the run keeps nothing, and one
+        // whose earlier apply was an added member already has that fact in its Methods[].Reason.
+        private static List<string> CollectSkippedLabelsKeepingEarlierPatch(
+            HashSet<string> skippedLabels,
+            HashSet<string> snapshotLabels,
+            HashSet<string> snapshotAddedLabels,
+            HashSet<string> currentLabels)
+        {
+            List<string> labels = new List<string>();
+            foreach (string label in skippedLabels)
+            {
+                if (!snapshotLabels.Contains(label)
+                    || snapshotAddedLabels.Contains(label)
+                    || !currentLabels.Contains(label))
+                {
+                    continue;
+                }
+
+                labels.Add(label);
+            }
+
+            return labels;
+        }
+
+        // Why the two sentences are emitted separately rather than merged: a member this run
+        // skipped comes back only after its reason is addressed, and the ordinary sentence tells
+        // the reader to reload again - which skips it again. A run that deactivated both kinds
+        // gets one line of each, so neither group is given the other's instruction.
+        private static void AppendAddedWarningLines(
+            List<string> warnings,
+            List<string> deactivatedAdded,
+            HashSet<string> skippedLabels,
+            HashSet<string> snapshotForwardedUnityMessageLabels)
+        {
+            SplitBySkipped(
                 deactivatedAdded,
-                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
-                HotReloadDeactivatedUnityMessageNote.Describe(deactivatedAdded, snapshotForwardedUnityMessageLabels));
+                skippedLabels,
+                out List<string> skipped,
+                out List<string> deactivatedOnly);
             AppendDeactivatedWarningLine(
                 warnings,
+                deactivatedOnly,
+                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
+                HotReloadDeactivatedUnityMessageNote.Describe(deactivatedOnly, snapshotForwardedUnityMessageLabels));
+            AppendDeactivatedWarningLine(
+                warnings,
+                skipped,
+                HotReloadConstants.DeactivatedSkippedAddedMembersWarningFormat,
+                HotReloadDeactivatedUnityMessageNote.Describe(skipped, snapshotForwardedUnityMessageLabels));
+        }
+
+        private static void AppendPatchWarningLines(
+            List<string> warnings,
+            List<string> deactivatedPatches,
+            HashSet<string> skippedLabels)
+        {
+            SplitBySkipped(
                 deactivatedPatches,
+                skippedLabels,
+                out List<string> skipped,
+                out List<string> deactivatedOnly);
+            AppendDeactivatedWarningLine(
+                warnings,
+                deactivatedOnly,
                 HotReloadConstants.DeactivatedPatchesWarningFormat,
                 null);
+            AppendDeactivatedWarningLine(
+                warnings,
+                skipped,
+                HotReloadConstants.DeactivatedSkippedPatchesWarningFormat,
+                null);
+        }
+
+        private static void SplitBySkipped(
+            List<string> labels,
+            HashSet<string> skippedLabels,
+            out List<string> skipped,
+            out List<string> deactivatedOnly)
+        {
+            skipped = new List<string>();
+            deactivatedOnly = new List<string>();
+            foreach (string label in labels)
+            {
+                if (skippedLabels.Contains(label))
+                {
+                    skipped.Add(label);
+                    continue;
+                }
+
+                deactivatedOnly.Add(label);
+            }
         }
 
         private static void AppendDeactivatedWarningLine(

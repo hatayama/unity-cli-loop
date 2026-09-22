@@ -431,6 +431,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: the introduced-type refusal is the explanation on its own, with no resolver
+        /// sentence appended after it. A resolver sentence names a line and reads as a second,
+        /// contradicting reason, which sends the caller looking for a different line number.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheFileDeclaresAnIntroducedType_DoesNotAppendTheResolverSentence()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.IntroducedTypeSourceFiles = new HashSet<string> { IntroducedTypeFilePath };
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = IntroducedTypeFilePath,
+                    Line = IntroducedTypeRequestedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(string.Format(
+                        SourcePausePointConstants.IntroducedTypeResolveFailureMessageFormat,
+                        IntroducedTypeFilePath)));
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.IntroducedTypeResolveFailureNextAction));
+            }
+        }
+
+        /// <summary>
+        /// What: a file with a compiled line map keeps the resolver sentence, so dropping it for
+        /// an introduced-type file does not silence the ordinary unresolvable-line explanation.
+        /// </summary>
+        [Test]
+        public void Enable_WhenTheFileHasACompiledLineMap_KeepsTheResolverSentence()
+        {
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureFilePath,
+                Line = UnresolvableFixtureLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            Assert.That(response.Message, Does.Contain("No sequence point found"));
+        }
+
+        /// <summary>
         /// What: a line inside a method hot reload added is refused with a message naming that
         /// method and the compile it needs, even when the file has no patched method and so no
         /// shim lookup.

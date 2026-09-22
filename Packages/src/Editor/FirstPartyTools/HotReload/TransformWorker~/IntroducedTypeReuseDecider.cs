@@ -70,6 +70,7 @@ internal static class IntroducedTypeReuseDecider
                 OriginalAssemblyName = targetAssemblyName ?? string.Empty,
                 OriginalAssemblyMvid = targetAssemblyMvid ?? string.Empty,
                 BodyEdited = match.ChangedMethodSyntaxKeys.Count > 0
+                    || match.ChangedGetterPropertySyntaxKeys.Count > 0
             });
         return true;
     }

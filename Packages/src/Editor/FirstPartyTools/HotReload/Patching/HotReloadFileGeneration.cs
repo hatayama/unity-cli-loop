@@ -34,6 +34,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, List<string>> _addedFieldsByTypeKey =
             new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
+        // The initializer text each added field was last committed with, keyed by its display
+        // name. Kept beside the type map because it answers a question about the previous
+        // reload, not about which fields a type currently holds.
+        private readonly Dictionary<string, string> _addedFieldInitializerByFullName =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
         private readonly Dictionary<MethodBase, HotReloadActivePatchEntry> _patchesByMethod =
             new Dictionary<MethodBase, HotReloadActivePatchEntry>();
 
@@ -89,6 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             _addedMembersByMethodKey.Clear();
             _addedFieldsByTypeKey.Clear();
+            _addedFieldInitializerByFullName.Clear();
             HasAddedMemberGeneration = true;
         }
 
@@ -160,16 +167,78 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Replaces every added-field entry with <paramref name="addedFieldFullNames"/>
         /// (Type.field display names). Type keys are stored in reflection form (nested types
-        /// use '+').
+        /// use '+'). <paramref name="addedFieldInitializers"/> holds the initializer text of each
+        /// name in the same order, and is ignored when it does not line up with the names.
         /// </summary>
-        internal void ReplaceAddedFields(IReadOnlyList<string> addedFieldFullNames)
+        internal void ReplaceAddedFields(
+            IReadOnlyList<string> addedFieldFullNames,
+            IReadOnlyList<string> addedFieldInitializers)
         {
             Debug.Assert(addedFieldFullNames != null, "addedFieldFullNames must not be null.");
 
             _addedFieldsByTypeKey.Clear();
+            _addedFieldInitializerByFullName.Clear();
+            bool hasInitializers =
+                addedFieldInitializers != null
+                && addedFieldInitializers.Count == addedFieldFullNames.Count;
             for (int index = 0; index < addedFieldFullNames.Count; index++)
             {
                 AddAddedField(addedFieldFullNames[index]);
+                if (hasInitializers && !string.IsNullOrEmpty(addedFieldFullNames[index]))
+                {
+                    _addedFieldInitializerByFullName[addedFieldFullNames[index]] =
+                        addedFieldInitializers[index] ?? string.Empty;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds to <paramref name="changedFullNames"/> each name of
+        /// <paramref name="addedFieldFullNames"/> this generation already holds an initializer
+        /// for that differs from <paramref name="addedFieldInitializers"/>.
+        /// </summary>
+        /// <remarks>
+        /// Why it has to run before the generation starts: BeginAddedMemberGeneration drops the
+        /// ledger, and the previous reload's initializers go with it.
+        /// </remarks>
+        internal void CollectAddedFieldsWithChangedInitializer(
+            IReadOnlyList<string> addedFieldFullNames,
+            IReadOnlyList<string> addedFieldInitializers,
+            List<string> changedFullNames)
+        {
+            Debug.Assert(changedFullNames != null, "changedFullNames must not be null.");
+            if (addedFieldFullNames == null
+                || addedFieldInitializers == null
+                || addedFieldInitializers.Count != addedFieldFullNames.Count)
+            {
+                return;
+            }
+
+            for (int index = 0; index < addedFieldFullNames.Count; index++)
+            {
+                // Why a declaration that lost its initializer is not reported: the run has no
+                // initializer to run anywhere, so there is nothing that fails to reach a value.
+                if (string.IsNullOrEmpty(addedFieldInitializers[index]))
+                {
+                    continue;
+                }
+
+                if (!_addedFieldInitializerByFullName.TryGetValue(
+                        addedFieldFullNames[index],
+                        out string committedInitializer))
+                {
+                    continue;
+                }
+
+                if (string.Equals(
+                        committedInitializer,
+                        addedFieldInitializers[index],
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                changedFullNames.Add(addedFieldFullNames[index]);
             }
         }
 

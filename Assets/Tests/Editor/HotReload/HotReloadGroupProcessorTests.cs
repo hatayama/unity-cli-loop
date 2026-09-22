@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -640,6 +641,157 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
             Assert.That(HotReloadCompositionRoot.Services.Domain.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
             Assert.That(file.ClearedAddedFieldNames, Is.Null);
+        }
+
+        /// <summary>
+        /// What: the first run that reports removed members for a file prints the full warning.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_WhenTheFileHasNotReportedBefore_PrintsTheFullWarning()
+        {
+            string warning = AppendRemovedMembersRun("Alpha", "Beta");
+
+            Assert.That(
+                warning,
+                Is.EqualTo(string.Format(
+                    HotReloadConstants.RemovedMembersWarningFormat,
+                    "Alpha, Beta")));
+        }
+
+        /// <summary>
+        /// What: a later run whose removed members are exactly the previous run's set collapses to
+        /// the continuation line instead of reprinting the full warning, which is what buried the
+        /// warnings a run produced for the first time.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_WhenTheSameSetIsReportedAgain_CollapsesToTheContinuationLine()
+        {
+            AppendRemovedMembersRun("Alpha", "Beta");
+
+            // The second run edits a different method, so the removed set is unchanged while the
+            // run itself is not a repeat - a case the line-shift continuation cannot express.
+            string secondWarning = AppendRemovedMembersRun("Beta", "Alpha");
+
+            Assert.That(
+                secondWarning,
+                Is.EqualTo(string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.ContinuingRemovedMembersWarningFormat,
+                    2,
+                    "Alpha, Beta")));
+        }
+
+        /// <summary>
+        /// What: a run whose removed set differs from the recorded one prints the full warning
+        /// again, so a newly removed member is never hidden behind a continuation line.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_WhenTheSetChanges_PrintsTheFullWarningAgain()
+        {
+            AppendRemovedMembersRun("Alpha");
+
+            string secondWarning = AppendRemovedMembersRun("Alpha", "Beta");
+
+            Assert.That(
+                secondWarning,
+                Is.EqualTo(string.Format(
+                    HotReloadConstants.RemovedMembersWarningFormat,
+                    "Alpha, Beta")));
+        }
+
+        /// <summary>
+        /// What: RevertAll clears the recorded set inside the same domain, so the next run is a
+        /// first run again. Fails if the revert stops clearing the record.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_AfterRevertAll_PrintsTheFullWarningAgain()
+        {
+            AppendRemovedMembersRun("Alpha");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            string secondWarning = AppendRemovedMembersRun("Alpha");
+
+            Assert.That(
+                secondWarning,
+                Is.EqualTo(string.Format(
+                    HotReloadConstants.RemovedMembersWarningFormat,
+                    "Alpha")));
+        }
+
+        /// <summary>
+        /// What: a regenerated domain starts with no record, so the run after a domain reload
+        /// prints the full warning. Fails if the record is held anywhere wider than one domain.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_AfterTheDomainIsRegenerated_PrintsTheFullWarningAgain()
+        {
+            AppendRemovedMembersRun("Alpha");
+
+            using (new HotReloadDomainTestScope())
+            {
+                string secondWarning = AppendRemovedMembersRun("Alpha");
+
+                Assert.That(
+                    secondWarning,
+                    Is.EqualTo(string.Format(
+                        HotReloadConstants.RemovedMembersWarningFormat,
+                        "Alpha")));
+            }
+        }
+
+        /// <summary>
+        /// What: a run that reports nothing for the file drops the record, so the run after it is
+        /// a first run rather than a continuation of a set nothing reported in between.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_WhenARunReportsNothing_PrintsTheFullWarningAgain()
+        {
+            AppendRemovedMembersRun("Alpha");
+
+            string emptyRunWarning = AppendRemovedMembersRun();
+            string thirdWarning = AppendRemovedMembersRun("Alpha");
+
+            Assert.That(emptyRunWarning, Is.Null);
+            Assert.That(
+                thirdWarning,
+                Is.EqualTo(string.Format(
+                    HotReloadConstants.RemovedMembersWarningFormat,
+                    "Alpha")));
+        }
+
+        // Runs the removed-member notices for one file of a fresh run context against the domain
+        // installed right now, and returns the removed-members warning that run produced.
+        private static string AppendRemovedMembersRun(params string[] removedMemberNames)
+        {
+            HotReloadApplyContext context = CreateContext();
+            HotReloadGroupFile file = context.Files[0];
+            List<TransformWorkerRemovedMemberDto> removedMembers = new List<TransformWorkerRemovedMemberDto>();
+            foreach (string removedMemberName in removedMemberNames)
+            {
+                removedMembers.Add(new TransformWorkerRemovedMemberDto
+                {
+                    kind = HotReloadConstants.RemovedMemberKindField,
+                    name = removedMemberName
+                });
+            }
+
+            file.FileOutput.removedMembers = removedMembers.ToArray();
+
+            HotReloadGroupNotices.AppendRemovedMemberNotices(
+                HotReloadCompositionRoot.Services.Patcher,
+                context,
+                CreateEmptyGateResult());
+
+            foreach (string warning in file.Sinks.Warnings)
+            {
+                if (warning.Contains("Alpha", StringComparison.Ordinal)
+                    || warning.Contains("Beta", StringComparison.Ordinal))
+                {
+                    return warning;
+                }
+            }
+
+            return null;
         }
 
         private static int CountFileFailedRows(HotReloadGroupFile file)

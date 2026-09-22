@@ -49,6 +49,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        }\n"
             + "\n";
 
+        private const string TuningPropertyName = "Tuning";
+        private const string UntouchedPropertyName = "Untouched";
+        private const string SettablePropertyName = "Settable";
+        private const int IntroducedTuning = 7;
+        private const int EditedTuning = 9;
+        private const int UntouchedValue = 3;
+        private const int IntroducedStoredValue = 1;
+        private const int SettableAddend = 10;
+        private const int EditedSettableAddend = 20;
+
+
         // The member the removal test introduces first and drops afterwards.
         private const string RemovableMember =
             "        public int Twice()\n"
@@ -263,6 +274,213 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Does.Contain("removed:"),
                     "The differences must name the removed member.\n"
                     + DescribeOutcomes(changed));
+            });
+        }
+
+        /// <summary>
+        /// Verifies that editing the body of a getter-only property of an already introduced type
+        /// patches that getter on the assembly the earlier reload retained: the reload does not
+        /// fail, the getter is reported Patched, the type stays AlreadyActive, and a reflection
+        /// read of the property on the retained type returns the edited value.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeGetterOnlyPropertyBodyEdited_PatchesTheGetterOnTheRetainedArtifact()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    GetterMembers(IntroducedTuning),
+                    "IntroducedTypeGetterHost.cs",
+                    "IntroducedTypeGetterCaller.cs"));
+                Assert.That(
+                    ReadIntroducedProperty(readArtifact(), TuningPropertyName),
+                    Is.EqualTo(IntroducedTuning),
+                    "Precondition: the retained assembly must run the getter the first reload compiled.");
+
+                HotReloadOrchestratorResult edited = await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    GetterMembers(EditedTuning),
+                    "IntroducedTypeGetterEditedHost.cs",
+                    "IntroducedTypeGetterEditedCaller.cs"));
+
+                Assert.That(
+                    CountFailures(edited),
+                    Is.EqualTo(0),
+                    "A getter-only property body edit of an introduced type must not fail the reload.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    CountPatchedIntroducedGetters(edited, TuningPropertyName),
+                    Is.EqualTo(1),
+                    "The edited getter of the introduced type must be reported as patched.\n"
+                    + DescribeOutcomes(edited));
+                AssertBoundOneDeclaration(BuildResponse(edited));
+
+                Assert.That(
+                    ReadIntroducedProperty(readArtifact(), TuningPropertyName),
+                    Is.EqualTo(EditedTuning),
+                    "A read of the property on the retained assembly must run the edited getter.");
+            });
+        }
+
+        /// <summary>
+        /// Verifies that editing one getter-only property of an already introduced type leaves the
+        /// other getter of the same type alone: only the edited getter is reported Patched, and the
+        /// untouched one keeps returning the value the introducing reload compiled.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeGetterOnlyPropertyBodyEdited_LeavesTheUneditedGetterUnpatched()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    GetterMembers(IntroducedTuning),
+                    "IntroducedTypeGetterHost.cs",
+                    "IntroducedTypeGetterCaller.cs"));
+
+                HotReloadOrchestratorResult edited = await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    GetterMembers(EditedTuning),
+                    "IntroducedTypeGetterEditedHost.cs",
+                    "IntroducedTypeGetterEditedCaller.cs"));
+
+                Assert.That(
+                    CountPatchedIntroducedGetters(edited, TuningPropertyName),
+                    Is.EqualTo(1),
+                    "Precondition: the edited getter must still be patched.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    CountPatchedIntroducedGetters(edited, UntouchedPropertyName),
+                    Is.EqualTo(0),
+                    "A getter this edit did not touch must not be patched.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    ReadIntroducedProperty(readArtifact(), UntouchedPropertyName),
+                    Is.EqualTo(UntouchedValue),
+                    "The untouched getter must keep returning the value the first reload compiled.");
+            });
+        }
+
+        /// <summary>
+        /// Verifies that restoring an edited getter-only property body back to the source the
+        /// introducing reload compiled removes the patch the previous reload installed: no getter
+        /// of the introduced type is reported Patched, and the property returns the original value.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeGetterOnlyPropertyBodyRestored_RevertsThePatchOnTheRetainedArtifact()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    GetterMembers(IntroducedTuning),
+                    "IntroducedTypeGetterHost.cs",
+                    "IntroducedTypeGetterCaller.cs"));
+
+                await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    GetterMembers(EditedTuning),
+                    "IntroducedTypeGetterEditedHost.cs",
+                    "IntroducedTypeGetterEditedCaller.cs"));
+                Assert.That(
+                    ReadIntroducedProperty(readArtifact(), TuningPropertyName),
+                    Is.EqualTo(EditedTuning),
+                    "Precondition: the second reload must have patched the edited getter.");
+
+                HotReloadOrchestratorResult restored = await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    GetterMembers(IntroducedTuning),
+                    "IntroducedTypeGetterRestoredHost.cs",
+                    "IntroducedTypeGetterRestoredCaller.cs"));
+
+                Assert.That(
+                    CountFailures(restored),
+                    Is.EqualTo(0),
+                    "Restoring a getter body of an introduced type must not fail the reload.\n"
+                    + DescribeOutcomes(restored));
+                Assert.That(
+                    CountPatchedIntroducedGetters(restored, TuningPropertyName),
+                    Is.EqualTo(0),
+                    "A getter that matches the retained assembly must not be reported as patched.\n"
+                    + DescribeOutcomes(restored));
+                Assert.That(
+                    ReadIntroducedProperty(readArtifact(), TuningPropertyName),
+                    Is.EqualTo(IntroducedTuning),
+                    "A restored getter must leave the retained assembly running its own code again, "
+                    + "which means the patch the previous reload installed has to be reverted.");
+            });
+        }
+
+        /// <summary>
+        /// Verifies that editing the body of a property that also declares a setter body asks for a
+        /// compile: the fingerprint hashes every body of a property into one value, so such an edit
+        /// cannot be told from a setter edit, which the reload cannot patch.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypePropertyWithASetterBodyEdited_FailsAndAsksForACompile()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    SettableMember(SettableAddend),
+                    "IntroducedTypeSettableHost.cs",
+                    "IntroducedTypeSettableCaller.cs"));
+                AssertComputedValue(
+                    readArtifact(),
+                    IntroducedSeed,
+                    "Precondition: the retained assembly must run the body the first reload compiled.");
+
+                HotReloadOrchestratorResult edited = await RunReloadAsync(hostPath, callerPath, CreateGetterEdits(
+                    hostPath,
+                    callerPath,
+                    SettableMember(EditedSettableAddend),
+                    "IntroducedTypeSettableEditedHost.cs",
+                    "IntroducedTypeSettableEditedCaller.cs"));
+
+                HotReloadIntroducedTypeOutcome outcome = FindIntroducedTypeOutcome(edited);
+                Assert.That(
+                    outcome.Kind,
+                    Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed),
+                    "A property that declares a setter body is not a body the reload can patch.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    outcome.Reason,
+                    Does.StartWith(
+                        "Changed member body of introduced type requires a compile: "
+                        + IntroducedTypeMetadataName),
+                    "The reason must name the type whose member body changed.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    outcome.Reason,
+                    Does.Contain("::" + SettablePropertyName),
+                    "The reason must name the member whose body changed.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    ReadIntroducedProperty(readArtifact(), SettablePropertyName),
+                    Is.EqualTo(IntroducedStoredValue + SettableAddend),
+                    "A refused edit must leave the retained assembly running the original getter.");
             });
         }
 
@@ -592,6 +810,101 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "IntroducedTypeMemberRemovedCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
             };
+        }
+
+        // The two getter-only properties the getter tests declare: the one whose body an edit
+        // changes, and one no reload edits. A getter that is the only accessor of its property
+        // with a body is the shape a body edit can be read as the getter's own. NoInlining sits on
+        // the accessor rather than the property because that is where the attribute is allowed.
+        private static string GetterMembers(int tuning)
+        {
+            return "        public static int " + TuningPropertyName + "\n"
+                + "        {\n"
+                + "            [System.Runtime.CompilerServices.MethodImpl(\n"
+                + "                System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]\n"
+                + "            get { return " + tuning.ToString() + "; }\n"
+                + "        }\n"
+                + "\n"
+                + "        public static int " + UntouchedPropertyName + "\n"
+                + "        {\n"
+                + "            [System.Runtime.CompilerServices.MethodImpl(\n"
+                + "                System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]\n"
+                + "            get { return " + UntouchedValue.ToString() + "; }\n"
+                + "        }\n"
+                + "\n";
+        }
+
+        // A property whose setter has a body of its own, which is the shape whose body edit stays
+        // refused: the fingerprint folds every body of a property into one hash, so this edit
+        // cannot be told from an edit of the setter.
+        private static string SettableMember(int addend)
+        {
+            return "        private static int _stored = " + IntroducedStoredValue.ToString() + ";\n"
+                + "\n"
+                + "        public static int " + SettablePropertyName + "\n"
+                + "        {\n"
+                + "            [System.Runtime.CompilerServices.MethodImpl(\n"
+                + "                System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]\n"
+                + "            get { return _stored + " + addend.ToString() + "; }\n"
+                + "            set { _stored = value; }\n"
+                + "        }\n"
+                + "\n";
+        }
+
+        // The introduced type carrying the members the property tests are about, with the body of
+        // Compute() left as the introducing reload compiled it so the only difference a later
+        // reload finds is the property body.
+        private static Dictionary<string, string> CreateGetterEdits(
+            string hostPath,
+            string callerPath,
+            string extraMembers,
+            string hostFileName,
+            string callerFileName)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    hostFileName,
+                    InsertIntroducedType(File.ReadAllText(hostPath), SeedExpression, extraMembers)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    callerFileName,
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        private static int ReadIntroducedProperty(HotReloadIntroducedTypeArtifact artifact, string propertyName)
+        {
+            Assert.That(artifact, Is.Not.Null, "A reload had to introduce the type before this check.");
+            Type introducedType = artifact.Assembly.GetType(IntroducedTypeMetadataName, throwOnError: false);
+            Assert.That(introducedType, Is.Not.Null, "The artifact must hold " + IntroducedTypeMetadataName + ".");
+
+            PropertyInfo property = introducedType.GetProperty(
+                propertyName,
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(property, Is.Not.Null, "The introduced type must declare " + propertyName + ".");
+
+            return (int)property.GetValue(null);
+        }
+
+        private static int CountPatchedIntroducedGetters(HotReloadOrchestratorResult result, string propertyName)
+        {
+            int count = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Patched || outcome.Method == null)
+                {
+                    continue;
+                }
+
+                if (outcome.Method.Contains(
+                        IntroducedTypeMetadataName + ".get_" + propertyName + "()",
+                        StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         // Why NoInlining: the test reads the patched body back through a reflection call, and the

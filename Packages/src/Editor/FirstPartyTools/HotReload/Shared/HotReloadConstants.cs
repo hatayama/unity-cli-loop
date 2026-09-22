@@ -164,6 +164,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string DeactivatedAddedMembersWarningFormat =
             "This run deactivated previously active added members: {0}. They are no longer registered, but patches this run left active may still reach their previous shim bodies. Edit and reload again to re-apply them, or run 'uloop compile'.";
 
+        // Why a separate sentence for the members this run skipped: the ordinary wording invites
+        // another reload, and another reload of the same shape skips them again. What has to
+        // change first is the shape their Methods[] reason names.
+        public const string DeactivatedSkippedPatchesWarningFormat =
+            "This run deactivated previously active patches by skipping them: {0}. They reverted to the "
+            + "compiled behavior, and reloading the same shape skips them again; change what their "
+            + "Methods[].Reason names and reload, or run 'uloop compile'.";
+
+        // Why this is reported at all: a skip that leaves an earlier patch active produces no
+        // Skipped-versus-compiled difference the reader can see. The method keeps running the
+        // older reload's body, which matches neither the compiled assembly nor the source on
+        // disk, and nothing else in the response says so.
+        public const string SkippedMethodKeepsActivePatchWarningFormat =
+            "This run skipped these methods, so what runs for them is still the body an earlier hot "
+            + "reload applied, which matches neither the compiled assembly nor the source on disk: {0}. "
+            + "Reloading the same shape skips them again; change what their Methods[].Reason names and "
+            + "reload, or run 'uloop compile'.";
+
+        public const string DeactivatedSkippedAddedMembersWarningFormat =
+            "This run deactivated previously active added members by skipping them: {0}. They are no longer "
+            + "registered, but patches this run left active may still reach their previous shim bodies. "
+            + "Reloading the same shape skips them again; change what their Methods[].Reason names and "
+            + "reload, or run 'uloop compile'.";
+
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/RemovedMemberKinds.cs.
         public const string RemovedMemberKindMethod = "method";
@@ -175,6 +199,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Removed members stay present in the compiled assembly until 'uloop compile'; "
             + "edited bodies no longer call them: {0}.";
 
+        // Format: count of removed members, then the comma-separated names (ordinal).
+        // Why a line of its own rather than the full warning again: the full text reappears on
+        // every run until 'uloop compile', and a reader who already acted on it reads the reprint
+        // as news, which buries the warnings the run produced for the first time.
+        public const string ContinuingRemovedMembersWarningFormat =
+            "Continuing from an earlier run: the same {0} removed member(s) are still in the "
+            + "compiled assembly and still uncalled by the edited bodies ({1}); 'uloop compile' "
+            + "is what removes them.";
+
         // Reason on a Stale row: the source no longer declares the method, but the patch is still
         // installed, so compiled callers keep running the patched body.
         public const string StalePatchRemovedFromSourceReason =
@@ -184,6 +217,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
+
+        // Why a warning rather than a re-run of the initializer: a stored value cannot be told
+        // apart from one the edited code assigned, so re-running would overwrite live state. The
+        // run reports the mismatch instead, because nothing else in the response shows it.
+        public const string AddedFieldInitializerChangedWarningFormat =
+            "A previous reload already added these fields, so this run's initializer for them does "
+            + "not reach a value that already exists: {0}. It runs only where the field has not been "
+            + "read yet; assign the value inside a patched method (for a reference type, "
+            + "'if (field == null) field = ...;'), rename the field, or run 'uloop compile'.";
 
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
@@ -397,7 +439,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "{0} change(s) have not been invoked since their patch was applied; see Methods[].Reason.";
 
         public const string MultiWarningSingleCompileResolutionMessage =
-            "A single 'uloop compile' clears all of them at once.";
+            "A single 'uloop compile' clears all of them at once when you want them gone; none of them has to be cleared before you keep working.";
 
         // Format: continuing file count, then comma-separated project-relative paths (ordinal).
         public const string ContinuingLineShiftWarningFormat =

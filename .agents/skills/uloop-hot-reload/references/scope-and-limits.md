@@ -49,10 +49,23 @@ refused with a message naming the added method (see
 An added field's values live in a side table that follows each instance's lifetime
 (statics live per domain). Its initializer does not run at construction time; it runs
 on the field's first access from edited code — once per instance, or once per domain
-for statics. Initializer expressions are limited to literals and externally visible
-static calls (`= 5`, `= Math.Abs(x)`); object creation (`= new List<int>()`) and
-anything touching the host type or instance state skips the field's readers and
-writers with a per-method reason. To apply such a field without compiling, declare it
+for statics. Initializer expressions are limited to what a static lambda on a separate
+shim type can evaluate: literals, externally visible static calls (`= 5`,
+`= Math.Abs(x)`), and array creation whose elements are themselves such expressions
+(`= new int[] { 1, 2, 3 }`). Object creation (`= new List<int>()`) and anything touching
+the host type or instance state skips the field's readers and writers with a per-method
+reason — including an array element that is itself a refused object creation. The one
+object creation that applies is a type an
+earlier reload introduced and this Editor session still keeps active, through a
+constructor the retained assembly holds as `public` — including in the reload that also
+edits a body of that type. A constructor this reload adds to it, or one whose parameters
+the retained assembly does not hold, keeps the readers and writers `Skipped`.
+Because the initializer runs on first access, one this reload adds to — or changes on — a
+field an earlier reload already added never reaches a value the side table already holds:
+it runs only where the field has not been read yet. That reload names those fields in
+`Warnings`; the way to reach the existing instances is to assign the value inside a patched
+method, rename the field, or run `uloop compile`.
+To apply such a field without compiling, declare it
 without an initializer — it starts at `default(T)` — and assign it inside the patched
 method instead; for a reference type, guard that with
 `if (_field == null) { _field = new List<int>(); }`. `??=` is not rewritable and keeps
@@ -67,7 +80,9 @@ like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
 resolved type has any — their values live in the hot-reload shim and are not visible
 to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
-names fail with CS1061). Read them from a patched method body instead.
+names fail with CS1061). Read them from a patched method body instead. When such a
+failure quotes the name of an active added member, the diagnostic's `Hint` says so
+rather than leaving the error reading as a typo.
 
 A type introduced in the same reload cannot use added members of a compiled type: its
 artifact is compiled against the compiled assemblies, so such a reference fails with
@@ -241,6 +256,11 @@ restarting Play Mode. JIT-inlined call sites are the exception — the reload re
 `Warnings` lists the at-risk methods (see [troubleshooting.md](troubleshooting.md)).
 Keep `const` for values you never tune at runtime.
 
+Add the getter under a new name rather than replacing an already compiled `const` with a
+getter of the same name: to the compiled assembly that name is still a field, so the edit
+is `Skipped` and the old constant keeps being inlined. Leave the `const` in place, add
+`HeightAmplitudeValue` (or any unused name) beside it, and point the call sites at it.
+
 This works only for consumers that read the getter on a live call path — a per-frame
 `Update`, a physics step, an event handler. A consumer that read the getter once during
 initialization and cached the value in a field never observes the new value: the patch
@@ -280,6 +300,10 @@ delegate type is not visible outside the assembly, and an event added in this ed
 (including one that had custom accessors when the assembly was last compiled).
 Raising through a conditional receiver (`other?.E?.Invoke(x)`) and `nameof(E)` also
 stay `Skipped`.
+
+A `Skipped` row never undoes what an earlier reload applied to the same method: that
+patch keeps running, so the method matches neither the compiled assembly nor the
+source on disk. When a run skips a method it had patched before, `Warnings` names it.
 
 ## Skipped — reported per method and in `Warnings`, never flips `Success`
 

@@ -51,8 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.AddedMemberTemplates.cs.
         // The literal is spelled out here so a template edit fails this test instead of silently
         // changing what a skipped caller reports.
-        private const string UnavailableAddedCallSkipReason =
-            "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
+        private static string UnavailableAddedCallSkipReason(string calledMethodDisplayName)
+        {
+            return "Calls the added method '" + calledMethodDisplayName
+                + "', which hot reload cannot emit. Run 'uloop compile'.";
+        }
 
         // Mirrors the MethodTransformGenericMethodOrType template in
         // Packages/src/Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonText.MethodTransformTemplates.cs.
@@ -3806,6 +3809,137 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an initializer added to a field an earlier reload already added is named in
+        /// Warnings, leaves the value an existing instance holds alone, and still runs for an
+        /// instance that has not read the field yet.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldGainsInitializerAfterItWasActive_WarnsAndKeepsStoredValue()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldWithoutInitializer.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(CountAddedFieldInitializerChangedWarnings(first.Warnings), Is.EqualTo(0));
+
+            HotReloadAddedFieldApplyFixture existingHost = new HotReloadAddedFieldApplyFixture();
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(0));
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldGainsInitializer.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                second.Warnings,
+                Does.Contain(ExpectedAddedFieldInitializerChangedWarning("AddedCount")),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(0));
+
+            HotReloadAddedFieldApplyFixture freshHost = new HotReloadAddedFieldApplyFixture();
+            Assert.That(freshHost.ReadAdded(), Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: a field added with its initializer in the same reload is not warned about,
+        /// because nothing holds a value for it yet.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldCarriesItsInitializerFromTheStart_DoesNotWarn()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldInitializedFromTheStart.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(
+                CountAddedFieldInitializerChangedWarnings(result.Warnings),
+                Is.EqualTo(0),
+                "Warnings were:\n" + string.Join("\n", result.Warnings));
+
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            Assert.That(host.ReadAdded(), Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: reloading an added field whose initializer did not change is not warned about,
+        /// so an unrelated edit in the same file stays quiet.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldInitializerUnchangedOnReapply_DoesNotWarn()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;");
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldInitializerStable1.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldInitializerStable2.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                CountAddedFieldInitializerChangedWarnings(second.Warnings),
+                Is.EqualTo(0),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+        }
+
+        /// <summary>
+        /// What: changing the literal an already added field is initialized with is warned about
+        /// too, because the stored value keeps the literal the earlier reload ran.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldLiteralInitializerChanged_WarnsAndKeepsStoredValue()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldLiteralInitializerFive.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 5;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+
+            HotReloadAddedFieldApplyFixture existingHost = new HotReloadAddedFieldApplyFixture();
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(5));
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource(
+                    "AddedFieldLiteralInitializerSeven.cs",
+                    WithAddedFieldDeclaredAs(onDisk, "public int AddedCount = 7;")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                second.Warnings,
+                Does.Contain(ExpectedAddedFieldInitializerChangedWarning("AddedCount")),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+            Assert.That(existingHost.ReadAdded(), Is.EqualTo(5));
+        }
+
+        /// <summary>
         /// What: reading an added instance field as this.field patches the existing method
         /// instead of failing shim compile with CS0026.
         /// </summary>
@@ -4158,7 +4292,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: after an added method applies, a later run whose added body does not bind is
         /// refused by the worker before any shim is compiled: the added method and its caller are
         /// Skipped with the worker's reasons, nothing fails, and the run deactivates the earlier
-        /// AddedPing registration with one warning naming it. A third run with the body fixed
+        /// AddedPing registration with one warning naming it and telling the reader that another
+        /// reload of the same shape skips it again. A third run with the body fixed
         /// registers AddedPing again and the caller returns the new value.
         /// </summary>
         [Test]
@@ -4182,7 +4317,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.StartWith("The added member's body could not be fully bound in the hot-reload compilation"));
             Assert.That(
                 FindSkippedReason(second, nameof(HotReloadAddedMethodApplyFixture.ExistingCaller)),
-                Is.EqualTo("Calls an added method that hot reload cannot emit. Run 'uloop compile'."));
+                Is.EqualTo(
+                    UnavailableAddedCallSkipReason(
+                        typeof(HotReloadAddedMethodApplyFixture).FullName + ".AddedPing(int)")));
             Assert.That(
                 CountOutcomeKind(second, HotReloadMethodOutcomeKind.Failed),
                 Is.EqualTo(0),
@@ -4190,7 +4327,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(0));
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
 
             string fixedBody = WithWorkingAddedPing(onDisk).Replace(
                 "            return value + 1;\n        }",
@@ -4431,7 +4568,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after an added method applies, a later run that skips it as virtual while
-        /// still patching an unrelated method warns with the added method's label.
+        /// still patching an unrelated method warns with the added method's label and the
+        /// wording that says another reload of the same shape skips it again.
         /// </summary>
         [Test]
         public async Task Run_VirtualAddedMethodAfterSuccess_WarnsDeactivatedPatches()
@@ -4455,12 +4593,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
         }
 
         /// <summary>
         /// What: after an added method applies, a later run that skips every method as virtual
-        /// (empty entries) still warns with the added-member deactivation wording.
+        /// (empty entries) still warns with the skipped added-member deactivation wording.
         /// </summary>
         [Test]
         public async Task Run_VirtualAddedMethodAfterSuccess_EmptyEntries_WarnsDeactivatedAddedMembers()
@@ -4480,7 +4618,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
         }
 
         /// <summary>
@@ -4781,11 +4919,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(1),
                 "The earlier replacement must stay in the added-member registry.");
             Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
+
+            // The reason already says the earlier replacement is still active, so the warning
+            // that carries the same fact must not name it again. The caller this run skipped
+            // does keep its earlier patch, so that label may appear.
+            Assert.That(
+                string.Join("\n", FindKeepsActivePatchWarnings(second.Warnings)),
+                Does.Not.Contain(expectedLabel),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
         }
 
         /// <summary>
         /// What: after a return-type replacement applies, a later run that gates it and
-        /// applies an unrelated method warns with the replacement label.
+        /// applies an unrelated method warns with the replacement label; the gate reports the
+        /// replacement as Skipped, so the warning is the one that names Methods[].Reason.
         /// </summary>
         [Test]
         public async Task Run_ReturnTypeChange_GatedReplacementDeactivatedByUnrelatedApply_Warns()
@@ -4826,7 +4973,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 0);
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedAddedMembersWarning(expectedLabel));
+                ExpectedDeactivatedSkippedAddedMembersWarning(expectedLabel));
         }
 
         /// <summary>
@@ -4928,6 +5075,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.Unrelated(3), Is.EqualTo(4));
             Assert.That(host.Target(3), Is.EqualTo(3));
             Assert.That(host.SameFileCaller(3), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a run that skips a method an earlier reload patched reports that the earlier
+        /// patch is still what runs, and names only the skipped methods that actually keep one.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedMethodKeepsEarlierPatch_WarnsThatItStaysActive()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string bodyEdit = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public int Target(int value)\n        {\n            return value + 5;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(bodyEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedKeepsEarlierPatch1.cs", bodyEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeExternalHost.Target));
+
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            Assert.That(host.Target(3), Is.EqualTo(8));
+
+            string returnTypeChange = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(returnTypeChange, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedKeepsEarlierPatch2.cs", returnTypeChange),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                FindSkippedReason(second, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Is.Not.Null,
+                FormatOutcomes(second));
+
+            // The first run's patch is still what compiled callers reach, even though the source
+            // on disk no longer declares that method at all.
+            Assert.That(host.Target(3), Is.EqualTo(8));
+
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeExternalHost).FullName),
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                new[] { "System.Int32" },
+                0);
+            Assert.That(
+                second.Warnings,
+                Does.Contain(
+                    string.Format(
+                        HotReloadConstants.SkippedMethodKeepsActivePatchWarningFormat,
+                        expectedLabel)),
+                "Warnings were:\n" + string.Join("\n", second.Warnings));
+            Assert.That(FindKeepsActivePatchWarnings(second.Warnings), Has.Count.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a skip on a method no earlier reload patched keeps quiet, because nothing
+        /// other than the compiled body runs for it.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedMethodWithoutEarlierPatch_DoesNotWarnAboutAnActivePatch()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string edited = File.ReadAllText(fixturePath)
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedWithoutEarlierPatch.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(result);
+            Assert.That(
+                FindSkippedReason(result, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Is.Not.Null,
+                FormatOutcomes(result));
+            Assert.That(
+                FindKeepsActivePatchWarnings(result.Warnings),
+                Is.Empty,
+                "Warnings were:\n" + string.Join("\n", result.Warnings));
         }
 
         /// <summary>
@@ -5167,7 +5412,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Mid()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Broken()" }
                     },
                     calledAddedMethodKey = "Host::Broken()"
                 },
@@ -5178,7 +5424,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Outer()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Mid()" }
                     },
                     calledAddedMethodKey = "Host::Mid()"
                 }
@@ -5212,7 +5459,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Mid()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Broken()" }
                     },
                     calledAddedMethodKey = "Host::Broken()"
                 },
@@ -5223,7 +5471,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Outer()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Mid()" }
                     },
                     calledAddedMethodKey = "Host::Mid()"
                 }
@@ -5237,8 +5486,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(2));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
-            Assert.That(outcomes[1].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason("Host.Broken()")));
+            Assert.That(outcomes[1].Reason, Is.EqualTo(UnavailableAddedCallSkipReason("Host.Mid()")));
         }
 
         /// <summary>
@@ -5257,7 +5506,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodKey = "Host::Caller()",
                     reason = new TransformWorkerReasonDto
                     {
-                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall
+                        code = HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
+                        args = new[] { "Host.Unrelated()" }
                     },
                     calledAddedMethodKey = "Host::Unrelated()"
                 }
@@ -5271,7 +5521,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(1));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(UnavailableAddedCallSkipReason("Host.Unrelated()")));
         }
 
         /// <summary>
@@ -6332,6 +6582,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + FormatOutcomes(restoreRun.Methods));
         }
 
+        // Picks the "an earlier reload's body still runs" warnings by a phrase no other warning
+        // uses, so a reworded sentence fails the assertion instead of matching twice.
+        private static List<string> FindKeepsActivePatchWarnings(IReadOnlyList<string> warnings)
+        {
+            List<string> found = new List<string>();
+            foreach (string warning in warnings)
+            {
+                if (warning.Contains("still the body an earlier hot", StringComparison.Ordinal))
+                {
+                    found.Add(warning);
+                }
+            }
+
+            return found;
+        }
+
         private static string FormatOutcomes(IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             List<string> lines = new List<string>();
@@ -6466,7 +6732,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindSkippedReason(
                     result,
                     nameof(HotReloadSignatureChangeExternalHost.SameFileCaller)),
-                Is.EqualTo(UnavailableAddedCallSkipReason));
+                Is.EqualTo(
+                    UnavailableAddedCallSkipReason(
+                        typeof(HotReloadSignatureChangeExternalHost).FullName + ".AddedBridge(int)")));
             AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
         }
 
@@ -7229,14 +7497,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return string.Format(HotReloadConstants.DeactivatedAddedMembersWarningFormat, joinedLabels);
         }
 
+        private static string ExpectedDeactivatedSkippedAddedMembersWarning(string joinedLabels)
+        {
+            return string.Format(HotReloadConstants.DeactivatedSkippedAddedMembersWarningFormat, joinedLabels);
+        }
+
         private static bool IsDeactivatedPatchesWarning(string warning)
         {
-            return warning.StartsWith(
-                    DeactivatedWarningPrefix(HotReloadConstants.DeactivatedPatchesWarningFormat),
-                    StringComparison.Ordinal)
-                || warning.StartsWith(
-                    DeactivatedWarningPrefix(HotReloadConstants.DeactivatedAddedMembersWarningFormat),
-                    StringComparison.Ordinal);
+            foreach (string format in DeactivationWarningFormats())
+            {
+                if (warning.StartsWith(DeactivatedWarningPrefix(format), StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string[] DeactivationWarningFormats()
+        {
+            return new[]
+            {
+                HotReloadConstants.DeactivatedPatchesWarningFormat,
+                HotReloadConstants.DeactivatedAddedMembersWarningFormat,
+                HotReloadConstants.DeactivatedSkippedPatchesWarningFormat,
+                HotReloadConstants.DeactivatedSkippedAddedMembersWarningFormat
+            };
         }
 
         private static string DeactivatedWarningPrefix(string format)
@@ -7406,11 +7693,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string WithAddedFieldAccesses(string onDisk)
         {
+            return WithAddedFieldDeclaredAs(onDisk, "public int AddedCount;");
+        }
+
+        // The declaration is a parameter so a test can reload the same field with a different
+        // initializer, which is what makes the initializer of an already added field observable.
+        private static string WithAddedFieldDeclaredAs(string onDisk, string declaration)
+        {
             return onDisk.Replace(
                 "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n        }",
-                "        public int AddedCount;\n\n"
+                "        " + declaration + "\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
@@ -7687,10 +7981,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedSiblingTuningDriftWarning =
-            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change.";
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with 7 yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change.";
 
         private const string ExpectedAddedSiblingTuningWarning =
-            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run have the new value folded in, but bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run already have its value folded in, so this run needs no compile; only bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' when one of those files has to see it.";
 
         private static IDisposable MutateSiblingTuningValue(int newValue)
         {
@@ -7964,6 +8258,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     File.Move(_hiddenPath, _snapshotPath);
                 }
             }
+        }
+
+        private static string ExpectedAddedFieldInitializerChangedWarning(string fieldName)
+        {
+            return string.Format(
+                HotReloadConstants.AddedFieldInitializerChangedWarningFormat,
+                typeof(HotReloadAddedFieldApplyFixture).FullName + "." + fieldName);
+        }
+
+        // The token is the one sentence only this warning carries, so an unrelated warning that
+        // also mentions an initializer cannot satisfy a negative pin.
+        private static int CountAddedFieldInitializerChangedWarnings(IReadOnlyList<string> warnings)
+        {
+            return CountWarningsContaining(warnings, "does not reach a value that already exists");
         }
 
         private static int CountWarningsContaining(IReadOnlyList<string> warnings, string token)

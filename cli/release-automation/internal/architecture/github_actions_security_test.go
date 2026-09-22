@@ -113,6 +113,88 @@ func TestPullRequestWorkflowCacheActionsRequireTrustedUnitySecrets(t *testing.T)
 	}
 }
 
+// Tests that no folded run block contains a shell comment.
+func TestFoldedRunBlocksContainNoShellComment(t *testing.T) {
+	repositoryRoot := findRepositoryRoot(t)
+	violations := []string{}
+	for _, workflowPath := range workflowFilePaths(t, repositoryRoot) {
+		lines := readWorkflowLines(t, workflowPath)
+		for _, lineIndex := range foldedRunBlockCommentLines(lines) {
+			relativePath, err := filepath.Rel(repositoryRoot, workflowPath)
+			if err != nil {
+				relativePath = workflowPath
+			}
+			violations = append(violations, fmt.Sprintf(
+				"%s:%d is a comment inside a folded run block; YAML folds it onto the command line and the shell drops everything after it. Move the comment above the step.",
+				filepath.ToSlash(relativePath), lineIndex+1))
+		}
+	}
+	if len(violations) > 0 {
+		sort.Strings(violations)
+		t.Fatalf("folded run block comment policy violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+// Tests that comments are reported only for folded blocks, and not for the forms that keep them harmless.
+func TestFoldedRunBlockCommentLinesDistinguishesBlockStyles(t *testing.T) {
+	testCases := []struct {
+		name     string
+		lines    []string
+		expected []int
+	}{
+		{
+			name: "comment folded onto the command",
+			lines: []string{
+				"      - run: >",
+				"          scripts/check.sh",
+				"          # why the ceiling is 24",
+				"          --max-public-candidates 24",
+			},
+			expected: []int{2},
+		},
+		{
+			name: "literal block keeps the comment on its own line",
+			lines: []string{
+				"      - run: |",
+				"          # why the ceiling is 24",
+				"          scripts/check.sh --max-public-candidates 24",
+			},
+			expected: []int{},
+		},
+		{
+			name: "yaml comment above the step is not part of the block",
+			lines: []string{
+				"      # why the ceiling is 24",
+				"      - run: >",
+				"          scripts/check.sh",
+				"          --max-public-candidates 24",
+			},
+			expected: []int{},
+		},
+		{
+			name: "a hash inside a word is not a shell comment",
+			lines: []string{
+				"      - run: >",
+				"          scripts/check.sh --label issue#2689",
+			},
+			expected: []int{},
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			found := foldedRunBlockCommentLines(testCase.lines)
+			if len(found) != len(testCase.expected) {
+				t.Fatalf("unexpected comment lines %v, want %v", found, testCase.expected)
+			}
+			for index, lineIndex := range found {
+				if lineIndex != testCase.expected[index] {
+					t.Fatalf("unexpected comment lines %v, want %v", found, testCase.expected)
+				}
+			}
+		})
+	}
+}
+
 // Tests that unnamed action steps are still parsed as remote action uses.
 func TestParseUsesActionAcceptsUnnamedSteps(t *testing.T) {
 	actionRef, ok := parseUsesAction("      - uses: actions/checkout@v6")
@@ -312,6 +394,57 @@ func actionRepository(actionRef string) string {
 		return ""
 	}
 	return pathParts[0] + "/" + pathParts[1]
+}
+
+// Reports the lines a shell reads as a comment once YAML folds a run block onto one line.
+func foldedRunBlockCommentLines(lines []string) []int {
+	commentLines := []int{}
+	for lineIndex, line := range lines {
+		blockIndent, isFoldedRunBlock := foldedRunBlockIndent(line)
+		if !isFoldedRunBlock {
+			continue
+		}
+		commentLines = append(commentLines, foldedBlockBodyCommentLines(lines, lineIndex, blockIndent)...)
+	}
+	return commentLines
+}
+
+func foldedBlockBodyCommentLines(lines []string, blockLineIndex int, blockIndent int) []int {
+	commentLines := []int{}
+	for bodyIndex := blockLineIndex + 1; bodyIndex < len(lines); bodyIndex++ {
+		bodyLine := lines[bodyIndex]
+		if strings.TrimSpace(bodyLine) == "" {
+			continue
+		}
+		if leadingWhitespaceCount(bodyLine) <= blockIndent {
+			return commentLines
+		}
+		if startsShellComment(bodyLine) {
+			commentLines = append(commentLines, bodyIndex)
+		}
+	}
+	return commentLines
+}
+
+// Only the folded indicators matter: a literal block keeps every line separate, so a
+// comment there ends at its own newline instead of swallowing the rest of the command.
+func foldedRunBlockIndent(line string) (int, bool) {
+	trimmedLine := strings.TrimSpace(line)
+	trimmedLine = strings.TrimPrefix(trimmedLine, "- ")
+	if !strings.HasPrefix(trimmedLine, "run:") {
+		return 0, false
+	}
+	blockValue := strings.TrimSpace(strings.TrimPrefix(trimmedLine, "run:"))
+	if !strings.HasPrefix(blockValue, ">") {
+		return 0, false
+	}
+	return leadingWhitespaceCount(line), true
+}
+
+// A shell starts a comment only where the hash opens a word, so a hash inside a token stays code.
+func startsShellComment(line string) bool {
+	trimmedLine := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmedLine, "#") || strings.Contains(trimmedLine, " #")
 }
 
 func stepContains(lines []string, lineIndex int, expectedLine string) bool {
