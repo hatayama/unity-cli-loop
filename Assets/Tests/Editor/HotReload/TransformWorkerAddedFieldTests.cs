@@ -684,7 +684,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
             Assert.That(slice, Does.Contain("GetOrInit<"));
             Assert.That(slice, Does.Contain("Set<"));
-            Assert.That(slice, Does.Contain("+ value"));
+            Assert.That(slice, Does.Contain("+ (value)"));
             Assert.That(slice, Does.Contain("+ 1"));
         }
 

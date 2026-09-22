@@ -3581,6 +3581,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: '+=' with a conditional right-hand side on a compiled private static property
+        /// adds the whole conditional's value through the property accessors.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_PrivateStaticPropertyCompoundWithConditional_AddsTheWholeConditional()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedWriteStaticPropertyConditional();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedWriteStaticPropertyConditional()\n        {\n"
+                + "            int step = 3;\n"
+                + "            StaticWritableValue = 5;\n"
+                + "            StaticWritableValue += step > 0 ? step : 0;\n"
+                + "            return StaticWritableValue;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            host.ResetStaticWritable();
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedPrivateStaticPropertyCompoundConditional.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedWriteStaticPropertyConditional");
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(8));
+            Assert.That(host.ReadStaticWritable(), Is.EqualTo(8));
+            host.ResetStaticWritable();
+        }
+
+        /// <summary>
         /// What: an existing patched method that reads a private static field through a
         /// closure (pre-existing delegation path) is Patched and returns the compiled value.
         /// </summary>
@@ -3825,6 +3861,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAlreadyActive(second, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
             Assert.That(firstHost.ReadAdded(), Is.EqualTo(10));
             Assert.That(secondHost.ReadAdded(), Is.EqualTo(20));
+        }
+
+        /// <summary>
+        /// What: '+=' with a lambda right-hand side on an added delegate field is patched and
+        /// the reader invokes the combined delegate.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldCompoundAssignment_LambdaRightHandSide_Applies()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithAddedFieldAccessedAs(
+                onDisk,
+                "public System.Func<int> AddedFunc;",
+                "AddedFunc == null ? -1 : AddedFunc()",
+                "AddedFunc += () => value;");
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldCompoundLambda.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            host.WriteAdded(7);
+            Assert.That(host.ReadAdded(), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: '+=' with a conditional right-hand side on an added field adds the whole
+        /// conditional's value, not the value of a conditional over the partial sum.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldCompoundAssignment_ConditionalRightHandSide_AddsTheWholeConditional()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithAddedFieldAccessedAs(
+                onDisk,
+                "public int AddedCount;",
+                "AddedCount",
+                "AddedCount += value > 0 ? value : 0;");
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldCompoundConditional.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            host.WriteAdded(5);
+            host.WriteAdded(5);
+            Assert.That(host.ReadAdded(), Is.EqualTo(10));
         }
 
         /// <summary>
@@ -7933,15 +8027,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // initializer, which is what makes the initializer of an already added field observable.
         private static string WithAddedFieldDeclaredAs(string onDisk, string declaration)
         {
+            return WithAddedFieldAccessedAs(onDisk, declaration, "AddedCount", "AddedCount = value;");
+        }
+
+        // The reader and writer bodies are parameters so a test can vary the field's type and
+        // the shape of the write, which is where the shim rewrite of an added field differs.
+        private static string WithAddedFieldAccessedAs(
+            string onDisk,
+            string declaration,
+            string readExpression,
+            string writeStatement)
+        {
             return onDisk.Replace(
                 "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n        }",
                 "        " + declaration + "\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
-                + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
+                + "        public int ReadAdded()\n        {\n            return " + readExpression + ";\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
-                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
+                + "        public void WriteAdded(int value)\n        {\n            " + writeStatement + "\n        }",
                 StringComparison.Ordinal);
         }
 
