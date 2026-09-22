@@ -193,12 +193,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This run deactivated previously active added members: {0}. They are no longer registered, but patches this run left active may still reach their previous shim bodies. Edit and reload again to re-apply them, or run 'uloop compile'.";
 
         // Why a separate sentence for the members this run skipped: the ordinary wording invites
-        // another reload, and another reload of the same shape skips them again. What has to
-        // change first is the shape their Methods[] reason names.
+        // an edit to them, while what has to change first is what their Methods[] reason names,
+        // often in another file. The next reload of the assembly retries the unchanged file once
+        // by itself, so the reader only has to pass the file the reason names.
         public const string DeactivatedSkippedPatchesWarningFormat =
             "This run deactivated previously active patches by skipping them: {0}. They reverted to the "
-            + "compiled behavior, and reloading the same shape skips them again; change what their "
-            + "Methods[].Reason names and reload, or run 'uloop compile'.";
+            + "compiled behavior. The next reload of this assembly retries their file once while it stays "
+            + "unchanged, so change what their Methods[].Reason names and reload, or run 'uloop compile'.";
 
         // Why this is reported at all: a skip that leaves an earlier patch active produces no
         // Skipped-versus-compiled difference the reader can see. The method keeps running the
@@ -213,8 +214,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string DeactivatedSkippedAddedMembersWarningFormat =
             "This run deactivated previously active added members by skipping them: {0}. They are no longer "
             + "registered, but patches this run left active may still reach their previous shim bodies. "
-            + "Reloading the same shape skips them again; change what their Methods[].Reason names and "
-            + "reload, or run 'uloop compile'.";
+            + "The next reload of this assembly retries their file once while it stays unchanged, so "
+            + "change what their Methods[].Reason names and reload, or run 'uloop compile'.";
 
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/RemovedMemberKinds.cs.
