@@ -170,7 +170,7 @@ func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
 	if len(args) == 0 {
 		return UnityProcess{}, false
 	}
-	if path.Base(args[0]) != "Unity" {
+	if !isLinuxUnityEditorExecutable(path.Base(args[0])) {
 		return UnityProcess{}, false
 	}
 	if hasNonEditorLinuxArg(args) {
@@ -181,6 +181,17 @@ func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
 		return UnityProcess{}, false
 	}
 	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+}
+
+// isLinuxUnityEditorExecutable reports whether argv[0]'s basename is a Unity Editor
+// binary. Unity Hub launches the Editor through a hardlink named
+// unityhub-unity-editor-<version> that sits beside Editor/Unity, so the basename
+// is not always "Unity".
+func isLinuxUnityEditorExecutable(executableName string) bool {
+	if executableName == "Unity" {
+		return true
+	}
+	return strings.HasPrefix(executableName, "unityhub-unity-editor-")
 }
 
 // hasNonEditorLinuxArg reports whether argv marks a batchmode run or an asset
