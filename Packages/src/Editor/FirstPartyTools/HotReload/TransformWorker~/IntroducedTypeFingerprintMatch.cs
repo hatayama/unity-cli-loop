@@ -356,7 +356,10 @@ internal sealed class IntroducedTypeFingerprintMatch
             names += " and " + (omittedAdditions.Count - namedCount) + " more";
         }
 
-        return omittedAdditions.Count + " applicable addition(s) omitted: " + names;
+        // Why not "omitted": it read as if the reload had dropped these additions, while they are
+        // only left out of the differences because each of them applies on its own.
+        return omittedAdditions.Count + " addition(s) not counted as differences because they apply on their own: "
+            + names;
     }
 
     private static bool HasDetailWithPrefix(

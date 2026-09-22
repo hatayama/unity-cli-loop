@@ -15,9 +15,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // concatenating it, so a next-step wording change never touches the sentence bodies.
         private const string CompileCallToAction = "Run 'uloop compile'.";
 
-        private const string CompileCallToActionToAddIt = "Run 'uloop compile' to add it.";
+        // Why each names what the compile adds instead of "it" or "them": a sentence that names a
+        // rewrite before its call to action left readers unsure whether "it" was the member or
+        // the rewrite.
+        private const string CompileCallToActionToAddTheMethod = "Run 'uloop compile' to add the method.";
 
-        private const string CompileCallToActionToAddThem = "Run 'uloop compile' to add them.";
+        private const string CompileCallToActionToAddTheField = "Run 'uloop compile' to add the field.";
+
+        private const string CompileCallToActionToAddTheProperty = "Run 'uloop compile' to add the property.";
+
+        // For a sentence that already names a rewrite that needs no compile: the compile is only
+        // for keeping the code the way it is written, whether or not the rewrite fits.
+        private const string CompileCallToActionToKeepTheCode =
+            "Run 'uloop compile' to keep the code as written.";
 
         private const string AccessorRewriteUnavailableSeparator = " Accessor rewrite unavailable: ";
 

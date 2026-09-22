@@ -63,6 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AddedPropertyConditionalAccess,
         AddedPropertyRefOutIn,
         AddedPropertyUnavailableAddedProperty,
+        AddedPropertyAccessorExcludedFromReload,
         AddedPropertyCompiledMemberKindChanged,
         AddedPropertyInitializerNotEmittable,
         UnsupportedMemberExplicitAccessor,

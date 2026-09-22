@@ -741,7 +741,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                     + " Declaration differences: "));
             Assert.That(reason, Does.Contain("removed:"));
             Assert.That(reason, Does.Not.Contain("added:"));
-            Assert.That(reason, Does.Contain("1 applicable addition(s) omitted: Example.Retained::Extra()"));
+            Assert.That(reason, Does.Contain("1 addition(s) not counted as differences because they apply on their own: Example.Retained::Extra()"));
         }
 
         /// <summary>What: adding a constructor ahead of the existing members asks for a compile and

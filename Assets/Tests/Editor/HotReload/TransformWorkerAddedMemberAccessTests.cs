@@ -248,6 +248,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method that captures a compiled private method as a method group is
+        /// skipped with a reason naming the lambda rewrite, and that rewrite - a lambda calling the
+        /// same method - is added.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompiledPrivateMethodGroupWrappedInALambda_IsAddedAsTheReasonSays()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedCaptureGroup()\n        {\n"
+                + "            Func<int> read = PrivateCall;\n            return read();\n        }\n\n"
+                + "        public int AddedCaptureLambda()\n        {\n"
+                + "            Func<int> read = () => PrivateCall();\n            return read();\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string groupReason = FindSkipReason(result, "AddedCaptureGroup");
+            Assert.That(groupReason, Does.Contain("method group 'PrivateCall' (non-invocation)"));
+            Assert.That(
+                groupReason,
+                Does.Contain("wrapping the method group in a lambda that calls it"));
+            AssertAddedAndNotSkipped(result, "AddedCaptureLambda");
+        }
+
+        /// <summary>
         /// What: an added method that reads a compiled private static property is added, and the
         /// shim calls the getter delegate with no receiver argument.
         /// </summary>
