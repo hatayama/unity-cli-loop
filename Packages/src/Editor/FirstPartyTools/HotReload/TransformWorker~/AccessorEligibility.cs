@@ -82,7 +82,7 @@ internal static class AccessorEligibility
             }
         }
 
-        if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode))
+        if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode, addedMemberAccess))
         {
             rejectReason =
                 WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
@@ -230,7 +230,10 @@ internal static class AccessorEligibility
         return true;
     }
 
-    private static bool NeedsPropertyIncrementRewrite(SemanticModel semanticModel, SyntaxNode bodyNode)
+    private static bool NeedsPropertyIncrementRewrite(
+        SemanticModel semanticModel,
+        SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess)
     {
         foreach (SyntaxNode node in bodyNode.DescendantNodes())
         {
@@ -259,6 +262,16 @@ internal static class AccessorEligibility
             }
 
             ISymbol symbol = semanticModel.GetSymbolInfo(operand).Symbol;
+            // Why an added property is left to the added-property scan: its reason names the one
+            // rewrite that works there ('X = X + 1'), while this one also suggests 'X += 1',
+            // which that scan skips for an added property.
+            if (symbol is IPropertySymbol addedProperty
+                && addedMemberAccess != null
+                && addedMemberAccess.IsAddedProperty(addedProperty))
+            {
+                continue;
+            }
+
             if (symbol is IPropertySymbol propertySymbol
                 && (AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
                     || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod)))
