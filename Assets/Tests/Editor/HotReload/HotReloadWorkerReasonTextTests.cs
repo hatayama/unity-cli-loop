@@ -305,7 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeUnresolved,
                 new[] { "Missing" },
-                "Added field type 'Missing' could not be resolved; check for a missing using directive or a typo, fix the declaration, and rerun. Run 'uloop compile' if the type is new.");
+                "Added field type 'Missing' could not be resolved; check for a missing using directive or a typo, fix the declaration, and rerun. If the type is declared in a new file, pass that file to --files too (new files are not selected automatically); run 'uloop compile' only if it still does not resolve.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldIncrementNotNumeric,
                 NoArgs,
@@ -391,7 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AddedPropertyValueTypeUnresolved,
                 new[] { "Missing" },
                 "Added property type 'Missing' could not be resolved; check for a missing using directive or a typo, "
-                + "fix the declaration, and rerun. Run 'uloop compile' if the type is new.");
+                + "fix the declaration, and rerun. If the type is declared in a new file, pass that file to --files too (new files are not selected automatically); run 'uloop compile' only if it still does not resolve.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedPropertyValueTypeNotExternallyVisible,
                 NoArgs,
