@@ -1848,7 +1848,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string.Join(" | ", response.Warnings));
         }
 
+        /// <summary>
+        /// What: the rewire warning suppresses the single-compile resolution sentence, because a
+        /// compile does not bring wired values back, while the same result without a recovered
+        /// identity keeps that sentence.
+        /// </summary>
+        [Test]
+        public void Build_RewireWarningBesideTwoOrchestratorWarnings_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse withRewire = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreatePatchedResultWithTwoWarningsAndAddedField(),
+                Array.Empty<string>(),
+                new[] { "Ns.Host.Tick()" });
+            HotReloadResponse withoutRewire = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreatePatchedResultWithTwoWarningsAndAddedField(),
+                Array.Empty<string>(),
+                Array.Empty<string>());
+
+            Assert.That(
+                withRewire.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            Assert.That(withRewire.Message, Does.Contain("3 warning(s). See Warnings."));
+            Assert.That(
+                withoutRewire.Message,
+                Does.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
         private const string RewireAfterDomainReloadWarningMarker = "wire them again";
+
+        private static HotReloadOrchestratorResult CreatePatchedResultWithTwoWarningsAndAddedField()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Ns.Host.Tick()", "Assets/Host.cs")
+                },
+                new List<string> { "warn-a", "warn-b" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                addedFields: new[] { "Ns.Host.Speed" });
+        }
 
         private static HotReloadOrchestratorResult CreateResultWithAddedFields()
         {
