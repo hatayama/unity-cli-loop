@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf16"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/install"
 )
 
 func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
@@ -126,6 +128,76 @@ func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
 	runPosixUninstallCommand(t, home, installDir)
 	assertPosixUninstallRemovedBinary(t, targetPath)
 	assertPosixUninstallRemovedPathBlocks(t, profilePaths)
+}
+
+func TestPosixUninstallScriptRestoresBashrcBytesAfterInstall(t *testing.T) {
+	// Verifies uninstall after install leaves ~/.bashrc byte-identical to the original, including the blank line install adds before the block.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX uninstall script is not available on Windows")
+	}
+
+	cases := []struct {
+		name     string
+		original string
+	}{
+		{"trailing newline", "existing\n"},
+		{"trailing blank line", "existing\n\n"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			home, installDir, _ := createPosixUninstallHome(t)
+			bashrcPath := filepath.Join(home, ".bashrc")
+			if err := os.WriteFile(bashrcPath, []byte(testCase.original), 0o600); err != nil {
+				t.Fatalf("failed to write bashrc: %v", err)
+			}
+			runPosixInstallCommandOnLinux(t, home, installDir)
+			installedContent, err := os.ReadFile(bashrcPath)
+			if err != nil {
+				t.Fatalf("failed to read bashrc after install: %v", err)
+			}
+			if !strings.Contains(string(installedContent), "# >>> uloop PATH >>>") {
+				t.Fatalf("install did not add the uloop PATH block:\n%s", installedContent)
+			}
+
+			runPosixUninstallCommand(t, home, installDir)
+
+			restoredContent, err := os.ReadFile(bashrcPath)
+			if err != nil {
+				t.Fatalf("failed to read bashrc after uninstall: %v", err)
+			}
+			if string(restoredContent) != testCase.original {
+				t.Fatalf("bashrc not restored byte-for-byte:\nwant %q\ngot  %q", testCase.original, restoredContent)
+			}
+		})
+	}
+}
+
+// runPosixInstallCommandOnLinux runs the install shell setup as Linux bash, the
+// same way TestPosixInstallScriptWritesBashrcOnLinux does, so the PATH block lands
+// in ~/.bashrc with the blank line the installer writes before it.
+func runPosixInstallCommandOnLinux(t *testing.T, home string, installDir string) {
+	t.Helper()
+	fakeBinDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBinDir, "uname"), []byte("#!/bin/sh\necho Linux\n"), 0o755); err != nil {
+		t.Fatalf("failed to write fake uname: %v", err)
+	}
+	command, err := install.CommandForOS("linux", install.Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("install CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"SHELL=/bin/bash",
+		"PATH=" + fakeBinDir + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX install setup failed: %v\n%s", err, output)
+	}
 }
 
 func createPosixUninstallHome(t *testing.T) (string, string, string) {

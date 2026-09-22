@@ -164,7 +164,7 @@ and the ones left out because every assembly they reference kept the same public
   invalidate a reused result**, because it is not part of the input digest — the same exposure the
   dependent skip in step 3 already has. One handed to the compiler as `/analyzerconfig:` is read by
   content and does invalidate it. `--all` compiles everything again.
-- **Linux is not supported.** macOS and Windows only.
+- **Linux (x86_64) is supported.** The Editor is looked up under `~/Unity/Hub/Editor/<version>/Editor/Unity`.
 
 ## Troubleshooting
 
