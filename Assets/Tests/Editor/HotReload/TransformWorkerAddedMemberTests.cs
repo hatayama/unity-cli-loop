@@ -246,6 +246,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the receiver check of an added property whose whole body is an arrow maps to the
+        /// property's declaration line, so a null receiver's getter frame points there rather than
+        /// at the generated file's own line count.
+        /// </summary>
+        [Test]
+        public async Task Emit_PropertyLevelArrowAddedInstanceProperty_ReceiverCheckMapsToTheDeclarationLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedArrowProperty => 7;");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithPropertyLevelArrowProperty.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_AddedArrowProperty"), Is.Not.Null);
+
+            AssertReceiverCheckMapsTo(result.Output.shimSource, FindLineNumberContaining(edited, "AddedArrowProperty =>"));
+        }
+
+        /// <summary>
+        /// What: the receiver check of an added property whose getter accessor is an arrow maps to
+        /// the accessor's line, the arrow that accessor carries rather than the property's.
+        /// </summary>
+        [Test]
+        public async Task Emit_AccessorLevelArrowAddedInstanceProperty_ReceiverCheckMapsToTheAccessorLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedAccessorArrow\n        {\n            get => 8;\n        }");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithAccessorLevelArrowProperty.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_AddedAccessorArrow"), Is.Not.Null);
+
+            AssertReceiverCheckMapsTo(result.Output.shimSource, FindLineNumberContaining(edited, "get => 8;"));
+        }
+
+        private static void AssertReceiverCheckMapsTo(string shimSource, int expectedLine)
+        {
+            int guardIndex = shimSource.IndexOf(
+                "throw new global::System.NullReferenceException",
+                StringComparison.Ordinal);
+            Assert.That(guardIndex, Is.GreaterThan(0), shimSource);
+            int guardLineStart = shimSource.LastIndexOf('\n', guardIndex) + 1;
+            int directiveIndex = shimSource.LastIndexOf("#line ", guardIndex, StringComparison.Ordinal);
+            Assert.That(directiveIndex, Is.GreaterThanOrEqualTo(0), shimSource);
+            int directiveEnd = shimSource.IndexOf('\n', directiveIndex);
+            Assert.That(
+                shimSource.Substring(directiveIndex, directiveEnd - directiveIndex),
+                Is.EqualTo("#line " + expectedLine + " \"" + HostProjectRelativePath + "\""),
+                shimSource);
+            Assert.That(
+                shimSource.Substring(directiveEnd, guardLineStart - directiveEnd).Trim(),
+                Is.Empty,
+                "The directive must sit right before the receiver check's throw.\n" + shimSource);
+        }
+
+        /// <summary>
         /// What: implicit-this, explicit-this, receiver-expression, and static added-method calls
         /// plus mutual and recursive added-method calls are rewritten to the shim static form.
         /// </summary>
