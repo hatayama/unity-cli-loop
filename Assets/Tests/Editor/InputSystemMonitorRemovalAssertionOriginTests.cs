@@ -69,6 +69,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result, Is.False);
         }
+
+        /// <summary>
+        /// Verifies FireStateChangeNotifications is rejected when a type other than the Input System's declares it.
+        /// </summary>
+        [Test]
+        public void IsMonitorRemovalFrame_WhenUserTypeFireStateChangeNotifications_ReturnsFalse()
+        {
+            bool result = InputSystemMonitorRemovalAssertionOrigin.IsMonitorRemovalFrame(
+                "Game.PlayerInput", "FireStateChangeNotifications");
+
+            Assert.That(result, Is.False);
+        }
     }
 }
 #endif
