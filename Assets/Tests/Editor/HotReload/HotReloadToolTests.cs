@@ -1791,6 +1791,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: after a domain reload discarded an earlier apply, the response asks to wire again
+        /// the added fields of the types whose changes this run recovered, and names no other field.
+        /// </summary>
+        [Test]
+        public void Build_RecoveredIdentityOfAddedFieldType_WarnsToWireTheFieldAgain()
+        {
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreateResultWithAddedFields(),
+                Array.Empty<string>(),
+                new[] { "Ns.Host.Tick()" });
+
+            string warning = response.Warnings.FirstOrDefault(
+                entry => entry.Contains(RewireAfterDomainReloadWarningMarker));
+            Assert.That(warning, Is.Not.Null, string.Join(" | ", response.Warnings));
+            Assert.That(warning, Does.Contain("Ns.Host.Speed"));
+            Assert.That(warning, Does.Not.Contain("Ns.Other.Count"));
+        }
+
+        /// <summary>
+        /// What: a recovered constructor, whose label ends in "..ctor", still identifies its type,
+        /// so the added fields of that type are named.
+        /// </summary>
+        [Test]
+        public void Build_RecoveredConstructorOfAddedFieldType_WarnsToWireTheFieldAgain()
+        {
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreateResultWithAddedFields(),
+                Array.Empty<string>(),
+                new[] { "Ns.Host..ctor()" });
+
+            string warning = response.Warnings.FirstOrDefault(
+                entry => entry.Contains(RewireAfterDomainReloadWarningMarker));
+            Assert.That(warning, Is.Not.Null, string.Join(" | ", response.Warnings));
+            Assert.That(warning, Does.Contain("Ns.Host.Speed"));
+        }
+
+        /// <summary>
+        /// What: a run that recovered nothing a domain reload discarded does not ask to wire added
+        /// fields again, because nothing was wired into them before.
+        /// </summary>
+        [Test]
+        public void Build_NoRecoveredIdentity_DoesNotWarnToWireAgain()
+        {
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreateResultWithAddedFields(),
+                Array.Empty<string>(),
+                Array.Empty<string>());
+
+            Assert.That(
+                response.Warnings.Any(entry => entry.Contains(RewireAfterDomainReloadWarningMarker)),
+                Is.False,
+                string.Join(" | ", response.Warnings));
+        }
+
+        private const string RewireAfterDomainReloadWarningMarker = "wire them again";
+
+        private static HotReloadOrchestratorResult CreateResultWithAddedFields()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Added("Ns.Host.Tick()", "Assets/Host.cs"),
+                    HotReloadMethodOutcome.Added("Ns.Other.Run()", "Assets/Other.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 2,
+                addedFields: new[] { "Ns.Host.Speed", "Ns.Other.Count" });
+        }
+
+        /// <summary>
         /// What: BuildApplyResponse copies the live added-field ledger count onto AddedFieldTotal.
         /// </summary>
         [Test]

@@ -262,6 +262,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "serialize until 'uloop compile': {0}. To put a value in one now, follow "
             + "references/added-field-wiring.md in the uloop-hot-reload skill.";
 
+        // Why name the fields: the domain reload dropped the values an earlier run wired into
+        // them, and nothing else in the response says the wiring has to be done again.
+        public const string RewireAfterDomainReloadWarningFormat =
+            "These added fields were active before the last domain reload, and the values wired "
+            + "into them then are gone; wire them again before code that reads them runs: {0}.";
+
         // Why a warning rather than a re-run of the initializer: a stored value cannot be told
         // apart from one the edited code assigned, so re-running would overwrite live state. The
         // run reports the mismatch instead, because nothing else in the response shows it.

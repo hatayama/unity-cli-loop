@@ -92,7 +92,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             GetServices?.Invoke().Domain.CompanionSources.Clear();
         }
 
-        internal static void NotifyApplyRecovered(
+        /// <summary>
+        /// Removes what this apply brought back from the ledgers and returns the identities the
+        /// ledger held, which are the changes a domain reload had discarded.
+        /// </summary>
+        internal static IReadOnlyList<string> NotifyApplyRecovered(
             IReadOnlyList<HotReloadMethodOutcome> methods,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes)
         {
@@ -127,7 +131,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outcome.MetadataName));
             }
 
+            List<string> heldIdentities = ListHeldByLedger(recoveredIdentities);
             RemoveFromLedgers(recoveredIdentities);
+            return heldIdentities;
+        }
+
+        // Why only the held ones: a change this run made for the first time was never discarded
+        // by a domain reload, so the caller must not treat it as recovered state.
+        private static List<string> ListHeldByLedger(IReadOnlyList<string> identities)
+        {
+            HashSet<string> held = new HashSet<string>(
+                HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                StringComparer.Ordinal);
+            List<string> heldIdentities = new List<string>();
+            for (int index = 0; index < identities.Count; index++)
+            {
+                if (held.Contains(identities[index]))
+                {
+                    heldIdentities.Add(identities[index]);
+                }
+            }
+
+            return heldIdentities;
         }
 
         // Why only the owner-file ledger takes the surviving types: the identity ledger reports
