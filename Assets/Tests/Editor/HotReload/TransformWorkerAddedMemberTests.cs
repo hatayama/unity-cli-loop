@@ -205,6 +205,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the receiver check inserted at the top of a block-bodied added instance method
+        /// maps to the method's declaration line, so a null receiver's stack frame points there
+        /// rather than at a line the enclosing mapping happens to reach.
+        /// </summary>
+        [Test]
+        public async Task Emit_BlockBodiedAddedInstanceMethod_ReceiverCheckMapsToTheDeclarationLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedBlock(int value)\n        {\n            int doubled = value * 2;\n"
+                + "            return doubled;\n        }");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithBlockBodiedAddedMethod.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedBlock"), Is.Not.Null);
+
+            string shimSource = result.Output.shimSource;
+            int guardIndex = shimSource.IndexOf(
+                "throw new global::System.NullReferenceException",
+                StringComparison.Ordinal);
+            Assert.That(guardIndex, Is.GreaterThan(0), shimSource);
+            int guardLineStart = shimSource.LastIndexOf('\n', guardIndex) + 1;
+            int directiveIndex = shimSource.LastIndexOf("#line ", guardIndex, StringComparison.Ordinal);
+            Assert.That(directiveIndex, Is.GreaterThanOrEqualTo(0), shimSource);
+            int directiveEnd = shimSource.IndexOf('\n', directiveIndex);
+            Assert.That(
+                shimSource.Substring(directiveIndex, directiveEnd - directiveIndex),
+                Is.EqualTo(
+                    "#line " + FindLineNumberContaining(edited, "public int AddedBlock(")
+                    + " \"" + HostProjectRelativePath + "\""),
+                shimSource);
+            Assert.That(
+                shimSource.Substring(directiveEnd, guardLineStart - directiveEnd).Trim(),
+                Is.Empty,
+                "The directive must sit right before the receiver check.\n" + shimSource);
+        }
+
+        /// <summary>
         /// What: implicit-this, explicit-this, receiver-expression, and static added-method calls
         /// plus mutual and recursive added-method calls are rewritten to the shim static form.
         /// </summary>
