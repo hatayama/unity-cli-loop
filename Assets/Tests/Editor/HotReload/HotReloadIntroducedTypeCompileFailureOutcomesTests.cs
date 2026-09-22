@@ -228,10 +228,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 rows[0].Reason,
                 Does.EndWith(
-                    "One or more of the missing members were added by hot reload (Added rows) and "
-                    + "are not visible to the compilation of an introduced type, which compiles "
-                    + "against the compiled assemblies only. Run 'uloop compile' to make the added "
-                    + "members compiled, then rerun."));
+                    "One or more of the missing members share a name with a hot reload addition, "
+                    + "from this reload or an earlier one. If the missing member is that addition, "
+                    + "an introduced type cannot see it: it compiles against the compiled "
+                    + "assemblies and earlier introduced types only, so reloading the addition "
+                    + "first does not help. Run 'uloop compile' to make the added members "
+                    + "compiled, then rerun."));
         }
 
         /// <summary>
@@ -259,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Other" });
 
             Assert.That(rows, Has.Count.EqualTo(1));
-            Assert.That(rows[0].Reason, Does.Not.Contain("added by hot reload"));
+            Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));
         }
 
         /// <summary>
@@ -344,7 +346,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Clear" });
 
             Assert.That(rows, Has.Count.EqualTo(1));
-            Assert.That(rows[0].Reason, Does.Not.Contain("added by hot reload"));
+            Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));
         }
 
         private static HotReloadIntroducedTypeDescriptor CreateDescriptor(
