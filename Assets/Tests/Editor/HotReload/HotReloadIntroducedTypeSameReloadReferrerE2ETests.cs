@@ -234,9 +234,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(CountFailures(memberAdded), Is.EqualTo(0), DescribeOutcomes(memberAdded));
                 Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), DescribeOutcomes(memberAdded));
 
-                HotReloadOrchestratorResult factoryOnly = await RunLeavingValueUnlistedAsync(
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
                     callerPath,
-                    valueWithPong,
+                    Owners(valueWithPong, null),
+                    NoListedOwnerPaths,
                     BuildFactorySource(DefaultMakeBody),
                     "new " + FactorySimpleName + "().Make().Ping()",
                     "AppliedFactoryOnly");
@@ -252,6 +253,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(description, Does.Not.Contain("first without the change to"), description);
                 Assert.That(description, Does.Contain(AppliedChangesOnlyPhrase), description);
                 Assert.That(description, Does.Contain("uloop compile"), description);
+                Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), "A refused run must leave the previous patch in place.");
+            });
+        }
+
+        /// <summary>
+        /// What: when a retained type restored to the body it was introduced with also returns the
+        /// introduced type whose changes earlier reloads applied, the refusal for a new type
+        /// returning it names the retained type too
+        /// and tells the reader to edit it in the same reload as well, because moving the use into
+        /// the new type's bodies alone would leave the next reload refusing for the retained type.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeReturningAnIntroducedTypeWhoseAdditionAnEarlierReloadAppliedBesideARetainedReferrer_NamesTheRetainedTypeToEditToo()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                Dictionary<string, string> introducingOwners = Owners(BuildValueSource(NoExtraMembers), null);
+                introducingOwners[KeeperOwnerPath] = BuildReturningTypeSource(KeeperSimpleName, DefaultMakeBody);
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    callerPath,
+                    introducingOwners,
+                    "new " + KeeperSimpleName + "().Make().Ping()",
+                    "AppliedKeeperIntroducing");
+                Assert.That(CountFailures(introducing), Is.EqualTo(0), DescribeOutcomes(introducing));
+
+                string valueWithPong = BuildValueSource(PongMember);
+                string editedKeeper = BuildReturningTypeSource(KeeperSimpleName, EditedMakeBody);
+                Dictionary<string, string> memberAddedOwners = Owners(valueWithPong, null);
+                memberAddedOwners[KeeperOwnerPath] = editedKeeper;
+                HotReloadOrchestratorResult memberAdded = await RunAsync(
+                    callerPath,
+                    memberAddedOwners,
+                    "new " + KeeperSimpleName + "().Make().Pong()",
+                    "AppliedKeeperMemberAdded");
+                Assert.That(CountFailures(memberAdded), Is.EqualTo(0), DescribeOutcomes(memberAdded));
+                Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), DescribeOutcomes(memberAdded));
+
+                // Restoring the body the first reload introduced makes the retained type match its
+                // artifact again, so it is bound from there instead of being rebuilt from source.
+                Dictionary<string, string> factoryOwners = Owners(valueWithPong, null);
+                factoryOwners[KeeperOwnerPath] = BuildReturningTypeSource(KeeperSimpleName, DefaultMakeBody);
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
+                    callerPath,
+                    factoryOwners,
+                    new[] { KeeperOwnerPath },
+                    BuildFactorySource(DefaultMakeBody),
+                    "new " + FactorySimpleName + "().Make().Ping()",
+                    "AppliedKeeperFactoryOnly");
+
+                string description = DescribeOutcomes(factoryOnly);
+                Assert.That(CountFailures(factoryOnly), Is.GreaterThan(0), description);
+                Assert.That(description, Does.Contain(AppliedChangesOnlyPhrase), description);
+                Assert.That(
+                    description,
+                    Does.Contain("'" + KeeperMetadataName + "', which an earlier reload retained"),
+                    description);
+                Assert.That(description, Does.Contain("also edit '" + KeeperMetadataName + "'"), description);
                 Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), "A refused run must leave the previous patch in place.");
             });
         }
@@ -288,9 +348,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + DescribeOutcomes(partlySkipped));
                 Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), DescribeOutcomes(partlySkipped));
 
-                HotReloadOrchestratorResult factoryOnly = await RunLeavingValueUnlistedAsync(
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
                     callerPath,
-                    valueWithPongAndGeneric,
+                    Owners(valueWithPongAndGeneric, null),
+                    NoListedOwnerPaths,
                     BuildFactorySource(DefaultMakeBody),
                     "new " + FactorySimpleName + "().Make().Ping()",
                     "PartialFactoryOnly");
@@ -333,9 +394,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "BodyOnlyMemberAdded");
                 Assert.That(CountFailures(memberAdded), Is.EqualTo(0), DescribeOutcomes(memberAdded));
 
-                HotReloadOrchestratorResult factoryOnly = await RunLeavingValueUnlistedAsync(
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
                     callerPath,
-                    valueWithPong,
+                    Owners(valueWithPong, null),
+                    NoListedOwnerPaths,
                     BuildBodyOnlyFactorySource(),
                     "new " + FactorySimpleName + "().MakePing()",
                     "BodyOnlyFactoryOnly");
@@ -350,12 +412,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
-        // The value type's file stays out of the requested paths, so only the sibling re-apply
-        // brings it in, the way a reload naming just the new file does. Its content stays in the
-        // override map because the file never exists on disk.
-        private static Task<HotReloadOrchestratorResult> RunLeavingValueUnlistedAsync(
+        private static readonly string[] NoListedOwnerPaths = new string[0];
+
+        // Owner files outside listedOwnerPaths stay out of the requested paths, so only the
+        // sibling re-apply brings them in, the way a reload naming just the new file does. Their
+        // content stays in the override map because the files never exist on disk.
+        private static Task<HotReloadOrchestratorResult> RunWithNewFactoryAsync(
             string callerPath,
-            string valueSource,
+            Dictionary<string, string> ownerSources,
+            string[] listedOwnerPaths,
             string factorySource,
             string callerExpression,
             string label)
@@ -365,16 +430,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "SameReloadCaller" + label + ".cs",
                     CallExpression(File.ReadAllText(callerPath), callerExpression)),
-                [ValueOwnerPath] = HotReloadTestSourceWriter.WriteEditedSource(
-                    Path.GetFileNameWithoutExtension(ValueOwnerPath) + label + ".cs",
-                    valueSource),
                 [FactoryOwnerPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     Path.GetFileNameWithoutExtension(FactoryOwnerPath) + label + ".cs",
                     factorySource)
             };
+            foreach (KeyValuePair<string, string> owner in ownerSources)
+            {
+                edits[owner.Key] = HotReloadTestSourceWriter.WriteEditedSource(
+                    Path.GetFileNameWithoutExtension(owner.Key) + label + ".cs",
+                    owner.Value);
+            }
 
+            List<string> paths = new List<string> { callerPath, FactoryOwnerPath };
+            paths.AddRange(listedOwnerPaths);
             return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                new[] { callerPath, FactoryOwnerPath },
+                paths.ToArray(),
                 contentPathOverride: null,
                 CancellationToken.None,
                 edits);

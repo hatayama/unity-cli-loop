@@ -48,7 +48,7 @@ internal static class RetainedTypeSignatureReferenceFinder
             List<string> sameRunReferrers = referrers.FindAll(referrer => preparedReferrers.Contains(referrer));
             if (sameRunReferrers.Count > 0 && verdict.HoldsOnlyAppliedChanges)
             {
-                return FormatAppliedChangesReferrerRefusal(verdict.MetadataName, sameRunReferrers);
+                return FormatAppliedChangesReferrerRefusal(verdict.MetadataName, retainedReferrers, sameRunReferrers);
             }
 
             if (sameRunReferrers.Count > 0)
@@ -114,11 +114,23 @@ internal static class RetainedTypeSignatureReferenceFinder
     // Why the two steps are not offered here: they begin with a reload without the change, and
     // this reload holds none. What is kept in the source is what earlier reloads added, and a new
     // type is compiled against the type those reloads first loaded, which never holds it, so no
-    // order of reloads can join the two before a compile.
-    private static string FormatAppliedChangesReferrerRefusal(string metadataName, List<string> sameRunReferrers)
+    // order of reloads can join the two before a compile. Why a retained referrer changes the
+    // alternative: once the new type names the changed one only inside its bodies, the next reload
+    // still refuses for the retained type unless that reload edits it as well.
+    private static string FormatAppliedChangesReferrerRefusal(
+        string metadataName,
+        List<string> retainedReferrers,
+        List<string> sameRunReferrers)
     {
         string sameRunList = FormatNameList(sameRunReferrers);
+        string retainedClause = retainedReferrers.Count == 0
+            ? string.Empty
+            : FormatNameList(retainedReferrers) + ", which an earlier reload retained and this edit leaves unchanged, and of ";
+        string retainedEdit = retainedReferrers.Count == 0
+            ? string.Empty
+            : " and also edit " + FormatNameList(retainedReferrers) + " in this same reload (a method body change is enough)";
         return "Introduced type '" + metadataName + "' appears in member signatures of "
+            + retainedClause
             + sameRunList
             + ", introduced by this reload from a new file. The source of '"
             + metadataName
@@ -131,7 +143,9 @@ internal static class RetainedTypeSignatureReferenceFinder
             + metadataName
             + "' only inside method bodies of "
             + sameRunList
-            + " rather than in its member signatures.";
+            + " rather than in its member signatures"
+            + retainedEdit
+            + ".";
     }
 
     private static string FormatNameList(List<string> names)

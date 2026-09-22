@@ -50,6 +50,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public const string ReferrerMetadataName = "Example.RetainedFactory";
 
+        public const string PreparedReferrerMetadataName = "Example.PreparedFactory";
+
+        // The new file the prepared type comes from is not part of the edited sources, because
+        // the run under test only carries the artifact that file produced.
+        private const string PreparedReferrerProjectRelativePath = "Assets/RetainedDeclaration/Prepared.cs";
+
         private HotReloadRetainedArtifactFixture(
             string sourcePath,
             string projectRelativePath,
@@ -317,6 +323,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return artifact;
         }
 
+        /// <summary>
+        /// An artifact this run prepared, holding a new type whose public method returns the
+        /// retained type, so a test can put a referrer introduced by this reload next to one an
+        /// earlier reload retained.
+        /// </summary>
+        public TransformWorkerIntroducedTypeArtifactDto CreatePreparedReferrerArtifact()
+        {
+            string path = Path.Combine(Path.GetDirectoryName(ArtifactPath), "PreparedArtifact.dll");
+            CreatePreparedReferrerAssembly(path, ArtifactPath);
+            return new TransformWorkerIntroducedTypeArtifactDto
+            {
+                assemblyFullName = ReadAssemblyFullName(path),
+                referencePath = path,
+                preparedByThisRun = true,
+                types = new[]
+                {
+                    new TransformWorkerIntroducedTypeArtifactTypeDto
+                    {
+                        metadataName = PreparedReferrerMetadataName,
+                        originalAssemblyName = TargetAssemblyName,
+                        originalAssemblyMvid = TargetAssemblyMvid,
+                        ownerProjectRelativePath = PreparedReferrerProjectRelativePath,
+                        declarationFingerprint = RestrictedDeclarationFingerprint
+                    }
+                }
+            };
+        }
+
         private static string ReadAssemblySimpleName(string path)
         {
             using (AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(path))
@@ -520,6 +554,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             assembly.MainModule.Types.Add(referrer);
+        }
+
+        // The new type lives in an artifact of its own, as a type this run prepares from a new
+        // file does, and names the retained definition through a reference to the retained one.
+        private static void CreatePreparedReferrerAssembly(string path, string retainedArtifactPath)
+        {
+            AssemblyNameDefinition assemblyName = new AssemblyNameDefinition("PreparedArtifact", new Version(1, 0, 0, 0));
+            using (AssemblyDefinition retainedAssembly = AssemblyDefinition.ReadAssembly(retainedArtifactPath))
+            using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(assemblyName, "PreparedArtifact", ModuleKind.Dll))
+            {
+                TypeReference retained = assembly.MainModule.ImportReference(
+                    retainedAssembly.MainModule.GetType(RetainedMetadataName));
+                TypeDefinition referrer = new TypeDefinition(
+                    "Example",
+                    "PreparedFactory",
+                    CecilTypeAttributes.Public | CecilTypeAttributes.Class,
+                    assembly.MainModule.TypeSystem.Object);
+                AddConstructor(assembly, referrer, CecilMethodAttributes.Public);
+                MethodDefinition make = new MethodDefinition(
+                    "Make",
+                    CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig,
+                    retained);
+                ILProcessor makeProcessor = make.Body.GetILProcessor();
+                makeProcessor.Append(makeProcessor.Create(OpCodes.Ldnull));
+                makeProcessor.Append(makeProcessor.Create(OpCodes.Ret));
+                referrer.Methods.Add(make);
+                assembly.MainModule.Types.Add(referrer);
+                assembly.Write(path);
+            }
         }
 
         // The bodies are never executed: the artifact is only ever read as metadata, so a bare

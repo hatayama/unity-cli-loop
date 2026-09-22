@@ -197,6 +197,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntries(result, RetainedTypeMetadataName, "Compute"), Is.Empty);
         }
 
+        /// <summary>
+        /// What: when a type this reload introduces and a type an earlier reload retained both name
+        /// a retained type whose source holds only what earlier reloads applied, the refusal names
+        /// the retained referrer too and says to edit it in the same reload, because naming the
+        /// changed type only inside the new type's bodies would still leave the retained one split.
+        /// </summary>
+        [Test]
+        public async Task Transform_AppliedOnlyRetainedTypeNamedByANewAndARetainedReferrer_NamesTheRetainedReferrerToEdit()
+        {
+            HotReloadRetainedArtifactFixture fixture = await HotReloadRetainedArtifactFixture.CreateWithReferrerAsync(
+                "AppliedOnlyMixedReferrers",
+                RetainedSource,
+                RetainedArtifactReferrerShape.PublicReturnType);
+            File.WriteAllText(fixture.SourcePath, WithAddedMethod(RetainedSource));
+            TransformWorkerIntroducedTypeArtifactDto retainedArtifact =
+                fixture.CreateRecordedArtifactWithReferrer(fixture.RetainedFingerprint, UnplannedReferrerFingerprint);
+            retainedArtifact.types[0].ownerAppliedSourceHash =
+                new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(fixture.SourcePath));
+
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                fixture.BuildTransformInput(new[] { retainedArtifact, fixture.CreatePreparedReferrerArtifact() }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("holds only what earlier reloads added to or edited in it"));
+            Assert.That(
+                result.ErrorMessage,
+                Does.Contain("'" + HotReloadRetainedArtifactFixture.ReferrerMetadataName + "', which an earlier reload retained"));
+            Assert.That(
+                result.ErrorMessage,
+                Does.Contain("'" + HotReloadRetainedArtifactFixture.PreparedReferrerMetadataName + "', introduced by this reload"));
+            Assert.That(
+                result.ErrorMessage,
+                Does.Contain("also edit '" + HotReloadRetainedArtifactFixture.ReferrerMetadataName + "' in this same reload"));
+        }
+
         private static void AssertRefusedNamingTheReferrer(TransformWorkerClientResult result)
         {
             Assert.That(result.Success, Is.False);
