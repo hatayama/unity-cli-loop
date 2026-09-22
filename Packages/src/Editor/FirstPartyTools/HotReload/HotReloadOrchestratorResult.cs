@@ -25,6 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<string> ReappliedSiblingPaths { get; }
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
+        // How many of Warnings are type notices, each saying its type needs a compile.
+        public int IntroducedTypeNoticeCount { get; }
+
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
             IReadOnlyList<string> warnings,
@@ -39,7 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldSyncResult autoRefreshHold = null,
             IReadOnlyList<string> reappliedSiblingPaths = null,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
-            bool autoRefreshHoldNewlyArmed = false)
+            bool autoRefreshHoldNewlyArmed = false,
+            int introducedTypeNoticeCount = 0)
         {
             Methods = methods;
             Warnings = warnings;
@@ -61,6 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 autoRefreshHold != null ? autoRefreshHold.SceneRefreshWarning : null;
             ReappliedSiblingPaths = reappliedSiblingPaths ?? Array.Empty<string>();
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
+            IntroducedTypeNoticeCount = introducedTypeNoticeCount;
         }
     }
 }

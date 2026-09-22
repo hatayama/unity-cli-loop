@@ -49,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     string.IsNullOrEmpty(notice.OwnerProjectRelativePath)
                         ? notice.Text
                         : notice.OwnerProjectRelativePath + ": " + notice.Text);
+                carrier.Sinks.IntroducedTypeNoticeCount++;
             }
         }
 
