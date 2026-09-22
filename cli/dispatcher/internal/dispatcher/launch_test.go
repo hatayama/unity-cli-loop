@@ -1742,3 +1742,20 @@ func TestRunLaunchRestartDoesNotUseIpcProbeFallback(t *testing.T) {
 		t.Fatalf("expected failure, got %d stdout=%s", code, stdout.String())
 	}
 }
+
+// Verifies the Linux Editor candidate points at the Unity Hub install under the home directory.
+func TestLinuxUnityExecutableCandidatesUseUnityHubUnderHome(t *testing.T) {
+	candidates := linuxUnityExecutableCandidates("6000.0.1f1", "/home/tester")
+	expected := []string{"/home/tester/Unity/Hub/Editor/6000.0.1f1/Editor/Unity"}
+	if len(candidates) != len(expected) || candidates[0] != expected[0] {
+		t.Fatalf("candidates mismatch: %#v", candidates)
+	}
+}
+
+// Verifies no Linux Editor candidate is produced when the home directory is unknown, so no relative path is searched.
+func TestLinuxUnityExecutableCandidatesAreEmptyWithoutHome(t *testing.T) {
+	candidates := linuxUnityExecutableCandidates("6000.0.1f1", "")
+	if len(candidates) != 0 {
+		t.Fatalf("expected no candidates, got %#v", candidates)
+	}
+}
