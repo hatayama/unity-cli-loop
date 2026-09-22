@@ -51,8 +51,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         : notice.OwnerProjectRelativePath + ": " + notice.Text);
                 carrier.Sinks.IntroducedTypeNoticeCount++;
                 // Why only when the carrier is the named file: an unattributed notice travels on the
-                // first file of the group without being about it.
-                if (string.Equals(carrier.ProjectRelativePath, notice.OwnerProjectRelativePath, StringComparison.Ordinal))
+                // first file of the group without being about it. Why only a declaration notice: a
+                // run-scoped one lands on every parsed file, including files that declare no type.
+                if (notice.NamesDeclaration
+                    && string.Equals(carrier.ProjectRelativePath, notice.OwnerProjectRelativePath, StringComparison.Ordinal))
                 {
                     carrier.DeclaresRefusedIntroducedType = true;
                 }

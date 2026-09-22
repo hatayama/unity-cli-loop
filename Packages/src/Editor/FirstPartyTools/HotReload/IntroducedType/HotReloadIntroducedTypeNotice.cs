@@ -10,13 +10,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </remarks>
     internal sealed class HotReloadIntroducedTypeNotice
     {
-        internal HotReloadIntroducedTypeNotice(string ownerProjectRelativePath, string text)
+        internal HotReloadIntroducedTypeNotice(string ownerProjectRelativePath, string text, bool namesDeclaration)
         {
             OwnerProjectRelativePath = ownerProjectRelativePath ?? string.Empty;
             Text = text ?? string.Empty;
+            NamesDeclaration = namesDeclaration;
         }
 
         internal string OwnerProjectRelativePath { get; }
+
+        /// <summary>
+        /// Whether the notice is about a declaration in its owner file. A diagnostic about the
+        /// whole run is attached to every file the worker parsed, so its owner declares nothing
+        /// the notice refuses.
+        /// </summary>
+        internal bool NamesDeclaration { get; }
 
         internal string Text { get; }
     }

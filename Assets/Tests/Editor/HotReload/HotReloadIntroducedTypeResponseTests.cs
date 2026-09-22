@@ -674,7 +674,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             {
                                 new HotReloadIntroducedTypeNotice(
                                     "Assets/Example.cs",
-                                    InjectedNoticeText)
+                                    InjectedNoticeText,
+                                    namesDeclaration: true)
                             }))))
                 {
                     HotReloadResponse response = await RunAgainstTheHostAsync();
