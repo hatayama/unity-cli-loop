@@ -1554,6 +1554,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an enum member added in the same reload as a body that names it fails that body
+        /// with CS0117, and the warning says the member is not folded and names the cast rewrite
+        /// instead of claiming this run needs no compile.
+        /// </summary>
+        [Test]
+        public async Task Run_EnumMemberAddedWithReferencingBody_FailsAndWarnsWithCastRewrite()
+        {
+            using (MutateSiblingEnumToAddMemberAndUseIt())
+            {
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { ResolveSiblingEnumDefinitionsPath(), ResolveSiblingEnumUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertHasFailed(result, "ReadSiblingEnum");
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(ExpectedAddedSiblingEnumMemberWarning),
+                    "Expected the added-enum-member warning.\n" + string.Join("\n", result.Warnings));
+                Assert.That(
+                    result.Warnings,
+                    Has.None.Contains("needs no compile"),
+                    "An added enum member must not be reported as needing no compile.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
         /// What: passing the holder first, then the referencing file, still emits the sibling
         /// const-drift warning once (reversed input order of the holder+user case).
         /// </summary>
@@ -8467,6 +8495,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     compiledDeclaration,
                     compiledDeclaration + "\n        public const int AddedSiblingTuning = 9;"));
             return new FileRestoreScope(new[] { path }, new[] { original });
+        }
+
+        private static string ResolveSiblingEnumDefinitionsPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSiblingEnumDefinitions.cs");
+            Assert.That(File.Exists(path), Is.True, "Sibling enum fixture missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSiblingEnumUserPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSiblingEnumUser.cs");
+            Assert.That(File.Exists(path), Is.True, "Sibling enum user fixture missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private const string ExpectedAddedSiblingEnumMemberWarning =
+            "enum member io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum.Third exists only in the edited source, not in the compiled assembly. Hot reload does not fold an added enum member into patched bodies, so every body that names it fails shim compilation (CS0117), including bodies in this reload's files. Write the underlying value as a cast instead ('(io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum)3'; ToString() then prints the number, not the name), or run 'uloop compile' to add the member.";
+
+        private static IDisposable MutateSiblingEnumToAddMemberAndUseIt()
+        {
+            string definitionsPath = ResolveSiblingEnumDefinitionsPath();
+            string userPath = ResolveSiblingEnumUserPath();
+            string originalDefinitions = File.ReadAllText(definitionsPath);
+            string originalUser = File.ReadAllText(userPath);
+            string compiledMember = "Second = 2";
+            string compiledUse = "(int)HotReloadSiblingEnum.Second";
+            Assert.That(
+                originalDefinitions.Contains(compiledMember) && originalUser.Contains(compiledUse),
+                Is.True,
+                "Precondition: compiled sibling enum fixtures must still be on disk.");
+            EditorApplication.LockReloadAssemblies();
+            File.WriteAllText(
+                definitionsPath,
+                originalDefinitions.Replace(compiledMember, compiledMember + ",\n        Third = 3"));
+            File.WriteAllText(
+                userPath,
+                originalUser.Replace(compiledUse, "(int)HotReloadSiblingEnum.Third"));
+            return new FileRestoreScope(
+                new[] { definitionsPath, userPath },
+                new[] { originalDefinitions, originalUser });
         }
 
         private static IDisposable TouchSmallestSiblingsWithTrailingComment(

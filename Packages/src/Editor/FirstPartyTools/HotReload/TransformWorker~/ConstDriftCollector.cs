@@ -20,6 +20,12 @@ internal static class ConstDriftCollector
     internal const string NewConstWarningFormat =
         "const {0} exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run already have its value folded in, so this run needs no compile; only bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' when one of those files has to see it.";
 
+    // Why a separate wording: patched bodies fold an added const, but an added enum member is
+    // bound as a member access on the compiled enum, so it fails shim compilation even in this
+    // reload's files and the "needs no compile" sentence would be false.
+    internal const string NewEnumMemberWarningFormat =
+        "enum member {0} exists only in the edited source, not in the compiled assembly. Hot reload does not fold an added enum member into patched bodies, so every body that names it fails shim compilation (CS0117), including bodies in this reload's files. Write the underlying value as a cast instead ('({1}){2}'; ToString() then prints the number, not the name), or run 'uloop compile' to add the member.";
+
     internal const string ChangedConstWarningFormat =
         "const {0} is {1} in the edited source but {2} in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with {1} yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change.";
 
@@ -86,11 +92,7 @@ internal static class ConstDriftCollector
                 string constDisplayName = sourceType.ToDisplayString() + "." + sourceField.Name;
                 if (compiledField == null)
                 {
-                    warnings.Add(
-                        string.Format(
-                            CultureInfo.InvariantCulture,
-                            NewConstWarningFormat,
-                            constDisplayName));
+                    warnings.Add(FormatNewConstWarning(sourceType, sourceField, constDisplayName));
                     continue;
                 }
 
@@ -110,6 +112,35 @@ internal static class ConstDriftCollector
         }
 
         return warnings;
+    }
+
+    /// <summary>
+    /// Builds the warning for a const that exists only in the edited source, choosing the enum
+    /// member wording when the declaring type is an enum.
+    /// </summary>
+    private static string FormatNewConstWarning(
+        INamedTypeSymbol sourceType,
+        IFieldSymbol sourceField,
+        string constDisplayName)
+    {
+        if (sourceType.TypeKind != TypeKind.Enum)
+        {
+            return string.Format(CultureInfo.InvariantCulture, NewConstWarningFormat, constDisplayName);
+        }
+
+        // Why the parentheses: '(E)-1' parses as a subtraction when E is not a keyword type.
+        string underlyingValue = FormatConstValue(sourceField.ConstantValue);
+        if (underlyingValue.StartsWith("-", StringComparison.Ordinal))
+        {
+            underlyingValue = "(" + underlyingValue + ")";
+        }
+
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            NewEnumMemberWarningFormat,
+            constDisplayName,
+            sourceType.ToDisplayString(),
+            underlyingValue);
     }
 
     /// <summary>
