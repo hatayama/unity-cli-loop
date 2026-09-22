@@ -90,19 +90,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why a Skipped or Failed row wins over every other row: the file then holds an edit that
         // is not loaded, whatever else applied. Why an AlreadyActive row keeps the record: it comes
         // only from the unchanged-source short-circuit, which matched that very record.
-        // Why a Stale row forgets the record: the row keeps a patch for a method the source no
-        // longer declares, and the file is not yet recorded as holding only what is loaded.
+        // Why a Stale row counts as applied: it only keeps the patch of a method the current
+        // bytes no longer declare, so those bytes are what the file has loaded. Forgetting the
+        // record would leave the file out of a later reload that needs a member it added.
         private static HotReloadAppliedSourceRecordKind ClassifyRows(IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             bool hasUnapplied = false;
             bool hasAlreadyActive = false;
-            bool hasStale = false;
             for (int index = 0; index < outcomes.Count; index++)
             {
                 switch (outcomes[index].Kind)
                 {
                     case HotReloadMethodOutcomeKind.Patched:
                     case HotReloadMethodOutcomeKind.Added:
+                    case HotReloadMethodOutcomeKind.Stale:
                         break;
                     case HotReloadMethodOutcomeKind.Skipped:
                     case HotReloadMethodOutcomeKind.Failed:
@@ -110,9 +111,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         break;
                     case HotReloadMethodOutcomeKind.AlreadyActive:
                         hasAlreadyActive = true;
-                        break;
-                    case HotReloadMethodOutcomeKind.Stale:
-                        hasStale = true;
                         break;
                     default:
                         throw new InvalidOperationException(
@@ -125,13 +123,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadAppliedSourceRecordKind.PartiallyApplied;
             }
 
-            if (hasAlreadyActive)
-            {
-                return HotReloadAppliedSourceRecordKind.Keep;
-            }
-
-            return hasStale
-                ? HotReloadAppliedSourceRecordKind.Forget
+            return hasAlreadyActive
+                ? HotReloadAppliedSourceRecordKind.Keep
                 : HotReloadAppliedSourceRecordKind.FullyApplied;
         }
     }
