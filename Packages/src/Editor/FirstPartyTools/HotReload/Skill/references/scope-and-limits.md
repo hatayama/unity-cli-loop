@@ -114,7 +114,9 @@ A member added to a compiled enum is out of scope too: it is not folded like an 
 reload. Write the underlying value as a cast (`(MyEnum)3`) or run `uloop compile`.
 This holds for a type the reload introduces as well: its compile fails, the failure
 reason says the name is an enum member this reload adds, and the enum-member and
-changed-`const` warnings stay in `Warnings` even though that failure stops the file.
+changed-`const` warnings of the files passed to that reload stay in `Warnings` even though
+that failure stops the file. The drift of a changed sibling file that was not passed is not
+reported on this failure path.
 
 An added property applies unless its shape is listed below. A bodied getter or setter is
 emitted like an added method;
