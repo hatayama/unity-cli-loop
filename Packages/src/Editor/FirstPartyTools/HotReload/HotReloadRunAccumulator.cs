@@ -118,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 fileResult.SourceContentSha256,
                 fileResult.Outcomes,
+                fileResult.AppliedAddedFieldsOrConsts,
                 fileResult.NewSourceMembershipEvidence);
             _siblingLedgerUpdates.Observe(projectRelativePath, fileResult);
         }

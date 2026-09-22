@@ -266,12 +266,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths;
         }
 
+        // Why added fields count here but not in AddedMemberCount: a field lives only in its file's
+        // edited source, so a later reload that reads it needs the file back, while the active
+        // change counts behind --status and the Auto Refresh hold track methods only.
         internal IReadOnlyList<string> ListPathsWithActiveAddedMembers()
         {
             List<string> paths = new List<string>();
             foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
             {
-                if (pair.Value.AddedMemberCount > 0)
+                if (pair.Value.AddedMemberCount > 0 || pair.Value.HasAddedFields)
                 {
                     paths.Add(pair.Key);
                 }

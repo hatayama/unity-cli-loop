@@ -134,6 +134,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(format, Is.EqualTo(HotReloadConstants.ActiveSiblingRebindFailedWarningFormat));
         }
 
+        /// <summary>
+        /// What: a sibling that wrote no row but applied an added field was re-applied, so no
+        /// warning format is selected and the reload counts it as a change.
+        /// </summary>
+        [Test]
+        public void SelectUnappliedWarningFormat_NoRowsButAnAddedField_ReturnsNullAndCountsAsApplied()
+        {
+            HotReloadFileProcessResult result = new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedCount: 0,
+                addedFieldNames: new[] { "Sibling.AddedTable" });
+
+            Assert.That(HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(result), Is.Null);
+            Assert.That(HotReloadSiblingRebindWarningSelector.AppliedAnyChange(result), Is.True);
+        }
+
+        /// <summary>
+        /// What: a sibling that wrote no row but applied an added const was re-applied, so no
+        /// warning format is selected and the reload counts it as a change.
+        /// </summary>
+        [Test]
+        public void SelectUnappliedWarningFormat_NoRowsButAnAddedConst_ReturnsNullAndCountsAsApplied()
+        {
+            HotReloadFileProcessResult result = new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedCount: 0,
+                addedConstNames: new[] { "Sibling.AddedLimit" });
+
+            Assert.That(HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(result), Is.Null);
+            Assert.That(HotReloadSiblingRebindWarningSelector.AppliedAnyChange(result), Is.True);
+        }
+
+        /// <summary>
+        /// What: an applied added field does not hide a Failed row, so the sibling still gets the
+        /// failed-rebind warning.
+        /// </summary>
+        [Test]
+        public void SelectUnappliedWarningFormat_AddedFieldWithAFailedRow_ReturnsTheFailedWarning()
+        {
+            HotReloadFileProcessResult result = new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome> { HotReloadMethodOutcome.Failed("Sibling.Broken", "reason", SiblingPath) },
+                new List<string>(),
+                patchedCount: 0,
+                addedFieldNames: new[] { "Sibling.AddedTable" });
+
+            Assert.That(
+                HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(result),
+                Is.EqualTo(HotReloadConstants.ActiveSiblingRebindFailedWarningFormat));
+        }
+
         private static HotReloadFileProcessResult CreateResult(params HotReloadMethodOutcome[] outcomes)
         {
             return CreateResultWithReverts(0, outcomes);

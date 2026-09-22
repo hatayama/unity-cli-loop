@@ -420,6 +420,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal int AddedMemberCount => _addedMembersByMethodKey.Count;
 
+        internal bool HasAddedFields => _addedFields.HasFields;
+
         /// <summary>
         /// Whether this file still has a live patch or an added method, which is what makes its
         /// edited lines differ from the compiled line map pause points resolve against.

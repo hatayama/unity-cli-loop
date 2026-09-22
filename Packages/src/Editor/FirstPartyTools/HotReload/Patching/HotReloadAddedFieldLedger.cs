@@ -158,6 +158,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal IReadOnlyList<HotReloadSerializedAddedField> SerializedFields => _serializedFields;
 
+        internal bool HasFields => _fieldsByTypeKey.Count > 0;
+
         internal void CollectFieldsForType(string normalizedTypeName, HashSet<string> fieldNames)
         {
             Debug.Assert(fieldNames != null, "fieldNames must not be null.");
