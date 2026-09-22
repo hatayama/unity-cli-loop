@@ -76,9 +76,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly group are applied through that group's shim assembly.
         public const string NewMemberCompileHint =
             "Added members declared in the edited files of the same assembly are applied through "
-            + "the shim assembly. Members referenced from other assemblies, or from files that are "
-            + "neither passed to this reload nor already hot-reloaded, still require a real compile "
-            + "(uloop compile).";
+            + "the shim assembly. A member that another assembly declares, one declared in a file "
+            + "outside this reload that no earlier reload applied, or a kind hot reload cannot add "
+            + "(such as an added enum member) still requires a real compile (uloop compile).";
 
         public const string ActiveSiblingsRebindWarningFormat =
             "Also re-applied {0} unchanged file(s) with active patches in assembly '{1}' so their "

@@ -395,7 +395,8 @@ Wire details:
   introduced type from another assembly or through Unity, still requires `uloop compile`
   (`docs/hot-reload-introduced-types.md`). Added members referenced from another assembly or
   from a file that is neither passed to this reload nor already hot-reloaded, and changed
-  field initializers or `const` values — all require `uloop compile`.
+  field initializers or `const` values, and members added to a compiled enum (a body that
+  names one fails with CS0117 even in the same reload) — all require `uloop compile`.
   Added fields, methods, and properties themselves apply, and are visible to the bodies
   edited in any file of the same assembly passed to the same reload — including on a type an
   earlier reload introduced, where they are applied on the artifact that already carries it. An
