@@ -450,7 +450,8 @@ internal static class WorkerGroupPipeline
             AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
             IntroducedTypes = unit.IntroducedTypes.ToArray(),
             IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
-            IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray()
+            IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray(),
+            PlannedAddedMemberNames = Array.Empty<string>()
         };
     }
 }

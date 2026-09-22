@@ -96,9 +96,10 @@ passed to this reload nor already hot-reloaded; anything
 that reaches the type through Unity (serialization, `[SerializeField]`, Inspector,
 `AddComponent`, `CreateInstance`, message discovery); a method body edit of an introduced
 struct, which is `Skipped` like any struct method; a call to a member an earlier or the same
-reload *added* to a compiled type (an `Added` row), because introduced types compile against the
-compiled assemblies and retained artifacts only, so the compile fails naming the missing member;
-and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
+reload *added* to a compiled type or to an earlier introduced type, because introduced types
+compile against the compiled assemblies and retained artifacts only, so the compile fails naming
+the missing member and says it is a hot reload addition (reloading the addition first does not
+help); and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
 the exception: every active artifact is referenced by that compilation, so the snippet can name an
 introduced type directly by its full name. When such a snippet still fails on the name, the
 diagnostic's `Hint` names the type and how to spell it.

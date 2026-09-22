@@ -163,6 +163,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly for them. Reported so a reload can name the types it bound from an active
         // artifact; introducing them again is what the transform refuses.
         public TransformWorkerIntroducedTypeReuseDto[] introducedTypeReuses;
+
+        // Prepare run only: names of members the file declares on a compiled or retained type
+        // that the type does not hold yet, so a failed introduced-type compilation can tell a
+        // member this reload adds from a typo. Null/omitted deserializes as empty.
+        public string[] plannedAddedMemberNames;
     }
 
     /// <summary>

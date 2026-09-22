@@ -90,9 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         compileResult,
                         descriptors,
                         transformInput.targetAssemblyName,
-                        HotReloadActiveAddedMemberNames.Collect(
-                            collaborators.Domain.DescribeAddedMembers(),
-                            collaborators.Domain.DescribeAddedFields())),
+                        CollectAddedMemberNames(collaborators.Domain, prepareResult.Output)),
                     alreadyActiveTypes,
                     notices);
             }
@@ -103,6 +101,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     CollectOwnerSourceHashes(prepareResult.Output, descriptors)),
                 alreadyActiveTypes,
                 notices);
+        }
+
+        // Why this reload's additions as well: the introduced-type compilation runs before the
+        // transform run records them, and it cannot see them any more than an earlier reload's.
+        private static HashSet<string> CollectAddedMemberNames(
+            HotReloadDomain domain,
+            TransformWorkerOutputDto output)
+        {
+            HashSet<string> names = HotReloadActiveAddedMemberNames.Collect(
+                domain.DescribeAddedMembers(),
+                domain.DescribeAddedFields());
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                names.UnionWith(file.plannedAddedMemberNames);
+            }
+
+            return names;
         }
 
         // Why the active artifacts as well: a declaration this run introduces may name a type an

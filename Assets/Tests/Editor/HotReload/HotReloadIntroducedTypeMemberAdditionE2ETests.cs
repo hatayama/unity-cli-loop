@@ -34,9 +34,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CompiledTypeAddedMethodName = "AddedForIntroducedType";
         private const string InvisibleAddedMemberTypeName = "HotReloadAddedMemberInvisibleIntroducedValue";
         private const string AddedMemberInvisibleHint =
-            "One or more of the missing members were added by hot reload (Added rows) and are not "
-            + "visible to the compilation of an introduced type, which compiles against the "
-            + "compiled assemblies only. Run 'uloop compile' to make the added members compiled, "
+            "One or more of the missing members are hot reload additions, from this reload or an "
+            + "earlier one, and an introduced type cannot see them: it compiles against the "
+            + "compiled assemblies and earlier introduced types only, so reloading the addition "
+            + "first does not help. Run 'uloop compile' to make the added members compiled, "
             + "then rerun.";
 
         // The method the first reload adds to a compiled type. It exists only in that reload's

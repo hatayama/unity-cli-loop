@@ -19,12 +19,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "so this type was not introduced. Fix the failed file and rerun.";
 
         // Why this has to be spelled out: an introduced type compiles against the compiled
-        // assemblies on disk, so a member hot reload added earlier is genuinely absent there. The
-        // bare compiler error reads as a typo and sends the reader looking for one.
+        // assemblies on disk and the retained artifacts, so a member hot reload added, in this
+        // reload or an earlier one, is genuinely absent there. The bare compiler error reads as a
+        // typo and sends the reader looking for one. Why splitting is ruled out: reloading the
+        // addition first still leaves it outside both, which is the obvious retry to try.
         private const string AddedMemberInvisibleHint =
-            "One or more of the missing members were added by hot reload (Added rows) and are not "
-            + "visible to the compilation of an introduced type, which compiles against the "
-            + "compiled assemblies only. Run 'uloop compile' to make the added members compiled, "
+            "One or more of the missing members are hot reload additions, from this reload or an "
+            + "earlier one, and an introduced type cannot see them: it compiles against the "
+            + "compiled assemblies and earlier introduced types only, so reloading the addition "
+            + "first does not help. Run 'uloop compile' to make the added members compiled, "
             + "then rerun.";
 
         private const string MissingMemberErrorCode = "CS1061:";
@@ -37,11 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MissingStaticMemberErrorCode
         };
 
+        // addedMemberNames holds the members earlier reloads added and the ones this reload's
+        // sources add, so the hint covers both origins of a member the compilation cannot see.
         public static List<HotReloadIntroducedTypeOutcome> Build(
             HotReloadIntroducedTypeCompilerResult compileResult,
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
             string targetAssemblyName,
-            IReadOnlyCollection<string> activeAddedMemberNames)
+            IReadOnlyCollection<string> addedMemberNames)
         {
             List<HotReloadIntroducedTypeOutcome> rows = new List<HotReloadIntroducedTypeOutcome>();
 
@@ -68,14 +73,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 messagesByOwner,
                 emittedOwners,
                 targetAssemblyName,
-                activeAddedMemberNames,
+                addedMemberNames,
                 rows);
             AppendUnknownOwnerRows(
                 ownerOrder,
                 messagesByOwner,
                 emittedOwners,
                 targetAssemblyName,
-                activeAddedMemberNames,
+                addedMemberNames,
                 rows);
             if (unattributed.Count > 0)
             {
@@ -123,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> messagesByOwner,
             HashSet<string> emittedOwners,
             string targetAssemblyName,
-            IReadOnlyCollection<string> activeAddedMemberNames,
+            IReadOnlyCollection<string> addedMemberNames,
             List<HotReloadIntroducedTypeOutcome> rows)
         {
             foreach (HotReloadIntroducedTypeDescriptor descriptor in descriptors)
@@ -151,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     descriptor.MetadataName.Value,
                     targetAssemblyName,
                     owner,
-                    BuildReason(messages, activeAddedMemberNames)));
+                    BuildReason(messages, addedMemberNames)));
             }
         }
 
@@ -162,7 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> messagesByOwner,
             HashSet<string> emittedOwners,
             string targetAssemblyName,
-            IReadOnlyCollection<string> activeAddedMemberNames,
+            IReadOnlyCollection<string> addedMemberNames,
             List<HotReloadIntroducedTypeOutcome> rows)
         {
             foreach (string owner in ownerOrder)
@@ -176,16 +181,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     string.Empty,
                     targetAssemblyName,
                     owner,
-                    BuildReason(messagesByOwner[owner], activeAddedMemberNames)));
+                    BuildReason(messagesByOwner[owner], addedMemberNames)));
             }
         }
 
         private static string BuildReason(
             List<string> messages,
-            IReadOnlyCollection<string> activeAddedMemberNames)
+            IReadOnlyCollection<string> addedMemberNames)
         {
             string reason = ReasonPrefix + string.Join("; ", messages);
-            if (!MentionsAnActiveAddedMember(messages, activeAddedMemberNames))
+            if (!MentionsAnAddedMember(messages, addedMemberNames))
             {
                 return reason;
             }
@@ -193,11 +198,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return reason + " " + AddedMemberInvisibleHint;
         }
 
-        private static bool MentionsAnActiveAddedMember(
+        private static bool MentionsAnAddedMember(
             List<string> messages,
-            IReadOnlyCollection<string> activeAddedMemberNames)
+            IReadOnlyCollection<string> addedMemberNames)
         {
-            if (activeAddedMemberNames == null || activeAddedMemberNames.Count == 0)
+            if (addedMemberNames == null || addedMemberNames.Count == 0)
             {
                 return false;
             }
@@ -210,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 string member = FindSecondQuotedToken(message, searchStart);
-                if (member != null && Contains(activeAddedMemberNames, member))
+                if (member != null && Contains(addedMemberNames, member))
                 {
                     return true;
                 }

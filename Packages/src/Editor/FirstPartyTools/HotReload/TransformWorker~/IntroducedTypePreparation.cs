@@ -113,6 +113,7 @@ internal static class IntroducedTypePreparation
             references,
             compilation);
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
+        string[][] plannedAddedMemberNames = new string[units.Count][];
         for (int index = 0; index < units.Count; index++)
         {
             WorkerSourceUnit unit = units[index];
@@ -131,6 +132,13 @@ internal static class IntroducedTypePreparation
                         artifactMap,
                         input.Defines,
                         assemblyGlobalUsings);
+                    plannedAddedMemberNames[index] = PlannedAddedMemberNames.Collect(
+                        unit,
+                        home,
+                        compilation,
+                        artifactMap,
+                        input.TargetAssemblyName,
+                        input.TargetAssemblyMvid);
                 }
                 else
                 {
@@ -153,7 +161,8 @@ internal static class IntroducedTypePreparation
                 AddedConstNames = Array.Empty<string>(),
                 IntroducedTypes = unit.IntroducedTypes.ToArray(),
                 IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
-                IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray()
+                IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray(),
+                PlannedAddedMemberNames = plannedAddedMemberNames[index] ?? Array.Empty<string>()
             };
         }
 

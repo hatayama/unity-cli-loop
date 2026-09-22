@@ -52,4 +52,8 @@ internal sealed class WorkerFileOutput
     public WorkerReason[] IntroducedTypeDiagnostics { get; set; }
 
     public WorkerIntroducedTypeReuse[] IntroducedTypeReuses { get; set; }
+
+    // Prepare run only: names of members this source declares on a compiled or retained type
+    // that the type does not hold yet. Empty from the transform run.
+    public string[] PlannedAddedMemberNames { get; set; }
 }
