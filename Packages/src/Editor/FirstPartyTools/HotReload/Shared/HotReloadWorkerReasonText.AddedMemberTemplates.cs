@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeUnresolved,
                 Plain(
-                    "Added field type '{0}' could not be resolved; check for a missing using directive or a typo, fix the declaration, and rerun. Run 'uloop compile' if the type is new.",
+                    "Added field type '{0}' could not be resolved; check for a missing using directive or a typo, fix the declaration, and rerun. If the type is declared in a new file, pass that file to --files too (new files are not selected automatically); run 'uloop compile' only if it still does not resolve.",
                     1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldIncrementNotNumeric,
@@ -197,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AddedPropertyValueTypeUnresolved,
                 Plain(
                     "Added property type '{0}' could not be resolved; check for a missing using directive or a typo, "
-                    + "fix the declaration, and rerun. Run 'uloop compile' if the type is new.",
+                    + "fix the declaration, and rerun. If the type is declared in a new file, pass that file to --files too (new files are not selected automatically); run 'uloop compile' only if it still does not resolve.",
                     1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyValueTypeNotExternallyVisible,
