@@ -109,6 +109,9 @@ add or remove appears as a `Skipped` row. A newly added explicit event, or
 an edit before the first compile snapshot, still reports both accessors.
 Adding a type
 (`class`, `struct`, `enum`, `record`), an event, or an indexer is still out of scope.
+A member added to a compiled enum is out of scope too: it is not folded like an added
+`const`, so every body that names it fails with CS0117, including bodies in the same
+reload. Write the underlying value as a cast (`(MyEnum)3`) or run `uloop compile`.
 
 An added property applies unless its shape is listed below. A bodied getter or setter is
 emitted like an added method;
