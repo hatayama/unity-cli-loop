@@ -51,8 +51,11 @@ Every check runs before anything is stored, so a refused call leaves an earlier 
 | Static field through an instance, or the reverse | Throws, naming the call to use instead |
 | A destroyed `UnityEngine.Object` as the instance | Throws: its patched methods never run again |
 
-`TryReadInstanceField` / `TryReadStaticField` return `false` when nothing has been wired yet,
-and reading never fills the slot — the field still runs its initializer on the next access.
+`TryReadInstanceField` / `TryReadStaticField` return `false` until the field's slot exists. A
+patched method that reads the field creates the slot with the field's initializer value (or its
+default), so after such a read they return `true` with that value even though nothing was wired.
+The try-read calls themselves never fill the slot — when no patched method has read the field
+yet, it still runs its initializer on the next access.
 
 ## Do not call the low-level store directly
 
