@@ -39,6 +39,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence { get; }
 
+        /// <summary>How many of Warnings are type notices that say their type needs a compile.</summary>
+        public int IntroducedTypeNoticeCount { get; }
+
         public HotReloadFileProcessResult(
             List<HotReloadMethodOutcome> outcomes,
             List<string> warnings,
@@ -53,7 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] addedConstNames = null,
             int revertedUnchangedCount = 0,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null,
+            int introducedTypeNoticeCount = 0)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -70,6 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RevertedUnchangedCount = revertedUnchangedCount;
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
+            IntroducedTypeNoticeCount = introducedTypeNoticeCount;
         }
     }
 }

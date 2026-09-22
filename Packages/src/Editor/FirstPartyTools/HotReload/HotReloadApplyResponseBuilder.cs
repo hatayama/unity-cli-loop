@@ -128,8 +128,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailure,
                 hasMethodFailure,
                 warnings.Count,
-                appendCompileResolution: orchestratorWarningCount >= 2
-                    && orchestratorWarningCount == warningCountBeforeHold,
+                appendCompileResolution: DecideAppendCompileResolution(
+                    result,
+                    orchestratorWarningCount,
+                    warningCountBeforeHold),
                 allRequestedSkipped,
                 reappliedSiblingCount);
             return new HotReloadResponse
@@ -265,6 +267,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.IntroducedTypes);
 
             return AppendWarningCount(message, warningCount, appendCompileResolution);
+        }
+
+        // Whether the Message may say one compile clears every warning and none has to be cleared
+        // first: only for two or more hot reload warnings with no pause-point extras after them,
+        // and never when a declared type needs a compile before it exists, which contradicts it.
+        private static bool DecideAppendCompileResolution(
+            HotReloadOrchestratorResult result,
+            int orchestratorWarningCount,
+            int warningCountBeforeHold)
+        {
+            if (orchestratorWarningCount < 2 || orchestratorWarningCount != warningCountBeforeHold)
+            {
+                return false;
+            }
+
+            return result.IntroducedTypeNoticeCount == 0
+                && !HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
         }
 
         private static bool ReadsInvocationCountFromLedger(HotReloadMethodOutcomeKind kind)

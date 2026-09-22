@@ -534,6 +534,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     FindWarning(response, "requires a compile"),
                     Does.Contain(HostFileName),
                     "The warning must name the file that declares it.");
+                Assert.That(
+                    result.IntroducedTypeNoticeCount,
+                    Is.EqualTo(1),
+                    "The run must count the notice so the response knows a compile is still required.");
             }
         }
 

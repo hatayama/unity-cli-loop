@@ -52,6 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private int _patchedTotal;
         private int _unchangedTotal;
         private int _revertedUnchangedTotal;
+        private int _introducedTypeNoticeCount;
 
         /// <param name="autoRefreshHeldAtStart">
         /// Whether the Auto Refresh hold was already armed when the run started. Read on the Unity
@@ -115,6 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _addedFields.AddRange(fileResult.AddedFieldNames);
             _addedConsts.AddRange(fileResult.AddedConstNames);
             _introducedTypes.AddRange(fileResult.IntroducedTypes);
+            _introducedTypeNoticeCount += fileResult.IntroducedTypeNoticeCount;
             // Why the worker hash (not the orchestrator probe): the worker re-reads the file in
             // another process, so the bytes it compiled can differ from the probe if the file
             // changed mid-run.
@@ -230,7 +232,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 autoRefreshHold: autoRefreshHold,
                 reappliedSiblingPaths: _reappliedSiblingPaths.ToArray(),
                 introducedTypes: _introducedTypes,
-                autoRefreshHoldNewlyArmed: newlyArmed);
+                autoRefreshHoldNewlyArmed: newlyArmed,
+                introducedTypeNoticeCount: _introducedTypeNoticeCount);
         }
 
         private void AppendInlineRiskWarning()

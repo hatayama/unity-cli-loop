@@ -1643,6 +1643,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a run whose warnings include a type notice saying the type requires a compile does
+        /// not say that none of the warnings has to be cleared before continuing.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WarningsIncludeTypeNotice_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "Assets/A.cs: notice", "warn-b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    introducedTypeNoticeCount: 1));
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "2 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: a run that refused a type declaration does not say that none of its warnings has to
+        /// be cleared before continuing, because the refused type exists only after a compile.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WarningsBesideFailedType_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "warn-a", "warn-b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    introducedTypes: new List<HotReloadIntroducedTypeOutcome>
+                    {
+                        HotReloadIntroducedTypeOutcome.Failed(
+                            "Example.RefusedType",
+                            "SomeAssembly",
+                            "Assets/B.cs",
+                            "refused")
+                    }));
+
+            Assert.That(response.Message, Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            Assert.That(response.Message, Does.Contain("2 warning(s). See Warnings."));
+        }
+
+        /// <summary>
         /// What: a single orchestrator warning keeps the count suffix and does not add the
         /// single-compile resolution sentence.
         /// </summary>

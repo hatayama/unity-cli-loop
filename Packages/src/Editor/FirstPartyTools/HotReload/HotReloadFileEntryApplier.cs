@@ -224,7 +224,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sourceContentSha256: file.FileOutput != null ? file.FileOutput.sourceContentSha256 : null,
                 revertedUnchangedCount: file.RevertedUnchangedCount,
                 introducedTypes: sinks.IntroducedTypes,
-                newSourceMembershipEvidence: file.NewSourceMembershipEvidence);
+                newSourceMembershipEvidence: file.NewSourceMembershipEvidence,
+                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount);
         }
 
         /// <summary>
@@ -284,7 +285,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 addedConstNames: applied ? file.AddedConstNames : null,
                 revertedUnchangedCount: file.RevertedUnchangedCount,
                 introducedTypes: sinks.IntroducedTypes,
-                newSourceMembershipEvidence: file.NewSourceMembershipEvidence);
+                newSourceMembershipEvidence: file.NewSourceMembershipEvidence,
+                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount);
         }
 
         private int ApplyResolvedEntries(

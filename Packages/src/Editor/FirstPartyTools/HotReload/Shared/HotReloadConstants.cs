@@ -157,6 +157,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
         // are not Failed (the compile error was in the added body) and must not stay silent.
+        // The caller of an added method the isolation retry left out, whose row may be Failed (its
+        // own shim failed) or Skipped (another method of its file failed). Why not the sentence
+        // above: that one points at a Failed row, which a Skipped callee does not have.
+        public const string UnappliedAddedMethodCallerSkipReasonFormat =
+            "Calls the added method '{0}', which this reload did not apply; the caller was left unpatched. "
+            + "That method's own row gives the reason: fix its compile error when it Failed, or the failure "
+            + "elsewhere in its file when it was Skipped, and reload again, or run 'uloop compile'.";
+
         public const string IsolatedAddedMethodCallerSkipReason =
             "Calls an added method whose shim failed to compile; the caller was left unpatched. "
             + "Fix the compile error in the added method (see the Failed row in this response) and reload again, or run 'uloop compile'.";

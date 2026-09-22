@@ -271,7 +271,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome hostSkip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, "Scaled");
             Assert.That(hostSkip.Reason, Is.EqualTo(HotReloadConstants.AtomicFileSkipReason));
             HotReloadMethodOutcome callerSkip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, "Call(");
-            Assert.That(callerSkip.Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+            Assert.That(
+                callerSkip.Reason,
+                Is.EqualTo(
+                    string.Format(
+                        HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat,
+                        typeof(HotReloadCrossFileAddedMemberHost).FullName + ".Added()")));
+            Assert.That(callerSkip.Reason, Does.Not.Contain("Failed row"));
             Assert.That(callerSkip.FilePath, Is.EqualTo(FixturePath(CallerFileName)));
             AssertNothingApplied(result);
         }
@@ -296,8 +302,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 callerSource);
 
             AssertOnlyFailureIsBrokenHostValue(result);
-            AssertIsolatedCallerSkip(result, "AddedRelay", FixturePath(CallerFileName));
-            AssertIsolatedCallerSkip(result, "Call(", FixturePath(CallerFileName));
+            AssertIsolatedCallerSkip(result, "AddedRelay", "Added", FixturePath(CallerFileName));
+            AssertIsolatedCallerSkip(result, "Call(", "AddedRelay", FixturePath(CallerFileName));
             AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Other");
             Assert.That(new HotReloadCrossFileAddedMemberCaller().Other(), Is.EqualTo(8));
         }
@@ -337,9 +343,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
 
             AssertOnlyFailureIsBrokenHostValue(result);
-            AssertIsolatedCallerSkip(result, "AddedMid", siblingPath);
-            AssertIsolatedCallerSkip(result, "AddedOuter", siblingPath);
-            AssertIsolatedCallerSkip(result, "ExistingCaller", siblingPath);
+            AssertIsolatedCallerSkip(result, "AddedMid", "Added", siblingPath);
+            AssertIsolatedCallerSkip(result, "AddedOuter", "AddedMid", siblingPath);
+            AssertIsolatedCallerSkip(result, "ExistingCaller", "AddedOuter", siblingPath);
             AssertNothingApplied(result);
         }
 
@@ -927,10 +933,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerProjectRelativePath(),
                 HotReloadMethodOutcomeKind.Skipped,
                 "Call");
-            Assert.That(
-                callerOutcome.Reason,
-                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason),
-                FormatOutcomes(second));
+            AssertNamesUnappliedCallee(callerOutcome.Reason, "Added", FormatOutcomes(second));
             Assert.That(
                 CountWarningsContaining(second, "re-applied"),
                 Is.EqualTo(0),
@@ -1198,14 +1201,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static void AssertIsolatedCallerSkip(
             HotReloadOrchestratorResult result,
             string methodNamePart,
+            string calledMethodName,
             string expectedFilePath)
         {
             HotReloadMethodOutcome skip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, methodNamePart);
-            Assert.That(
-                skip.Reason,
-                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason),
-                FormatOutcomes(result));
+            AssertNamesUnappliedCallee(skip.Reason, calledMethodName, FormatOutcomes(result));
             Assert.That(skip.FilePath, Is.EqualTo(expectedFilePath));
+        }
+
+        // The worker names the callee in its source spelling, so the test checks the method name
+        // inside the quoted callee rather than spelling out every namespace and parameter type.
+        private static void AssertNamesUnappliedCallee(string reason, string calledMethodName, string context)
+        {
+            string[] parts = HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat.Split(new[] { "{0}" }, StringSplitOptions.None);
+            Assert.That(reason, Does.StartWith(parts[0]), context);
+            Assert.That(reason, Does.EndWith(parts[1]), context);
+            string callee = reason.Substring(parts[0].Length, reason.Length - parts[0].Length - parts[1].Length);
+            Assert.That(callee, Does.Contain("." + calledMethodName + "("), context);
         }
 
         private static string ReplaceHostBody(string bodyAnchor, string bodyText)
