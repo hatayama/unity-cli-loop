@@ -13,27 +13,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodVirtualOrAbstract,
                 Plain(
-                    "Added virtual, override, or abstract methods are skipped; the loaded type has no vtable slot. "
-                    + CompileCallToActionToAddThem,
-                    0));
+                    "Added virtual, override, or abstract methods are skipped; the loaded type has no vtable slot.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodGeneric,
                 Plain(
-                    "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "
-                    + CompileCallToAction,
-                    0));
+                    "Added generic methods are skipped; hot reload cannot emit a typed shim for them.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodMethodGroupReference,
                 Plain(
                     "Methods that capture an added method as a method group or delegate are skipped; "
-                    + "the shim signature does not match. " + CompileCallToAction,
-                    0));
+                    + "the shim signature does not match.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodConditionalAccess,
                 Plain(
-                    "Added-method calls through conditional access are skipped; there is no rewrite shape. "
-                    + CompileCallToAction,
-                    0));
+                    "Added-method calls through conditional access are skipped; there is no rewrite shape.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
                 // Why point at the callee's row instead of a compile: the callee was skipped in
@@ -53,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodInterfaceMember,
-                Plain("Interface members are not patchable. " + CompileCallToAction, 0));
+                Plain("Interface members are not patchable.", 0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite,
                 RequiringDetail(
@@ -85,9 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 Plain(
-                    "Added fields on struct types are skipped; the store requires a reference-type instance. "
-                    + CompileCallToActionToAddThem,
-                    0));
+                    "Added fields on struct types are skipped; the store requires a reference-type instance.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic,
                 Plain(
@@ -101,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeNotExternallyVisible,
-                Plain("Added field type is not visible to the shim assembly. " + CompileCallToAction, 0));
+                Plain("Added field type is not visible to the shim assembly.", 0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeUnresolved,
                 Plain(
@@ -111,33 +107,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AddedFieldIncrementNotNumeric,
                 Plain(
                     "Increment or decrement of an added field is skipped unless the type is a numeric "
-                    + "primitive or enum. " + CompileCallToAction,
-                    0));
+                    + "primitive or enum.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldRefOutIn,
-                Plain("Added fields cannot be passed by ref, out, or in. " + CompileCallToAction, 0));
+                Plain("Added fields cannot be passed by ref, out, or in.", 0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldConsumedWrite,
                 Plain(
-                    "The value of an assignment to an added field is consumed; the store write returns void. "
-                    + CompileCallToAction,
-                    0));
+                    "The value of an assignment to an added field is consumed; the store write returns void.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver,
                 Plain(
-                    "Assignment to an added field would evaluate a receiver with possible side effects twice. "
-                    + CompileCallToAction,
-                    0));
+                    "Assignment to an added field would evaluate a receiver with possible side effects twice.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 Plain(
                     "Writes to members of an added value-type field, and instance method calls on that field, "
                     + "cannot be rewritten. Copy the field into a local, change the local, and assign the "
-                    + "whole value back. " + CompileCallToAction,
-                    0));
+                    + "whole value back.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldUnavailableAddedField,
-                Plain("Uses added field '{0}' in a way hot reload cannot emit. " + CompileCallToAction, 1));
+                Plain("Uses added field '{0}' in a way hot reload cannot emit.", 1).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldCoalesceAssignment,
                 Plain(
@@ -147,63 +141,56 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged,
                 Plain(
-                    "Field '{0}' has a different type in the compiled assembly. " + CompileCallToAction,
-                    1));
+                    "Field '{0}' has a different type in the compiled assembly.",
+                    1).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldFieldModifiersChanged,
                 Plain(
-                    "Field '{0}' changed its static or const modifier in the compiled assembly. "
-                    + CompileCallToAction,
-                    1));
+                    "Field '{0}' changed its static or const modifier in the compiled assembly.",
+                    1).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldMemberKindChanged,
                 Plain(
-                    "Field '{0}' is declared as a property or an event in the compiled assembly. "
-                    + CompileCallToAction,
-                    1));
+                    "Field '{0}' is declared as a property or an event in the compiled assembly.",
+                    1).EndingWith(CompileCallToAction));
 
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertySetOnly,
                 Plain(
-                    "Added properties with only a setter are skipped; the shim requires a getter identity. "
-                    + CompileCallToActionToAddThem,
-                    0));
+                    "Added properties with only a setter are skipped; the shim requires a getter identity.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyVirtualOrAbstract,
                 Plain(
-                    "Added virtual, override, abstract, or interface properties are skipped; the loaded type has no vtable slot. "
-                    + CompileCallToActionToAddThem,
-                    0));
+                    "Added virtual, override, abstract, or interface properties are skipped; the loaded type has no vtable slot.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyExplicitInterface,
                 Plain(
-                    "Added explicit interface properties are skipped; the compiled type has no interface member slot. "
-                    + CompileCallToActionToAddThem,
-                    0));
+                    "Added explicit interface properties are skipped; the compiled type has no interface member slot.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyInitAccessor,
                 Plain(
-                    "Added properties with init accessors are skipped; the shim cannot preserve initialization-only assignment. "
-                    + CompileCallToActionToAddThem,
-                    0));
+                    "Added properties with init accessors are skipped; the shim cannot preserve initialization-only assignment.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyPropertyPattern,
                 Plain(
                     "Property patterns that match an added property are skipped; a pattern member name cannot "
-                    + "be replaced by an accessor shim call. " + CompileCallToActionToAddIt,
-                    0));
+                    + "be replaced by an accessor shim call.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyGenericHostType,
                 Plain(
                     "Added properties on generic types are skipped; one accessor identity and one store entry "
-                    + "cannot stand for every closed instantiation. " + CompileCallToActionToAddThem,
-                    0));
+                    + "cannot stand for every closed instantiation.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyStructHost,
                 Plain(
-                    "Added properties on struct types are skipped; the shim requires a reference-type instance. "
-                    + CompileCallToActionToAddThem,
-                    0));
+                    "Added properties on struct types are skipped; the shim requires a reference-type instance.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyValueTypeUnresolved,
                 Plain(
@@ -213,68 +200,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyValueTypeNotExternallyVisible,
                 Plain(
-                    "Added property type is not visible to the shim assembly. " + CompileCallToActionToAddIt,
-                    0));
+                    "Added property type is not visible to the shim assembly.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyCompoundAssignment,
                 Plain(
                     "Compound assignment, increment, and decrement of an added property are skipped; the accessor shim cannot preserve the operation. "
-                    + "Rewrite it as a plain assignment statement ('X = X + 1;') to keep hot reloading. "
-                    + CompileCallToActionToAddIt,
-                    0));
+                    + "Rewrite it as a plain assignment statement ('X = X + 1;') to keep hot reloading.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyConsumedWrite,
                 Plain(
-                    "The value of an assignment to an added property is consumed; the setter shim returns void. "
-                    + CompileCallToActionToAddIt,
-                    0));
+                    "The value of an assignment to an added property is consumed; the setter shim returns void.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyNameofReference,
                 Plain(
-                    "References to added properties inside nameof are skipped; the member does not exist in the compiled assembly. "
-                    + CompileCallToActionToAddIt,
-                    0));
+                    "References to added properties inside nameof are skipped; the member does not exist in the compiled assembly.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyObjectInitializer,
                 Plain(
-                    "Object initializers that assign added properties are skipped; the setter shim cannot rewrite the initializer. "
-                    + CompileCallToActionToAddIt,
-                    0));
+                    "Object initializers that assign added properties are skipped; the setter shim cannot rewrite the initializer.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyDeconstructionTarget,
                 Plain(
                     "Deconstruction assignment to an added property is skipped; the setter shim cannot stand as a "
-                    + "deconstruction target. " + CompileCallToActionToAddIt,
-                    0));
+                    + "deconstruction target.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyConditionalAccess,
                 Plain(
-                    "Conditional access to added properties is skipped; there is no rewrite shape. "
-                    + CompileCallToActionToAddIt,
-                    0));
+                    "Conditional access to added properties is skipped; there is no rewrite shape.",
+                    0).EndingWith(CompileCallToActionToAddIt));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyRefOutIn,
                 Plain(
-                    "Added properties cannot be passed by ref, out, or in. " + CompileCallToActionToAddThem,
-                    0));
+                    "Added properties cannot be passed by ref, out, or in.",
+                    0).EndingWith(CompileCallToActionToAddThem));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty,
                 Composing(
-                    "Uses an added property that hot reload cannot emit. " + CompileCallToAction,
+                    "Uses an added property that hot reload cannot emit.",
                     0,
                     " The property body was refused because: ",
-                    ""));
+                    "").EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyCompiledMemberKindChanged,
                 Plain(
-                    "Property '{0}' is declared as a field or an event in the compiled assembly. "
-                    + CompileCallToAction,
-                    1));
+                    "Property '{0}' is declared as a field or an event in the compiled assembly.",
+                    1).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyInitializerNotEmittable,
                 Plain(
-                    "Added property initializer cannot run in the shim lambda. " + CompileCallToActionToAddIt,
-                    0));
+                    "Added property initializer cannot run in the shim lambda.",
+                    0).EndingWith(CompileCallToActionToAddIt));
         }
     }
 }

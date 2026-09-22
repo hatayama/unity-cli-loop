@@ -49,9 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType,
                 Plain(
-                    "Generic methods and methods inside generic types cannot be safely patched with Harmony. "
-                    + CompileCallToAction,
-                    0));
+                    "Generic methods and methods inside generic types cannot be safely patched with Harmony.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 Plain("Explicit interface implementations are skipped.", 0));
