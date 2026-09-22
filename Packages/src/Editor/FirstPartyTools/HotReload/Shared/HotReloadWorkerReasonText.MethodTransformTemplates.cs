@@ -43,8 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 Plain(
                     "Struct (value type) methods are skipped; byref instance transplant is unverified. "
-                    + "Keep the struct as compiled and put the new logic at the call site or in a non-struct "
-                    + "helper, or run 'uloop compile' to change the struct.",
+                    + "Leave the struct's methods as they are and put the new logic at the call site or in a "
+                    + "non-struct helper, or run 'uloop compile' to change the struct.",
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType,

@@ -91,8 +91,12 @@ internal static class AddedPropertyClassifier
         MarkClassifiedAccessors(candidate, addedMethodCatalog);
         if (candidate.Reason != null || IsExcluded(input, candidate.GetterKey, candidate.SetterKey))
         {
+            // Why the property's name in the exclusion reason: a consumer's row composes it, and
+            // without the name the reader cannot find which property's accessor to fix.
             candidate.Binding.UnavailableReason = candidate.Reason
-                ?? WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty);
+                ?? WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedPropertyAccessorExcludedFromReload,
+                    candidate.Binding.Name);
             addedPropertyCatalog.Register(candidate.Binding);
             AppendSkippedAccessors(candidate.Binding, skipped);
             return;

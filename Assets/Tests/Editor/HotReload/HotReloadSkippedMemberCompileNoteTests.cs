@@ -153,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             const string reason =
                 "Added properties with only a setter are skipped; the shim requires a getter identity. "
-                + "Run 'uloop compile' to add them.";
+                + "Run 'uloop compile' to add the property.";
             TransformWorkerSkippedDto[] getterSkipped =
             {
                 new TransformWorkerSkippedDto

@@ -1263,7 +1263,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string ExpectedSetOnlyPropertySkipReason =
             "Added properties with only a setter are skipped; the shim requires a getter identity. "
-            + "Run 'uloop compile' to add them.";
+            + "Run 'uloop compile' to add the property.";
 
         /// <summary>
         /// What: adding an expression-bodied property plus a method-body edit emits the getter
