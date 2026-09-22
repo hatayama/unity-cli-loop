@@ -86,10 +86,23 @@ internal static class IntroducedTypeDeclarationVerifier
                 record.DeclarationFingerprint,
                 fingerprint,
                 IntroducedTypeDeclarationMemberIndex.Build(declaration, metadataName));
-            verdicts.Add(new RetainedDeclarationVerdict(declaration, metadataName, match, record));
+            verdicts.Add(new RetainedDeclarationVerdict(
+                declaration,
+                metadataName,
+                match,
+                record,
+                HoldsOnlyAppliedChanges(unit, record)));
         }
 
         return verdicts;
+    }
+
+    // The record carries the owner file's hash only when the last reload applied all of it, so
+    // bytes that still match hold nothing that reload did not already load.
+    private static bool HoldsOnlyAppliedChanges(WorkerSourceUnit unit, WorkerIntroducedTypeArtifactType record)
+    {
+        return !string.IsNullOrEmpty(record.OwnerAppliedSourceHash)
+            && string.Equals(record.OwnerAppliedSourceHash, unit.SourceContentSha256, StringComparison.Ordinal);
     }
 
     private static Dictionary<string, WorkerIntroducedTypeArtifactType> BuildRecordIndex(WorkerInput input)

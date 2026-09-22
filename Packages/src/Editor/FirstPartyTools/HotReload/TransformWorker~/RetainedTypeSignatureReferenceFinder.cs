@@ -46,6 +46,11 @@ internal static class RetainedTypeSignatureReferenceFinder
             List<string> referrers = FindReferrers(BuildIdentity(verdict.Record), signatureIdentitiesByReferrer);
             List<string> retainedReferrers = referrers.FindAll(referrer => !preparedReferrers.Contains(referrer));
             List<string> sameRunReferrers = referrers.FindAll(referrer => preparedReferrers.Contains(referrer));
+            if (sameRunReferrers.Count > 0 && verdict.HoldsOnlyAppliedChanges)
+            {
+                return FormatAppliedChangesReferrerRefusal(verdict.MetadataName, retainedReferrers, sameRunReferrers);
+            }
+
             if (sameRunReferrers.Count > 0)
             {
                 return FormatSameRunReferrerRefusal(verdict.MetadataName, retainedReferrers, sameRunReferrers);
@@ -104,6 +109,43 @@ internal static class RetainedTypeSignatureReferenceFinder
             + ", then make the change together with an edit of "
             + FormatNameList(allReferrers)
             + " (a method body change is enough). Otherwise run 'uloop compile' to apply this edit.";
+    }
+
+    // Why the two steps are not offered here: they begin with a reload without the change, and
+    // this reload holds none. What is kept in the source is what earlier reloads added, and a new
+    // type is compiled against the type those reloads first loaded, which never holds it, so no
+    // order of reloads can join the two before a compile. Why a retained referrer changes the
+    // alternative: once the new type names the changed one only inside its bodies, the next reload
+    // still refuses for the retained type unless that reload edits it as well.
+    private static string FormatAppliedChangesReferrerRefusal(
+        string metadataName,
+        List<string> retainedReferrers,
+        List<string> sameRunReferrers)
+    {
+        string sameRunList = FormatNameList(sameRunReferrers);
+        string retainedClause = retainedReferrers.Count == 0
+            ? string.Empty
+            : FormatNameList(retainedReferrers) + ", which an earlier reload retained and this edit leaves unchanged, and of ";
+        string retainedEdit = retainedReferrers.Count == 0
+            ? string.Empty
+            : " and also edit " + FormatNameList(retainedReferrers) + " in this same reload (a method body change is enough)";
+        return "Introduced type '" + metadataName + "' appears in member signatures of "
+            + retainedClause
+            + sameRunList
+            + ", introduced by this reload from a new file. The source of '"
+            + metadataName
+            + "' holds only what earlier reloads added to or edited in it, and this reload changes nothing in it, but "
+            + sameRunList
+            + " is compiled against the '"
+            + metadataName
+            + "' an earlier reload first loaded, which does not hold those changes, so the two would split. "
+            + "Reloading in steps cannot join them: run 'uloop compile' to apply this edit, or name '"
+            + metadataName
+            + "' only inside method bodies of "
+            + sameRunList
+            + " rather than in its member signatures"
+            + retainedEdit
+            + ".";
     }
 
     private static string FormatNameList(List<string> names)

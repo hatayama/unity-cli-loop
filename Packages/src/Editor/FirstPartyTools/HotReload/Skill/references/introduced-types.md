@@ -73,6 +73,14 @@ without the change, which introduces the new type, then the change together with
 type the refusal names (a method body change is enough). Editing only the retained type in the
 same reload does not help while the new type is still being introduced.
 
+The two steps do not apply when the changed type's file holds only what earlier reloads already
+applied and this reload changes nothing in it, for example when the file comes back in only
+because the new file uses it. The new type is still compiled against the definition the first
+reload loaded, so no order of reloads joins the two, and the refusal says so: run `uloop compile`,
+or name the type only inside method bodies of the new type rather than in its signatures. When a
+retained type also names it in its signatures, the refusal names that type too, and moving the
+use into the new type's bodies works only if the same reload also edits the retained type.
+
 `--revert-all` reverts patches and added members but cannot unload an introduced type; the
 response says how many stayed. Auto Refresh stays held while any introduced type is active —
 `uloop compile` always releases it, `--revert-all` only when no introduced type remains.

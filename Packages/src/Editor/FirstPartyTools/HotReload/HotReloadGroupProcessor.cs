@@ -77,7 +77,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
                 _domain.IntroducedTypes,
                 workerInput.targetAssemblyName,
-                workerInput.targetAssemblyMvid).ToArray();
+                workerInput.targetAssemblyMvid,
+                FindFullyAppliedSourceHash).ToArray();
             HotReloadIntroducedTypePreparationResult preparation = await _dependencies
                 .PrepareIntroducedTypes(files, workerInput, ct)
                 .ConfigureAwait(false);
@@ -119,6 +120,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 preparation.Prepared,
                 correlationId,
                 ct).ConfigureAwait(false);
+        }
+
+        // Why only a fully applied file: a run that skipped or failed part of the file records the
+        // same hash, so equal bytes would not mean every change in them is loaded. Why the worker
+        // compares and not this side: it reads the file again in its own process, and only its
+        // hash says which bytes it compiled.
+        private string FindFullyAppliedSourceHash(string projectRelativePath)
+        {
+            (string Hash, bool IsFullyApplied)? applied = _domain.TryGetAppliedSource(projectRelativePath);
+            return applied != null && applied.Value.IsFullyApplied ? applied.Value.Hash : null;
         }
 
         /// <summary>

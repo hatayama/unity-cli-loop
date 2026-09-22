@@ -52,6 +52,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "            return " + PongValue.ToString() + ";\n"
             + "        }\n";
 
+        private static readonly string GenericEchoMember =
+            "\n"
+            + "        public T Echo<T>(T value)\n"
+            + "        {\n"
+            + "            return value;\n"
+            + "        }\n";
+
+        private const string AppliedChangesOnlyPhrase = "holds only what earlier reloads added to or edited in it";
+
         /// <summary>
         /// What: a reload that adds a method to an introduced type and introduces a new type that
         /// returns it is refused, and the refusal names the new type as introduced by this same
@@ -196,6 +205,251 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// What: after an earlier reload added a method to an introduced type, a reload that
+        /// passes only a new file whose type returns it re-applies the introduced type's file
+        /// unchanged and is refused. The refusal does not tell the reader to reload first without
+        /// a change to that type, because this reload holds none; it names compile instead.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeReturningAnIntroducedTypeWhoseAdditionAnEarlierReloadApplied_RefusesWithoutTheTwoStepOrder()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    callerPath,
+                    Owners(BuildValueSource(NoExtraMembers), null),
+                    "new " + ValueSimpleName + "().Ping()",
+                    "AppliedIntroducing");
+                Assert.That(CountFailures(introducing), Is.EqualTo(0), DescribeOutcomes(introducing));
+
+                string valueWithPong = BuildValueSource(PongMember);
+                HotReloadOrchestratorResult memberAdded = await RunAsync(
+                    callerPath,
+                    Owners(valueWithPong, null),
+                    "new " + ValueSimpleName + "().Pong()",
+                    "AppliedMemberAdded");
+                Assert.That(CountFailures(memberAdded), Is.EqualTo(0), DescribeOutcomes(memberAdded));
+                Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), DescribeOutcomes(memberAdded));
+
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
+                    callerPath,
+                    Owners(valueWithPong, null),
+                    NoListedOwnerPaths,
+                    BuildFactorySource(DefaultMakeBody),
+                    "new " + FactorySimpleName + "().Make().Ping()",
+                    "AppliedFactoryOnly");
+
+                string description = DescribeOutcomes(factoryOnly);
+                Assert.That(
+                    factoryOnly.ReappliedSiblingPaths,
+                    Does.Contain(ValueOwnerPath),
+                    "Precondition: the value type's file must come back in as a sibling.\n" + description);
+                Assert.That(CountFailures(factoryOnly), Is.GreaterThan(0), description);
+                Assert.That(description, Does.Contain("'" + ValueMetadataName + "'"), description);
+                Assert.That(description, Does.Contain("'" + FactoryMetadataName + "'"), description);
+                Assert.That(description, Does.Not.Contain("first without the change to"), description);
+                Assert.That(description, Does.Contain(AppliedChangesOnlyPhrase), description);
+                Assert.That(description, Does.Contain("uloop compile"), description);
+                Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), "A refused run must leave the previous patch in place.");
+            });
+        }
+
+        /// <summary>
+        /// What: when a retained type restored to the body it was introduced with also returns the
+        /// introduced type whose changes earlier reloads applied, the refusal for a new type
+        /// returning it names the retained type too
+        /// and tells the reader to edit it in the same reload as well, because moving the use into
+        /// the new type's bodies alone would leave the next reload refusing for the retained type.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeReturningAnIntroducedTypeWhoseAdditionAnEarlierReloadAppliedBesideARetainedReferrer_NamesTheRetainedTypeToEditToo()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                Dictionary<string, string> introducingOwners = Owners(BuildValueSource(NoExtraMembers), null);
+                introducingOwners[KeeperOwnerPath] = BuildReturningTypeSource(KeeperSimpleName, DefaultMakeBody);
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    callerPath,
+                    introducingOwners,
+                    "new " + KeeperSimpleName + "().Make().Ping()",
+                    "AppliedKeeperIntroducing");
+                Assert.That(CountFailures(introducing), Is.EqualTo(0), DescribeOutcomes(introducing));
+
+                string valueWithPong = BuildValueSource(PongMember);
+                string editedKeeper = BuildReturningTypeSource(KeeperSimpleName, EditedMakeBody);
+                Dictionary<string, string> memberAddedOwners = Owners(valueWithPong, null);
+                memberAddedOwners[KeeperOwnerPath] = editedKeeper;
+                HotReloadOrchestratorResult memberAdded = await RunAsync(
+                    callerPath,
+                    memberAddedOwners,
+                    "new " + KeeperSimpleName + "().Make().Pong()",
+                    "AppliedKeeperMemberAdded");
+                Assert.That(CountFailures(memberAdded), Is.EqualTo(0), DescribeOutcomes(memberAdded));
+                Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), DescribeOutcomes(memberAdded));
+
+                // Restoring the body the first reload introduced makes the retained type match its
+                // artifact again, so it is bound from there instead of being rebuilt from source.
+                Dictionary<string, string> factoryOwners = Owners(valueWithPong, null);
+                factoryOwners[KeeperOwnerPath] = BuildReturningTypeSource(KeeperSimpleName, DefaultMakeBody);
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
+                    callerPath,
+                    factoryOwners,
+                    new[] { KeeperOwnerPath },
+                    BuildFactorySource(DefaultMakeBody),
+                    "new " + FactorySimpleName + "().Make().Ping()",
+                    "AppliedKeeperFactoryOnly");
+
+                string description = DescribeOutcomes(factoryOnly);
+                Assert.That(CountFailures(factoryOnly), Is.GreaterThan(0), description);
+                Assert.That(description, Does.Contain(AppliedChangesOnlyPhrase), description);
+                Assert.That(
+                    description,
+                    Does.Contain("'" + KeeperMetadataName + "', which an earlier reload retained"),
+                    description);
+                Assert.That(description, Does.Contain("also edit '" + KeeperMetadataName + "'"), description);
+                Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), "A refused run must leave the previous patch in place.");
+            });
+        }
+
+        /// <summary>
+        /// What: when the earlier reload that changed an introduced type skipped part of that
+        /// change, a later reload passing only a new file whose type returns it is refused without
+        /// claiming that every change in the introduced type's source is already loaded.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeReturningAnIntroducedTypeWhoseChangeAnEarlierReloadSkippedInPart_DoesNotClaimTheChangeIsLoaded()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    callerPath,
+                    Owners(BuildValueSource(NoExtraMembers), null),
+                    "new " + ValueSimpleName + "().Ping()",
+                    "PartialIntroducing");
+                Assert.That(CountFailures(introducing), Is.EqualTo(0), DescribeOutcomes(introducing));
+
+                string valueWithPongAndGeneric = BuildValueSource(PongMember + GenericEchoMember);
+                HotReloadOrchestratorResult partlySkipped = await RunAsync(
+                    callerPath,
+                    Owners(valueWithPongAndGeneric, null),
+                    "new " + ValueSimpleName + "().Pong()",
+                    "PartialMemberAdded");
+                Assert.That(
+                    HasSkippedRow(partlySkipped, "Echo"),
+                    Is.True,
+                    "Precondition: the added generic method must be skipped so the file is only partly applied.\n"
+                    + DescribeOutcomes(partlySkipped));
+                Assert.That(CallTheCaller(), Is.EqualTo(PongValue + HostValue), DescribeOutcomes(partlySkipped));
+
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
+                    callerPath,
+                    Owners(valueWithPongAndGeneric, null),
+                    NoListedOwnerPaths,
+                    BuildFactorySource(DefaultMakeBody),
+                    "new " + FactorySimpleName + "().Make().Ping()",
+                    "PartialFactoryOnly");
+
+                string description = DescribeOutcomes(factoryOnly);
+                Assert.That(
+                    factoryOnly.ReappliedSiblingPaths,
+                    Does.Contain(ValueOwnerPath),
+                    "Precondition: the value type's file must come back in as a sibling.\n" + description);
+                Assert.That(CountFailures(factoryOnly), Is.GreaterThan(0), description);
+                Assert.That(description, Does.Contain("'" + FactoryMetadataName + "'"), description);
+                Assert.That(description, Does.Not.Contain(AppliedChangesOnlyPhrase), description);
+            });
+        }
+
+        /// <summary>
+        /// What: after an earlier reload added a method to an introduced type, a new type that
+        /// uses it only inside a method body, not in a signature, is introduced by a reload that
+        /// passes only the new file, and the caller reaches the value through it.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeUsingAnIntroducedTypeWhoseAdditionAnEarlierReloadAppliedOnlyInABody_IsIntroduced()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    callerPath,
+                    Owners(BuildValueSource(NoExtraMembers), null),
+                    "new " + ValueSimpleName + "().Ping()",
+                    "BodyOnlyIntroducing");
+                Assert.That(CountFailures(introducing), Is.EqualTo(0), DescribeOutcomes(introducing));
+
+                string valueWithPong = BuildValueSource(PongMember);
+                HotReloadOrchestratorResult memberAdded = await RunAsync(
+                    callerPath,
+                    Owners(valueWithPong, null),
+                    "new " + ValueSimpleName + "().Pong()",
+                    "BodyOnlyMemberAdded");
+                Assert.That(CountFailures(memberAdded), Is.EqualTo(0), DescribeOutcomes(memberAdded));
+
+                HotReloadOrchestratorResult factoryOnly = await RunWithNewFactoryAsync(
+                    callerPath,
+                    Owners(valueWithPong, null),
+                    NoListedOwnerPaths,
+                    BuildBodyOnlyFactorySource(),
+                    "new " + FactorySimpleName + "().MakePing()",
+                    "BodyOnlyFactoryOnly");
+
+                string description = DescribeOutcomes(factoryOnly);
+                Assert.That(
+                    factoryOnly.ReappliedSiblingPaths,
+                    Does.Contain(ValueOwnerPath),
+                    "Precondition: the value type's file must come back in as a sibling.\n" + description);
+                Assert.That(CountFailures(factoryOnly), Is.EqualTo(0), description);
+                Assert.That(CallTheCaller(), Is.EqualTo(PingValue + HostValue), description);
+            });
+        }
+
+        private static readonly string[] NoListedOwnerPaths = new string[0];
+
+        // Owner files outside listedOwnerPaths stay out of the requested paths, so only the
+        // sibling re-apply brings them in, the way a reload naming just the new file does. Their
+        // content stays in the override map because the files never exist on disk.
+        private static Task<HotReloadOrchestratorResult> RunWithNewFactoryAsync(
+            string callerPath,
+            Dictionary<string, string> ownerSources,
+            string[] listedOwnerPaths,
+            string factorySource,
+            string callerExpression,
+            string label)
+        {
+            Dictionary<string, string> edits = new Dictionary<string, string>
+            {
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "SameReloadCaller" + label + ".cs",
+                    CallExpression(File.ReadAllText(callerPath), callerExpression)),
+                [FactoryOwnerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    Path.GetFileNameWithoutExtension(FactoryOwnerPath) + label + ".cs",
+                    factorySource)
+            };
+            foreach (KeyValuePair<string, string> owner in ownerSources)
+            {
+                edits[owner.Key] = HotReloadTestSourceWriter.WriteEditedSource(
+                    Path.GetFileNameWithoutExtension(owner.Key) + label + ".cs",
+                    owner.Value);
+            }
+
+            List<string> paths = new List<string> { callerPath, FactoryOwnerPath };
+            paths.AddRange(listedOwnerPaths);
+            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                paths.ToArray(),
+                contentPathOverride: null,
+                CancellationToken.None,
+                edits);
+        }
+
         private const string DefaultMakeBody = "            return new " + ValueSimpleName + "();\n";
 
         private const string EditedMakeBody =
@@ -288,6 +542,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        }\n"
                 + "    }\n"
                 + "}\n";
+        }
+
+        // The factory names the value type only inside its body, so no signature of the new
+        // type refers to it.
+        private static string BuildBodyOnlyFactorySource()
+        {
+            return
+                "namespace " + Namespace + "\n"
+                + "{\n"
+                + "    public sealed class " + FactorySimpleName + "\n"
+                + "    {\n"
+                + "        [System.Runtime.CompilerServices.MethodImpl(\n"
+                + "            System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]\n"
+                + "        public int MakePing()\n"
+                + "        {\n"
+                + "            return new " + ValueSimpleName + "().Ping();\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        }
+
+        private static bool HasSkippedRow(HotReloadOrchestratorResult result, string methodFragment)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method != null
+                    && outcome.Method.Contains(methodFragment))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static string CallExpression(string callerSource, string expression)
