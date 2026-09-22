@@ -134,6 +134,7 @@ internal static class AddedPropertyEmitter
     {
         return AddedFieldShimRewrite.CreateAddedFieldInitializer(new AddedFieldBinding
         {
+            FieldType = binding.ValueType,
             Initializer = binding.Initializer
         });
     }
