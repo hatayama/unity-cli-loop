@@ -131,24 +131,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a Stale row alone forgets the record.
+        /// What: a Stale row alone records the hash as fully applied, because the row only keeps
+        /// the patch of a method the current bytes no longer declare.
         /// </summary>
         [Test]
-        public void Decide_StaleOnly_Forgets()
+        public void Decide_StaleOnly_RecordsFullyApplied()
         {
             HotReloadAppliedSourceRecordDecision decision = HotReloadAppliedSourceRecordDecision.Decide(
                 Hash,
                 new[] { HotReloadMethodOutcome.Stale("Type.Removed()", FilePath) },
                 appliedAddedFieldsOrConsts: false);
 
-            AssertDecision(decision, HotReloadAppliedSourceRecordKind.Forget, null);
+            AssertDecision(decision, HotReloadAppliedSourceRecordKind.FullyApplied, Hash);
         }
 
         /// <summary>
-        /// What: a Stale row next to Patched and Added rows still forgets the record.
+        /// What: a Stale row next to Patched and Added rows records the hash as fully applied, so
+        /// a later reload can bring the file back for the members it added.
         /// </summary>
         [Test]
-        public void Decide_StaleNextToPatchedAndAdded_Forgets()
+        public void Decide_StaleNextToPatchedAndAdded_RecordsFullyApplied()
         {
             HotReloadAppliedSourceRecordDecision decision = HotReloadAppliedSourceRecordDecision.Decide(
                 Hash,
@@ -160,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 appliedAddedFieldsOrConsts: false);
 
-            AssertDecision(decision, HotReloadAppliedSourceRecordKind.Forget, null);
+            AssertDecision(decision, HotReloadAppliedSourceRecordKind.FullyApplied, Hash);
         }
 
         private static void AssertDecision(
