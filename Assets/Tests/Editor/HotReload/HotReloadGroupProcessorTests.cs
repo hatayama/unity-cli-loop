@@ -1038,6 +1038,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.SameAs(evidence));
         }
 
+        /// <summary>
+        /// What: a result that ended without a worker hash, such as a worker that produced no file
+        /// output, leaves the file's earlier applied-source record in place, because the run
+        /// touched none of the file's patches.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_FailedResultWithoutWorkerHash_KeepsTheEarlierRecord()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            domain.RecordAppliedSource(CoverageCallerPath, "earlier-hash", false);
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+
+            run.Add(
+                CoverageCallerPath,
+                new HotReloadFileProcessResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Failed("(file)", "worker produced no output", CoverageCallerPath)
+                    },
+                    new List<string>(),
+                    patchedCount: 0,
+                    sourceContentSha256: null));
+            run.RecordAppliedSourceHashes();
+
+            Assert.That(domain.TryGetAppliedSource(CoverageCallerPath), Is.EqualTo(("earlier-hash", false)));
+        }
+
+        /// <summary>
+        /// What: a result the run decides to forget clears the file's applied-source record and
+        /// the membership evidence recorded with it, so no earlier run's record outlives it.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_ResultWithNoRowsOrAddedFields_ClearsTheRecordAndEvidence()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator first = new HotReloadRunAccumulator(
+                domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+            first.Add(CoverageCallerPath, CreateAppliedResult(CreateChangedMembershipEvidence()));
+            first.RecordAppliedSourceHashes();
+            Assert.That(domain.TryGetAppliedSource(CoverageCallerPath), Is.Not.Null, "Precondition: the first run must record the file.");
+
+            HotReloadRunAccumulator second = new HotReloadRunAccumulator(
+                domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+            second.Add(
+                CoverageCallerPath,
+                new HotReloadFileProcessResult(
+                    new List<HotReloadMethodOutcome>(),
+                    new List<string>(),
+                    patchedCount: 0,
+                    sourceContentSha256: "later-hash"));
+            second.RecordAppliedSourceHashes();
+
+            Assert.That(domain.TryGetAppliedSource(CoverageCallerPath), Is.Null);
+            Assert.That(domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath), Is.Null);
+        }
+
         // A fully applied single-method result for the caller path: the shape the run stages an
         // applied-source record from.
         private static HotReloadFileProcessResult CreateAppliedResult(

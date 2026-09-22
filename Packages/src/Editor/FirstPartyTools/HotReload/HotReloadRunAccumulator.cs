@@ -34,9 +34,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
         // Why staged (not recorded per file): duplicate paths in one run must still apply
         // twice; recording mid-run would short-circuit the second copy.
-        private readonly Dictionary<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>
-            _appliedSourceHashByPath =
-                new Dictionary<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>(
+        // Why the last occurrence wins: only what the last copy landed is what the next run has
+        // to compare against.
+        private readonly Dictionary<string, (HotReloadAppliedSourceRecordDecision Decision, HotReloadNewSourceMembershipEvidence Evidence)>
+            _appliedSourceRecordByPath =
+                new Dictionary<string, (HotReloadAppliedSourceRecordDecision Decision, HotReloadNewSourceMembershipEvidence Evidence)>(
                     StringComparer.Ordinal);
         // Why captured at construction: the 0.5s Auto Refresh reconcile can arm the hold while the
         // run is still awaited, so the sync at the end of the run cannot tell a run that armed the
@@ -113,12 +115,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _addedFields.AddRange(fileResult.AddedFieldNames);
             _addedConsts.AddRange(fileResult.AddedConstNames);
             _introducedTypes.AddRange(fileResult.IntroducedTypes);
-            HotReloadAppliedSourceLifecycle.StageAppliedSourceHash(
-                _appliedSourceHashByPath,
-                projectRelativePath,
-                fileResult.SourceContentSha256,
-                fileResult.Outcomes,
-                fileResult.AppliedAddedFieldsOrConsts,
+            // Why the worker hash (not the orchestrator probe): the worker re-reads the file in
+            // another process, so the bytes it compiled can differ from the probe if the file
+            // changed mid-run.
+            _appliedSourceRecordByPath[projectRelativePath] = (
+                HotReloadAppliedSourceRecordDecision.Decide(
+                    fileResult.SourceContentSha256,
+                    fileResult.Outcomes,
+                    fileResult.AppliedAddedFieldsOrConsts),
                 fileResult.NewSourceMembershipEvidence);
             _siblingLedgerUpdates.Observe(projectRelativePath, fileResult);
         }
@@ -140,13 +144,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public void RecordAppliedSourceHashes()
         {
-            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>
-                         pair in _appliedSourceHashByPath)
+            foreach (KeyValuePair<string, (HotReloadAppliedSourceRecordDecision Decision, HotReloadNewSourceMembershipEvidence Evidence)>
+                         pair in _appliedSourceRecordByPath)
             {
+                HotReloadAppliedSourceRecordDecision decision = pair.Value.Decision;
+                if (decision.Kind == HotReloadAppliedSourceRecordKind.Keep)
+                {
+                    continue;
+                }
+
+                if (decision.Kind == HotReloadAppliedSourceRecordKind.Forget)
+                {
+                    _domain.ClearAppliedSource(pair.Key);
+                    continue;
+                }
+
                 _domain.RecordAppliedSource(
                     pair.Key,
-                    pair.Value.Hash,
-                    pair.Value.IsFullyApplied);
+                    decision.Hash,
+                    decision.Kind == HotReloadAppliedSourceRecordKind.FullyApplied);
 
                 // Why a null evidence leaves the recorded one alone: a result that carries none is
                 // a file the compiler lists, or one that ended before its target was resolved.
