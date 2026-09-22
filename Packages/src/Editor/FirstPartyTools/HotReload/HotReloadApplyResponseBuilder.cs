@@ -128,9 +128,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailure,
                 hasMethodFailure,
                 warnings.Count,
-                appendCompileResolution: orchestratorWarningCount >= 2
-                    && orchestratorWarningCount == warningCountBeforeHold
-                    && !RequiresCompileBeforeContinuing(result),
+                appendCompileResolution: DecideAppendCompileResolution(
+                    result,
+                    orchestratorWarningCount,
+                    warningCountBeforeHold),
                 allRequestedSkipped,
                 reappliedSiblingCount);
             return new HotReloadResponse
@@ -268,12 +269,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return AppendWarningCount(message, warningCount, appendCompileResolution);
         }
 
-        // Whether a type the run declared needs a compile before it exists. The compile-resolution
-        // suffix says no warning has to be cleared before continuing, which such a type contradicts.
-        private static bool RequiresCompileBeforeContinuing(HotReloadOrchestratorResult result)
+        // Whether the Message may say one compile clears every warning and none has to be cleared
+        // first: only for two or more hot reload warnings with no pause-point extras after them,
+        // and never when a declared type needs a compile before it exists, which contradicts it.
+        private static bool DecideAppendCompileResolution(
+            HotReloadOrchestratorResult result,
+            int orchestratorWarningCount,
+            int warningCountBeforeHold)
         {
-            return result.IntroducedTypeNoticeCount > 0
-                || HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
+            if (orchestratorWarningCount < 2 || orchestratorWarningCount != warningCountBeforeHold)
+            {
+                return false;
+            }
+
+            return result.IntroducedTypeNoticeCount == 0
+                && !HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
         }
 
         private static bool ReadsInvocationCountFromLedger(HotReloadMethodOutcomeKind kind)
