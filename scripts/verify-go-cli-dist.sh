@@ -10,6 +10,8 @@ dist/darwin-amd64/uloop
 dist/darwin-amd64/uloop-project-runner
 dist/windows-amd64/uloop.exe
 dist/windows-amd64/uloop-project-runner.exe
+dist/linux-amd64/uloop
+dist/linux-amd64/uloop-project-runner
 "
 
 "$ROOT_DIR/scripts/build-go-cli.sh"

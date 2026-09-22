@@ -124,6 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why not `using`: the executor awaits below use ConfigureAwait(false), so this method
             // can resume on a thread-pool thread. Application.runInBackground is main-thread-only,
             // so the scope must be disposed after switching back to the main thread.
+            int suppressedCountBefore = InputStateChangeApplier.SuppressedAssertionCount;
             InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
             try
             {
@@ -175,6 +176,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     isPressAction,
                     response.PressEdgeObserved,
                     response.Success);
+                response.Warning = InputStateMonitorRemovalWarningBuilder.Append(
+                    response.Warning, suppressedCountBefore, InputStateChangeApplier.SuppressedAssertionCount);
 
                 return response;
             }
@@ -204,6 +207,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why not `using`: SwitchToMainThreadIfNeeded can resume on a thread-pool thread
             // after ConfigureAwait(false), and Application.runInBackground is main-thread-only.
+            int suppressedCountBefore = InputStateChangeApplier.SuppressedAssertionCount;
             InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
             try
             {
@@ -239,6 +243,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     KeyStateReadUpdateType = releaseResult.KeyStateReadUpdateType,
                     DeferredLatchSyncScheduled = deferredLatchSyncScheduled
                 };
+                response.Warning = InputStateMonitorRemovalWarningBuilder.Append(
+                    response.Warning, suppressedCountBefore, InputStateChangeApplier.SuppressedAssertionCount);
 
                 VibeLogger.LogInfo(
                     "simulate_keyboard_complete",

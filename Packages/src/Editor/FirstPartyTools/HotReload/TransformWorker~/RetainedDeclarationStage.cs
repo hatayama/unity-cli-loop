@@ -95,7 +95,25 @@ internal static class RetainedDeclarationStage
             return bindingParseErrors[0];
         }
 
+        PublishRunRetainedBodyEditTypes(loadedUnits);
         return null;
+    }
+
+    // Hands every unit the body-edit declarations of the whole run, because a file that only
+    // constructs such a type declares none of them itself and would otherwise read the source
+    // declaration the binding tree still holds as a type no artifact serves.
+    private static void PublishRunRetainedBodyEditTypes(List<WorkerSourceUnit> loadedUnits)
+    {
+        List<WorkerRetainedBodyEditType> runBodyEditTypes = new List<WorkerRetainedBodyEditType>();
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            runBodyEditTypes.AddRange(loadedUnit.RetainedBodyEditTypes);
+        }
+
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            loadedUnit.RunRetainedBodyEditTypes = runBodyEditTypes;
+        }
     }
 
     // Records what the unit's verdicts mean for it and returns the declarations to remove. The
@@ -133,7 +151,8 @@ internal static class RetainedDeclarationStage
                 MetadataName = verdict.MetadataName,
                 OriginalAssemblyName = verdict.Record.OriginalAssemblyName,
                 OriginalAssemblyMvid = verdict.Record.OriginalAssemblyMvid,
-                ChangedMethodKeys = verdict.Match.ChangedMethodSyntaxKeys.ToArray()
+                ChangedMethodKeys = verdict.Match.ChangedMethodSyntaxKeys.ToArray(),
+                ChangedGetterPropertyKeys = verdict.Match.ChangedGetterPropertySyntaxKeys.ToArray()
             });
         }
 

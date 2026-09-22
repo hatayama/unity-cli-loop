@@ -16,5 +16,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// form before comparing it against Type.FullName or passing it to Assembly.GetType.
         /// </summary>
         public static Func<IReadOnlyList<string>> DescribeActiveTypeNames { get; set; }
+
+        /// <summary>
+        /// Set by the hot-reload composition root. Returns the path of the on-disk assembly behind
+        /// every active introduced type, empty when none. A tool that compiles against file paths
+        /// adds these to its references so the introduced types resolve; a path whose file is gone
+        /// is left out. Prepared-but-not-activated types are not listed.
+        /// </summary>
+        public static Func<IReadOnlyList<string>> DescribeActiveArtifactReferencePaths { get; set; }
     }
 }

@@ -90,7 +90,7 @@ remains.
 One-shot methods (`Awake`, `Start`, initialization helpers) patch successfully but show
 no effect on the call that already ran; the response marks them with `LifecycleNote`.
 For values you expect to tune while playing, expose a static property getter instead of
-a `const` (in a compiled type; an introduced type's getter is not patchable).
+a `const`; its body is patched on a compiled type and on an introduced type alike.
 
 ## Reference Guides
 

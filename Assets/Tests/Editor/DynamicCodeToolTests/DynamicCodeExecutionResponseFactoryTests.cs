@@ -495,13 +495,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(
                     response.Diagnostics[0].Hint,
                     Is.EqualTo(
-                        "'Widget' is a hot-reload introduced type (Example.Widget). execute-dynamic-code compiles against the compiled assemblies only, so an introduced type is not visible here until it is compiled. Members that hot reload added to it are not visible through reflection either; only code edited in the same reload sees them. Use reflection through the loaded assembly (AppDomain.CurrentDomain.GetAssemblies) while it is active, or run 'uloop compile' to make it a compiled type."));
+                        "'Widget' is a hot-reload introduced type (Example.Widget), and the assembly holding it is referenced by this compilation while it stays active, so the name is what did not resolve. Write it as Example.Widget, or add a using for its namespace. Members that hot reload added to it are separate: those are not visible here at all, and not through reflection either; only code edited in the same reload sees them. If the name still does not resolve, reach the type through reflection (AppDomain.CurrentDomain.GetAssemblies), or run 'uloop compile' to make it a compiled type."));
                 Assert.That(
                     response.Diagnostics[0].Suggestions,
                     Is.EqualTo(new[]
                     {
+                        "Write it as Example.Widget, or add a using for its namespace",
                         "Locate the type with AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).First(t => t.FullName == \"Example.Widget\") and drive it through reflection",
-                        "Run 'uloop compile' when the type is final, then reference it directly",
+                        "Run 'uloop compile' when the type is final, then reference it as an ordinary compiled type",
                         "Use Namespace.One.Widget",
                         "Use Namespace.Two.Widget"
                     }));
@@ -509,6 +510,107 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             finally
             {
                 HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames = previousDescribe;
+            }
+        }
+
+        /// <summary>
+        /// Verifies a missing member whose name is an active hot-reload addition is explained as one,
+        /// so the bare CS1061 no longer reads as a misspelling.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenMissingMemberWasAddedByHotReload_ExplainsTheAddedMember()
+        {
+            Func<IReadOnlyList<string>> previousDescribe =
+                HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames;
+            HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames =
+                () => new List<string> { "ComputeScore" };
+            try
+            {
+                DynamicCodeExecutionResponseFactory factory = new();
+                ExecutionResult result = new()
+                {
+                    Success = false,
+                    ErrorMessage = "Compilation error occurred",
+                    UpdatedCode = "return new Player().ComputeScore();",
+                    CompilationErrors = new List<CompilationError>
+                    {
+                        new CompilationError
+                        {
+                            ErrorCode = "CS1061",
+                            Message = "'Player' does not contain a definition for 'ComputeScore' and no "
+                                + "accessible extension method 'ComputeScore' accepting a first argument of "
+                                + "type 'Player' could be found",
+                            Line = 1,
+                            Column = 22
+                        }
+                    }
+                };
+
+                ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+                Assert.That(
+                    response.Diagnostics[0].Hint,
+                    Is.EqualTo(
+                        "'ComputeScore' matches a member hot reload added, which is active now. An added member is not visible to the compilation of a dynamic-code snippet, which compiles against the compiled assemblies only, and it is not visible through reflection either. Run 'uloop compile' to make the added member compiled, then rerun, or read the state through a member that was already compiled."));
+                Assert.That(
+                    response.Diagnostics[0].Suggestions,
+                    Is.EqualTo(new[]
+                    {
+                        "Run 'uloop compile' to make the added member compiled, then rerun",
+                        "Read the state through a member that was already compiled instead of the added one"
+                    }));
+            }
+            finally
+            {
+                HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames = previousDescribe;
+            }
+        }
+
+        /// <summary>
+        /// Verifies an unknown identifier that names both an active introduced type and an active
+        /// added member is explained as the introduced type, which is the larger fact about it.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenAnUnknownNameMatchesBothHotReloadFacts_PrefersTheIntroducedType()
+        {
+            Func<IReadOnlyList<string>> previousTypes =
+                HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames;
+            Func<IReadOnlyList<string>> previousMembers =
+                HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames;
+            HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames =
+                () => new List<string> { "Example.Badge" };
+            HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames =
+                () => new List<string> { "Badge" };
+            try
+            {
+                DynamicCodeExecutionResponseFactory factory = new();
+                ExecutionResult result = new()
+                {
+                    Success = false,
+                    ErrorMessage = "Compilation error occurred",
+                    UpdatedCode = "return Badge;",
+                    CompilationErrors = new List<CompilationError>
+                    {
+                        new CompilationError
+                        {
+                            ErrorCode = "CS0103",
+                            Message = "The name 'Badge' does not exist in the current context",
+                            Line = 1,
+                            Column = 8
+                        }
+                    }
+                };
+
+                ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+                Assert.That(
+                    response.Diagnostics[0].Hint,
+                    Does.StartWith("'Badge' is a hot-reload introduced type (Example.Badge),"));
+            }
+            finally
+            {
+                HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames = previousTypes;
+                HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames = previousMembers;
             }
         }
     }

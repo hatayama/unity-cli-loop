@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+
+using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -8,14 +11,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadRemovedMembersWarning
     {
-        internal static string FormatRemovedMembersWarning(
+        /// <summary>
+        /// The removed-member names this run reports for one file, in the order the worker listed
+        /// them. Empty when the file has none left to report after the gate.
+        /// </summary>
+        internal static IReadOnlyList<string> SelectDisplayedRemovedMemberNames(
             TransformWorkerRemovedMemberDto[] removedMembers,
             TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
             if (removedMembers == null || removedMembers.Length == 0)
             {
-                return null;
+                return Array.Empty<string>();
             }
 
             HashSet<string> gatedKeys = new HashSet<string>(
@@ -42,14 +49,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 names.Add(removed.name);
             }
 
-            if (names.Count == 0)
-            {
-                return null;
-            }
+            return names;
+        }
+
+        /// <summary>The full warning, which every run that changes the reported set prints.</summary>
+        internal static string FormatRemovedMembersWarning(IReadOnlyList<string> displayedNames)
+        {
+            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
+            Debug.Assert(displayedNames.Count > 0, "displayedNames must not be empty.");
 
             return string.Format(
                 HotReloadConstants.RemovedMembersWarningFormat,
-                string.Join(", ", names));
+                string.Join(", ", displayedNames));
+        }
+
+        // Why the names are sorted here and not in the full warning: the continuation line stands
+        // for a set, so two runs that list the same members in a different order must read the
+        // same. The full warning reports this run's own listing order.
+        internal static string FormatContinuingRemovedMembersWarning(IReadOnlyList<string> displayedNames)
+        {
+            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
+            Debug.Assert(displayedNames.Count > 0, "displayedNames must not be empty.");
+
+            List<string> sortedNames = new List<string>(displayedNames);
+            sortedNames.Sort(StringComparer.Ordinal);
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                HotReloadConstants.ContinuingRemovedMembersWarningFormat,
+                sortedNames.Count,
+                string.Join(", ", sortedNames));
         }
 
         // Why signature keys, not simple names: a gated replacement and a real deletion can

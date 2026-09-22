@@ -51,6 +51,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return rawNamespace.Trim();
         }
 
+        /// <summary>
+        /// Returns the member name of a CS1061 / CS0117 message, whose second quoted phrase is the
+        /// member the compiler could not find on the type quoted first. Null when the message has no
+        /// second quoted phrase.
+        /// </summary>
+        public static string ExtractMemberNameFromMessage(string message)
+        {
+            if (message == null)
+            {
+                return null;
+            }
+
+            MatchCollection matches = TypeNamePattern.Matches(message);
+            if (matches.Count < 2)
+            {
+                return null;
+            }
+
+            // The type arguments are dropped for the same reason as on a type name: a generic member
+            // is quoted with the arguments of the call site, while a name to match against is bare.
+            return NormalizeTypeName(matches[1].Groups[1].Value);
+        }
+
         private static string NormalizeTypeName(string rawName)
         {
             if (string.IsNullOrWhiteSpace(rawName))

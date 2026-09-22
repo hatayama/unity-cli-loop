@@ -195,3 +195,75 @@ func TestNormalizeComparablePathPreservesCaseOutsideWindows(t *testing.T) {
 		t.Fatalf("expected normalized path to preserve case, got %q", normalizedPath)
 	}
 }
+
+// Verifies a /proc/<pid>/cmdline buffer splits on NUL into argv, keeping spaces inside arguments.
+func TestParseLinuxProcCmdlineSplitsOnNul(t *testing.T) {
+	args := parseLinuxProcCmdline([]byte("/opt/Unity/Editor/Unity\x00-projectpath\x00/work/My Project\x00"))
+	expected := []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/My Project"}
+	if len(args) != len(expected) {
+		t.Fatalf("argv length mismatch: %#v", args)
+	}
+	for index := range expected {
+		if args[index] != expected[index] {
+			t.Fatalf("argv mismatch at %d: %#v", index, args)
+		}
+	}
+}
+
+// Verifies an empty cmdline buffer (kernel threads, zombies) yields no arguments.
+func TestParseLinuxProcCmdlineReturnsEmptyForEmptyBuffer(t *testing.T) {
+	args := parseLinuxProcCmdline([]byte{})
+	if len(args) != 0 {
+		t.Fatalf("expected no arguments, got %#v", args)
+	}
+}
+
+// Verifies Linux Unity process matching accepts Editor processes and extracts their project path.
+func TestMatchLinuxUnityProcessExtractsProjectPath(t *testing.T) {
+	cases := []struct {
+		name         string
+		args         []string
+		expectedPath string
+	}{
+		{"separate value keeps spaces", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/My Project"}, "/work/My Project"},
+		{"equals form with mixed case", []string{"/opt/Unity/Editor/Unity", "-projectPath=/work/p"}, "/work/p"},
+		{"project path containing batchmode", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/nightly-batchmode"}, "/work/nightly-batchmode"},
+		{"project path containing assetimportworker", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/AssetImportWorker-lab"}, "/work/AssetImportWorker-lab"},
+		{"unity hub hardlink name with lowercase projectpath", []string{"/home/user/Unity/Hub/Editor/2022.3.62f3/Editor/unityhub-unity-editor-2022.3.62f3", "-projectpath", "/home/user/project", "-acceptSoftwareTermsForThisRunOnly", "-useHub", "-hubIPC", "-cloudEnvironment", "production", "-licensingIpc", "LicenseClient-user", "-hubSessionId", "session-placeholder", "-accessToken", "token-placeholder"}, "/home/user/project"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			process, matched := matchLinuxUnityProcess(42, testCase.args)
+			if !matched {
+				t.Fatal("expected the Unity editor process to match")
+			}
+			if process.Pid != 42 || process.projectPath != testCase.expectedPath {
+				t.Fatalf("editor process mismatch: %#v", process)
+			}
+		})
+	}
+}
+
+// Verifies Linux Unity process matching rejects each non-Editor shape independently.
+func TestMatchLinuxUnityProcessRejectsNonEditorProcesses(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"batchmode", []string{"/opt/Unity/Editor/Unity", "-batchmode", "-projectpath", "/work/p"}},
+		{"asset import worker", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/p", "-name", "AssetImportWorker0"}},
+		{"executable name is not Unity", []string{"/opt/Unity/Editor/Data/Tools/UnityShaderCompiler", "-projectpath", "/work/p"}},
+		{"asset import worker with relative hub hardlink name", []string{"unityhub-unity-editor-2022.3.62f3", "-batchMode", "-name", "AssetImportWorker0", "-projectPath", "/home/user/project"}},
+		{"unrelated executable with unityhub prefix in directory only", []string{"/home/user/Unity/Hub/Editor/2022.3.62f3/Editor/Data/Tools/UnityShaderCompiler", "-projectpath", "/home/user/project"}},
+		{"no project path flag", []string{"/opt/Unity/Editor/Unity"}},
+		{"project path flag without value", []string{"/opt/Unity/Editor/Unity", "-projectpath"}},
+		{"empty argv", []string{}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if process, matched := matchLinuxUnityProcess(42, testCase.args); matched {
+				t.Fatalf("expected no match, got %#v", process)
+			}
+		})
+	}
+}

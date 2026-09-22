@@ -248,8 +248,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
-                NoArgs,
-                "Calls an added method that hot reload cannot emit. Run 'uloop compile'.");
+                new[] { "Outer.Inner.Ping()" },
+                "Calls the added method 'Outer.Inner.Ping()', which hot reload cannot emit. "
+                + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced,
                 NoArgs,
@@ -592,7 +593,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 NoArgs,
                 "inaccessible method calls with ref/out/in parameters are not rewritten; the call is "
-                + "refused whatever is passed, because the rewrite cannot forward ref/out/in parameters.");
+                + "refused whatever is passed, because the rewrite cannot forward ref/out/in parameters. "
+                + "No form of this call applies while the callee stays a compiled inaccessible method - an "
+                + "added method that calls it is refused for the same reason. Only a method this same "
+                + "reload adds is called directly with ref/out/in arguments, so declare that logic as a "
+                + "method this reload adds, or route the work through an API this code can already "
+                + "access, to keep the edit applying without leaving Play Mode.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten,
                 NoArgs,
@@ -688,7 +694,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Example.Type::.ctor()" },
                 "Changed member body of introduced type requires a compile: Example.Type"
                 + " Changed members: Example.Type::.ctor()."
-                + " Only ordinary method bodies of an introduced type can be hot reloaded.");
+                + " Only ordinary method bodies and getter-only property bodies of an introduced type can be hot reloaded.");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeDifferenceList,
                 new[] { "header, order" },

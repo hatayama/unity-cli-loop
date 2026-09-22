@@ -12,8 +12,9 @@ internal static class RetainedBodyEditHome
     /// <summary>
     /// Binds the type state to the retained artifact that serves it and returns that artifact's
     /// type, or null when no artifact of this run serves the type. On success the state also
-    /// carries the assembly the patch belongs in and the method keys this edit changed, because
-    /// every other method still runs the body the artifact holds.
+    /// carries the assembly the patch belongs in and the keys of the methods and getter-only
+    /// properties this edit changed, because every other member still runs the body the artifact
+    /// holds.
     /// </summary>
     internal static INamedTypeSymbol Adopt(TypeEmitState typeState, SemanticModel semanticModel)
     {
@@ -42,6 +43,9 @@ internal static class RetainedBodyEditHome
         typeState.RetainedChangedMethodKeys = new HashSet<string>(
             bodyEditType.ChangedMethodKeys ?? new string[0],
             StringComparer.Ordinal);
+        typeState.RetainedChangedGetterPropertyKeys = new HashSet<string>(
+            bodyEditType.ChangedGetterPropertyKeys ?? new string[0],
+            StringComparer.Ordinal);
         return artifactType;
     }
 
@@ -67,6 +71,27 @@ internal static class RetainedBodyEditHome
             FindBodyEditType(sourceUnit.RetainedBodyEditTypes, CecilTypeNames.ToMetadataName(typeSymbol)));
     }
 
+    /// <summary>
+    /// The artifact serving a type any file of this run keeps in its tree, or null when no
+    /// artifact of this run serves it. Asked by a file that uses such a type without declaring
+    /// it, where the declaration lives in another unit of the same group.
+    /// </summary>
+    internal static INamedTypeSymbol FindRunRetainedType(
+        WorkerSourceUnit sourceUnit,
+        SemanticModel semanticModel,
+        INamedTypeSymbol typeSymbol)
+    {
+        if (sourceUnit == null || typeSymbol == null)
+        {
+            return null;
+        }
+
+        return ResolveArtifactType(
+            sourceUnit,
+            semanticModel,
+            FindBodyEditType(sourceUnit.RunRetainedBodyEditTypes, CecilTypeNames.ToMetadataName(typeSymbol)));
+    }
+
     private static INamedTypeSymbol ResolveArtifactType(
         WorkerSourceUnit sourceUnit,
         SemanticModel semanticModel,
@@ -85,7 +110,7 @@ internal static class RetainedBodyEditHome
     }
 
     private static WorkerRetainedBodyEditType FindBodyEditType(
-        List<WorkerRetainedBodyEditType> bodyEditTypes,
+        IReadOnlyList<WorkerRetainedBodyEditType> bodyEditTypes,
         string metadataName)
     {
         foreach (WorkerRetainedBodyEditType bodyEditType in bodyEditTypes)

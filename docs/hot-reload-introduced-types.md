@@ -48,8 +48,8 @@ nothing from them is applied, while files in other assemblies still apply.
 
 | Condition | `Reason` |
 |---|---|
-| The declaration of a type this domain already introduced has changed in a way the artifact cannot be brought up to | `Changed introduced type requires a compile: <type> Declaration differences: <parts>.` — the differences name the fingerprint parts that stopped matching, and are omitted when the comparison only knows the type name. `removed:<member>` and `declaration:<member>` name a member the artifact holds that the source no longer declares the same way; `added:<member>` names one the source gained; `header` is the type's own declaration (accessibility, kind, base list, type parameters), `defines` the preprocessor symbols the file was read with, and `order` the declared order of the members. `added:` keys are applied rather than refused when every added member is an ordinary method, field or property and nothing else about the declaration differs; an added constructor, operator, event, indexer or nested type is refused like any other change. The `order` an insertion shifts is forgiven as long as the members the record holds keep the same order once the added keys are dropped. Additions the reload could have applied (ordinary methods, fields, properties) are not listed; the row ends with `N applicable addition(s) omitted` so the reader knows they are not the cause |
-| A member body of a type this domain already introduced changed in a way that cannot be patched | `Changed member body of introduced type requires a compile: <type> Changed members: <keys>. Only ordinary method bodies of an introduced type can be hot reloaded.` |
+| The declaration of a type this domain already introduced has changed in a way the artifact cannot be brought up to | `Changed introduced type requires a compile: <type> Declaration differences: <parts>.` — the differences name the fingerprint parts that stopped matching, and are omitted when the comparison only knows the type name. `removed:<member>` and `declaration:<member>` name a member the artifact holds that the source no longer declares the same way; `added:<member>` names one the source gained; `header` is the type's own declaration (accessibility, kind, base list, type parameters), `defines` the preprocessor symbols the file was read with, and `order` the declared order of the members. `added:` keys are applied rather than refused when every added member is an ordinary method, field or property and nothing else about the declaration differs; an added constructor, operator, event, indexer or nested type is refused like any other change. The `order` an insertion shifts is forgiven as long as the members the record holds keep the same order once the added keys are dropped. Additions the reload could have applied (ordinary methods, fields, properties) are not counted among the blocking differences; the row ends with `N applicable addition(s) omitted: <member>, <member>` — the first three of them by name, then `and <M> more` — so the reader knows which additions are not the cause |
+| A member body of a type this domain already introduced changed in a way that cannot be patched | `Changed member body of introduced type requires a compile: <type> Changed members: <keys>. Only ordinary method bodies and getter-only property bodies of an introduced type can be hot reloaded.` |
 | Two files of the same reload declare the same type | `Introduced type <type> is declared in more than one file of the group: <paths>.` |
 | The artifact assembly failed to compile | `Introduced-type compilation failed: <compiler output>` |
 
@@ -67,11 +67,13 @@ unload it either — the type stays loaded, and the active state of the domain i
 What is fixed is the declaration, not the code behind it. Editing only the bodies of the type's
 ordinary methods leaves the declaration identical, so the reload patches those bodies on the
 artifact assembly that already carries the type and reports the type as an `AlreadyActive` row
-with the methods as `Patched`. Restoring such a body to what the artifact was compiled from
-reverts the patch, so the artifact runs its own code again. Bodies that are not ordinary method
-bodies — constructors, property and event accessors, field and property initializers — and any
-change to the declaration other than adding an ordinary method, field or property still require
-a compile.
+with the methods as `Patched`. A property whose getter is its only accessor with a body is read
+the same way: the fingerprint folds every body of a property into one hash, so only that shape
+tells the comparison the difference can be the getter's alone. Restoring such a body to what the
+artifact was compiled from reverts the patch, so the artifact runs its own code again. Every
+other body — constructors, setter, init, indexer and event accessors, field and property
+initializers — and any change to the declaration other than adding an ordinary method, field or
+property still require a compile.
 
 ## Partial apply
 
@@ -89,6 +91,18 @@ and still fail a method. The three shapes a caller has to be able to read:
 whatever the methods did. In the third shape the recommended next action is a partial-apply
 recovery: the types stay loaded whatever the methods did, so a re-apply is not a clean retry.
 
+## Use from execute-dynamic-code
+
+A snippet run by `uloop execute-dynamic-code` can name an active introduced type directly: every
+active artifact on disk is added to that compilation's references, so the type is nameable for as
+long as it stays active. Write its full name, as the snippet has no using for its namespace, and
+spell a nested type in C# form (`Outer.Inner`), which a using cannot shorten. Only a public type
+is introduced at all, so a snippet never meets an inaccessible one. Two
+limits stay: members hot reload *added* to a type are still invisible to a snippet, added or not
+to an introduced type, because an addition lives only in the reload's shim; and the compilation
+cache keys on the reference set, so a snippet compiled against one generation of artifacts is
+recompiled rather than reused once that generation is gone.
+
 ## When a compile is still required
 
 - Any refused shape in the tables above.
@@ -98,10 +112,6 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
   reload nor already hot-reloaded still refers to the compiled world, where the type is absent.
 - Anything that reads the type through Unity: serialization, `[SerializeField]`, Inspector
   display, `AddComponent`, `ScriptableObject.CreateInstance`, Unity message discovery.
-- Use from `uloop execute-dynamic-code`. Dynamic code compiles against the compiled assemblies,
-  not against the reload's artifact. The compile error's `Hint` names the introduced type and
-  points to reflection through the loaded assembly or to `uloop compile`, so the failure does not
-  read as a missing type.
 - A new or changed `.asmdef` / `.asmref`. Assembly layout is decided at compile time.
 - A call to a member an earlier or the same reload *added* to a compiled type (an `Added` row).
   Introduced types compile against the compiled assemblies and the retained artifacts only, so
@@ -125,9 +135,11 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 - **Values are not preserved.** Nothing carries the state of an introduced type's instances
   across the domain reload that ends its life, and this stage makes no attempt to. Treat an
   introduced type as an Editor-session illusion, exactly like an added member.
-- Body-only edits of an introduced type's ordinary methods are patched on the artifact assembly,
+- Body-only edits of an introduced type's ordinary methods, and of a property whose getter is
+  its only accessor with a body, are patched on the artifact assembly,
   and ordinary methods, fields and properties added to it are applied through the same
-  added-member machinery a compiled type uses. Constructor / accessor / initializer bodies,
+  added-member machinery a compiled type uses. Constructor / setter / init / indexer / event
+  accessor / initializer bodies,
   member removals, signature changes, and additions of constructors, operators, events,
   indexers or nested types still require a compile.
 - A member added to an introduced type lives in the shim that reload compiled, so a later reload

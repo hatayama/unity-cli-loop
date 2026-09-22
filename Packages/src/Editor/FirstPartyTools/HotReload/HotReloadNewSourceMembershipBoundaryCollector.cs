@@ -156,14 +156,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             out HotReloadNewSourceMembershipBoundary boundary)
         {
             boundary = null;
+            // Why the path is in every sentence: a source can sit under several .asmdef / .asmref
+            // ancestors, and the caller only sees this sentence as the reason of a "(file)" row,
+            // so an unnamed boundary leaves the reader to find the offending file by hand.
             if (diskBytes == null)
             {
-                return "An imported assembly definition was deleted on disk. Compile the project and retry hot reload.";
+                return $"The imported assembly definition '{projectRelativePath}' was deleted on disk. Compile the project and retry hot reload.";
             }
 
             if (importedBytes == null)
             {
-                return "An assembly definition changed on disk but is not imported. Compile the project and retry hot reload.";
+                return $"The assembly definition '{projectRelativePath}' changed on disk but is not imported. Compile the project and retry hot reload.";
             }
 
             string diskContents = Convert.ToBase64String(diskBytes);
@@ -172,7 +175,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || string.IsNullOrEmpty(diskGuid)
                 || !string.Equals(diskGuid, importedGuid, StringComparison.OrdinalIgnoreCase))
             {
-                return "An assembly definition changed on disk or its GUID differs from the imported asset. Compile the project and retry hot reload.";
+                return $"The assembly definition '{projectRelativePath}' changed on disk or its GUID differs from the imported asset. Compile the project and retry hot reload.";
             }
 
             boundary = new HotReloadNewSourceMembershipBoundary(

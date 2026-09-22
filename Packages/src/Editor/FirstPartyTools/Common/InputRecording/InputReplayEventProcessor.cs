@@ -242,7 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
                 }
 
-                InputState.Change(keyboard, eventPtr, updateType);
+                InputStateChangeApplier.Apply(keyboard, eventPtr, updateType);
             }
         }
 
@@ -272,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     MouseButtonControlResolver.GetButtonControl(mouse, button).WriteValueIntoEvent(1f, eventPtr);
                 }
 
-                InputState.Change(mouse, eventPtr, updateType);
+                InputStateChangeApplier.Apply(mouse, eventPtr, updateType);
             }
         }
 

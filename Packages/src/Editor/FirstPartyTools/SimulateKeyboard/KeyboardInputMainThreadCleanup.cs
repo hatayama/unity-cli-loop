@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
 
                     InputUpdateType updateType = InputUpdateTypeResolver.Resolve();
-                    InputState.Change(keyboard, eventPtr, updateType);
+                    InputStateChangeApplier.Apply(keyboard, eventPtr, updateType);
                 }
 
                 InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());

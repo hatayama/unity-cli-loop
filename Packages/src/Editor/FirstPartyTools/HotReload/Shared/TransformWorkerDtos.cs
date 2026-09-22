@@ -137,6 +137,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Null/omitted deserializes as empty after client coalesce.
         public string[] addedFieldNames;
 
+        // One entry per addedFieldNames entry, in the same order: the normalized initializer text
+        // of that field, empty when it is declared without one. A shorter row means the worker
+        // did not report them, and the run compares nothing.
+        public string[] addedFieldInitializers;
+
         // Source-level names of added consts folded into edited bodies as literals.
         // Null/omitted deserializes as empty after client coalesce.
         public string[] addedConstNames;

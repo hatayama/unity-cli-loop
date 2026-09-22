@@ -807,6 +807,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the unavailable-call reason names the callee the way C# source spells it, so a
+        /// method on a nested type is reported with '.' between the type names and not with the
+        /// '+' the method key nests with.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerOfUnavailableAddedMethodOnNestedType_NamesTheCalleeInSourceForm()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "            public int ExistingNested()\n            {\n                return 1;\n            }",
+                "            public int AddedNestedPing(int value)\n            {\n                return value + 1;\n            }\n\n"
+                + "            public int ExistingNested()\n            {\n                return AddedNestedPing(1);\n            }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            // The worker keys a method by its Cecil metadata name, which nests with '/'.
+            string addedKey = typeof(HotReloadAddedMemberHost).FullName
+                + "/" + nameof(HotReloadAddedMemberHost.NestedAddedFieldHost)
+                + "::AddedNestedPing(System.Int32)";
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("UnavailableAddedCallOnNestedType.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk,
+                excludedAddedMethodKeys: new[] { addedKey });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string expectedCallee = typeof(HotReloadAddedMemberHost).FullName
+                + "." + nameof(HotReloadAddedMemberHost.NestedAddedFieldHost)
+                + ".AddedNestedPing(int)";
+            AssertHasSkip(result, "ExistingNested", "Calls the added method '" + expectedCallee + "'");
+        }
+
+        /// <summary>
         /// What: a caller of a skipped added method is skipped with the unavailable-call reason
         /// instead of leaving a bare CS0103 in the shim; static method-group capture is skipped
         /// the same way as instance capture.
