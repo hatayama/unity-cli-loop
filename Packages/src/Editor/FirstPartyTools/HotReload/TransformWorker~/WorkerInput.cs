@@ -54,7 +54,7 @@ internal sealed class WorkerInput
     // Null/omitted is treated as empty (nothing is normalized through an artifact).
     public WorkerIntroducedTypeArtifact[] IntroducedTypeArtifacts { get; set; }
 
-    // Labels of the edited files' methods whose patch from an earlier reload is active.
-    // Null/omitted is treated as empty (no method keeps an earlier patch).
-    public string[] ActivePatchedMethodLabels { get; set; }
+    // Labels of the edited files' methods that an earlier reload patched or added and that are
+    // still active. Null/omitted is treated as empty (no method keeps an earlier body).
+    public string[] ActiveMethodLabels { get; set; }
 }

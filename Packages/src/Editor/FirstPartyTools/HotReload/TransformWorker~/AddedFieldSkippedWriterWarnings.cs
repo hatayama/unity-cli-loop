@@ -55,7 +55,7 @@ internal static class AddedFieldSkippedWriterWarnings
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerSkipped> skipped,
-        HashSet<string> activePatchedLabels)
+        HashSet<string> activeLabels)
     {
         if (skipped.Count == 0)
         {
@@ -86,7 +86,7 @@ internal static class AddedFieldSkippedWriterWarnings
             if (candidate.Value.ShouldWarn)
             {
                 unit.DeclarationDriftWarnings.Add(
-                    FormatWarning(candidate.Key, candidate.Value, activePatchedLabels));
+                    FormatWarning(candidate.Key, candidate.Value, activeLabels));
             }
         }
     }
@@ -232,9 +232,9 @@ internal static class AddedFieldSkippedWriterWarnings
         return node is TupleExpressionSyntax && node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node;
     }
 
-    private static string FormatWarning(ISymbol candidate, FieldUses uses, HashSet<string> activePatchedLabels)
+    private static string FormatWarning(ISymbol candidate, FieldUses uses, HashSet<string> activeLabels)
     {
-        List<string> writersWithEarlierPatch = uses.SkippedWriters.Where(activePatchedLabels.Contains).ToList();
+        List<string> writersWithEarlierPatch = uses.SkippedWriters.Where(activeLabels.Contains).ToList();
         bool isProperty = candidate is IPropertySymbol;
         if (writersWithEarlierPatch.Count == 0)
         {

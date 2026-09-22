@@ -552,7 +552,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<TransformWorkerClientResult> RunWithActivePatchesAsync(
             string editedHostSource,
             string editedCallerSource,
-            string[] activePatchedMethodLabels)
+            string[] activeMethodLabels)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -609,7 +609,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 assemblySourcePaths = BuildAbsoluteAssemblySourcePaths(compilationAssembly.sourceFiles),
                 excludedMethodKeys = Array.Empty<string>(),
                 excludedAddedMethodKeys = Array.Empty<string>(),
-                activePatchedMethodLabels = activePatchedMethodLabels
+                activeMethodLabels = activeMethodLabels
             };
 
             return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
