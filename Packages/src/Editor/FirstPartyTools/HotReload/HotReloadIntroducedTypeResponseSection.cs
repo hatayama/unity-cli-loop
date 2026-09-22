@@ -51,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hasMethodFailure,
             int patchedMethodCount,
             int addedMethodCount,
+            int skippedMethodCount,
             out string message)
         {
             message = null;
@@ -91,6 +92,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 introducedCount > 0
                     ? introducedCount
                     : CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.AlreadyActive));
+            // Why counted here: "no method body needed patching" otherwise reads as if every
+            // method edit of the run was unchanged, while some of them were Skipped.
+            if (skippedMethodCount > 0)
+            {
+                message += string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.SkippedCountApplyMessageSuffixFormat,
+                    skippedMethodCount);
+            }
+
             return true;
         }
 

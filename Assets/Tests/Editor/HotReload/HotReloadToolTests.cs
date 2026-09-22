@@ -2256,8 +2256,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.StartWith(
                     string.Format(
                         HotReloadConstants.AlreadyActiveIntroducedTypesOnlyApplyMessageFormat,
-                        1)));
+                        1)
+                    + " Skipped: 1."));
             Assert.That(response.RecommendedNextAction, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a run that introduced a type and patched no method still counts the methods it
+        /// skipped, so its message does not read as if nothing else was edited.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_IntroducedTypeBesideSkippedMethods_CountsTheSkippedMethods()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.First", "reason", "Assets/Requested.cs"),
+                        HotReloadMethodOutcome.Skipped("T.Second", "reason", "Assets/Requested.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    introducedTypes: new[]
+                    {
+                        HotReloadIntroducedTypeOutcome.Introduced(
+                            "Example.Introduced",
+                            "IntroducedAssembly",
+                            "Assets/Requested.cs")
+                    }));
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    string.Format(HotReloadConstants.IntroducedTypesOnlyApplyMessageFormat, 1)
+                    + " Skipped: 2."));
         }
 
         /// <summary>

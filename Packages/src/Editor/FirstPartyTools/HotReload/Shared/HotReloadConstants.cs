@@ -418,6 +418,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ActiveIntroducedTypesRevertAllHoldNote =
             " Auto Refresh stays held for them; run 'uloop compile' to release it.";
 
+        // Format: how many method outcomes of this run were Skipped.
+        public const string SkippedCountApplyMessageSuffixFormat = " Skipped: {0}.";
+
         // Format: how many types this run introduced.
         public const string IntroducedTypesOnlyApplyMessageFormat =
             "Hot reload introduced {0} type(s); no method body needed patching.";
