@@ -120,8 +120,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult first = await RunAsync(new[] { payloadPath, registryPath }, overrides);
             Assert.That(CountKind(first, HotReloadMethodOutcomeKind.Patched), Is.EqualTo(1), "Precondition: Raise must be Patched.\n" + Format(first));
             Assert.That(OutcomesFor(first, PayloadFileName), Is.Zero, "Precondition: the payload must write no row.\n" + Format(first));
-            // Why a const-only file reports no AddedConsts: the reader compiles against the edited
-            // declaration and folds the value itself, so no shim rewrite names the const.
+            // Why a const-only file reports no AddedConsts: the worker records the folded const
+            // against its declaring file, but a file with no method entry is reported through the
+            // no-entry result, which passes added field names only, so the file is a companion.
             Assert.That(
                 expectedAddedField ? first.AddedFields : first.AddedConsts,
                 expectedAddedField ? Is.Not.Empty : Is.Empty,
