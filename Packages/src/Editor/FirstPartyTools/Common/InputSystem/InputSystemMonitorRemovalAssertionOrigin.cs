@@ -15,11 +15,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string DynamicBitfieldTypeName = "UnityEngine.InputSystem.DynamicBitfield";
         private const string ClearBitMethodName = "ClearBit";
         private const string InputManagerTypeName = "UnityEngine.InputSystem.InputManager";
+        private const string InputManagerStateMonitorsTypeName = "UnityEngine.InputSystem.InputManagerStateMonitors";
         private const string FireStateChangeNotificationsMethodName = "FireStateChangeNotifications";
 
         /// <summary>
         /// Returns true only when the first frame below the logging frames is DynamicBitfield.ClearBit,
-        /// or InputManager.FireStateChangeNotifications in case the JIT inlined ClearBit into it.
+        /// or FireStateChangeNotifications in case the JIT inlined ClearBit into it. That caller is
+        /// InputManager.FireStateChangeNotifications in Input System 1.14 and
+        /// InputManagerStateMonitors.FireStateChangeNotifications in Input System 1.20, which moved it,
+        /// so both declaring types are accepted.
         /// A user callback's bare assert always has the user's method there, so it is never matched.
         /// </summary>
         public bool IsCurrentAssertionFromMonitorRemoval()
@@ -63,14 +67,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return declaringType.Namespace == UnityEngineNamespace;
         }
 
-        private static bool IsMonitorRemovalFrame(string typeName, string methodName)
+        internal static bool IsMonitorRemovalFrame(string typeName, string methodName)
         {
             if (typeName == DynamicBitfieldTypeName && methodName == ClearBitMethodName)
             {
                 return true;
             }
 
-            return typeName == InputManagerTypeName && methodName == FireStateChangeNotificationsMethodName;
+            if (methodName != FireStateChangeNotificationsMethodName)
+            {
+                return false;
+            }
+
+            return typeName == InputManagerTypeName || typeName == InputManagerStateMonitorsTypeName;
         }
     }
 }
