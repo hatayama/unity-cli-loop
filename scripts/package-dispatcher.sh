@@ -56,6 +56,7 @@ create_checksum() {
 
 package_unix darwin-arm64
 package_unix darwin-amd64
+package_unix linux-amd64
 package_windows
 package_installers
 

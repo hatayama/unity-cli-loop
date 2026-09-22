@@ -51,6 +51,7 @@ create_checksum() {
 
 package_unix darwin-arm64
 package_unix darwin-amd64
+package_unix linux-amd64
 package_windows
 
 for asset_path in "$RELEASE_DIR"/*.tar.gz "$RELEASE_DIR"/*.zip; do

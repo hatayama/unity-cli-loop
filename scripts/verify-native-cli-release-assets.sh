@@ -7,6 +7,8 @@ uloop-project-runner-darwin-amd64.tar.gz
 uloop-project-runner-darwin-amd64.tar.gz.sha256
 uloop-project-runner-darwin-arm64.tar.gz
 uloop-project-runner-darwin-arm64.tar.gz.sha256
+uloop-project-runner-linux-amd64.tar.gz
+uloop-project-runner-linux-amd64.tar.gz.sha256
 uloop-project-runner-windows-amd64.zip
 uloop-project-runner-windows-amd64.zip.sha256
 "
@@ -100,10 +102,12 @@ done
 
 verify_checksum "uloop-project-runner-darwin-amd64.tar.gz"
 verify_checksum "uloop-project-runner-darwin-arm64.tar.gz"
+verify_checksum "uloop-project-runner-linux-amd64.tar.gz"
 verify_checksum "uloop-project-runner-windows-amd64.zip"
 
 require_tar_entry "uloop-project-runner-darwin-amd64.tar.gz" "uloop-project-runner"
 require_tar_entry "uloop-project-runner-darwin-arm64.tar.gz" "uloop-project-runner"
+require_tar_entry "uloop-project-runner-linux-amd64.tar.gz" "uloop-project-runner"
 require_zip_entry "uloop-project-runner-windows-amd64.zip" "uloop-project-runner.exe"
 
 echo "Native CLI release assets are complete."
