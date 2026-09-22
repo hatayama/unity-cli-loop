@@ -311,7 +311,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertAddedAndNotSkipped(result, "AddedBumpCompiledStatic");
             Assert.That(
                 result.Output.shimSource,
-                Does.Match(@"__P_set_PrivateStaticCounter\(\(int\)\(__P_get_PrivateStaticCounter\(\)\s*\+\s*value\)\)"),
+                Does.Match(@"__P_set_PrivateStaticCounter\(\(int\)\(__P_get_PrivateStaticCounter\(\)\s*\+\s*\(value\)\)\)"),
                 result.Output.shimSource);
         }
 
@@ -360,7 +360,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertAddedAndNotSkipped(result, "AddedBumpCompiledStaticByte");
             Assert.That(
                 result.Output.shimSource,
-                Does.Match(@"__P_set_PrivateStaticByteCounter\(\(byte\)\(__P_get_PrivateStaticByteCounter\(\)\s*\+\s*1\)\)"),
+                Does.Match(@"__P_set_PrivateStaticByteCounter\(\(byte\)\(__P_get_PrivateStaticByteCounter\(\)\s*\+\s*\(1\)\)\)"),
                 result.Output.shimSource);
         }
 
@@ -377,7 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertAddedAndNotSkipped(result, "AddedBumpCompiledByte");
             Assert.That(
                 result.Output.shimSource,
-                Does.Match(@"__P_set_PrivateByteCounter\(__uloopInstance,\s*\(byte\)\(__P_get_PrivateByteCounter\(__uloopInstance\)\s*\+\s*1\)\)"),
+                Does.Match(@"__P_set_PrivateByteCounter\(__uloopInstance,\s*\(byte\)\(__P_get_PrivateByteCounter\(__uloopInstance\)\s*\+\s*\(1\)\)\)"),
                 result.Output.shimSource);
         }
 

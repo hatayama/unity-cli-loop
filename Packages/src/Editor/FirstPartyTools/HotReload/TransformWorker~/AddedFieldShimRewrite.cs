@@ -106,7 +106,7 @@ internal sealed class AddedFieldShimRewrite
 
         SyntaxKind binaryKind = ShimBodyRewriter.GetCompoundAssignmentBinaryKind(node.Kind());
         ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
-        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
+        ExpressionSyntax combined = CombineCompoundOperands(binaryKind, getCall, visitedRight);
         return CreateAddedFieldSet(
                 binding,
                 receiver,
@@ -146,6 +146,22 @@ internal sealed class AddedFieldShimRewrite
 
         return node is PostfixUnaryExpressionSyntax postfix
             && postfix.IsKind(SyntaxKind.PostDecrementExpression);
+    }
+
+    // Why the right operand is always parenthesized: the shim is emitted as text and parsed
+    // again, and a node tree does not print the parentheses its shape implies. A right side that
+    // binds looser than the operator (a lambda, a conditional, an assignment) would otherwise
+    // reparse as a syntax error, or as a conditional over the partial sum that silently computes
+    // a different value. Parenthesizing unconditionally avoids reimplementing C# precedence.
+    internal static ExpressionSyntax CombineCompoundOperands(
+        SyntaxKind binaryKind,
+        ExpressionSyntax getCall,
+        ExpressionSyntax right)
+    {
+        return SyntaxFactory.BinaryExpression(
+            binaryKind,
+            getCall,
+            SyntaxFactory.ParenthesizedExpression(right));
     }
 
     // Why cast: C# compound assignment and ++/-- apply a conversion back to the assigned type
