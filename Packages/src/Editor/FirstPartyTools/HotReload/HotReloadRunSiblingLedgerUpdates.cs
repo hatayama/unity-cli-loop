@@ -90,6 +90,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why a retry that applied nothing forgets the record: that record is what makes the
             // file a retry candidate, and one more try at the same bytes cannot end differently.
+            // Why here and not in HotReloadAppliedSourceRecordDecision: that decision reads only the
+            // file's result, and whether the file was a retry is known only from why the run
+            // brought it back.
             for (int index = 0; index < _unappliedRetryPaths.Count; index++)
             {
                 domain.ClearAppliedSource(_unappliedRetryPaths[index]);

@@ -7,16 +7,15 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Applied-source hash short-circuit, staging, and unexpected patch-deactivation warnings.
+    /// Applied-source hash short-circuit and unexpected patch-deactivation warnings.
     /// </summary>
     internal static class HotReloadAppliedSourceLifecycle
     {
         // What: decide whether an unchanged source should short-circuit, re-apply with a
         // non-baseline warning, or fall through as a normal changed/unknown source.
-        // Why Clear on the miss and non-baseline paths: a later Failed run or revert can leave
-        // the hash pointing at a different live patch set; the next reload must not inherit
-        // that stale hash. Non-baseline matches still Clear; Stage/Record writes the same
-        // hash+flag back so the next identical reload warns again.
+        // Why the record is only read here: the run replaces it from this file's result once the
+        // file is processed (see HotReloadAppliedSourceRecordDecision), and a file whose result
+        // touches no patch has to keep the record it had.
         internal static HotReloadUnchangedSourceDecision TryShortCircuitUnchangedAppliedSource(
             HotReloadDomain domain,
             string workerSourcePath,
@@ -31,8 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why Exists (not ReadAllBytes first): a missing file after a successful apply
             // used to surface as a file-level Failed from the worker. Reading unconditionally
-            // would throw and abort the whole RunAsync. Why not Clear: this path does not
-            // mutate patches, so the ledger still describes the live patch set.
+            // would throw and abort the whole RunAsync.
             string fullWorkerSourcePath = Path.GetFullPath(workerSourcePath);
             if (!File.Exists(fullWorkerSourcePath))
             {
@@ -48,7 +46,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || !string.Equals(probeHash, recorded.Value.Hash, StringComparison.Ordinal)
                 || (recorded.Value.IsFullyApplied && activeLabels.Count == 0))
             {
-                domain.ClearAppliedSource(projectRelativePath);
                 return HotReloadUnchangedSourceDecision.NotUnchanged;
             }
 
@@ -71,92 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadUnchangedSourceDecision.ShortCircuited;
             }
 
-            domain.ClearAppliedSource(projectRelativePath);
             return HotReloadUnchangedSourceDecision.ReapplyNonBaseline;
-        }
-
-        // Why worker hash (not the orchestrator probe): the worker re-reads the file in another
-        // process, so the bytes it compiled can differ from the probe if the file changed mid-run.
-        // Why last occurrence wins: duplicate paths in one run apply twice; only the last
-        // qualifying hash is recorded so the next run short-circuits against what actually landed.
-        internal static void StageAppliedSourceHash(
-            Dictionary<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>
-                appliedSourceHashByPath,
-            string projectRelativePath,
-            string sourceContentSha256,
-            IReadOnlyList<HotReloadMethodOutcome> outcomes,
-            bool appliedAddedFieldsOrConsts,
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence)
-        {
-            Debug.Assert(appliedSourceHashByPath != null, "appliedSourceHashByPath must not be null.");
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(outcomes != null, "outcomes must not be null.");
-
-            (string Hash, bool IsFullyApplied)? record = DecideAppliedSourceRecord(
-                sourceContentSha256,
-                outcomes,
-                appliedAddedFieldsOrConsts);
-            if (record == null)
-            {
-                appliedSourceHashByPath.Remove(projectRelativePath);
-                return;
-            }
-
-            appliedSourceHashByPath[projectRelativePath] =
-                (record.Value.Hash, record.Value.IsFullyApplied, newSourceMembershipEvidence);
-        }
-
-        // Why not record "everything that is not fully applied": deleting an added method and
-        // converging to compiled IL yields empty outcomes on the empty-entries path. Recording
-        // that as non-baseline would make the next identical reload claim a prior Skipped/Failed
-        // that never happened. Why a file with no rows but applied added fields or consts is
-        // recorded: that file is still active, and a later reload that brings it back as a
-        // sibling needs this hash to tell its bytes are the ones those members came from.
-        private static (string Hash, bool IsFullyApplied)? DecideAppliedSourceRecord(
-            string sourceContentSha256,
-            IReadOnlyList<HotReloadMethodOutcome> outcomes,
-            bool appliedAddedFieldsOrConsts)
-        {
-            if (string.IsNullOrEmpty(sourceContentSha256))
-            {
-                return null;
-            }
-
-            if (outcomes.Count == 0)
-            {
-                return appliedAddedFieldsOrConsts ? (sourceContentSha256, true) : null;
-            }
-
-            bool hasSkippedOrFailed = false;
-            bool allPatchedOrAdded = true;
-            for (int index = 0; index < outcomes.Count; index++)
-            {
-                HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
-                if (kind == HotReloadMethodOutcomeKind.Patched
-                    || kind == HotReloadMethodOutcomeKind.Added)
-                {
-                    continue;
-                }
-
-                allPatchedOrAdded = false;
-                if (kind == HotReloadMethodOutcomeKind.Skipped
-                    || kind == HotReloadMethodOutcomeKind.Failed)
-                {
-                    hasSkippedOrFailed = true;
-                }
-            }
-
-            if (allPatchedOrAdded)
-            {
-                return (sourceContentSha256, true);
-            }
-
-            if (hasSkippedOrFailed)
-            {
-                return (sourceContentSha256, false);
-            }
-
-            return null;
         }
 
         internal static HashSet<string> CollectActiveLabelsForFile(
