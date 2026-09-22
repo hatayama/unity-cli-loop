@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 firstFile.Sinks.SiblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
             }
 
-            TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan);
+            TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan, _domain);
             workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
                 _domain.IntroducedTypes,
                 workerInput.targetAssemblyName,
@@ -439,7 +439,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static TransformWorkerInputDto BuildWorkerInput(
             IReadOnlyList<HotReloadGroupFile> files,
-            HotReloadChangedSiblingScanResult siblingScan)
+            HotReloadChangedSiblingScanResult siblingScan,
+            HotReloadDomain domain)
         {
             HotReloadGroupFile firstFile = files[0];
             TransformWorkerSourceDto[] sources = new TransformWorkerSourceDto[files.Count];
@@ -470,8 +471,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(
                     firstFile.ProjectRoot,
                     firstFile.CompilationAssembly.sourceFiles),
-                changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths
+                changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths,
+                activePatchedMethodLabels = CollectActivePatchedMethodLabels(files, domain)
             };
+        }
+
+        // Why only patched methods and not added members: a skipped method keeps running the body
+        // an earlier reload patched into it, while a skipped added member is not what the
+        // skipped-writer warning can be wrong about.
+        private static string[] CollectActivePatchedMethodLabels(
+            IReadOnlyList<HotReloadGroupFile> files,
+            HotReloadDomain domain)
+        {
+            List<string> labels = new List<string>();
+            foreach (HotReloadGroupFile file in files)
+            {
+                labels.AddRange(domain.ListActiveMethodKeys(file.ProjectRelativePath));
+            }
+
+            return labels.ToArray();
         }
 
         private static List<string> CollectProjectRelativePaths(IReadOnlyList<HotReloadGroupFile> files)

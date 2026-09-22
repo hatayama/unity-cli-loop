@@ -5316,6 +5316,89 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the only writer of an added auto-property is skipped but an earlier reload
+        /// patched it and that patch still assigns the property, the skipped-writer warning names
+        /// the earlier patch instead of claiming the property keeps its default value. Also pins
+        /// that the Editor's active-patch labels match the worker's skipped-row labels: with
+        /// different forms the warning would fall back to the default-value wording.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedWriterWithEarlierPatch_WarningNamesTheEarlierPatch()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            const string targetOriginal =
+                "        public int Target(int value)\n        {\n            return value;\n        }";
+            const string unrelatedOriginal =
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }";
+            const string readingUnrelated =
+                "        public int Unrelated(int value)\n        {\n            return AddedCount + value;\n        }\n\n"
+                + "        public int AddedCount { get; private set; }";
+            string firstEdit = onDisk
+                .Replace(
+                    targetOriginal,
+                    "        public int Target(int value)\n        {\n            AddedCount = value;\n"
+                    + "            return value;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
+            Assert.That(firstEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedWriterEarlierPatch1.cs", firstEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeExternalHost.Target));
+
+            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
+            // sees this writer as skipped while the first run's patch stays what runs.
+            string secondEdit = onDisk
+                .Replace(
+                    targetOriginal,
+                    "        public int Target(int value)\n        {\n            AddedCount = value;\n"
+                    + "            return value + base.GetHashCode() * 0;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedWriterEarlierPatch2.cs", secondEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                FindSkippedReason(second, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Is.Not.Null,
+                FormatOutcomes(second));
+
+            // The first run's Target patch still assigns the property the applied reader reads.
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            host.Target(7);
+            Assert.That(host.Unrelated(0), Is.EqualTo(7));
+
+            string targetLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeExternalHost).FullName),
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                new[] { "System.Int32" },
+                0);
+            List<string> writerWarnings = new List<string>();
+            foreach (string warning in second.Warnings)
+            {
+                if (warning.Contains("'AddedCount'", StringComparison.Ordinal))
+                {
+                    writerWarnings.Add(warning);
+                }
+            }
+
+            string allWarnings = "Warnings were:\n" + string.Join("\n", second.Warnings);
+            Assert.That(writerWarnings, Has.Count.EqualTo(1), allWarnings);
+            Assert.That(writerWarnings[0], Does.Contain("an earlier hot reload applied " + targetLabel), allWarnings);
+            Assert.That(
+                writerWarnings[0],
+                Does.Not.Contain("reads it; the property keeps its default value"),
+                allWarnings);
+        }
+
+        /// <summary>
         /// What: a gated return-type change does not record the skipped replacement as superseded.
         /// </summary>
         [Test]
