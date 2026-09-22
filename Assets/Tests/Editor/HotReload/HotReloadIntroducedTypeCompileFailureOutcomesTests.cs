@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Kind, Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed));
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.Second", "Assets/Second.cs")
                 },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -134,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.Companion", "Assets/First.cs")
                 },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].MetadataName, Is.EqualTo("Example.First"));
@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Is.EqualTo(Prefix + "CS0246: missing type"));
@@ -187,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDescriptor("Example.Second", "Assets/Second.cs")
                 },
                 "TargetAssembly",
-                Array.Empty<string>());
+                new HotReloadIntroducedTypeAddedMemberNames(Array.Empty<string>(), Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(2));
             Assert.That(rows[1].Kind, Is.EqualTo(HotReloadIntroducedTypeOutcomeKind.Failed));
@@ -222,7 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Clear" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Clear" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
@@ -258,9 +258,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Other" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Other" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));
+        }
+
+        /// <summary>
+        /// Verifies that a CS0117 naming an enum member this reload adds to a compiled enum points
+        /// at the enum-member warning instead of the added-member hint, even when an added member
+        /// shares the name: no reordering of the reload makes an added enum member visible.
+        /// </summary>
+        [Test]
+        public void Build_DiagnosticNamesAnAddedEnumMember_AppendsTheEnumMemberHint()
+        {
+            HotReloadIntroducedTypeCompilerResult compileResult = HotReloadIntroducedTypeCompilerResult.Failure(
+                "Introduced-type compilation reported errors.",
+                new[]
+                {
+                    new HotReloadIntroducedTypeCompilerDiagnostic(
+                        "Assets/First.cs",
+                        "CS0117: 'Shape' does not contain a definition for 'Third'",
+                        4,
+                        9)
+                });
+
+            List<HotReloadIntroducedTypeOutcome> rows = HotReloadIntroducedTypeCompileFailureOutcomes.Build(
+                compileResult,
+                new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
+                "TargetAssembly",
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Third" }, new[] { "Third" }));
+
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Reason, Does.Contain("an enum member this reload adds to a compiled enum"));
             Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));
         }
 
@@ -287,7 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", ownerPath) },
                 "TargetAssembly",
-                new[] { "Clear" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Clear" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
@@ -315,7 +345,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Reset" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Reset" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
@@ -343,7 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compileResult,
                 new[] { CreateDescriptor("Example.First", "Assets/First.cs") },
                 "TargetAssembly",
-                new[] { "Clear" });
+                new HotReloadIntroducedTypeAddedMemberNames(new[] { "Clear" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(rows[0].Reason, Does.Not.Contain("hot reload addition"));

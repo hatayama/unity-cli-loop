@@ -34,6 +34,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CompiledTypeAddedMethodName = "AddedInTheSameReload";
         private const string IntroducedTypeAddedMethodName = "Pong";
         private const string NoExtraMembers = "";
+        private const string EnumLastMemberAnchor = "        Second = 2";
+        private const string AddedEnumMemberName = "Third";
+
+        // The part of the enum-member failure hint that sends the reader to the warning.
+        private const string EnumMemberHintCore = "an enum member this reload adds";
 
         // The part of the hint that holds whether the addition came from this reload or an
         // earlier one, so each case below checks the same sentence.
@@ -139,26 +144,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// What: a new type naming an enum member the same reload adds to a compiled enum fails
+        /// to compile (CS0117), and the run still carries the added-enum-member warning with its
+        /// cast workaround instead of dropping it with the rest of the unapplied run. The failure
+        /// row points at that warning rather than at the generic added-member hint.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeNamesAnEnumMemberTheSameReloadAdds_FailsAndWarnsWithTheCast()
+        {
+            string enumPath = FixturePath("HotReloadSiblingEnumDefinitions.cs");
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [enumPath] = InsertEnumMember(File.ReadAllText(enumPath)),
+                        [UserOwnerPath] = BuildUserSource("(int)HotReloadSiblingEnum." + AddedEnumMemberName)
+                    },
+                    "EnumSameReload");
+
+                string reason = FindIntroducedTypeFailureReason(result, "CS0117");
+                Assert.That(reason, Does.Contain(EnumMemberHintCore), DescribeOutcomes(result));
+                Assert.That(reason, Does.Not.Contain(HintCore), DescribeOutcomes(result));
+                string warning = FindWarning(result, "enum member");
+                Assert.That(warning, Does.Contain(nameof(HotReloadSiblingEnum) + ")3"), warning);
+                Assert.That(warning, Does.Not.Contain("needs no compile"), warning);
+            });
+        }
+
         private static void AssertFailsWithHint(HotReloadOrchestratorResult result)
         {
-            string reason = FindIntroducedTypeFailureReason(result);
-            Assert.That(reason, Does.Contain("CS1061"), DescribeOutcomes(result));
+            string reason = FindIntroducedTypeFailureReason(result, "CS1061");
             Assert.That(reason, Does.Contain(HintCore), DescribeOutcomes(result));
         }
 
-        private static string FindIntroducedTypeFailureReason(HotReloadOrchestratorResult result)
+        private static string FindIntroducedTypeFailureReason(
+            HotReloadOrchestratorResult result,
+            string errorCode)
         {
             foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
             {
                 if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed
-                    && outcome.Reason.Contains("CS1061", StringComparison.Ordinal))
+                    && outcome.Reason.Contains(errorCode, StringComparison.Ordinal))
                 {
                     return outcome.Reason;
                 }
             }
 
-            Assert.Fail("No introduced type failed on a missing member.\n" + DescribeOutcomes(result));
+            Assert.Fail("No introduced type failed with " + errorCode + ".\n" + DescribeOutcomes(result));
             return null;
+        }
+
+        private static string FindWarning(HotReloadOrchestratorResult result, string fragment)
+        {
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains(fragment, StringComparison.Ordinal))
+                {
+                    return warning;
+                }
+            }
+
+            Assert.Fail(
+                "No warning contains '" + fragment + "'.\n"
+                + string.Join("\n", result.Warnings) + "\n" + DescribeOutcomes(result));
+            return null;
+        }
+
+        private static string InsertEnumMember(string enumSource)
+        {
+            Assert.That(enumSource, Does.Contain(EnumLastMemberAnchor), "Precondition: enum anchor must exist.");
+            return enumSource.Replace(
+                EnumLastMemberAnchor,
+                EnumLastMemberAnchor + ",\n        " + AddedEnumMemberName + " = 3",
+                StringComparison.Ordinal);
         }
 
         private static Task<HotReloadOrchestratorResult> RunAsync(

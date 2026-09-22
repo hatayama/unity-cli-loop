@@ -15,7 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string errorMessage,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> failures,
-            IReadOnlyList<HotReloadIntroducedTypeNotice> notices)
+            IReadOnlyList<HotReloadIntroducedTypeNotice> notices,
+            IReadOnlyDictionary<string, string[]> declarationDriftWarnings)
         {
             Success = success;
             Prepared = prepared;
@@ -23,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AlreadyActiveTypes = alreadyActiveTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             Failures = failures ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             Notices = notices ?? Array.Empty<HotReloadIntroducedTypeNotice>();
+            DeclarationDriftWarnings = declarationDriftWarnings ?? new Dictionary<string, string[]>();
         }
 
         public bool Success { get; }
@@ -54,12 +56,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> AlreadyActiveTypes { get; }
 
+        /// <summary>
+        /// The const and enum-member drift warnings of each file, keyed by its project-relative
+        /// path. Carried by a refusal only: a run that continues reports them from the transform
+        /// run, and a refusal ends the run before it.
+        /// </summary>
+        public IReadOnlyDictionary<string, string[]> DeclarationDriftWarnings { get; }
+
         public static HotReloadIntroducedTypePreparationResult NoIntroducedTypes(
             IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes = null,
             IReadOnlyList<HotReloadIntroducedTypeNotice> notices = null)
         {
             return new HotReloadIntroducedTypePreparationResult(
-                true, null, string.Empty, alreadyActiveTypes, null, notices);
+                true, null, string.Empty, alreadyActiveTypes, null, notices, null);
         }
 
         public static HotReloadIntroducedTypePreparationResult WithPrepared(
@@ -73,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadIntroducedTypePreparationResult(
-                true, prepared, string.Empty, alreadyActiveTypes, null, notices);
+                true, prepared, string.Empty, alreadyActiveTypes, null, notices, null);
         }
 
         /// <summary>
@@ -89,7 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadIntroducedTypePreparationResult(
-                false, null, errorMessage, null, null, null);
+                false, null, errorMessage, null, null, null, null);
         }
 
         /// <summary>
@@ -104,7 +113,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static HotReloadIntroducedTypePreparationResult TypeFailures(
             IReadOnlyList<HotReloadIntroducedTypeOutcome> failures,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes = null,
-            IReadOnlyList<HotReloadIntroducedTypeNotice> notices = null)
+            IReadOnlyList<HotReloadIntroducedTypeNotice> notices = null,
+            IReadOnlyDictionary<string, string[]> declarationDriftWarnings = null)
         {
             if (failures == null || failures.Count == 0)
             {
@@ -112,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadIntroducedTypePreparationResult(
-                false, null, string.Empty, alreadyActiveTypes, failures, notices);
+                false, null, string.Empty, alreadyActiveTypes, failures, notices, declarationDriftWarnings);
         }
     }
 }

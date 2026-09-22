@@ -56,4 +56,13 @@ internal sealed class WorkerFileOutput
     // Prepare run only: names of members this source declares on a compiled or retained type
     // that the type does not hold yet. Empty from the transform run.
     public string[] PlannedAddedMemberNames { get; set; }
+
+    // Prepare run only: names of members this source adds to a compiled enum. Kept apart from
+    // PlannedAddedMemberNames because hot reload cannot add an enum member at all, so a failed
+    // introduced-type compilation has to point at the enum-member warning instead.
+    public string[] PlannedAddedEnumMemberNames { get; set; }
+
+    // Prepare run only: the const and enum-member drift warnings of this source. The transform
+    // run reports them itself, so the Editor surfaces these only when the run stops before it.
+    public string[] PreparedDeclarationDriftWarnings { get; set; }
 }

@@ -31,6 +31,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "types only, so reloading the addition first does not help. Run 'uloop compile' to "
             + "make the added members compiled, then rerun.";
 
+        // Why it points at the warning: the enum-member warning of the same run already carries
+        // the cast that avoids the member, and repeating the value here would need the enum too.
+        private const string AddedEnumMemberInvisibleHint =
+            "One or more of the missing members share a name with an enum member this reload adds "
+            + "to a compiled enum. Hot reload cannot add an enum member, so no compilation sees it "
+            + "until 'uloop compile'. Write the underlying value as the cast the enum-member warning "
+            + "in Warnings shows, or run 'uloop compile' to add the member, then rerun.";
+
         private const string MissingMemberErrorCode = "CS1061:";
 
         private const string MissingStaticMemberErrorCode = "CS0117:";
@@ -41,14 +49,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MissingStaticMemberErrorCode
         };
 
-        // addedMemberNames holds the members earlier reloads added and the ones this reload's
-        // sources add, so the hint covers both origins of a member the compilation cannot see.
         public static List<HotReloadIntroducedTypeOutcome> Build(
             HotReloadIntroducedTypeCompilerResult compileResult,
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
             string targetAssemblyName,
-            IReadOnlyCollection<string> addedMemberNames)
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames)
         {
+            if (addedMemberNames == null)
+            {
+                throw new ArgumentNullException(nameof(addedMemberNames));
+            }
+
             List<HotReloadIntroducedTypeOutcome> rows = new List<HotReloadIntroducedTypeOutcome>();
 
             // Why one unattributed row: without a diagnostic the failure belongs to the batch and
@@ -129,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> messagesByOwner,
             HashSet<string> emittedOwners,
             string targetAssemblyName,
-            IReadOnlyCollection<string> addedMemberNames,
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames,
             List<HotReloadIntroducedTypeOutcome> rows)
         {
             foreach (HotReloadIntroducedTypeDescriptor descriptor in descriptors)
@@ -168,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> messagesByOwner,
             HashSet<string> emittedOwners,
             string targetAssemblyName,
-            IReadOnlyCollection<string> addedMemberNames,
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames,
             List<HotReloadIntroducedTypeOutcome> rows)
         {
             foreach (string owner in ownerOrder)
@@ -188,22 +199,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string BuildReason(
             List<string> messages,
-            IReadOnlyCollection<string> addedMemberNames)
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames)
         {
             string reason = ReasonPrefix + string.Join("; ", messages);
-            if (!MentionsAnAddedMember(messages, addedMemberNames))
+            // Why the enum hint first: a name both lists hold is missing because of the enum
+            // member, which no reordering of the reload can make visible.
+            if (MentionsAnyOf(messages, addedMemberNames.EnumMembers))
             {
-                return reason;
+                return reason + " " + AddedEnumMemberInvisibleHint;
             }
 
-            return reason + " " + AddedMemberInvisibleHint;
+            if (MentionsAnyOf(messages, addedMemberNames.Members))
+            {
+                return reason + " " + AddedMemberInvisibleHint;
+            }
+
+            return reason;
         }
 
-        private static bool MentionsAnAddedMember(
+        private static bool MentionsAnyOf(
             List<string> messages,
-            IReadOnlyCollection<string> addedMemberNames)
+            IReadOnlyCollection<string> names)
         {
-            if (addedMemberNames == null || addedMemberNames.Count == 0)
+            if (names.Count == 0)
             {
                 return false;
             }
@@ -216,7 +234,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 string member = FindSecondQuotedToken(message, searchStart);
-                if (member != null && Contains(addedMemberNames, member))
+                if (member != null && Contains(names, member))
                 {
                     return true;
                 }

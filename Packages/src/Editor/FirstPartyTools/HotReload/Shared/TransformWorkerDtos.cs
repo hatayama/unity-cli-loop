@@ -180,6 +180,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // that the type does not hold yet, so a failed introduced-type compilation can tell a
         // member this reload adds from a typo. Null/omitted deserializes as empty.
         public string[] plannedAddedMemberNames;
+
+        // Prepare run only: names of members the file adds to a compiled enum, which hot reload
+        // cannot add, so a failed introduced-type compilation can point at the enum-member
+        // warning. Null/omitted deserializes as empty.
+        public string[] plannedAddedEnumMemberNames;
+
+        // Prepare run only: the file's const and enum-member drift warnings, surfaced when the
+        // run stops before the transform run reports them. Null/omitted deserializes as empty.
+        public string[] preparedDeclarationDriftWarnings;
     }
 
     /// <summary>
