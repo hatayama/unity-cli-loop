@@ -41,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         public static T GetOrInit<T>(object instance, string fieldKey, Func<T> initializer)
         {
+            ThrowIfNullReceiver(instance);
             // Why the slot is read once into a local: a shim body can run while the composition
             // root swaps domains, and reading twice could hit two different value sets.
             HotReloadAddedFieldValues values = Current;
@@ -54,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
         public static void Set<T>(object instance, string fieldKey, T value)
         {
+            ThrowIfNullReceiver(instance);
             HotReloadAddedFieldValues values = Current;
             // Why a dropped write is accepted: with no domain installed there is nothing whose
             // state the value could belong to, and the shim that wrote it cannot be patched in.
@@ -88,6 +90,19 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         {
             HotReloadAddedFieldValues values = Current;
             values?.Clear();
+        }
+
+        // Why NullReferenceException and why here: a shim reaches an added instance field
+        // through this gateway with the receiver as an argument, so a null receiver would
+        // otherwise run on as if it were an instance. Compiled field access throws exactly this,
+        // after the value being written is evaluated, which a check at the entry reproduces.
+        // A destroyed UnityEngine.Object arrives here as a live object and is not refused.
+        private static void ThrowIfNullReceiver(object instance)
+        {
+            if (instance == null)
+            {
+                throw new NullReferenceException();
+            }
         }
 
         private static T CreateValue<T>(Func<T> initializer)

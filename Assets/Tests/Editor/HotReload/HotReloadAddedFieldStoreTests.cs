@@ -220,6 +220,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: reading or writing an instance field through a null receiver throws
+        /// NullReferenceException, as compiled field access does, without running the
+        /// initializer.
+        /// </summary>
+        [Test]
+        public void GetOrInitAndSet_NullInstance_ThrowNullReferenceException()
+        {
+            string key = HotReloadAddedFieldStore.FormatFieldKey(HostTypeName, FieldName);
+            int calls = 0;
+
+            Assert.Throws<NullReferenceException>(() => HotReloadAddedFieldStore.GetOrInit(null, key, () =>
+            {
+                calls++;
+                return 3;
+            }));
+            Assert.Throws<NullReferenceException>(() => HotReloadAddedFieldStore.Set<int>(null, key, 8));
+
+            Assert.That(calls, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: FormatFieldKey joins type metadata name and field name with the store separator.
         /// </summary>
         [Test]
