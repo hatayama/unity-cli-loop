@@ -10,9 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static partial class HotReloadWorkerReasonText
     {
-        // The "compile it properly" call to action the skip sentences end with, and the phrase
-        // that introduces a rejected accessor rewrite. They are shared because several sentences
-        // end the same way, not because they carry meaning of their own.
+        // The next steps a sentence can end with, and the phrase that introduces a rejected
+        // accessor rewrite. A template names its next step through EndingWith instead of
+        // concatenating it, so a next-step wording change never touches the sentence bodies.
         private const string CompileCallToAction = "Run 'uloop compile'.";
 
         private const string CompileCallToActionToAddIt = "Run 'uloop compile' to add it.";
@@ -52,6 +52,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 text = text.Replace("{" + index + "}", args[index] ?? string.Empty);
             }
 
+            // The next step belongs to the sentence itself, so it comes before any detail: a
+            // detail explains the refusal, and the next step still reads as the sentence's end.
+            if (template.NextStep.Length > 0)
+            {
+                text = text + " " + template.NextStep;
+            }
+
             if (reason.detail == null)
             {
                 if (template.RequiresDetail)
@@ -89,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static ReasonTemplate Plain(string text, int placeholderCount)
         {
-            return new ReasonTemplate(text, placeholderCount, false, false, string.Empty, string.Empty);
+            return new ReasonTemplate(text, placeholderCount, false, false, string.Empty, string.Empty, string.Empty);
         }
 
         // A reason that reads on its own but appends a detail when it has one.
@@ -99,7 +106,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string detailSeparator,
             string detailSuffix)
         {
-            return new ReasonTemplate(text, placeholderCount, true, false, detailSeparator, detailSuffix);
+            return new ReasonTemplate(
+                text, placeholderCount, true, false, detailSeparator, detailSuffix, string.Empty);
         }
 
         // A reason that is incomplete without its detail.
@@ -109,7 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string detailSeparator,
             string detailSuffix)
         {
-            return new ReasonTemplate(text, placeholderCount, true, true, detailSeparator, detailSuffix);
+            return new ReasonTemplate(
+                text, placeholderCount, true, true, detailSeparator, detailSuffix, string.Empty);
         }
 
         /// <summary>
@@ -123,7 +132,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool allowsDetail,
                 bool requiresDetail,
                 string detailSeparator,
-                string detailSuffix)
+                string detailSuffix,
+                string nextStep)
             {
                 Text = text;
                 PlaceholderCount = placeholderCount;
@@ -131,6 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RequiresDetail = requiresDetail;
                 DetailSeparator = detailSeparator;
                 DetailSuffix = detailSuffix;
+                NextStep = nextStep;
             }
 
             internal string Text { get; }
@@ -144,6 +155,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             internal string DetailSeparator { get; }
 
             internal string DetailSuffix { get; }
+
+            // The call to action that closes the sentence, placed before any detail; empty when
+            // the sentence names its own next step or needs none.
+            internal string NextStep { get; }
+
+            /// <summary>
+            /// This template with the sentence closed by the given next step.
+            /// </summary>
+            internal ReasonTemplate EndingWith(string nextStep)
+            {
+                if (string.IsNullOrEmpty(nextStep))
+                {
+                    throw new ArgumentException("A next step must not be empty.", nameof(nextStep));
+                }
+
+                return new ReasonTemplate(
+                    Text,
+                    PlaceholderCount,
+                    AllowsDetail,
+                    RequiresDetail,
+                    DetailSeparator,
+                    DetailSuffix,
+                    nextStep);
+            }
         }
     }
 }
