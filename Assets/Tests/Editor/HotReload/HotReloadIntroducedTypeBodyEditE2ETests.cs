@@ -184,6 +184,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a file which only declared an introduced type is not remembered as a
+        /// companion when a reload drops that type while another file of the reload is patched:
+        /// the file had changes of its own, and a companion entry would bring it back into every
+        /// later reload of the assembly after a Play-entry domain reload.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeRemovedWhileAnotherFileIsPatched_DoesNotRecordTheOwnerAsCompanion()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult first = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducingEdits(hostPath, callerPath));
+                AssertCallerIsPatched(first);
+
+                HotReloadOrchestratorResult second = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                            "IntroducedTypeDroppedHost.cs",
+                            File.ReadAllText(hostPath)),
+                        [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                            "IntroducedTypeDroppedCaller.cs",
+                            File.ReadAllText(callerPath).Replace(CallerBodyAnchor, "return host.Value() + 1;"))
+                    });
+
+                Assert.That(
+                    CountFailures(second),
+                    Is.EqualTo(0),
+                    "Precondition: dropping the type must not fail the reload.\n" + DescribeOutcomes(second));
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.CompanionSources.ListPaths(),
+                    Is.Empty,
+                    DescribeOutcomes(second));
+            });
+        }
+
+        /// <summary>
         /// Verifies that a body edit of an already introduced type whose declaration has a
         /// constructor reports nothing about that constructor. The row used to appear on every
         /// reload of such a file and told the reader to compile a member they had not touched.

@@ -27,6 +27,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(domain != null, "domain must not be null.");
             _pathsActiveAtStart = new HashSet<string>(domain.ListActiveFilePaths(), _comparer);
             _pathsActiveAtStart.UnionWith(domain.ListPathsWithActiveAddedMembers());
+            // Why the declaring files of introduced types count as active: removing the last
+            // introduced type from such a file leaves no row, yet the file had changes of its own,
+            // and a Play-entry reload drops the types while the companion ledger comes back.
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> introducedTypes = domain.IntroducedTypes.DescribeActive();
+            for (int index = 0; index < introducedTypes.Count; index++)
+            {
+                if (!string.IsNullOrEmpty(introducedTypes[index].OwnerProjectRelativePath))
+                {
+                    _pathsActiveAtStart.Add(introducedTypes[index].OwnerProjectRelativePath);
+                }
+            }
+
             _reasonByPath = new Dictionary<string, HotReloadSiblingInclusionReason>(_comparer);
         }
 

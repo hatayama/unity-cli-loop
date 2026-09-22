@@ -29,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HandleBody = "_handled += payload.Value;";
         private const string PayloadScaledBody = "return Value * 2;";
         private const string UnrelatedBody = "return 0;";
+        private const string RegistryAssignment = "_handler = handler;";
 
         private HotReloadDomainTestScope _scope;
 
@@ -62,6 +63,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(second.ReappliedSiblingPaths, Does.Contain(ProjectRelativePath(RegistryFileName)), FormatOutcomes(second));
             Assert.That(FindWire(second, HotReloadMethodOutcomeKind.Skipped), Is.Null, FormatOutcomes(second));
+        }
+
+        /// <summary>
+        /// What: a companion whose explicit reload Failed and whose source was then restored comes
+        /// back into a later unrelated reload by its companion hash, even though its Failed record
+        /// names the broken bytes, so the added method still binds.
+        /// </summary>
+        [Test]
+        public async Task Run_CompanionRestoredAfterAFailedReload_IsReadmittedByItsCompanionHash()
+        {
+            Dictionary<string, string> overrides = PayloadAndHostOverrides(WireMethod);
+            await RunWireWithRegistryAsync(overrides);
+            string registryPath = FixturePath(RegistryFileName);
+            overrides[registryPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "SiblingCompanionE2EBrokenRegistry.cs",
+                ReplaceOnce(File.ReadAllText(registryPath), RegistryAssignment, "_handler = 42;"));
+            HotReloadOrchestratorResult broken = await RunAsync(new[] { registryPath }, overrides);
+            Assert.That(CountKind(broken, HotReloadMethodOutcomeKind.Failed), Is.GreaterThan(0), "Precondition: Register must fail.\n" + FormatOutcomes(broken));
+            overrides.Remove(registryPath);
+
+            HotReloadOrchestratorResult restored = await RunAsync(UnrelatedEdit(overrides, "return 1;"), overrides);
+
+            Assert.That(restored.ReappliedSiblingPaths, Does.Contain(ProjectRelativePath(RegistryFileName)), FormatOutcomes(restored));
+            Assert.That(FindWire(restored, HotReloadMethodOutcomeKind.Skipped), Is.Null, FormatOutcomes(restored));
         }
 
         /// <summary>

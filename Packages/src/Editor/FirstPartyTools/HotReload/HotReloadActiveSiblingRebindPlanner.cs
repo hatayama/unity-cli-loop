@@ -92,10 +92,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(resolveWorkerSourcePath != null, "resolveWorkerSourcePath must not be null.");
 
             StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
-            // Why the first reason wins: a file named by several sources comes back once, and the
-            // strongest reason is the one its report and its ledger updates follow.
-            Dictionary<string, HotReloadSiblingInclusionReason> candidates =
-                new Dictionary<string, HotReloadSiblingInclusionReason>(comparer);
+            // Why every reason is kept rather than the first: each reason carries its own recorded
+            // hash, and a file whose strongest record no longer matches its bytes can still match
+            // a weaker one, such as a companion whose later explicit reload Failed and was reverted.
+            Dictionary<string, List<HotReloadSiblingInclusionReason>> candidates =
+                new Dictionary<string, List<HotReloadSiblingInclusionReason>>(comparer);
             AddCandidatePaths(candidates, domain.ListActiveFilePaths(), HotReloadSiblingInclusionReason.ActiveChanges);
             AddCandidatePaths(
                 candidates,
@@ -125,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     [HotReloadSiblingInclusionReason.RetryAfterSkip] = new List<string>(),
                     [HotReloadSiblingInclusionReason.Companion] = new List<string>()
                 };
-            foreach (KeyValuePair<string, HotReloadSiblingInclusionReason> candidate in candidates)
+            foreach (KeyValuePair<string, List<HotReloadSiblingInclusionReason>> candidate in candidates)
             {
                 if (!BelongsToAssembly(
                         domain,
@@ -138,21 +139,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string expectedHash = ExpectedHash(domain, candidate.Key, candidate.Value);
-                if (expectedHash == null)
-                {
-                    continue;
-                }
-
                 ClassifyCandidate(
-                    expectedHash,
-                    new HotReloadSiblingInclusion(
-                        candidate.Key,
-                        resolveWorkerSourcePath(candidate.Key),
-                        evidence,
-                        candidate.Value),
+                    ListExpectedHashes(domain, candidate.Key, candidate.Value),
+                    candidate.Key,
+                    evidence,
+                    resolveWorkerSourcePath,
                     filesToInclude,
-                    changedByReason[candidate.Value]);
+                    changedByReason);
             }
 
             filesToInclude.Sort(
@@ -169,17 +162,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 changedByReason[HotReloadSiblingInclusionReason.Companion]);
         }
 
+        // Why the sources are added strongest first: ClassifyCandidate takes the first reason
+        // whose hash matches, so the list order is the order of preference.
         private static void AddCandidatePaths(
-            Dictionary<string, HotReloadSiblingInclusionReason> candidates,
+            Dictionary<string, List<HotReloadSiblingInclusionReason>> candidates,
             IReadOnlyList<string> paths,
             HotReloadSiblingInclusionReason reason)
         {
             for (int index = 0; index < paths.Count; index++)
             {
-                if (!candidates.ContainsKey(paths[index]))
-                {
-                    candidates.Add(paths[index], reason);
-                }
+                AddCandidate(candidates, paths[index], reason);
+            }
+        }
+
+        private static void AddCandidate(
+            Dictionary<string, List<HotReloadSiblingInclusionReason>> candidates,
+            string path,
+            HotReloadSiblingInclusionReason reason)
+        {
+            if (!candidates.TryGetValue(path, out List<HotReloadSiblingInclusionReason> reasons))
+            {
+                reasons = new List<HotReloadSiblingInclusionReason>();
+                candidates.Add(path, reasons);
+            }
+
+            if (!reasons.Contains(reason))
+            {
+                reasons.Add(reason);
             }
         }
 
@@ -187,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // and no added member of its own, so neither of the other two sources ever names it, yet
         // the members added to the type it declares live in the shim this run replaces.
         private static void AddIntroducedTypeOwnerPaths(
-            Dictionary<string, HotReloadSiblingInclusionReason> candidates,
+            Dictionary<string, List<HotReloadSiblingInclusionReason>> candidates,
             HotReloadDomain domain,
             string assemblyName)
         {
@@ -205,7 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                candidates[descriptor.OwnerProjectRelativePath] = HotReloadSiblingInclusionReason.ActiveChanges;
+                AddCandidate(candidates, descriptor.OwnerProjectRelativePath, HotReloadSiblingInclusionReason.ActiveChanges);
             }
         }
 
@@ -231,27 +240,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why a companion is compared against its own ledger: it has no applied-source record,
-        // because the reload that was given it wrote no row for it.
-        private static string ExpectedHash(
+        // because the reload that was given it wrote no row for it. A reason without a recorded
+        // hash is left out, so a file none of whose records holds a hash is never read.
+        private static List<(HotReloadSiblingInclusionReason Reason, string Hash)> ListExpectedHashes(
             HotReloadDomain domain,
             string path,
-            HotReloadSiblingInclusionReason reason)
+            List<HotReloadSiblingInclusionReason> reasons)
         {
-            if (reason == HotReloadSiblingInclusionReason.Companion)
+            List<(HotReloadSiblingInclusionReason Reason, string Hash)> expected =
+                new List<(HotReloadSiblingInclusionReason Reason, string Hash)>(reasons.Count);
+            for (int index = 0; index < reasons.Count; index++)
             {
-                return domain.CompanionSources.TryGetHash(path);
+                string hash = reasons[index] == HotReloadSiblingInclusionReason.Companion
+                    ? domain.CompanionSources.TryGetHash(path)
+                    : domain.TryGetAppliedSource(path)?.Hash;
+                if (hash != null)
+                {
+                    expected.Add((reasons[index], hash));
+                }
             }
 
-            return domain.TryGetAppliedSource(path)?.Hash;
+            return expected;
         }
 
+        // Why a file whose bytes match no record is reported under its strongest reason only: the
+        // weaker records name the same file, and one changed-file warning per file is enough.
         private static void ClassifyCandidate(
-            string expectedHash,
-            HotReloadSiblingInclusion inclusion,
+            List<(HotReloadSiblingInclusionReason Reason, string Hash)> expectedHashes,
+            string path,
+            HotReloadNewSourceMembershipEvidence evidence,
+            Func<string, string> resolveWorkerSourcePath,
             List<HotReloadSiblingInclusion> filesToInclude,
-            List<string> changedPaths)
+            Dictionary<HotReloadSiblingInclusionReason, List<string>> changedByReason)
         {
-            string workerSourcePath = inclusion.WorkerSourcePath;
+            if (expectedHashes.Count == 0)
+            {
+                return;
+            }
+
+            string workerSourcePath = resolveWorkerSourcePath(path);
             if (string.IsNullOrEmpty(workerSourcePath) || !File.Exists(workerSourcePath))
             {
                 return;
@@ -259,13 +286,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string probeHash = new HotReloadSourceContentHasher().ComputeContentHash(
                 File.ReadAllBytes(workerSourcePath));
-            if (string.Equals(probeHash, expectedHash, StringComparison.Ordinal))
+            for (int index = 0; index < expectedHashes.Count; index++)
             {
-                filesToInclude.Add(inclusion);
-                return;
+                if (string.Equals(probeHash, expectedHashes[index].Hash, StringComparison.Ordinal))
+                {
+                    filesToInclude.Add(new HotReloadSiblingInclusion(
+                        path,
+                        workerSourcePath,
+                        evidence,
+                        expectedHashes[index].Reason));
+                    return;
+                }
             }
 
-            changedPaths.Add(inclusion.ProjectRelativePath);
+            changedByReason[expectedHashes[0].Reason].Add(path);
         }
 
         private static bool ContainsPath(IReadOnlyCollection<string> pathsAlreadyInRun, string path)
