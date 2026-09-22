@@ -75,7 +75,8 @@ internal static class ShimMethodFactory
             + " == null) throw new global::System.NullReferenceException();");
         if (shim.Body != null)
         {
-            return shim.WithBody(shim.Body.WithStatements(shim.Body.Statements.Insert(0, guard)));
+            return shim.WithBody(shim.Body.WithStatements(
+                shim.Body.Statements.Insert(0, MapGuardToDeclarationLine(guard, shim))));
         }
 
         ArrowExpressionClauseSyntax arrow = shim.ExpressionBody;
@@ -92,6 +93,25 @@ internal static class ShimMethodFactory
             .WithExpressionBody(null)
             .WithSemicolonToken(default)
             .WithBody(SyntaxFactory.Block(guard, bodyStatement));
+    }
+
+    // Why mapped at all: an unannotated guard continues the mapping of the '{' before it, so the
+    // stack of a null receiver points at the line after the declaration. Why the throw as well as
+    // the if: formatting puts the throw on a line of its own, and the frame reports the throw's.
+    // Why the body as a fallback: a block-bodied accessor shim is built without a declaration
+    // annotation, and its '{' is the nearest line of the accessor.
+    private static StatementSyntax MapGuardToDeclarationLine(StatementSyntax guard, MethodDeclarationSyntax shim)
+    {
+        SyntaxNode lineSource = shim.HasAnnotations(TransformWorkerProgram.UloopLineAnnotationKind)
+            ? (SyntaxNode)shim
+            : shim.Body;
+        IfStatementSyntax ifGuard = (IfStatementSyntax)guard;
+        StatementSyntax mappedThrow = (StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(
+            lineSource,
+            ifGuard.Statement);
+        return (StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(
+            lineSource,
+            ifGuard.WithStatement(mappedThrow));
     }
 
     // Why a throw expression is special: `=> throw ...` is legal only as an expression body, and
