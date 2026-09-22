@@ -89,7 +89,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     1));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape,
-                Plain("inaccessible property increment/decrement has no accessor rewrite shape.", 0));
+                // Why name the rewrite: the accessor rewrite already handles the same write as a
+                // plain or compound assignment statement, so that edit applies without a compile.
+                Plain(
+                    "inaccessible property increment/decrement has no accessor rewrite shape; write it "
+                    + "as a statement 'X += 1' or 'X = X + 1', which the accessor rewrite handles.",
+                    0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorMethodReturnTypeUnresolved,
                 Plain(

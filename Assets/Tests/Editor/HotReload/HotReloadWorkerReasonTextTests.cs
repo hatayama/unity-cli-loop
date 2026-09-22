@@ -249,8 +249,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
                 new[] { "Outer.Inner.Ping()" },
-                "Calls the added method 'Outer.Inner.Ping()', which hot reload cannot emit. "
-                + "Run 'uloop compile'.");
+                "Calls the added method 'Outer.Inner.Ping()', which this reload skipped; the Skipped row "
+                + "for that member names the fix. Apply it and rerun; run 'uloop compile' only if that "
+                + "row asks for it.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced,
                 NoArgs,
@@ -507,7 +508,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape,
                 NoArgs,
-                "inaccessible property increment/decrement has no accessor rewrite shape.");
+                "inaccessible property increment/decrement has no accessor rewrite shape; write it as a "
+                + "statement 'X += 1' or 'X = X + 1', which the accessor rewrite handles.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorMethodReturnTypeUnresolved,
                 new[] { "Missing" },

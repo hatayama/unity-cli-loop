@@ -36,7 +36,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall,
-                Plain("Calls the added method '{0}', which hot reload cannot emit. " + CompileCallToAction, 1));
+                // Why point at the callee's row instead of a compile: the callee was skipped in
+                // this same response, and its row names a fix that often needs no compile (such as
+                // passing a new file to --files). Repeating a bare compile here hid that fix.
+                Plain(
+                    "Calls the added method '{0}', which this reload skipped; the Skipped row for that "
+                    + "member names the fix. Apply it and rerun; run 'uloop compile' only if that row "
+                    + "asks for it.",
+                    1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodTypeNotIntroduced,
                 Plain(

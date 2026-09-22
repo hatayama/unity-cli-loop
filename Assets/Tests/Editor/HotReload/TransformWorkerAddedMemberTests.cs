@@ -938,7 +938,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 excludedAddedMethodKeys: new[] { addedKey });
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "AddedPing"), Is.Null, "Excluded added method must not emit.");
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "cannot emit");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "which this reload skipped");
         }
 
         /// <summary>
@@ -1003,7 +1003,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "AddedVirtual", "vtable slot");
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "cannot emit");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "which this reload skipped");
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue), "method group");
             Assert.That(FindEntry(result, "AddedStatic"), Is.Not.Null);
         }
