@@ -35,12 +35,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // The metadata form, which is how the worker reports a nested type.
         private const string NestedRegistryTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadBindingSplitNestedRegistry/Inner";
+        private const string ExtensionsFileName = "HotReloadBindingSplitPayloadExtensions.cs";
         private const string InsertionAnchor = "        public int Handled => _handled;";
         private const string WireMethod =
             "\n\n        public void Wire()\n        {\n            _registry.Register(p => Handle(p));\n        }";
         private const string WireMethodThatAlsoCounts =
             "\n\n        public void Wire()\n        {\n            _registry.Register(p =>\n            {\n"
             + "                _handled++;\n                Handle(p);\n            });\n        }";
+        private const string CallExtensionMethod =
+            "\n\n        public int Twice(HotReloadBindingSplitPayload payload)\n        {\n"
+            + "            return payload.Doubled();\n        }";
+        private const string PeekThroughIndexerMethod =
+            "\n\n        public int Peek()\n        {\n"
+            + "            HotReloadBindingSplitPayload payload = _registry[3];\n            return payload.Value;\n        }";
+        private const string WireWithNullAndTypoMethod =
+            "\n\n        public void Wire()\n        {\n            _registry.Register(null);\n"
+            + "            UndeclaredName();\n        }";
         private const string WireThroughNestedRegistryMethod =
             "\n\n        public void Wire()\n        {\n"
             + "            new HotReloadBindingSplitNestedRegistry.Inner().Register(p => Handle(p));\n        }";
@@ -169,6 +179,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string text = HotReloadWorkerReasonText.Render(skipped.reason);
             Assert.That(text, Does.Contain("'" + NestedRegistryTypeMetadataName + "'"), text);
             Assert.That(text, Does.Contain("Pass 'Assets/Tests/Editor/HotReload/" + NestedRegistryFileName + "'"), text);
+        }
+
+        /// <summary>
+        /// What: when the compiled type is the receiver of a compiled extension method, which the
+        /// reduced call does not list among its parameters, the skipped row still names the file
+        /// declaring the extension, so a split through the receiver is not missed.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_NamesTheFileDeclaringACompiledExtensionOnThePayload()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), CallExtensionMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Twice");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Twice.\n" + FormatSkipped(result));
+            string text = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature), text);
+            Assert.That(text, Does.Contain("Pass 'Assets/Tests/Editor/HotReload/" + ExtensionsFileName + "'"), text);
+        }
+
+        /// <summary>
+        /// What: a compiled indexer that returns the compiled payload is found as the signature
+        /// holding the split, so the skipped row names the registry and its file.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_NamesTheFileDeclaringACompiledIndexer()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), PeekThroughIndexerMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Peek");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Peek.\n" + FormatSkipped(result));
+            string text = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature), text);
+            Assert.That(text, Does.Contain("'" + RegistryTypeMetadataName + "'"), text);
+            Assert.That(text, Does.Contain("Pass 'Assets/Tests/Editor/HotReload/" + RegistryFileName + "'"), text);
+        }
+
+        /// <summary>
+        /// What: a body that fails only on a typo keeps the plain unbound reason even though it also
+        /// calls a compiled API naming the payload, because that call binds and passing its file
+        /// would not fix the typo.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_KeepsThePlainReasonWhenOnlyATypoFailsToBind()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireWithNullAndTypoMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound),
+                HotReloadWorkerReasonText.Render(skipped.reason));
         }
 
         private static string WithMethod(string hostSource, string method)

@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 
 /// <summary>
 /// Finds the added member bodies the worker's compilation could not bind, whose accessibility
@@ -29,5 +31,22 @@ internal static class AddedMemberBindingGuard
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The spans of every error the compilation reports inside <paramref name="body"/>.
+    /// </summary>
+    internal static List<TextSpan> FindBindingErrorSpans(SemanticModel semanticModel, SyntaxNode body)
+    {
+        List<TextSpan> spans = new List<TextSpan>();
+        foreach (Diagnostic diagnostic in semanticModel.GetDiagnostics(body.Span))
+        {
+            if (diagnostic.Severity == DiagnosticSeverity.Error)
+            {
+                spans.Add(diagnostic.Location.SourceSpan);
+            }
+        }
+
+        return spans;
     }
 }

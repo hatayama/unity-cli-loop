@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 /// <summary>
 /// Finds, among the calls and accesses of one body, the compiled members whose signatures name a
@@ -14,25 +15,26 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 /// </remarks>
 internal static class CompiledSignatureSplitCollector
 {
-    internal static CompiledSignatureSplit Collect(SemanticModel semanticModel, SyntaxNode body)
+    internal static CompiledSignatureSplit Collect(
+        SemanticModel semanticModel,
+        SyntaxNode body,
+        IReadOnlyList<TextSpan> bindingErrorSpans)
     {
         IAssemblySymbol sourceAssembly = semanticModel.Compilation.Assembly;
         SortedSet<string> splitTypes = new SortedSet<string>(StringComparer.Ordinal);
         SortedSet<string> declaringTypes = new SortedSet<string>(StringComparer.Ordinal);
         foreach (SyntaxNode node in body.DescendantNodesAndSelf())
         {
-            if (!IsMemberUse(node))
+            // Why only uses an error touches: a compiled API elsewhere in the body that binds is
+            // not what failed, and naming its file would send the reader after the wrong fix.
+            if (!IsMemberUse(node) || !TouchesAny(node.Span, bindingErrorSpans))
             {
                 continue;
             }
 
-            // A use that failed overload resolution binds to no symbol, so its candidates are
-            // where the compiled signature is found.
-            SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
-            AddSplit(symbolInfo.Symbol, sourceAssembly, splitTypes, declaringTypes);
-            foreach (ISymbol candidate in symbolInfo.CandidateSymbols)
+            foreach (ISymbol member in FindUsedMembers(semanticModel, node))
             {
-                AddSplit(candidate, sourceAssembly, splitTypes, declaringTypes);
+                AddSplit(member, sourceAssembly, splitTypes, declaringTypes);
             }
         }
 
@@ -43,7 +45,81 @@ internal static class CompiledSignatureSplitCollector
     {
         return node is InvocationExpressionSyntax
             || node is MemberAccessExpressionSyntax
+            || node is ElementAccessExpressionSyntax
             || node is BaseObjectCreationExpressionSyntax;
+    }
+
+    private static bool TouchesAny(TextSpan span, IReadOnlyList<TextSpan> errorSpans)
+    {
+        foreach (TextSpan errorSpan in errorSpans)
+        {
+            if (span.IntersectsWith(errorSpan))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A use that failed overload resolution binds to no symbol, so its candidates are where the
+    // compiled signature is found.
+    private static List<ISymbol> FindUsedMembers(SemanticModel semanticModel, SyntaxNode node)
+    {
+        SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
+        List<ISymbol> members = new List<ISymbol>(symbolInfo.CandidateSymbols);
+        if (symbolInfo.Symbol != null)
+        {
+            members.Add(symbolInfo.Symbol);
+        }
+
+        if (members.Count == 0 && node is MemberAccessExpressionSyntax memberAccess)
+        {
+            members.AddRange(FindExtensionsOnCompiledCopy(semanticModel, memberAccess));
+        }
+
+        return members;
+    }
+
+    // Why a lookup: a compiled extension whose receiver is the compiled copy leaves no symbol and
+    // no candidate on a receiver of the copy this run declares (CS1929), so the extension is only
+    // found by looking the name up on the compiled copy itself.
+    private static IEnumerable<ISymbol> FindExtensionsOnCompiledCopy(
+        SemanticModel semanticModel,
+        MemberAccessExpressionSyntax memberAccess)
+    {
+        if (!(semanticModel.GetTypeInfo(memberAccess.Expression).Type is INamedTypeSymbol receiverType)
+            || !IsFromSource(receiverType, semanticModel.Compilation.Assembly))
+        {
+            return Array.Empty<ISymbol>();
+        }
+
+        INamedTypeSymbol compiledCopy = FindCompiledCopy(semanticModel.Compilation, receiverType);
+        if (compiledCopy == null)
+        {
+            return Array.Empty<ISymbol>();
+        }
+
+        return semanticModel.LookupSymbols(
+            memberAccess.Name.SpanStart,
+            compiledCopy,
+            memberAccess.Name.Identifier.ValueText,
+            includeReducedExtensionMethods: true);
+    }
+
+    private static INamedTypeSymbol FindCompiledCopy(Compilation compilation, INamedTypeSymbol sourceType)
+    {
+        string reflectionName = CecilTypeNames.ToMetadataName(sourceType.OriginalDefinition).Replace('/', '+');
+        foreach (IAssemblySymbol referenced in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            INamedTypeSymbol compiledCopy = referenced.GetTypeByMetadataName(reflectionName);
+            if (compiledCopy != null)
+            {
+                return compiledCopy;
+            }
+        }
+
+        return null;
     }
 
     private static void AddSplit(
@@ -108,6 +184,13 @@ internal static class CompiledSignatureSplitCollector
                 foreach (ITypeSymbol typeArgument in method.TypeArguments)
                 {
                     AddType(typeArgument, types);
+                }
+
+                // A reduced extension call drops the receiver from its parameters, and a split in
+                // the receiver is exactly what makes the call fail to bind.
+                if (method.ReducedFrom != null)
+                {
+                    CollectSignatureTypes(method.ReducedFrom, types);
                 }
 
                 return;

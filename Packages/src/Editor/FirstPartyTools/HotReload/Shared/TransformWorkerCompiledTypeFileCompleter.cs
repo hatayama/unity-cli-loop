@@ -20,14 +20,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> filesByType = null;
             foreach (TransformWorkerSkippedDto skipped in output.skipped)
             {
-                TransformWorkerReasonDto reason = skipped?.reason;
-                if (reason?.typeMetadataNames == null)
+                // Why the whole detail chain: a member whose own body split is recorded as
+                // unavailable, and a member reading it is skipped with that reason as its detail.
+                for (TransformWorkerReasonDto reason = skipped?.reason; reason != null; reason = reason.detail)
                 {
-                    continue;
-                }
+                    if (reason.typeMetadataNames == null)
+                    {
+                        continue;
+                    }
 
-                filesByType ??= ReadDeclaringFiles(input.targetTypesAssemblyPath);
-                reason.args = AppendPassTarget(reason.args, reason.typeMetadataNames, filesByType);
+                    filesByType ??= ReadDeclaringFiles(input.targetTypesAssemblyPath);
+                    reason.args = AppendPassTarget(reason.args, reason.typeMetadataNames, filesByType);
+                }
             }
         }
 
@@ -77,7 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ReadDocumentsInto(dllPath, pdbPath, filesByType);
             }
-            catch (Exception exception) when (exception is IOException || exception is BadImageFormatException)
+            // InvalidOperationException covers Cecil's SymbolsNotMatchingException, thrown when the
+            // PDB beside the assembly belongs to another build of it.
+            catch (Exception exception) when (exception is IOException
+                || exception is BadImageFormatException
+                || exception is InvalidOperationException)
             {
                 filesByType.Clear();
             }

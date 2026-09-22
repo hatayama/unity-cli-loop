@@ -241,7 +241,10 @@ internal static class MethodTransformDecider
         Diagnostic bindingError)
     {
         string diagnosticText = bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture);
-        CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(semanticModel, methodBodyNode);
+        CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(
+            semanticModel,
+            methodBodyNode,
+            AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode));
         if (split.DeclaringTypeMetadataNames.Count == 0)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodBodyUnbound, diagnosticText);
