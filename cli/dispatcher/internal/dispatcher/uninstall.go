@@ -86,7 +86,7 @@ func writeUninstallPathCompletion(stdout io.Writer, goos string) {
 		return
 	}
 
-	clicore.WriteLine(stdout, "PATH settings were not changed. Remove the install directory from PATH manually if it is no longer needed.")
+	clicore.WriteLine(stdout, "Open a new terminal to apply the PATH change. Remove the install directory from PATH manually if it is still listed elsewhere.")
 }
 
 func printUninstallHelp(stdout io.Writer) {
@@ -96,7 +96,7 @@ func printUninstallHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Removes the global uloop dispatcher binary from the install directory.")
 	clicore.WriteLine(stdout, "Set ULOOP_INSTALL_DIR to uninstall from a custom install directory.")
 	clicore.WriteLine(stdout, "On Windows, also removes the package-owned install directory from User PATH.")
-	clicore.WriteLine(stdout, "On macOS, PATH settings are not changed automatically.")
+	clicore.WriteLine(stdout, "On macOS and Linux, removes the uloop PATH block from the shell profile.")
 }
 
 func resolveUninstallInstallDir(goos string) (string, error) {
