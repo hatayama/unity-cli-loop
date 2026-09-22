@@ -246,7 +246,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _siblingRebindReporter.AddSiblingRebindResultWarnings(
                     filesOfGroup,
                     inputCount,
-                    groupResults);
+                    groupResults,
+                    run);
             }
         }
     }

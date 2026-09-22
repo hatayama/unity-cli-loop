@@ -88,6 +88,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "'{0}' has active patches but its source changed since they were applied, so it was "
             + "not re-applied; pass it to hot-reload to update it.";
 
+        // Format: retried file count, assembly name, comma-separated paths. Why apart from the
+        // re-applied summary: these files held no active patch, so "so their patches bind" would
+        // misstate why they came back.
+        public const string RetriedSiblingsWarningFormat =
+            "Also retried {0} unchanged file(s) in assembly '{1}' that an earlier reload left Skipped "
+            + "or Failed, and this reload applied them: {2}.";
+
+        // Why the reader is told it will not come back: the retry is a single one, so a reload
+        // that fixes the reason elsewhere has to pass this file again for it to apply.
+        public const string RetriedSiblingNotAppliedWarningFormat =
+            "'{0}' was retried because an earlier reload left it Skipped or Failed, but this reload "
+            + "did not apply it either; see its rows for the reasons. It is not retried again, so "
+            + "pass it to hot-reload once the reason is fixed.";
+
+        public const string RetrySiblingChangedSinceSkipWarningFormat =
+            "'{0}' was left Skipped or Failed by an earlier reload and its source changed since, so "
+            + "it was not retried; pass it to hot-reload to apply it.";
+
+        // Format: companion file count, assembly name, comma-separated paths.
+        public const string CompanionSiblingsWarningFormat =
+            "Also brought back {0} unchanged file(s) in assembly '{1}' that an earlier reload was "
+            + "given beside its changes, so this reload binds the same way: {2}.";
+
+        public const string CompanionSiblingChangedWarningFormat =
+            "'{0}' was given to an earlier reload beside its changes, but its source changed since, "
+            + "so it was not brought back; pass it to hot-reload too if an added member needs it to "
+            + "bind.";
+
         // Why a second wording: the failed-rebind sentence sends the reader to the sibling's own
         // rows, and a reload that stopped before re-applying anything wrote none. Pointing at
         // rows that do not exist reads as a lost report rather than as a run that changed nothing.
@@ -614,6 +642,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // "identity<TAB>project-relative path" line per type.
         public const string PlayModeEntryDropSourcesSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIntroducedSources";
+
+        // SessionState key for the unchanged files earlier reloads were given beside what they
+        // applied, one "project-relative path<TAB>hash" line per file, so a Play-entry domain
+        // reload does not forget them.
+        public const string CompanionSourcesSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.companionSources";
 
         // Format: remaining discarded identity count. Used only when --status active count is 0.
         public const string PlayModeEntryDropStatusMessageFormat =

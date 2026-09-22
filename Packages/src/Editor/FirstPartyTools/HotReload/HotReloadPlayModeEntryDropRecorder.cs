@@ -86,6 +86,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ClearLedgers();
+            // Why the companions go here but not with revert-all: the compiled assembly now holds
+            // what they were given for, while a revert leaves the next reload needing them again.
+            HotReloadCompanionSourceSessionStore.Clear();
+            GetServices?.Invoke().Domain.CompanionSources.Clear();
         }
 
         internal static void NotifyApplyRecovered(
