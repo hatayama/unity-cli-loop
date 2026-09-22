@@ -60,7 +60,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
                 Plain(
                     "The added member's body could not be fully bound in the hot-reload compilation ({0}); "
-                    + "hot reload cannot verify a member it cannot bind, so it is skipped. " + CompileCallToAction,
+                    + "hot reload cannot verify a member it cannot bind, so it is skipped. If the name is "
+                    + "declared in a new file, pass that file to --files too (new files are not selected "
+                    + "automatically); run 'uloop compile' only if it still does not bind.",
                     1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,

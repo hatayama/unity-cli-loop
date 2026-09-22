@@ -274,7 +274,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "CS1503: Argument 1: cannot convert" },
                 "The added member's body could not be fully bound in the hot-reload compilation "
                 + "(CS1503: Argument 1: cannot convert); hot reload cannot verify a member it cannot bind, "
-                + "so it is skipped. Run 'uloop compile'.");
+                + "so it is skipped. If the name is declared in a new file, pass that file to --files too "
+                + "(new files are not selected automatically); run 'uloop compile' only if it still does not bind.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
                 new[] { "CS1503: Argument 1: cannot convert", "'Example.Payload'", "'Example.Registry'", "'Assets/Registry.cs'" },

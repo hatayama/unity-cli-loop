@@ -575,13 +575,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // compile'", and during play that is the one thing --compile-on-skip auto declined to do,
         // so the reader has to be told the choice was theirs and how to make it.
         public const string CompileFallbackHeldForPlayModeRecommendedNextAction =
-            "No compile ran because the Editor is in Play Mode and a compile would stop the Play session; rerun with --compile-on-skip on to compile anyway.";
+            "Before compiling, do any fix that Methods[].Reason or IntroducedTypes[].Reason names without a compile. No compile ran because the Editor is in Play Mode and a compile would stop the Play session; rerun with --compile-on-skip on to compile anyway.";
 
         // The same Stop step the compile tool recommends when it refuses to compile during play
         // (CompileErrorNextActionsConstants.PlayModeStopNextAction); restated here because a tool
         // may not reference another tool's assembly.
         public const string CompileFallbackRefusedDuringPlayRecommendedNextAction =
-            "No compile ran because the Editor is in Play Mode and Unity's 'Script Changes While Playing' is set to 'Recompile After Finished Playing'. Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.";
+            "Before compiling, do any fix that Methods[].Reason or IntroducedTypes[].Reason names without a compile. No compile ran because the Editor is in Play Mode and Unity's 'Script Changes While Playing' is set to 'Recompile After Finished Playing'. Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.";
 
         // Unity's EditorPrefs entry behind "Script Changes While Playing", and its value for
         // "Recompile After Finished Playing", under which the compile tool refuses to run during
@@ -591,7 +591,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const int ScriptCompilationDuringPlayRecompileAfterFinishedPlaying = 1;
 
         public const string RequestedFilesAllSkippedRecommendedNextAction =
-            "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings).";
+            "Each Skipped row's Methods[].Reason names what to change (a file to pass with --files, an initializer to drop, a shape hot reload can patch; see Warnings); do that and rerun. Run 'uloop compile' to apply the Skipped edits as they are instead.";
 
         // Why one sentence in one place: the same rule has to reach the caller from the skill, the
         // docs, and every selection response, and two wordings of it read as two rules.

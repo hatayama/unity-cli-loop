@@ -2,7 +2,8 @@
 
 A field a reload added has no compiled storage: its values live in a side table, and it is
 invisible to the Inspector until `uloop compile`. Nothing serializes into it, so an added
-`[SerializeField] GameObject _target;` starts at `default(T)` for every instance. The run that
+`[SerializeField] GameObject _target;` starts at `default(T)` (or at its initializer value when
+the declaration has one) for every instance. The run that
 first makes such a field active says so in one `Warnings` line naming `Namespace.Type.field`;
 later reloads of the same field stay quiet.
 
