@@ -79,16 +79,33 @@ internal static class ShimMethodFactory
         }
 
         ArrowExpressionClauseSyntax arrow = shim.ExpressionBody;
-        StatementSyntax bodyStatement = ReturnsValue(methodSymbol)
-            ? SyntaxFactory.ReturnStatement(arrow.Expression)
-            : SyntaxFactory.ExpressionStatement(arrow.Expression);
-        // Why the arrow's annotations move to the statement: the #line mapping is injected from
-        // them, and the arrow node itself does not survive the change to a block.
-        bodyStatement = (StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(arrow, bodyStatement);
+        StatementSyntax bodyStatement = ToBodyStatement(arrow.Expression, methodSymbol);
+        // Why the annotations move to the statement: the #line mapping is injected from them. An
+        // accessor arrow carries its own, which does not survive the change to a block; an
+        // expression-bodied method carries the expression's line on the declaration instead,
+        // where it would now map the '{' and guard lines rather than the expression.
+        SyntaxNode lineSource = arrow.HasAnnotations(TransformWorkerProgram.UloopLineAnnotationKind)
+            ? (SyntaxNode)arrow
+            : shim;
+        bodyStatement = (StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(lineSource, bodyStatement);
         return shim
             .WithExpressionBody(null)
             .WithSemicolonToken(default)
             .WithBody(SyntaxFactory.Block(guard, bodyStatement));
+    }
+
+    // Why a throw expression is special: `=> throw ...` is legal only as an expression body, and
+    // neither `return throw ...;` nor a throw expression statement compiles.
+    private static StatementSyntax ToBodyStatement(ExpressionSyntax expression, IMethodSymbol methodSymbol)
+    {
+        if (expression is ThrowExpressionSyntax throwExpression)
+        {
+            return SyntaxFactory.ThrowStatement(throwExpression.Expression);
+        }
+
+        return ReturnsValue(methodSymbol)
+            ? SyntaxFactory.ReturnStatement(expression)
+            : SyntaxFactory.ExpressionStatement(expression);
     }
 
     // An async method returning a non-generic awaitable returns nothing from its body either.

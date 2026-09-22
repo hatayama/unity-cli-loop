@@ -74,6 +74,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             LogAssert.NoUnexpectedReceived();
         }
 
+        /// <summary>
+        /// What: an added method or getter whose expression body is a throw expression still
+        /// applies once the receiver check turns that body into a block: a real receiver gets the
+        /// member's own exception and a null receiver gets NullReferenceException.
+        /// </summary>
+        [TestCase("Throw method", "        public int Stub() => throw new System.InvalidOperationException();\n\n", "return host.Stub();")]
+        [TestCase("Throw getter", "        public int StubValue => throw new System.InvalidOperationException();\n\n", "return host.StubValue;")]
+        public async Task Call_AddedThrowExpressionMember_ThrowsItsOwnExceptionOrNullReference(
+            string label,
+            string hostMember,
+            string callerBody)
+        {
+            HotReloadOrchestratorResult result = await RunPairAsync(
+                "NullReceiver" + label.Replace(" ", string.Empty),
+                InsertHostMember(hostMember),
+                ReplaceCallerBody(callerBody));
+            AssertNoFailure(result);
+            HotReloadCrossFileAddedMemberCaller caller = new HotReloadCrossFileAddedMemberCaller();
+
+            Assert.Throws<InvalidOperationException>(
+                () => caller.Call(new HotReloadCrossFileAddedMemberHost()),
+                label);
+            Assert.Throws<NullReferenceException>(() => caller.Call(null), label);
+            LogAssert.NoUnexpectedReceived();
+        }
+
         private static Task<HotReloadOrchestratorResult> RunPairAsync(
             string editedFileNamePrefix,
             string editedHostSource,

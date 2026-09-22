@@ -172,6 +172,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the receiver check turns an expression-bodied added method into a block, and the
+        /// return statement it becomes still maps to the source line of the expression, not to a
+        /// line the '{' and the check pushed it to.
+        /// </summary>
+        [Test]
+        public async Task Emit_ExpressionBodiedAddedInstanceMethod_ReturnMapsToTheExpressionLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedArrow() =>\n            42;");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithExpressionBodiedAddedMethod.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedArrow"), Is.Not.Null);
+
+            string shimSource = result.Output.shimSource;
+            int returnIndex = shimSource.IndexOf("return 42;", StringComparison.Ordinal);
+            Assert.That(returnIndex, Is.GreaterThan(0), shimSource);
+            int directiveIndex = shimSource.LastIndexOf("#line ", returnIndex, StringComparison.Ordinal);
+            Assert.That(directiveIndex, Is.GreaterThanOrEqualTo(0), shimSource);
+            int directiveEnd = shimSource.IndexOf('\n', directiveIndex);
+            Assert.That(
+                shimSource.Substring(directiveIndex, directiveEnd - directiveIndex),
+                Is.EqualTo("#line " + FindLineNumberContaining(edited, "42;") + " \"" + HostProjectRelativePath + "\""),
+                shimSource);
+            Assert.That(
+                shimSource.Substring(directiveEnd, returnIndex - directiveEnd).Trim(),
+                Is.Empty,
+                "The directive must sit right before the return statement.\n" + shimSource);
+        }
+
+        /// <summary>
         /// What: implicit-this, explicit-this, receiver-expression, and static added-method calls
         /// plus mutual and recursive added-method calls are rewritten to the shim static form.
         /// </summary>
@@ -2017,6 +2050,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("Unbalanced shim method: " + shimMethodName);
             return string.Empty;
+        }
+
+        private static int FindLineNumberContaining(string source, string fragment)
+        {
+            string[] lines = source.Replace("\r\n", "\n").Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                if (lines[index].Contains(fragment, StringComparison.Ordinal))
+                {
+                    return index + 1;
+                }
+            }
+
+            Assert.Fail("Fragment missing: " + fragment);
+            return -1;
         }
 
         private static string WriteEdited(string fileName, string contents)
