@@ -75,8 +75,13 @@ internal static class ShimMethodFactory
             + " == null) throw new global::System.NullReferenceException();");
         if (shim.Body != null)
         {
+            // Why the body as a fallback: a block-bodied accessor shim is built without a
+            // declaration annotation, and its '{' is the nearest line of the accessor.
+            SyntaxNode blockLineSource = shim.HasAnnotations(TransformWorkerProgram.UloopLineAnnotationKind)
+                ? (SyntaxNode)shim
+                : shim.Body;
             return shim.WithBody(shim.Body.WithStatements(
-                shim.Body.Statements.Insert(0, MapGuardToDeclarationLine(guard, shim))));
+                shim.Body.Statements.Insert(0, MapGuardToLine(guard, blockLineSource))));
         }
 
         ArrowExpressionClauseSyntax arrow = shim.ExpressionBody;
@@ -92,19 +97,16 @@ internal static class ShimMethodFactory
         return shim
             .WithExpressionBody(null)
             .WithSemicolonToken(default)
-            .WithBody(SyntaxFactory.Block(guard, bodyStatement));
+            .WithBody(SyntaxFactory.Block(MapGuardToLine(guard, lineSource), bodyStatement));
     }
 
-    // Why mapped at all: an unannotated guard continues the mapping of the '{' before it, so the
-    // stack of a null receiver points at the line after the declaration. Why the throw as well as
-    // the if: formatting puts the throw on a line of its own, and the frame reports the throw's.
-    // Why the body as a fallback: a block-bodied accessor shim is built without a declaration
-    // annotation, and its '{' is the nearest line of the accessor.
-    private static StatementSyntax MapGuardToDeclarationLine(StatementSyntax guard, MethodDeclarationSyntax shim)
+    // Why mapped at all: an unannotated guard continues the mapping before it, which is the '{'
+    // of a block body and the generated file's own line count for an arrow turned into a block,
+    // so the stack of a null receiver would point at neither the declaration nor the arrow. Why
+    // the throw as well as the if: formatting puts the throw on a line of its own, and the frame
+    // reports the throw's.
+    private static StatementSyntax MapGuardToLine(StatementSyntax guard, SyntaxNode lineSource)
     {
-        SyntaxNode lineSource = shim.HasAnnotations(TransformWorkerProgram.UloopLineAnnotationKind)
-            ? (SyntaxNode)shim
-            : shim.Body;
         IfStatementSyntax ifGuard = (IfStatementSyntax)guard;
         StatementSyntax mappedThrow = (StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(
             lineSource,
