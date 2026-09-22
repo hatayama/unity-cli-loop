@@ -263,10 +263,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "references/added-field-wiring.md in the uloop-hot-reload skill.";
 
         // Why name the fields: the domain reload dropped the values an earlier run wired into
-        // them, and nothing else in the response says the wiring has to be done again.
+        // them, and nothing else in the response says the wiring has to be done again. Why
+        // conditional: the list holds every added field of the changed types, including one this
+        // run adds for the first time, so it cannot claim that each of them held a wired value.
         public const string RewireAfterDomainReloadWarningFormat =
-            "These added fields were active before the last domain reload, and the values wired "
-            + "into them then are gone; wire them again before code that reads them runs: {0}.";
+            "If values were wired into these added fields before the last domain reload, they are "
+            + "gone; wire them again before code that reads them runs: {0}.";
 
         // Why a warning rather than a re-run of the initializer: a stored value cannot be told
         // apart from one the edited code assigned, so re-running would overwrite live state. The
