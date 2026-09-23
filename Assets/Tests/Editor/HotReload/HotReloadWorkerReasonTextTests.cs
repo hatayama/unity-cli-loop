@@ -273,6 +273,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "checks). Accessor rewrite unavailable: " + GenericMethodFragment
                 + " Run 'uloop compile' to keep the code as written.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodNotForwardedUnityMessageNeedsCompile,
+                new[] { "OnEnable" },
+                "The added 'OnEnable' is a Unity message that hot reload does not forward (Awake, "
+                + "OnEnable, OnDisable, OnDestroy, and the editor-only messages), so no rewrite of its "
+                + "body would make the engine call it. Run 'uloop compile' to have Unity invoke it.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
                 new[] { "CS1503: Argument 1: cannot convert" },
                 "The added member's body could not be fully bound in the hot-reload compilation "
@@ -650,6 +656,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "inaccessible method group 'Helper' (non-invocation) has no accessor rewrite shape. "
                 + "A call is rewritten, so wrapping the method group in a lambda that calls it "
                 + "keeps hot reloading.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape,
+                new[] { "Helper" },
+                "inaccessible method group 'Helper' on the right of '-=' has no accessor rewrite shape, "
+                + "and wrapping it in a lambda would remove a different delegate and leave the handler "
+                + "subscribed.");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeSymbolUnresolved,
                 new string[0],

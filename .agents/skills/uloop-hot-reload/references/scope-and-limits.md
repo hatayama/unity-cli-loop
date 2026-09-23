@@ -228,6 +228,9 @@ method's row says which answer it got in `LifecycleNote` (see Output).
   `OnDisable`, `OnDestroy`, the editor-only messages (`Reset`, `OnValidate`,
   `OnDrawGizmos`, `OnDrawGizmosSelected`), and any message declared with a return value or a
   `ref`/`out` parameter. Run `uloop compile` to have the engine dispatch those.
+  When such a message's body is also skipped for a private access with no accessor rewrite,
+  its `Skipped` row names `uloop compile` as the only step: no rewrite of the body would make
+  the engine call it.
 
 The proxies exist only for the running session: nothing is attached outside Play Mode, and a
 compile or a domain reload drops them along with every other patch. Execution order relative

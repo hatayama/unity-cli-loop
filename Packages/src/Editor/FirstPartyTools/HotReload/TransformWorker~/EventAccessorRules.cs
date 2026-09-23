@@ -109,6 +109,31 @@ internal static class EventAccessorRules
             || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
     }
 
+    /// <summary>Whether the expression is the handler removed by a '-=' assignment.</summary>
+    internal static bool IsUnsubscribeOperand(ExpressionSyntax operand)
+    {
+        // Why parentheses and one cast are looked past: '-= (Handler)' and '-= (Action)Handler'
+        // still remove the delegate the method group converts to.
+        SyntaxNode unwrapped = operand;
+        while (unwrapped.Parent is ParenthesizedExpressionSyntax parenthesized)
+        {
+            unwrapped = parenthesized;
+        }
+
+        if (unwrapped.Parent is CastExpressionSyntax cast && cast.Expression == unwrapped)
+        {
+            unwrapped = cast;
+            while (unwrapped.Parent is ParenthesizedExpressionSyntax outer)
+            {
+                unwrapped = outer;
+            }
+        }
+
+        return unwrapped.Parent is AssignmentExpressionSyntax assignment
+            && assignment.Right == unwrapped
+            && assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
+    }
+
     private static bool IsPassedByRef(SyntaxNode eventUseNode)
     {
         // 'ref (E)' is still a by-ref argument, and the rewritten read inside the parentheses is

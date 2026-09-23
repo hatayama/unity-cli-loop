@@ -29,6 +29,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostCloseMarker =
             "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }";
 
+        // Why the Behaviour's member as the anchor: the host close marker belongs to the plain
+        // host class, and members added there would not land on the MonoBehaviour.
+        private const string BehaviourExistingTick =
+            "        public void ExistingTick()\n        {\n        }";
+
         private const string RefReturningPropertyNoShape = "inaccessible ref-returning properties have no accessor rewrite shape";
         private const string RefOutInNotRewritten = "inaccessible method calls with ref/out/in parameters are not rewritten";
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
@@ -506,6 +511,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, "AddedUsesTryBase"), Is.Null);
         }
 
+        /// <summary>
+        /// What: an added OnEnable on a MonoBehaviour whose body has no accessor rewrite names
+        /// 'uloop compile' as the only step, because no rewrite of the body would make the
+        /// engine call a message hot reload does not forward.
+        /// </summary>
+        [Test]
+        public async Task AddedNotForwardedUnityMessage_WithoutAccessorShape_PointsOnlyToCompile()
+        {
+            TransformWorkerClientResult result = await RunBehaviourWithAddedMembersAsync(
+                "private void OnEnable()\n        {\n"
+                + "            System.Action handler = AddedHandler;\n            handler();\n        }\n\n"
+                + "        private void AddedHandler()\n        {\n        }");
+
+            AssertHasSkip(result, "OnEnable", "uloop compile");
+            Assert.That(FindSkipReason(result, "OnEnable"), Does.Not.Contain("lambda"));
+        }
+
+        /// <summary>
+        /// What: a method group on the right of '-=' is not offered the lambda rewrite, because a
+        /// lambda there is a different delegate and would leave the handler subscribed.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_UnsubscribingAMethodGroup_DoesNotSuggestALambda()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedDetach()\n        {\n            PrivateChanged -= AddedHandler;\n        }\n\n"
+                + "        private void AddedHandler()\n        {\n        }");
+
+            AssertHasSkip(result, "AddedDetach", "'-='");
+            Assert.That(FindSkipReason(result, "AddedDetach"), Does.Not.Contain("=> AddedHandler"));
+            Assert.That(FindSkipReason(result, "AddedDetach"), Does.Not.Contain("keeps hot reloading"));
+        }
+
         private static void AssertAddedAndNotSkipped(TransformWorkerClientResult result, string methodNameFragment)
         {
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -536,6 +574,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = WithHostMembers(onDisk, extraMembers);
             return await RunWorkerOnSourceAsync(
                 WriteEdited("HostWithAddedMemberAccess.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunBehaviourWithAddedMembersAsync(string extraMembers)
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            Assert.That(onDisk, Does.Contain(BehaviourExistingTick));
+            string edited = onDisk.Replace(
+                BehaviourExistingTick,
+                BehaviourExistingTick + "\n\n        " + extraMembers,
+                StringComparison.Ordinal);
+            return await RunWorkerOnSourceAsync(
+                WriteEdited("BehaviourWithAddedMembers.cs", edited),
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
         }

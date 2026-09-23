@@ -210,6 +210,7 @@ internal static class AccessorAccessRegistrar
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
             addedMemberAccess,
+            EventAccessorRules.IsUnsubscribeOperand(memberAccess),
             out rejectReason);
     }
 
@@ -248,6 +249,7 @@ internal static class AccessorAccessRegistrar
             semanticModel.GetSymbolInfo(name).Symbol,
             plan,
             addedMemberAccess,
+            EventAccessorRules.IsUnsubscribeOperand(name),
             out rejectReason);
     }
 

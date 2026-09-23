@@ -62,6 +62,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // Why "to keep the code as written": several fragments end with a no-compile
                     // rewrite, and a bare compile call after it reads as the row asking for a compile.
                     " " + CompileCallToActionToKeepTheCode));
+            // Why compile is the only step named: the accessor hint of the plain skip would turn
+            // the method into an added one, which the engine still never calls for these messages.
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodNotForwardedUnityMessageNeedsCompile,
+                Plain(
+                    "The added '{0}' is a Unity message that hot reload does not forward (Awake, OnEnable, "
+                    + "OnDisable, OnDestroy, and the editor-only messages), so no rewrite of its body would "
+                    + "make the engine call it. Run 'uloop compile' to have Unity invoke it.",
+                    1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
                 Plain(
