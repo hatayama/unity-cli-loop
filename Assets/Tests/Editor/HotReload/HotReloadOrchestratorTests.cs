@@ -1575,8 +1575,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Expected the added-enum-member warning.\n" + string.Join("\n", result.Warnings));
                 Assert.That(
                     result.Warnings,
+                    Has.None.EqualTo(ExpectedSiblingEnumMemberWarning),
+                    "The enum file is in this reload, so no copy of the warning may drop the advice "
+                    + "about leaving it out of --files.\n" + string.Join("\n", result.Warnings));
+                Assert.That(
+                    result.Warnings,
                     Has.None.Contains("needs no compile"),
                     "An added enum member must not be reported as needing no compile.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
+        /// What: an enum member added in a file that is left out of the reload is still warned
+        /// about with the cast rewrite, but without the advice to leave the enum file out of
+        /// --files, because that file is already out of this reload.
+        /// </summary>
+        [Test]
+        public async Task Run_EnumMemberAddedInFileOutsideReload_WarnsWithoutLeaveOutAdvice()
+        {
+            using (MutateSiblingEnumToAddMemberAndUseIt())
+            {
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { ResolveSiblingEnumUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(ExpectedSiblingEnumMemberWarning),
+                    "Expected the added-enum-member warning from the file outside the reload.\n"
+                    + string.Join("\n", result.Warnings));
+                Assert.That(
+                    result.Warnings,
+                    Has.None.Contains("leave that file out of --files"),
+                    "The enum file is already outside the reload, so the warning must not tell the "
+                    + "user to leave it out.\n"
                     + string.Join("\n", result.Warnings));
             }
         }
@@ -8526,8 +8560,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Path.GetFullPath(path);
         }
 
-        private const string ExpectedAddedSiblingEnumMemberWarning =
+        private const string ExpectedSiblingEnumMemberWarning =
             "enum member io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum.Third exists only in the edited source, not in the compiled assembly. Hot reload does not fold an added enum member into patched bodies, so every body that names it fails shim compilation (CS0117), including bodies in this reload's files. Write the underlying value as a cast instead ('(io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum)3'; ToString() then prints the number, not the name), or run 'uloop compile' to add the member.";
+
+        private const string ExpectedAddedSiblingEnumMemberWarning =
+            ExpectedSiblingEnumMemberWarning
+            + " With the file that declares io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum in this reload, an added member that passes io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum to or takes it from compiled code or a type hot reload introduced is skipped; to keep such a member hot reloading, leave that file out of --files until you compile.";
 
         private static IDisposable MutateSiblingEnumToAddMemberAndUseIt()
         {

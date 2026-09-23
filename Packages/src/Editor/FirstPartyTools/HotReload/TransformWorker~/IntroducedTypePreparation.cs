@@ -147,7 +147,8 @@ internal static class IntroducedTypePreparation
                     declarationDriftWarnings[index] = ConstDriftCollector.CollectConstDriftWarnings(
                         unit.Root,
                         unit.ConstDriftSemanticModel,
-                        home).ToArray();
+                        home,
+                        isFileInReload: true).ToArray();
                 }
                 else
                 {

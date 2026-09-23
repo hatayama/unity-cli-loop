@@ -50,7 +50,8 @@ internal static class SiblingConstDriftCollector
                 ConstDriftCollector.CollectConstDriftWarnings(
                     root,
                     semanticModel,
-                    home));
+                    home,
+                    isFileInReload: false));
         }
 
         return warnings;

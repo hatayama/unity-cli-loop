@@ -295,8 +295,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "bound to the compiled 'Example.Payload' when that type was introduced, while this reload builds "
                 + "'Example.Payload' from source ('Assets/Payload.cs', passed or carried in to keep an earlier "
                 + "reload's binding), so the 'Example.Payload' this body uses no longer matches and it is skipped. "
-                + "Run 'uloop compile'; changing --files does not avoid this, because 'Assets/Payload.cs' is "
-                + "carried in again.");
+                + "Run 'uloop compile', or, if the edit in 'Assets/Payload.cs' can wait for that compile (for "
+                + "example an added enum member, which hot reload does not apply), undo it and leave "
+                + "'Assets/Payload.cs' out of --files; leaving it out alone does not help while its source "
+                + "matches what an earlier reload was given, because it is carried in again, and if it is "
+                + "still carried in after the undo, run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,

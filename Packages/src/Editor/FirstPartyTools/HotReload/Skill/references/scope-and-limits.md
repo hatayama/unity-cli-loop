@@ -112,6 +112,11 @@ Adding a type
 A member added to a compiled enum is out of scope too: it is not folded like an added
 `const`, so every body that names it fails with CS0117, including bodies in the same
 reload. Write the underlying value as a cast (`(MyEnum)3`) or run `uloop compile`.
+While the enum's file is in the reload, an added member that passes the enum to or takes
+it from compiled code or an introduced type is skipped, so leave that file out of `--files`
+until you compile. A file an earlier reload was given is carried in again while its source
+matches what that reload saw: undo the enum edit before leaving it out, and run
+`uloop compile` if it is still carried in.
 This holds for a type the reload introduces as well: its compile fails, the failure
 reason says the name is an enum member this reload adds, and the enum-member and
 changed-`const` warnings of the files passed to that reload stay in `Warnings` even though

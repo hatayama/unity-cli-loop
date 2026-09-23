@@ -78,9 +78,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "the compiled {1}, so it is skipped. Pass {3} to this reload as well so both bind to "
                     + "the same type. Otherwise run 'uloop compile'.",
                     4));
-            // Why no --files advice: the file declaring the compiled type is carried into every
-            // reload that keeps the introduced type's binding, so dropping it does not help and
-            // passing it is what already happened.
+            // Why "undo it and leave it out" and not just "leave it out": the file declaring the
+            // compiled type is carried into a reload while its current source hashes to one an
+            // earlier reload recorded, so dropping it from --files alone brings it back. Undoing
+            // the edit only stops that when the restored source matches no recorded hash, which
+            // is why the text falls back to 'uloop compile' when the file is still carried in.
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
                 Plain(
@@ -88,8 +90,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "the members of the introduced type {1} were bound to the compiled {2} when that type "
                     + "was introduced, while this reload builds {2} from source ({3}, passed or carried in to "
                     + "keep an earlier reload's binding), so the {2} this body uses no longer matches and it "
-                    + "is skipped. Run 'uloop compile'; changing --files does not avoid this, because {3} is "
-                    + "carried in again.",
+                    + "is skipped. Run 'uloop compile', or, if the edit in {3} can wait for that compile (for "
+                    + "example an added enum member, which hot reload does not apply), undo it and leave {3} "
+                    + "out of --files; leaving it out alone does not help while its source matches what an "
+                    + "earlier reload was given, because it is carried in again, and if it is still carried "
+                    + "in after the undo, run 'uloop compile'.",
                     4));
 
             templates.Add(

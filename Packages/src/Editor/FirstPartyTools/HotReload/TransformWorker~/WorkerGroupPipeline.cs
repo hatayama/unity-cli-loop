@@ -293,7 +293,8 @@ internal static class WorkerGroupPipeline
             ConstDriftCollector.CollectConstDriftWarnings(
                 unit.BindingRoot,
                 unit.SemanticModel,
-                home));
+                home,
+                isFileInReload: true));
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
         unit.KindChangeSyntaxKeys =
