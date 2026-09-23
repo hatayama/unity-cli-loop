@@ -58,15 +58,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 #pragma warning restore 618
 
-            builder.buildFinished += (string assemblyPath, CompilerMessage[] compilerMessages) =>
+            Action<string, CompilerMessage[]> onBuildFinished = (string assemblyPath, CompilerMessage[] compilerMessages) =>
             {
                 taskCompletionSource.TrySetResult(compilerMessages);
             };
+            builder.buildFinished += onBuildFinished;
             _ = RegisterBuildFinishedContinuation(taskCompletionSource.Task, markBuildFinished);
 
             bool started = builder.Build();
             if (!started)
             {
+                builder.buildFinished -= onBuildFinished;
                 return new DynamicCompilationBackendResult(
                     new CompilerMessage[]
                     {
@@ -80,7 +82,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             markBuildStarted();
-            CompilerMessage[] messages = await AwaitBuildCompletionAsync(taskCompletionSource.Task, ct).ConfigureAwait(false);
+            CompilerMessage[] messages;
+            try
+            {
+                messages = await AwaitBuildCompletionAsync(taskCompletionSource.Task, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                // A cancelled wait leaves the build running; a late completion must not reach this call.
+                builder.buildFinished -= onBuildFinished;
+            }
+
             ct.ThrowIfCancellationRequested();
             return new DynamicCompilationBackendResult(
                 messages,
@@ -132,9 +144,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     cancellationTaskCompletionSource);
 
             Task completedTask = await Task.WhenAny(buildTask, cancellationTaskCompletionSource.Task).ConfigureAwait(false);
+            // Unity reports the fallback build's end only while something polls its status, so waiting
+            // for it after a cancellation can hold the execution slot forever.
             if (completedTask == cancellationTaskCompletionSource.Task)
             {
-                await buildTask.ConfigureAwait(false);
                 return await cancellationTaskCompletionSource.Task.ConfigureAwait(false);
             }
 

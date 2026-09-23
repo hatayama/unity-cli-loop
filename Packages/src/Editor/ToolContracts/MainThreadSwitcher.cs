@@ -92,24 +92,20 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 this.cancellationToken = cancellationToken;
             }
             
-            public bool IsCompleted
-            {
-                get
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    return MainThreadSwitcher.IsMainThread;
-                }
-            }
+            // A cancelled switch completes at once so GetResult reports it without leaving the caller's thread.
+            public bool IsCompleted => cancellationToken.IsCancellationRequested || MainThreadSwitcher.IsMainThread;
 
+            // The only place a cancellation is observed: an exception thrown from OnCompleted never reaches
+            // the awaiting method, whose task then never completes and never runs its finally blocks.
             public void GetResult()
             {
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
+            // Never throws, even when cancelled after IsCompleted returned false: the cancellation
+            // registration resumes the continuation, and GetResult then throws.
             public void OnCompleted(Action continuation)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                
                 if (MainThreadSwitcher.IsMainThread)
                 {
                     continuation();
