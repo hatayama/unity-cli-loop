@@ -173,34 +173,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Whether the Message may say one compile clears every warning and none has to be cleared
         // first: only when the warnings allow it, and never when a declared type needs a compile
         // before it exists, which contradicts it.
-        // Why a Failed or Skipped method row rules it out too: the sentence reads as "keep
-        // working", while such a row is a body that is not running yet and needs a fix or a
-        // compile first.
+        // Why an unapplied edit rules it out too: the sentence reads as "keep working", while a
+        // Failed or Skipped method or a refused type is an edit that is not running yet and needs
+        // a fix or a compile first.
         private static bool DecideAppendCompileResolution(
             HotReloadOrchestratorResult result,
             HotReloadResponseWarnings warnings)
         {
-            if (!warnings.AllowsSingleCompileResolution || HoldsUnappliedMethod(result.Methods))
+            if (!warnings.AllowsSingleCompileResolution)
             {
                 return false;
             }
 
             return result.IntroducedTypeNoticeCount == 0
-                && !HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
-        }
-
-        private static bool HoldsUnappliedMethod(IReadOnlyList<HotReloadMethodOutcome> methods)
-        {
-            for (int index = 0; index < methods.Count; index++)
-            {
-                HotReloadMethodOutcomeKind kind = methods[index].Kind;
-                if (kind == HotReloadMethodOutcomeKind.Failed || kind == HotReloadMethodOutcomeKind.Skipped)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+                && !HotReloadCompileFallbackDecider.HasUnappliedEdit(result);
         }
 
         private static bool ReadsInvocationCountFromLedger(HotReloadMethodOutcomeKind kind)
