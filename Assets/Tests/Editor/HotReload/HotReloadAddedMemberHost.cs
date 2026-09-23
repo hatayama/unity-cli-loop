@@ -130,6 +130,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return true;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private int PrivateAddSeed(int value)
+        {
+            return _privateSeed + value;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private int PrivateSumWithSeed(int first, int second)
+        {
+            return _privateSeed + first + second;
+        }
+
+        // Lets an added method capture TryReadPrivateSeed as a method group, which no Func or
+        // Action type can hold because of the out parameter.
+        public delegate bool SeedReader(out int value);
+
         public class NestedAddedFieldHost
         {
             private static int NestedPrivateStaticSeed

@@ -638,10 +638,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "are not rewritten.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
-                new[] { "Helper" },
+                new[] { "Helper", " (such as 'a => Helper(a)')" },
                 "inaccessible method group 'Helper' (non-invocation) has no accessor rewrite shape. "
                 + "A call is rewritten, so wrapping the method group in a lambda that calls it "
-                + "(such as '(a, b) => Helper(a, b)') keeps hot reloading.");
+                + "(such as 'a => Helper(a)') keeps hot reloading.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
+                new[] { "Helper", "" },
+                "inaccessible method group 'Helper' (non-invocation) has no accessor rewrite shape. "
+                + "A call is rewritten, so wrapping the method group in a lambda that calls it "
+                + "keeps hot reloading.");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeSymbolUnresolved,
                 new string[0],
