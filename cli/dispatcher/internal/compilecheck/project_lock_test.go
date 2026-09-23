@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,14 +28,9 @@ func holdProjectLock(t *testing.T, projectRoot string) func() {
 	if err != nil {
 		t.Fatalf("expected the free project lock to be taken, got error: %v", err)
 	}
-	released := false
-	releaseOnce := func() {
-		if released {
-			return
-		}
-		released = true
-		release()
-	}
+	// Why sync.Once: a test may release from a goroutine while the cleanup releases on the test's own.
+	var once sync.Once
+	releaseOnce := func() { once.Do(release) }
 	t.Cleanup(releaseOnce)
 
 	return releaseOnce
@@ -124,9 +120,10 @@ func TestAcquireProjectLockStopsWaitingWhenTheContextIsCancelled(t *testing.T) {
 	}
 }
 
-// Verifies the busy error renders its dedicated, retryable error code.
+// Verifies the shared classifier renders the busy error with its dedicated, retryable error code.
 func TestProjectBusyErrorRendersItsOwnRetryableCode(t *testing.T) {
-	cliError := ProjectBusyError{LockPath: "lock", Waited: time.Second}.ToCLIError(
+	cliError := clierrors.ClassifyError(
+		ProjectBusyError{LockPath: "lock", Waited: time.Second},
 		clierrors.ErrorContext{Command: "compile-check", ProjectRoot: "root"})
 
 	if cliError.ErrorCode != clierrors.ErrorCodeCompileCheckProjectBusy {
