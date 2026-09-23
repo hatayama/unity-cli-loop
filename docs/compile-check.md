@@ -55,7 +55,10 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    assembly's sources are re-globbed from its own directory and from every folder an `.asmref`
    attaches to it, wherever that folder sits — including inside a nested assembly's directory,
    which the glob of its own directory never reaches — each glob stopping at nested assembly
-   boundaries, so a `.cs` file created in any of them since the last build is compiled. A source
+   boundaries, so a `.cs` file created in any of them since the last build is compiled. Assemblies
+   under `Library/PackageCache` are the exception: the package manager restores them and nothing
+   edits them in place, so their recorded sources are reused as-is and neither their directory nor
+   their `.asmref` folders are re-globbed. A source
    the last build recorded for this assembly that no glob produces any more stops the run unless an
    `.asmref` still attaches its folder to this assembly: the walk up from the file to the first
    folder holding an `.asmref` or an `.asmdef` says which assembly owns it today. An `.asmref` naming an assembly the build never produced — an
