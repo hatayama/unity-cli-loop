@@ -231,6 +231,15 @@ response files through the Editor-bundled Roslyn compiler; it never contacts the
 output is never loaded by Unity. What it can and cannot detect, and why it sometimes refuses to
 run, are in `docs/compile-check.md`.
 
+## Tool-Side Logs (VibeLogs)
+
+Before calling a BUSY error, a hang, or an unexplained `uloop` result undiagnosable, read the
+tool's own logs in the Unity project the command ran against:
+`<project>/.uloop/outputs/VibeLogs/unity_vibe_YYYYMMDD.json` (Editor side) and
+`cli_vibe_YYYYMMDD.json` (CLI side). They are written only when `ULOOP_DEBUG` is set, the file
+date is UTC, and they survive git resets. A `*_start` entry with no matching `*_complete` is the
+first thing to look for behind BUSY. Details: `docs/vibe-logs.md`.
+
 ## Unity Freeze Prevention
 
 Unity EditMode tests can freeze the Editor. `uloop` is single-flight per Editor: a command sent
