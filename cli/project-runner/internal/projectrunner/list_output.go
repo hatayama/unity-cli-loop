@@ -61,7 +61,7 @@ func writeToolNames(result json.RawMessage, stdout io.Writer) error {
 		return err
 	}
 
-	for _, command := range clicore.NativeCommands {
+	for _, command := range clicore.VisibleNativeCommands() {
 		clicore.WriteLine(stdout, command.Name)
 	}
 	for _, tool := range cache.Tools {

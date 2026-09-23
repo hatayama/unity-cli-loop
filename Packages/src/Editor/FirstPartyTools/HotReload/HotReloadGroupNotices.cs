@@ -69,11 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         file.FileOutput.removedMembers,
                         file.FileOutput.removedMethodSignatures,
                         gateResult.GatedReplacementMethodKeys);
-                // Why the record is written even when nothing is reported: the set is the file's,
-                // not this run's, so a run that reports none has to end the continuation.
-                bool isSameAsLastDisplayed = patcher.RecordDisplayedRemovedMembers(
+                bool isSameAsLastDisplayed = patcher.IsSameAsLastDisplayedRemovedMembers(
                     file.ProjectRelativePath,
                     displayedRemovedMembers);
+                file.Sinks.DisplayedRemovedMembers?.Stage(file.ProjectRelativePath, displayedRemovedMembers);
                 if (displayedRemovedMembers.Count > 0)
                 {
                     file.Sinks.Warnings.Add(

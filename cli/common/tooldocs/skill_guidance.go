@@ -8,7 +8,6 @@ package tooldocs
 var commandSkillNames = map[string]string{
 	"clear-console":        "uloop-clear-console",
 	"compile":              "uloop-compile",
-	"compile-check":        "uloop-compile-check",
 	"control-play-mode":    "uloop-control-play-mode",
 	"execute-dynamic-code": "uloop-execute-dynamic-code",
 	"find-game-objects":    "uloop-find-game-objects",

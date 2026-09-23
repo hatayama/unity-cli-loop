@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.6.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.5.1...dispatcher-v3.6.0) (2026-09-23)
+
+
+### Features
+
+* hot-reload says whether the CLI should compile the edits it could not apply, chosen by --compile-on-skip ([#2819](https://github.com/hatayama/unity-cli-loop/issues/2819)) ([edf54a3](https://github.com/hatayama/unity-cli-loop/commit/edf54a34a1440c5a130477f406248033ea977d88))
+* uloop finds and launches the Unity Editor on Linux ([#2854](https://github.com/hatayama/unity-cli-loop/issues/2854)) ([ba61348](https://github.com/hatayama/unity-cli-loop/commit/ba613489bbe2f65b0807859562e8720a75f4300c))
+* uloop installs, updates, and downloads its project runner on Linux ([#2855](https://github.com/hatayama/unity-cli-loop/issues/2855)) ([828e141](https://github.com/hatayama/unity-cli-loop/commit/828e14144ef0b100a7c7e099370bd824c2a2d103))
+
+
+### Bug Fixes
+
+* A busy error while the Editor is paused says the running command cannot finish and how to recover ([#2860](https://github.com/hatayama/unity-cli-loop/issues/2860)) ([63e4ac5](https://github.com/hatayama/unity-cli-loop/commit/63e4ac58b8b18ce1f83ea00ba8c57e9a8159ec51))
+* **cli:** launch --restart tolerates Temp files still held after Unity exits ([#2766](https://github.com/hatayama/unity-cli-loop/issues/2766)) ([4e1fd86](https://github.com/hatayama/unity-cli-loop/commit/4e1fd86bbfa96986df104384c2e0e53a593a206b))
+* Hot reload reports what a run actually did and skips added methods it cannot verify ([#2830](https://github.com/hatayama/unity-cli-loop/issues/2830)) ([c90d226](https://github.com/hatayama/unity-cli-loop/commit/c90d2265a7f5f1bdafe958c24e4bf26aa44f69f4))
+
 ## [3.5.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.5.0...dispatcher-v3.5.1) (2026-09-10)
 
 

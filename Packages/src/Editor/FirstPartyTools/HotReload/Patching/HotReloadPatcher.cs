@@ -292,6 +292,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Returns true when the last run that reported removed members for one file reported
+        /// exactly this set, without changing the record.
+        /// </summary>
+        public bool IsSameAsLastDisplayedRemovedMembers(
+            string projectRelativePath,
+            IReadOnlyList<string> displayedNames)
+        {
+            return _domain.IsSameAsLastDisplayedRemovedMembers(projectRelativePath, displayedNames);
+        }
+
+        /// <summary>
         /// Records the removed-member names this run reports for one file, and returns true when
         /// the last run that reported any for it reported exactly the same set.
         /// </summary>

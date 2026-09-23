@@ -78,6 +78,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Warning sink shared with the per-file stage for sibling-derived notices.</summary>
         public List<string> SiblingDerivedWarnings => _siblingDerivedWarnings;
 
+        /// <summary>Where each file stages the removed members it reported, recorded once per run.</summary>
+        public HotReloadRunDisplayedRemovedMembers DisplayedRemovedMembers { get; } =
+            new HotReloadRunDisplayedRemovedMembers();
+
         /// <summary>Where re-applied siblings report a missing baseline, summarized once per run.</summary>
         public HotReloadSiblingBaselineNotices SiblingBaselineNotices => _siblingBaselineNotices;
 
