@@ -36,13 +36,30 @@ type mergePackageReleasePRPoll struct {
 	failMerge bool
 	// stateJSON answers the re-read that follows a failed write.
 	stateJSON string
+	// stateJSONSequence, when set, answers successive re-reads in order and
+	// repeats its last entry, so a test can walk a merge that settles late.
+	stateJSONSequence []string
 }
 
 type mergePackageReleasePRStub struct {
-	polls      []mergePackageReleasePRPoll
-	pollIndex  int
-	activePoll mergePackageReleasePRPoll
-	commandLog []string
+	polls          []mergePackageReleasePRPoll
+	pollIndex      int
+	activePoll     mergePackageReleasePRPoll
+	stateReadIndex int
+	commandLog     []string
+}
+
+func (stub *mergePackageReleasePRStub) nextStateJSON() string {
+	sequence := stub.activePoll.stateJSONSequence
+	if len(sequence) == 0 {
+		return stub.activePoll.stateJSON
+	}
+	index := stub.stateReadIndex
+	if index >= len(sequence) {
+		index = len(sequence) - 1
+	}
+	stub.stateReadIndex++
+	return sequence[index]
 }
 
 func (stub *mergePackageReleasePRStub) nextPoll() mergePackageReleasePRPoll {
@@ -88,7 +105,7 @@ func (stub *mergePackageReleasePRStub) answerPullRequestCommand(commandLine stri
 		}
 		return "", true, nil
 	case strings.HasPrefix(commandLine, "gh pr view "):
-		return stub.activePoll.stateJSON, true, nil
+		return stub.nextStateJSON(), true, nil
 	case strings.Contains(commandLine, " --match-head-commit "):
 		if stub.activePoll.failMerge {
 			return "", true, fmt.Errorf("gh pr merge failed")
@@ -355,7 +372,7 @@ func TestMergePackageReleasePRWithNoWaitLeavesStalePinDraftAfterOnePass(t *testi
 	assertMergePackageReleasePRListCount(t, stub, 1)
 }
 
-// Verifies losing the merge race to the other automated path is a success rather than a failed job: a merge that fails against an already merged pull request reports it and exits 0.
+// Verifies a failed merge is a success rather than a failed job when the pull request is already merged: the command reports it and exits 0.
 func TestMergePackageReleasePRAcceptsAPullRequestAnotherRunMerged(t *testing.T) {
 	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
 		{
@@ -370,7 +387,7 @@ func TestMergePackageReleasePRAcceptsAPullRequestAnotherRunMerged(t *testing.T) 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
 	}
-	assertReleasePRCheckLogContains(t, stdout, "PR #2002 was already merged by another run")
+	assertReleasePRCheckLogContains(t, stdout, "PR #2002 is merged even though gh pr merge reported an error")
 	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
 }
 
@@ -410,6 +427,68 @@ func TestMergePackageReleasePRFailsWhenTheMergeFailsAndThePullRequestIsStillOpen
 	}
 	assertReleasePRCheckLogContains(t, stderr, "gh pr merge failed")
 	assertReleasePRCheckLogDoesNotContain(t, stdout, "already merged by another run")
+}
+
+// Verifies a merge GitHub reports as failed while it is still settling is a success once the pull request reaches MERGED on a later re-read.
+func TestMergePackageReleasePRWaitsForAMergeThatSettlesAfterReportingAnError(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", false),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+			failMerge:       true,
+			stateJSONSequence: []string{
+				`{"state":"OPEN","isDraft":false,"headRefOid":"package123"}`,
+				`{"state":"MERGED","isDraft":false,"headRefOid":"package123"}`,
+			},
+		},
+	})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "PR #2002 is merged even though gh pr merge reported an error")
+	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
+	assertMergePackageReleasePRStateReadCount(t, stub, 2)
+}
+
+// Verifies a merge that never settles fails with the original merge error after a bounded number of re-reads, instead of polling forever or reporting success.
+func TestMergePackageReleasePRFailsWhenAFailedMergeNeverSettles(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", false),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+			failMerge:       true,
+			stateJSON:       `{"state":"OPEN","isDraft":false,"headRefOid":"package123"}`,
+		},
+	})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "gh pr merge failed")
+	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
+	assertMergePackageReleasePRStateReadCount(t, stub, 1+mergePackageReleasePRSettleAttempts)
+}
+
+// Verifies a failed merge whose pull request moved to another head fails at once: waiting cannot turn a merge pinned to the old head into a release.
+func TestMergePackageReleasePRDoesNotWaitWhenTheHeadMovedAfterAFailedMerge(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", false),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+			failMerge:       true,
+			stateJSON:       `{"state":"OPEN","isDraft":false,"headRefOid":"package456"}`,
+		},
+	})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "gh pr merge failed")
+	assertMergePackageReleasePRStateReadCount(t, stub, 1)
 }
 
 // Verifies a failed write that no concurrent run explains still fails the command, so a real permission or ruleset error is not swallowed as a lost race.
@@ -636,4 +715,17 @@ func assertMergePackageReleasePRReadyPrecedesMerge(t *testing.T, stub *mergePack
 		}
 	}
 	t.Fatalf("expected a merge command\n%s", strings.Join(stub.commandLog, "\n"))
+}
+
+func assertMergePackageReleasePRStateReadCount(t *testing.T, stub *mergePackageReleasePRStub, expected int) {
+	t.Helper()
+	count := 0
+	for _, commandLine := range stub.commandLog {
+		if strings.HasPrefix(commandLine, "gh pr view ") {
+			count++
+		}
+	}
+	if count != expected {
+		t.Fatalf("expected %d pull request state reads, got %d: %v", expected, count, stub.commandLog)
+	}
 }

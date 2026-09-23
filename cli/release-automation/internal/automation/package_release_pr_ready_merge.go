@@ -6,15 +6,29 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"time"
 )
 
-// mergePackageReleasePRMergedState is the state gh reports for a pull request
-// another run already merged.
-const mergePackageReleasePRMergedState = "MERGED"
+// mergePackageReleasePRMergedState and mergePackageReleasePROpenState are the
+// states gh reports for a merged pull request and one still waiting to merge.
+const (
+	mergePackageReleasePRMergedState = "MERGED"
+	mergePackageReleasePROpenState   = "OPEN"
+)
+
+// A merge request can fail with "Merge already in progress" while the merge it
+// started is still being applied; the pull request reaches MERGED seconds
+// later. These bound how long a failed merge is re-read before it counts as a
+// real failure.
+const (
+	mergePackageReleasePRSettleAttempts = 15
+	mergePackageReleasePRSettleInterval = 2 * time.Second
+)
 
 type mergePackageReleasePRState struct {
-	State   string `json:"state"`
-	IsDraft bool   `json:"isDraft"`
+	State      string `json:"state"`
+	IsDraft    bool   `json:"isDraft"`
+	HeadRefOID string `json:"headRefOid"`
 }
 
 // readyAndMergePackageReleasePR performs the two writes that release the
@@ -88,9 +102,9 @@ func readyPackageReleasePRBeforeMerge(
 }
 
 // resolvePackageReleasePRMergeFailure decides what a failed merge means. Only
-// a pull request another run already merged is a success here: any other state
-// leaves the package unreleased, so reporting anything but a failure would let
-// the release silently not happen.
+// a pull request that ends up merged is a success here: any other state leaves
+// the package unreleased, so reporting anything but a failure would let the
+// release silently not happen.
 func resolvePackageReleasePRMergeFailure(
 	ctx context.Context,
 	stdout io.Writer,
@@ -100,18 +114,50 @@ func resolvePackageReleasePRMergeFailure(
 	mergeErr error,
 	deps mergePackageReleasePRDeps,
 ) int {
-	state, err := packageReleasePullRequestState(ctx, config, releasePR, deps)
+	state, err := waitForPackageReleasePRMergeToSettle(ctx, config, releasePR, deps)
 	if err != nil {
 		writeMergePackageReleasePRLine(stderr, mergeErr)
 		writeMergePackageReleasePRLine(stderr, err)
 		return 1
 	}
 	if state.State == mergePackageReleasePRMergedState {
-		writeMergePackageReleasePRLine(stdout, packageReleasePRAlreadyMergedMessage(releasePR))
+		writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
+			"Unity package release PR #%d is merged even though gh pr merge reported an error; nothing left to do.",
+			releasePR.Number))
 		return 0
 	}
 	writeMergePackageReleasePRLine(stderr, mergeErr)
 	return 1
+}
+
+// waitForPackageReleasePRMergeToSettle re-reads the pull request after a failed
+// merge until it is merged or can no longer become merged by that request.
+// Only an open, non-draft pull request still at the head the merge was pinned
+// to is waited on; a closed pull request or a moved head cannot turn into this
+// release by waiting, so those return at once.
+func waitForPackageReleasePRMergeToSettle(
+	ctx context.Context,
+	config mergePackageReleasePRConfig,
+	releasePR mergePackageReleasePullRequest,
+	deps mergePackageReleasePRDeps,
+) (mergePackageReleasePRState, error) {
+	for attempt := 0; ; attempt++ {
+		state, err := packageReleasePullRequestState(ctx, config, releasePR, deps)
+		if err != nil {
+			return mergePackageReleasePRState{}, err
+		}
+		if !packageReleasePRMergeMaySettle(state, releasePR) || attempt >= mergePackageReleasePRSettleAttempts {
+			return state, nil
+		}
+		err = deps.sleep(ctx, mergePackageReleasePRSettleInterval)
+		if err != nil {
+			return mergePackageReleasePRState{}, err
+		}
+	}
+}
+
+func packageReleasePRMergeMaySettle(state mergePackageReleasePRState, releasePR mergePackageReleasePullRequest) bool {
+	return state.State == mergePackageReleasePROpenState && !state.IsDraft && state.HeadRefOID == releasePR.HeadRefOID
 }
 
 func packageReleasePRAlreadyMergedMessage(releasePR mergePackageReleasePullRequest) string {
@@ -120,8 +166,9 @@ func packageReleasePRAlreadyMergedMessage(releasePR mergePackageReleasePullReque
 }
 
 // packageReleasePullRequestState re-reads the state a write may have raced
-// with. Draft and merged are the two outcomes a concurrent run produces, so
-// both are read in one call.
+// with. Draft and merged are the two outcomes a concurrent run produces, and
+// the head tells whether a failed merge can still settle, so all are read in
+// one call.
 func packageReleasePullRequestState(
 	ctx context.Context,
 	config mergePackageReleasePRConfig,
@@ -137,7 +184,7 @@ func packageReleasePullRequestState(
 		"--repo",
 		config.repository,
 		"--json",
-		"state,isDraft",
+		"state,isDraft,headRefOid",
 	)
 	if err != nil {
 		return mergePackageReleasePRState{}, err
