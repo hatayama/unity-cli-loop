@@ -68,8 +68,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // types stayed loaded could not tell which ones a revert left behind.
                 IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(_domain),
                 ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
+                // Why the dropped fields count here but not in ClearedCount: a generation can hold
+                // added fields alone, and a revert that dropped them did revert something.
                 Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
-                    clearedCount == 0
+                    clearedCount == 0 && droppedAddedFields.Count == 0
                         ? "No active hot-reload changes to revert."
                         : "Reverted all active hot-reload changes.",
                     snapshot.IntroducedTypeCount,

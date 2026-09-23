@@ -457,11 +457,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a field the revert-all did not drop is not named by the next apply, even when an
-        /// earlier Play entry recorded it, because the revert starts the records over.
+        /// What: a field a Play entry recorded before a revert-all is still named by the next
+        /// apply, because the revert does not bring back the value that entry discarded.
         /// </summary>
         [Test]
-        public void NotifyApplyRecovered_AfterRevertAll_DoesNotReturnAFieldTheRevertDidNotDrop()
+        public void NotifyApplyRecovered_AfterRevertAll_StillReturnsAFieldAnEarlierPlayEntryRecorded()
         {
             HotReloadRewireLedger.Record(new[] { "Ns.Host.older" });
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
@@ -471,14 +471,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
                 new List<HotReloadMethodOutcome>(),
                 new List<HotReloadIntroducedTypeOutcome>(),
-                new[] { "Ns.Host.older" });
+                new[] { "Ns.Host.older", "Ns.Host.speed" });
 
-            Assert.That(rewireFields, Is.Empty);
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Host.older", "Ns.Host.speed" }));
+        }
+
+        /// <summary>
+        /// What: a second revert-all in a row, which drops nothing, keeps the fields the first one
+        /// dropped for the next apply.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_AfterTwoRevertAllsInARow_ReturnsTheFieldsTheFirstDropped()
+        {
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                new HotReloadPlayModeEntryDropSource[0],
+                new[] { "Ns.Host.speed" });
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                new HotReloadPlayModeEntryDropSource[0],
+                Array.Empty<string>());
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Host.speed" });
+
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Host.speed" }));
         }
 
         /// <summary>
         /// What: a revert-all that drops added fields says which ones and that values wired into
-        /// them are gone, and records them for the next apply.
+        /// them are gone, records them for the next apply, and does not claim it had nothing to
+        /// revert when the fields were all it dropped.
         /// </summary>
         [Test]
         public void ExecuteRevertAll_WithAddedFields_WarnsThatWiredValuesAreDropped()
@@ -499,6 +522,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 HotReloadRewireLedger.GetFields(),
                 Is.EqualTo(new[] { "Ns.Host.speed", "Ns.Outer+Inner.count" }));
+            Assert.That(response.Message, Does.Not.Contain("No active hot-reload changes to revert."));
+            Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -718,11 +743,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a successful compile and a revert-all both clear the rewire ledger, because after
-        /// either one no later apply re-adds a field whose value a domain reload discarded.
+        /// What: a successful compile clears the rewire ledger, because no later apply re-adds a
+        /// field the compiled assembly now declares, while a revert-all keeps the fields already
+        /// recorded, because it does not bring back the values they lost.
         /// </summary>
         [Test]
-        public void NotifyCompilationFinishedAndRevertAll_ClearRewireFields()
+        public void NotifyCompilationFinishedClearsRewireFieldsAndNotifyRevertAllKeepsThem()
         {
             HotReloadRewireLedger.Record(new[] { "Ns.Host.speed" });
             HotReloadPlayModeEntryDropRecorder.NotifyCompilationFinished(0);
@@ -730,7 +756,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadRewireLedger.Record(new[] { "Ns.Host.speed" });
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new HotReloadPlayModeEntryDropSource[0], Array.Empty<string>());
-            Assert.That(HotReloadRewireLedger.GetFields(), Is.Empty, "revert-all");
+            Assert.That(HotReloadRewireLedger.GetFields(), Is.EqualTo(new[] { "Ns.Host.speed" }), "revert-all");
         }
 
         /// <summary>
