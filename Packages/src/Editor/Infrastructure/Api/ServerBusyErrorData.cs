@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public int? runningToolElapsedSeconds { get; }
 
         // Lets a client say "waiting for the stalled main thread" instead of "running" when the
-        // slot holder has not started, or has already finished, its tool code.
+        // slot holder is waiting for the Editor main thread and is not running tool code at the moment.
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string runningToolPhase { get; }
 

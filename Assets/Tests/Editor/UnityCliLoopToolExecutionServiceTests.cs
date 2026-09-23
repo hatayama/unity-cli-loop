@@ -187,6 +187,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a switch to the Editor main thread awaited inside the tool's own code is also
+        /// reported as waiting, so a holder that finished its snippet but still waits to return
+        /// through the main thread is not reported as running.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenToolCodeAwaitsQueuedMainThreadSwitch_ShouldThrowBusyWithWaitingPhase()
+        {
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            registry.RegisterTool(new MainThreadSwitchingTool());
+            registry.RegisterTool(new ImmediateTool(ImmediateTool.RequestedName));
+            UnityCliLoopToolExecutionService executionService =
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), new ToolExecutionSession());
+            QueueingMainThreadDispatcher dispatcher = new QueueingMainThreadDispatcher();
+            MainThreadSwitcher.RegisterService(dispatcher);
+            // Why clear the context: under Unity's context the service's ConfigureAwait(false) resume
+            // after the tool is moved to the thread pool, which would leave background work behind and
+            // make the holder's completion untestable without waiting.
+            SynchronizationContext originalContext = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(null);
+
+            try
+            {
+                Task<UnityCliLoopToolResponse> holderTask = executionService.ExecuteToolAsync(
+                    registry,
+                    MainThreadSwitchingTool.ToolNameValue,
+                    null,
+                    CancellationToken.None);
+                // Resumes the switch before the tool, so the tool code runs and queues its own switch.
+                dispatcher.RunQueued();
+
+                Assert.That(holderTask.IsCompleted, Is.False);
+
+                UnityCliLoopToolBusyException exception = Assert.ThrowsAsync<UnityCliLoopToolBusyException>(
+                    () => executionService.ExecuteToolAsync(
+                        registry,
+                        ImmediateTool.RequestedName,
+                        null,
+                        CancellationToken.None));
+
+                Assert.That(exception.RunningToolName, Is.EqualTo(MainThreadSwitchingTool.ToolNameValue));
+                Assert.That(exception.RunningToolPhase, Is.EqualTo("WaitingForMainThread"));
+
+                dispatcher.RunQueued();
+
+                Assert.That(holderTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(originalContext);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        /// <summary>
         /// Verifies ExecuteToolAsync hands the request token to the session, so a cancelled execute-dynamic-code run that never returns stops blocking other tools after the grace period.
         /// </summary>
         [Test]
@@ -335,6 +389,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
             {
                 return Task.FromResult<UnityCliLoopToolResponse>(new PendingTypedResponse());
+            }
+        }
+
+        // Awaits the Editor main thread inside its own code, as execute-dynamic-code does after the snippet.
+        private sealed class MainThreadSwitchingTool : IUnityCliLoopTool
+        {
+            public const string ToolNameValue = "main-thread-switching-tool";
+
+            public string ToolName => ToolNameValue;
+
+            public ToolParameterSchema ParameterSchema => new();
+
+            public async Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                return new PendingTypedResponse();
             }
         }
 
