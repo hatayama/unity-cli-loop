@@ -33,6 +33,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public int? runningToolElapsedSeconds { get; }
 
+        // Lets a client say "waiting for the stalled main thread" instead of "running" when the
+        // slot holder is waiting for the Editor main thread and is not running tool code at the moment.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string runningToolPhase { get; }
+
         public ServerBusyErrorData(
             string runningToolName,
             string requestedToolName,
@@ -42,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             double? secondsSinceLastMainThreadTick = null,
             bool? isCompiling = null,
             bool? isUpdating = null,
-            int? runningToolElapsedSeconds = null)
+            int? runningToolElapsedSeconds = null,
+            string runningToolPhase = null)
             : base(message)
         {
             this.runningToolName = runningToolName;
@@ -53,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             this.isUpdating = isUpdating;
             this.secondsSinceLastMainThreadTick = secondsSinceLastMainThreadTick;
             this.runningToolElapsedSeconds = runningToolElapsedSeconds;
+            this.runningToolPhase = runningToolPhase;
         }
     }
 }

@@ -124,6 +124,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(dataToken["runningToolElapsedSeconds"]!.Value<int>(), Is.EqualTo(12));
         }
 
+        /// <summary>
+        /// Verifies a busy payload copies the holder phase onto the wire, and omits the field when
+        /// the busy rejection did not come from the single-flight slot.
+        /// </summary>
+        [Test]
+        public void CreateErrorResponse_ForBusyException_IncludesRunningToolPhaseOnlyWhenKnown()
+        {
+            UnityCliLoopToolBusyException waitingException = new(
+                "running-tool",
+                "requested-tool",
+                runningToolPhase: "WaitingForMainThread");
+            UnityCliLoopToolBusyException unknownPhaseException = new(
+                "running-tool",
+                "requested-tool");
+
+            JToken waitingData = JObject.Parse(
+                JsonRpcResponseFactory.CreateErrorResponse(1, waitingException))["error"]!["data"]!;
+            JToken unknownPhaseData = JObject.Parse(
+                JsonRpcResponseFactory.CreateErrorResponse(1, unknownPhaseException))["error"]!["data"]!;
+
+            Assert.That(waitingData["runningToolPhase"]!.Value<string>(), Is.EqualTo("WaitingForMainThread"));
+            Assert.That(unknownPhaseData["runningToolPhase"], Is.Null);
+        }
+
         [Test]
         public async Task ProcessRequest_WhenProtocolVersionIsTooOld_ProducesFrozenMismatchJson()
         {

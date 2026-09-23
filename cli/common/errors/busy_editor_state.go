@@ -3,6 +3,10 @@ package clierrors
 const unityServerBusyResponsivenessStallThresholdSeconds = 5.0
 
 func unityServerBusyNextActions(data serverBusyErrorData) []string {
+	if isWaitingForStalledMainThread(data) {
+		return mainThreadWaitBusyNextActions(data.RunningToolName)
+	}
+
 	actions := []string{
 		"Wait for the running Unity command to complete.",
 		"Retry the command after Unity reports it is no longer busy.",

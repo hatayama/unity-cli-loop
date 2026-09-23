@@ -81,7 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick(),
                     busyEx.IsCompiling,
                     busyEx.IsUpdating,
-                    busyEx.RunningToolElapsedSeconds);
+                    busyEx.RunningToolElapsedSeconds,
+                    busyEx.RunningToolPhase);
             }
             else
             {
