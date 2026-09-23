@@ -99,16 +99,21 @@ func runReleasePleasePRChecksWithDeps(ctx context.Context, stdout io.Writer, std
 	// One component's failing checks must not strand the other components'
 	// release PRs in draft, so every PR is processed and the failures are
 	// reported together at the end.
-	failed := false
+	failedPRNumbers := []string{}
 	for _, releasePR := range releasePRs {
 		if runReleasePRCheckForPullRequest(ctx, stdout, stderr, config, releasePR, deps) != 0 {
-			failed = true
+			failedPRNumbers = append(failedPRNumbers, "#"+strconv.Itoa(releasePR.Number))
 		}
 	}
-	if failed {
-		return 1
+	if len(failedPRNumbers) == 0 {
+		return 0
 	}
-	return 0
+	// Each PR's error is printed where it happened, possibly far above; without a
+	// closing summary the job log ends in a bare "exit status 1" that reads as a
+	// failure with no cause.
+	writeReleasePRCheckLine(stderr, fmt.Sprintf(
+		"Release PR checks failed for %s; the errors above say why.", strings.Join(failedPRNumbers, ", ")))
+	return 1
 }
 
 // runReleasePRCheckForPullRequest runs the prepare, dispatch and finalize
