@@ -101,15 +101,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _siblingLedgerUpdates.ReasonOf(projectRelativePath);
         }
 
-        /// <summary>
-        /// Where the file stands once this run's sibling records are written. Valid only after
-        /// <see cref="RecordAppliedSourceHashes"/>.
-        /// </summary>
-        public HotReloadCarriedInState DescribeCarriedInState(string projectRelativePath)
-        {
-            return _siblingLedgerUpdates.DescribeAfterApply(new HotReloadDomainCarriedInLookup(_domain), projectRelativePath);
-        }
-
         /// <summary>Merges one processed file into the run.</summary>
         public void Add(string projectRelativePath, HotReloadFileProcessResult fileResult)
         {
