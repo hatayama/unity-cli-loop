@@ -21,24 +21,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<(string Path, string Hash)> _companionCandidates = new List<(string Path, string Hash)>();
         private readonly List<string> _appliedPaths = new List<string>();
         private readonly List<string> _unappliedRetryPaths = new List<string>();
+        private readonly Dictionary<string, string> _observedHashByPath;
+        private bool _appliedToDomain;
 
         internal HotReloadRunSiblingLedgerUpdates(HotReloadDomain domain)
         {
             Debug.Assert(domain != null, "domain must not be null.");
-            _pathsActiveAtStart = new HashSet<string>(domain.ListActiveFilePaths(), _comparer);
-            _pathsActiveAtStart.UnionWith(domain.ListPathsWithActiveAddedMembers());
-            // Why the declaring files of introduced types count as active: removing the last
-            // introduced type from such a file leaves no row, yet the file had changes of its own,
-            // and a Play-entry reload drops the types while the companion ledger comes back.
-            IReadOnlyList<HotReloadIntroducedTypeDescriptor> introducedTypes = domain.IntroducedTypes.DescribeActive();
-            for (int index = 0; index < introducedTypes.Count; index++)
-            {
-                if (!string.IsNullOrEmpty(introducedTypes[index].OwnerProjectRelativePath))
-                {
-                    _pathsActiveAtStart.Add(introducedTypes[index].OwnerProjectRelativePath);
-                }
-            }
-
+            _pathsActiveAtStart = new HotReloadDomainCarriedInLookup(domain).ListActivePaths();
+            _observedHashByPath = new Dictionary<string, string>(_comparer);
             _reasonByPath = new Dictionary<string, HotReloadSiblingInclusionReason>(_comparer);
         }
 
@@ -62,6 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             Debug.Assert(fileResult != null, "fileResult must not be null.");
 
+            _observedHashByPath[projectRelativePath] = fileResult.SourceContentSha256 ?? string.Empty;
             if (HotReloadSiblingRebindWarningSelector.AppliedAnyChange(fileResult))
             {
                 _appliedPaths.Add(projectRelativePath);
@@ -87,6 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void ApplyTo(HotReloadDomain domain)
         {
             Debug.Assert(domain != null, "domain must not be null.");
+            _appliedToDomain = true;
 
             // Why a retry that applied nothing forgets the record: that record is what makes the
             // file a retry candidate, and one more try at the same bytes cannot end differently.
@@ -114,6 +106,72 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 domain.CompanionSources.Record(_companionCandidates[index].Path, _companionCandidates[index].Hash);
             }
+        }
+
+        /// <summary>
+        /// Where the file stands once this run's records are written: whether a later reload
+        /// brings it back, and why.
+        /// </summary>
+        internal HotReloadCarriedInState DescribeAfterApply(IHotReloadCarriedInLookup lookup, string projectRelativePath)
+        {
+            if (lookup == null)
+            {
+                throw new ArgumentNullException(nameof(lookup));
+            }
+
+            // Why an exception and not an assert: read before the records are written, a file this
+            // run is about to record would read as unrecorded, and the next step named from that
+            // would send the reader after a fix that does not work.
+            if (!_appliedToDomain)
+            {
+                throw new InvalidOperationException("The run's sibling records are read before they were written.");
+            }
+
+            if (!_observedHashByPath.TryGetValue(projectRelativePath, out string observedHash))
+            {
+                return HotReloadCarriedInState.NotInRun;
+            }
+
+            if (ContainsPath(_appliedPaths, projectRelativePath))
+            {
+                return HotReloadCarriedInState.AppliedInThisRun;
+            }
+
+            if (lookup.IsActive(projectRelativePath))
+            {
+                return HotReloadCarriedInState.ActiveFromEarlierRun;
+            }
+
+            return IsRecordedAt(lookup, projectRelativePath, observedHash)
+                ? HotReloadCarriedInState.RecordedAtCurrentSource
+                : HotReloadCarriedInState.NotRecorded;
+        }
+
+        // Why a record of other bytes does not count: the sibling planner brings a file back only
+        // while its source hashes to a recorded hash, so an older record brings it back only once
+        // the source returns to those bytes.
+        private static bool IsRecordedAt(IHotReloadCarriedInLookup lookup, string projectRelativePath, string hash)
+        {
+            if (string.IsNullOrEmpty(hash))
+            {
+                return false;
+            }
+
+            return string.Equals(lookup.TryGetCompanionHash(projectRelativePath), hash, StringComparison.Ordinal)
+                || string.Equals(lookup.TryGetAppliedHash(projectRelativePath), hash, StringComparison.Ordinal);
+        }
+
+        private bool ContainsPath(List<string> paths, string projectRelativePath)
+        {
+            for (int index = 0; index < paths.Count; index++)
+            {
+                if (_comparer.Equals(paths[index], projectRelativePath))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // Why rows of any kind disqualify a file: a row means it had something of its own to apply
