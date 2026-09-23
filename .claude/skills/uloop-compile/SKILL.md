@@ -1,7 +1,7 @@
 ---
 name: uloop-compile
 toolName: compile
-description: "Compile the Unity project and report errors/warnings. Use after C# edits."
+description: "Compile the Unity project in the Editor and report errors/warnings. Use after C# edits that must be live in the Editor; to only check for errors, use compile-check; to try edits without a domain reload, use hot-reload."
 ---
 
 # uloop compile
