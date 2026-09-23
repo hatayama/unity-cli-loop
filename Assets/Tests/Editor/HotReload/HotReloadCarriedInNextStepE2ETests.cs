@@ -34,7 +34,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostValueAnchor = "        public int Value()";
         private const string RegistryBody = "            return (int)kind;";
         private const string LeaveOutStart = "To hot reload it without a compile, leave '" + EnumProjectRelativePath + "' out of --files";
-        private const string UndoStart = "To hot reload it without a compile, undo the edit in '" + EnumProjectRelativePath + "'";
 
         private static readonly string TakeKindMember =
             "        public int TakeKind()\n"
@@ -51,12 +50,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "\n";
 
         /// <summary>
-        /// What: when another file of the run applies a change, the passed enum file is recorded
-        /// at its current source, so the skipped row asks to undo the enum edit and leave the file
-        /// out rather than only to leave it out.
+        /// What: an enum file whose only edit adds members is not recorded as a companion even
+        /// beside an applied change, so the skipped row asks only to leave it out.
         /// </summary>
         [Test]
-        public async Task Run_EnumFileBesideAnAppliedChange_AsksToUndoAndLeaveOut()
+        public async Task Run_EnumFileBesideAnAppliedChange_AsksToLeaveOutWithoutUndo()
         {
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string enumPath = FixturePath(EnumFileName);
@@ -71,10 +69,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         [enumPath] = InsertEnumMember(File.ReadAllText(enumPath)),
                         [hostPath] = EditHost(File.ReadAllText(hostPath), TakeKindMember, changeValue: true)
                     },
-                    "UndoBesideApplied");
+                    "LeaveOutBesideApplied");
 
                 string reason = FindSkippedReason(result, ".TakeKind(");
-                Assert.That(reason, Does.Contain(UndoStart), DescribeOutcomes(result));
+                Assert.That(reason, Does.Contain(LeaveOutStart), DescribeOutcomes(result));
+                Assert.That(reason, Does.Not.Contain("undo"), DescribeOutcomes(result));
+            });
+        }
+
+        /// <summary>
+        /// What: a file whose only edit adds enum members, passed beside an applied change, is not
+        /// carried into a later reload of another file, so that reload binds against the compiled
+        /// enum and succeeds.
+        /// </summary>
+        [Test]
+        public async Task Run_ReloadAfterAnEnumOnlyFileWasPassed_DoesNotBringTheEnumFileBack()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string enumPath = FixturePath(EnumFileName);
+            string registryPath = FixturePath("HotReloadCarriedInNextStepRegistry.cs");
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                await IntroduceSinkAsync();
+                // Why the applied change sits in another file than the host: the host is passed
+                // alone in the second run, the same way a reader reloads only the file they edit.
+                Dictionary<string, string> edits = WriteEdits(
+                    new Dictionary<string, string>
+                    {
+                        [enumPath] = InsertEnumMember(File.ReadAllText(enumPath)),
+                        [registryPath] = EditRegistry(File.ReadAllText(registryPath))
+                    },
+                    "EnumOnlyRecording");
+                HotReloadOrchestratorResult recording = await RunFilesAsync(new[] { enumPath, registryPath }, edits);
+                Assert.That(CountFailures(recording), Is.EqualTo(0), DescribeOutcomes(recording));
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.CompanionSources.TryGetHash(EnumProjectRelativePath),
+                    Is.Null,
+                    DescribeOutcomes(recording));
+
+                // Why the enum edit stays among the overrides: the edit remains on disk for the
+                // reader, and a recorded companion is brought back only while its bytes match.
+                Dictionary<string, string> hostEdits = WriteEdits(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = EditHost(File.ReadAllText(hostPath), TakeKindMember, changeValue: false)
+                    },
+                    "EnumOnlyReload");
+                foreach (KeyValuePair<string, string> hostEdit in hostEdits)
+                {
+                    edits[hostEdit.Key] = hostEdit.Value;
+                }
+
+                HotReloadOrchestratorResult result = await RunFilesAsync(new[] { hostPath }, edits);
+                Assert.That(CountFailures(result), Is.EqualTo(0), DescribeOutcomes(result));
+                // Why the kind of the TakeKind row: a carried-in enum file writes no row of its
+                // own, and it shows only as a Skipped TakeKind that no longer binds to the Sink.
+                Assert.That(
+                    FindOutcomeKind(result, ".TakeKind("),
+                    Is.EqualTo(HotReloadMethodOutcomeKind.Added),
+                    DescribeOutcomes(result));
             });
         }
 
@@ -214,6 +268,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
+        private static HotReloadMethodOutcomeKind FindOutcomeKind(
+            HotReloadOrchestratorResult result,
+            string methodFragment)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method != null && outcome.Method.Contains(methodFragment, StringComparison.Ordinal))
+                {
+                    return outcome.Kind;
+                }
+            }
+
+            Assert.Fail("No row for " + methodFragment + ".\n" + DescribeOutcomes(result));
+            return default;
+        }
+
         private static string EditHost(string hostSource, string addedMembers, bool changeValue)
         {
             Assert.That(hostSource, Does.Contain(HostValueAnchor), "Precondition: host value anchor must exist.");
@@ -258,21 +328,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Dictionary<string, string> sources,
             string label)
         {
-            List<string> paths = new List<string>();
+            return RunFilesAsync(new List<string>(sources.Keys).ToArray(), WriteEdits(sources, label));
+        }
+
+        private static Dictionary<string, string> WriteEdits(Dictionary<string, string> sources, string label)
+        {
             Dictionary<string, string> edits = new Dictionary<string, string>();
             foreach (KeyValuePair<string, string> source in sources)
             {
-                paths.Add(source.Key);
                 edits[source.Key] = HotReloadTestSourceWriter.WriteEditedSource(
                     Path.GetFileNameWithoutExtension(source.Key) + label + ".cs",
                     source.Value);
             }
 
+            return edits;
+        }
+
+        private static Task<HotReloadOrchestratorResult> RunFilesAsync(
+            string[] files,
+            Dictionary<string, string> edits)
+        {
             return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                paths.ToArray(),
+                files,
                 contentPathOverride: null,
                 CancellationToken.None,
-                edits);
+                new Dictionary<string, string>(edits));
         }
     }
 }

@@ -47,6 +47,12 @@ internal sealed class WorkerFileOutput
 
     public string[] AddedConstNames { get; set; }
 
+    // Transform run: members this source adds to a compiled enum, each as "<enum C# display
+    // name>.<member>". Hot reload never adds an enum member, so a file whose only edit is one of
+    // these must not be recorded as a companion; the Editor reads this to keep it out of the
+    // ledger. Empty from the prepare run, which reports PlannedAddedEnumMemberNames instead.
+    public string[] AddedEnumMemberNames { get; set; }
+
     public WorkerIntroducedType[] IntroducedTypes { get; set; }
 
     public WorkerReason[] IntroducedTypeDiagnostics { get; set; }

@@ -171,6 +171,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Null/omitted deserializes as empty after client coalesce.
         public string[] addedConstNames;
 
+        // Transform run: members this source adds to a compiled enum, as "<enum>.<member>".
+        // Null/omitted deserializes as empty after client coalesce.
+        public string[] addedEnumMemberNames;
+
         public TransformWorkerIntroducedTypeDto[] introducedTypes;
 
         public TransformWorkerReasonDto[] introducedTypeDiagnostics;

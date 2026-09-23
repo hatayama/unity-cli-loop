@@ -199,12 +199,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why rows of any kind disqualify a file: a row means it had something of its own to apply
         // or refuse, and the applied-source record then speaks for it instead.
+        // Why an added enum member disqualifies it too: it is not a row, yet the file holds an
+        // edit hot reload cannot apply, and bringing it back beside a retained artifact splits the
+        // enum's identity, so passing or leaving it out stays the reader's choice.
         private static bool IsCompanionResult(HotReloadFileProcessResult fileResult)
         {
             return fileResult.Outcomes.Count == 0
                 && fileResult.IntroducedTypes.Count == 0
                 && fileResult.AddedFieldNames.Length == 0
                 && fileResult.AddedConstNames.Length == 0
+                && fileResult.AddedEnumMemberNames.Length == 0
                 && fileResult.RevertedUnchangedCount == 0
                 && !string.IsNullOrEmpty(fileResult.SourceContentSha256);
         }

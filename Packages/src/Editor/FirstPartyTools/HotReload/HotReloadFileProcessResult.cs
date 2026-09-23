@@ -24,6 +24,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int RevertedUnchangedCount { get; }
         public string[] AddedFieldNames { get; }
         public string[] AddedConstNames { get; }
+
+        /// <summary>
+        /// Members this file adds to a compiled enum. Hot reload never applies them, so they do
+        /// not count as an applied change.
+        /// </summary>
+        public string[] AddedEnumMemberNames { get; }
         public string SourceContentSha256 { get; }
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
@@ -57,7 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int revertedUnchangedCount = 0,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null,
-            int introducedTypeNoticeCount = 0)
+            int introducedTypeNoticeCount = 0,
+            string[] addedEnumMemberNames = null)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -75,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
             IntroducedTypeNoticeCount = introducedTypeNoticeCount;
+            AddedEnumMemberNames = addedEnumMemberNames ?? Array.Empty<string>();
         }
     }
 }

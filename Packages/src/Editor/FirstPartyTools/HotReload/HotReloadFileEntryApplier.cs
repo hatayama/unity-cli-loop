@@ -225,7 +225,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 revertedUnchangedCount: file.RevertedUnchangedCount,
                 introducedTypes: sinks.IntroducedTypes,
                 newSourceMembershipEvidence: file.NewSourceMembershipEvidence,
-                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount);
+                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount,
+                addedEnumMemberNames: file.FileOutput != null ? file.FileOutput.addedEnumMemberNames : null);
         }
 
         /// <summary>
@@ -286,7 +287,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 revertedUnchangedCount: file.RevertedUnchangedCount,
                 introducedTypes: sinks.IntroducedTypes,
                 newSourceMembershipEvidence: file.NewSourceMembershipEvidence,
-                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount);
+                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount,
+                addedEnumMemberNames: file.FileOutput != null ? file.FileOutput.addedEnumMemberNames : null);
         }
 
         private int ApplyResolvedEntries(

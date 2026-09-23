@@ -226,7 +226,8 @@ internal static class WorkerGroupPipeline
             unchangedMethods,
             siblingConstDriftWarnings,
             addedFieldCatalog,
-            CreateDeclaredTypeNames(compilation, home, transformUnits));
+            CreateDeclaredTypeNames(compilation, home, transformUnits),
+            home);
     }
 
     // Every unit of a run holds the same run-wide retained records and artifact map, so any one
@@ -403,7 +404,8 @@ internal static class WorkerGroupPipeline
         List<WorkerUnchangedMethod> unchangedMethods,
         List<string> siblingConstDriftWarnings,
         AddedFieldCatalog addedFieldCatalog,
-        AddedFieldDeclaredTypeNames declaredTypeNames)
+        AddedFieldDeclaredTypeNames declaredTypeNames,
+        WorkerTypeHome home)
     {
         bool hasAccessorDelegates = false;
         foreach (ShimTypeBuilder shimType in shimTypes)
@@ -419,7 +421,7 @@ internal static class WorkerGroupPipeline
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         for (int index = 0; index < units.Count; index++)
         {
-            files[index] = BuildFileOutput(units[index], addedFieldCatalog, declaredTypeNames);
+            files[index] = BuildFileOutput(units[index], addedFieldCatalog, declaredTypeNames, home);
         }
 
         return new WorkerOutput
@@ -438,7 +440,8 @@ internal static class WorkerGroupPipeline
     private static WorkerFileOutput BuildFileOutput(
         WorkerSourceUnit unit,
         AddedFieldCatalog addedFieldCatalog,
-        AddedFieldDeclaredTypeNames declaredTypeNames)
+        AddedFieldDeclaredTypeNames declaredTypeNames,
+        WorkerTypeHome home)
     {
         string projectRelativePath = unit.Input.ProjectRelativePath;
         return new WorkerFileOutput
@@ -458,6 +461,11 @@ internal static class WorkerGroupPipeline
             AddedFieldDeclarations =
                 addedFieldCatalog.ListRewrittenAddedFieldDeclarations(projectRelativePath, declaredTypeNames),
             AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
+            // Why only a transform unit: a unit that failed to load or parse has no semantic model,
+            // and the model answers only for BindingRoot, never Root.
+            AddedEnumMemberNames = unit.SemanticModel == null
+                ? Array.Empty<string>()
+                : PlannedAddedMemberNames.CollectCompiledEnumMembers(unit.BindingRoot, unit.SemanticModel, home),
             IntroducedTypes = unit.IntroducedTypes.ToArray(),
             IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
             IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray(),
