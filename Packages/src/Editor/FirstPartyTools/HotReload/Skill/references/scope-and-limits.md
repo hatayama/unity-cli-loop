@@ -317,6 +317,9 @@ delegate type is not visible outside the assembly, and an event added in this ed
 (including one that had custom accessors when the assembly was last compiled).
 Raising through a conditional receiver (`other?.E?.Invoke(x)`) and `nameof(E)` also
 stay `Skipped`.
+Subscribing to an event added in this edit, in any file of the run, is `Skipped`
+too, whether the handler is a method group or a lambda: the compiled assembly has no
+such event for the subscription to bind to until `uloop compile`.
 
 A `Skipped` row never undoes what an earlier reload applied to the same method: that
 patch keeps running, so the method matches neither the compiled assembly nor the
@@ -341,6 +344,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an event added in this edit leave nothing for the shim's Harmony accessor to bind |
 | Method raises or reads a field-like event through a conditional receiver (`other?.E`) | The shim has no name for the conditional receiver to pass to the accessor call |
 | Method names a field-like event inside `nameof` | The shim is a different type and cannot keep the bare event name |
+| Method subscribes (`+=`/`-=`) to an event added in this edit | The shim binds the subscription against the compiled assembly, which has no such event yet |
 
 ## Failed — flips `Success` to `false`
 
