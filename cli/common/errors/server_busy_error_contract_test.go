@@ -39,6 +39,9 @@ func assertServerBusyContractIdentity(t *testing.T, decoded serverBusyErrorData)
 	if decoded.RunningToolElapsedSeconds == nil || *decoded.RunningToolElapsedSeconds != 12 {
 		t.Fatalf("runningToolElapsedSeconds mismatch: %#v", decoded)
 	}
+	if decoded.RunningToolPhase != "WaitingForMainThread" {
+		t.Fatalf("runningToolPhase mismatch: %#v", decoded)
+	}
 }
 
 func assertServerBusyContractEditorState(t *testing.T, decoded serverBusyErrorData) {

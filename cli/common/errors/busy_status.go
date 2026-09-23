@@ -10,6 +10,9 @@ func unityServerBusyMessage(fallback string, data serverBusyErrorData, requested
 	if runningToolName == "" || requestedToolName == "" {
 		return fallback
 	}
+	if isWaitingForStalledMainThread(data) {
+		return mainThreadWaitBusyMessage(requestedToolName, runningToolName, *data.SecondsSinceLastMainThreadTick)
+	}
 	// Both the retrying tool path and commands that send once without retrying reach this
 	// message, so it must not claim that a retry already happened.
 	if data.RunningToolElapsedSeconds != nil {
