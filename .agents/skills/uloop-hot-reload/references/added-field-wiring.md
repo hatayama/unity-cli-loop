@@ -115,3 +115,16 @@ When the re-apply adds back fields the domain reload discarded, its `Warnings` n
 fields: any value wired into them before the domain reload is gone, so wire them again before code
 that reads them runs. A field the re-apply adds for the first time is not named, because it never
 held a wired value, and each field is named once, by the first re-apply that adds it back.
+
+### Wiring while play mode runs
+
+While play mode runs, every frame can read an added field before you wire it, and code that
+dereferences it fails every frame until then (a `NullReferenceException` per frame is typical).
+When the response names fields to wire while play mode runs unpaused, its `Warnings` says so. Do
+this instead:
+
+1. `uloop control-play-mode --action Pause`, preferably before the hot reload.
+2. Apply the hot reload if you have not yet, then run the wiring script.
+3. `uloop control-play-mode --action Play` resumes from the pause.
+
+No frame runs while play mode is paused, so the first read after resuming sees the wired value.

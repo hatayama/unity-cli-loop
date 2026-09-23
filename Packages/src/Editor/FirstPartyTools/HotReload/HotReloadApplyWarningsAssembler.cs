@@ -18,7 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings,
             IReadOnlyList<string> rewireFields,
-            Func<string, string> toProjectRelativeScriptPath)
+            Func<string, string> toProjectRelativeScriptPath,
+            bool isPlaying,
+            bool isPaused)
         {
             Debug.Assert(result != null, "result must not be null.");
             Debug.Assert(toProjectRelativeScriptPath != null, "toProjectRelativeScriptPath must not be null.");
@@ -29,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CollectClearedByCompile(result, additionalWarnings, toProjectRelativeScriptPath));
             warnings.Add(
                 HotReloadWarningResolution.NeedsCallerAction,
-                CollectNeedsCallerAction(result, rewireFields));
+                CollectNeedsCallerAction(result, rewireFields, isPlaying, isPaused));
             warnings.Add(
                 HotReloadWarningResolution.NotCounted,
                 CollectAutoRefreshHold(result));
@@ -66,7 +68,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // compile does not bring back values wired into added fields.
         private static List<string> CollectNeedsCallerAction(
             HotReloadOrchestratorResult result,
-            IReadOnlyList<string> rewireFields)
+            IReadOnlyList<string> rewireFields,
+            bool isPlaying,
+            bool isPaused)
         {
             List<string> lines = new List<string>();
             AppendRetargetLineDriftWarnings(lines);
@@ -74,6 +78,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendRetargetedPausePointsWarning(lines, result.RetargetedPausePointIds);
             AppendSuppressedPausePointsWarning(lines, result.SuppressedPausePointIds);
             HotReloadRewireAfterDomainReloadWarning.Append(lines, rewireFields);
+            HotReloadPauseBeforeWiringWarning.Append(
+                lines,
+                isPlaying,
+                isPaused,
+                namesFieldsToWire: rewireFields.Count > 0 || result.SerializedAddedFieldsReported.Count > 0);
             return lines;
         }
 

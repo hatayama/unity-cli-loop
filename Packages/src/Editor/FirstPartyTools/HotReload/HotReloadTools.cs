@@ -255,18 +255,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.AddedFields);
             HotReloadCompanionSourceSessionStore.Save(services.Domain.CompanionSources);
 
+            // Play Mode state and the Play Mode compile setting are read here because the switch
+            // above put this path on the main thread. isPlaying is read once so the response and
+            // the compile fallback decide from the same state.
+            bool isPlaying = EditorApplication.isPlaying;
             HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                 services,
                 result,
                 selection.ScanLimitWarnings,
-                rewireFields);
-            // isPlaying and the Play Mode compile setting are read here because the switch above
-            // put this path on the main thread.
+                rewireFields,
+                isPlaying,
+                EditorApplication.isPaused);
             ApplyCompileFallbackDecision(
                 response,
                 result,
                 parameters.CompileOnSkip,
-                EditorApplication.isPlaying,
+                isPlaying,
                 EditorPrefs.GetInt(HotReloadConstants.ScriptCompilationDuringPlayEditorPrefsKey, 0)
                     == HotReloadConstants.ScriptCompilationDuringPlayRecompileAfterFinishedPlaying);
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
@@ -314,7 +318,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadCompositionRoot.Services,
                 result,
                 additionalWarnings,
-                Array.Empty<string>());
+                Array.Empty<string>(),
+                isPlaying: false,
+                isPaused: false);
         }
 
         // Records the compile-fallback decision on an apply response. isPlaying and

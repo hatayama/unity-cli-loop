@@ -53,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private int _unchangedTotal;
         private int _revertedUnchangedTotal;
         private int _introducedTypeNoticeCount;
+        private IReadOnlyList<string> _serializedAddedFieldsReported = Array.Empty<string>();
 
         /// <param name="autoRefreshHeldAtStart">
         /// Whether the Auto Refresh hold was already armed when the run started. Read on the Unity
@@ -237,7 +238,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 reappliedSiblingPaths: _reappliedSiblingPaths.ToArray(),
                 introducedTypes: _introducedTypes,
                 autoRefreshHoldNewlyArmed: newlyArmed,
-                introducedTypeNoticeCount: _introducedTypeNoticeCount);
+                introducedTypeNoticeCount: _introducedTypeNoticeCount,
+                serializedAddedFieldsReported: _serializedAddedFieldsReported);
         }
 
         private void AppendInlineRiskWarning()
@@ -296,6 +298,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void AppendSerializedAddedFieldWarning()
         {
             IReadOnlyList<string> unreported = _domain.TakeUnreportedSerializedAddedFields();
+            // Why kept on the result: the response asks to pause Play Mode before wiring only when
+            // it names fields to wire, and this warning is one of the places that names them.
+            _serializedAddedFieldsReported = unreported;
             if (unreported.Count == 0)
             {
                 return;

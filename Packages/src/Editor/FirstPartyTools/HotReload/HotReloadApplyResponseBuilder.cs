@@ -17,7 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadServices services,
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings,
-            IReadOnlyList<string> rewireFields)
+            IReadOnlyList<string> rewireFields,
+            bool isPlaying,
+            bool isPaused)
         {
             Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
@@ -68,7 +70,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result,
                 additionalWarnings,
                 rewireFields,
-                toProjectRelativeScriptPath);
+                toProjectRelativeScriptPath,
+                isPlaying,
+                isPaused);
             bool allRequestedSkipped = DecideAllRequestedSkipped(result, toProjectRelativeScriptPath);
             int reappliedSiblingCount = HotReloadRequestedFileOutcomeSummary.CountReappliedSiblingOutcomes(
                 result.Methods,

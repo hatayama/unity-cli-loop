@@ -372,7 +372,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "A reload that declares an already introduced type must not fail.");
                     AssertCallerIsPatched(second);
 
-                    HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, second, null, Array.Empty<string>());
+                    HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, second, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
                     Assert.That(
                         response.IntroducedTypes.Count,
                         Is.EqualTo(1),
@@ -629,7 +629,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CancellationToken.None);
             }
 
-            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
             Assert.That(response.Success, Is.False, "A refused declaration must fail the run.");
             string ownerProjectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
                 HotReloadCompositionRoot.Services.PackageRootCapture,
