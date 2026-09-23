@@ -96,6 +96,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _siblingLedgerUpdates.NoteInclusion(projectRelativePath, reason);
         }
 
+        /// <summary>Remembers a companion left out because its source changed, so the ledger forgets it.</summary>
+        public void NoteChangedCompanion(string projectRelativePath)
+        {
+            _siblingLedgerUpdates.NoteChangedCompanion(projectRelativePath);
+        }
+
         public HotReloadSiblingInclusionReason SiblingInclusionReasonOf(string projectRelativePath)
         {
             return _siblingLedgerUpdates.ReasonOf(projectRelativePath);

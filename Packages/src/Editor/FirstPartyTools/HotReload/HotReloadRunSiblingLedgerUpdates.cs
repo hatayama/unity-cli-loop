@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<(string Path, string Hash)> _companionCandidates = new List<(string Path, string Hash)>();
         private readonly List<string> _appliedPaths = new List<string>();
         private readonly List<string> _unappliedRetryPaths = new List<string>();
+        private readonly List<string> _changedCompanionPaths = new List<string>();
         private readonly Dictionary<string, string> _observedHashByPath;
         private bool _appliedToDomain;
 
@@ -42,6 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void NoteChangedCompanion(string projectRelativePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            _changedCompanionPaths.Add(projectRelativePath);
         }
 
         /// <summary>Why a sibling came back; a file the run was passed reads as active changes.</summary>
@@ -98,6 +100,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < _appliedPaths.Count; index++)
             {
                 domain.CompanionSources.Remove(_appliedPaths[index]);
+            }
+
+            // Why a changed companion is forgotten: the ledger exists to bring back the same bytes,
+            // an entry whose bytes changed can no longer do that, and keeping it repeats the
+            // changed-source warning on every later reload even after the source is restored.
+            for (int index = 0; index < _changedCompanionPaths.Count; index++)
+            {
+                domain.CompanionSources.Remove(_changedCompanionPaths[index]);
             }
 
             RecordCompanions(domain);
@@ -161,8 +171,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why a record of other bytes does not count: the sibling planner brings a file back only
-        // while its source hashes to a recorded hash, so an older record brings it back only once
-        // the source returns to those bytes.
+        // while its source hashes to a recorded hash. A companion found at other bytes is forgotten
+        // by the run that finds it, so it comes back only after it is passed to a reload again.
         private static bool IsRecordedAt(IHotReloadCarriedInLookup lookup, string projectRelativePath, string hash)
         {
             if (string.IsNullOrEmpty(hash))
