@@ -112,6 +112,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a passed file whose only edit adds members to a compiled enum is not recorded as a
+        /// companion even beside an applied file, so it reads as not recorded.
+        /// </summary>
+        [Test]
+        public void ApplyTo_FileWithOnlyAddedEnumMembersBesideAnAppliedChange_IsNotRecordedAsCompanion()
+        {
+            using (HotReloadDomain domain = HotReloadCompositionRoot.CreateProductionDomain())
+            {
+                HotReloadRunSiblingLedgerUpdates updates = new HotReloadRunSiblingLedgerUpdates(domain);
+                updates.Observe(EnumPath, AddedEnumMemberResult());
+                updates.Observe(OtherPath, AppliedResult(OtherPath));
+                updates.ApplyTo(domain);
+
+                Assert.That(domain.CompanionSources.TryGetHash(EnumPath), Is.Null);
+                Assert.That(
+                    updates.DescribeAfterApply(new HotReloadDomainCarriedInLookup(domain), EnumPath),
+                    Is.EqualTo(HotReloadCarriedInState.NotRecorded));
+            }
+        }
+
+        /// <summary>
         /// What: a file whose applied-source record holds its current hash reads as recorded at
         /// its current source even when it has rows of its own.
         /// </summary>
@@ -196,6 +217,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<string>(),
                 0,
                 sourceContentSha256: CurrentHash);
+        }
+
+        private static HotReloadFileProcessResult AddedEnumMemberResult()
+        {
+            return new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                0,
+                sourceContentSha256: CurrentHash,
+                addedEnumMemberNames: new[] { "Kinds.Third" });
         }
 
         private static HotReloadFileProcessResult AppliedResult(string path)

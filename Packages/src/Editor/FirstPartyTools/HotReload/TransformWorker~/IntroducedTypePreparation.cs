@@ -141,7 +141,10 @@ internal static class IntroducedTypePreparation
                         artifactMap,
                         input.TargetAssemblyName,
                         input.TargetAssemblyMvid);
-                    plannedAddedEnumMemberNames[index] = PlannedAddedMemberNames.CollectCompiledEnumMembers(unit, home);
+                    plannedAddedEnumMemberNames[index] = PlannedAddedMemberNames.CollectCompiledEnumMembers(
+                        unit.Root,
+                        unit.SemanticModel,
+                        home);
                     // Why collected here as well: a refused or failed introduced-type batch ends
                     // the run before the transform run, which is what reports these otherwise.
                     declarationDriftWarnings[index] = ConstDriftCollector.CollectConstDriftWarnings(
@@ -168,6 +171,7 @@ internal static class IntroducedTypePreparation
                 AddedFieldInitializers = Array.Empty<string>(),
                 AddedFieldDeclarations = Array.Empty<WorkerAddedFieldDeclaration>(),
                 AddedConstNames = Array.Empty<string>(),
+                AddedEnumMemberNames = Array.Empty<string>(),
                 IntroducedTypes = unit.IntroducedTypes.ToArray(),
                 IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
                 IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray(),

@@ -1176,6 +1176,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a transform run over a source that adds a member to a compiled enum reports that
+        /// member as "<enum display name>.<member>", so the Editor can keep the file out of the
+        /// companion ledger.
+        /// </summary>
+        [Test]
+        public async Task Run_WithMemberAddedToCompiledEnum_ReportsAddedEnumMemberName()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string editedSource = onDisk.Replace(
+                "Active = 1",
+                "Active = 1,\n        Paused = 2",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: an enum member must be added.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, "AddedEnumMemberName.cs");
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].addedEnumMemberNames,
+                Is.EqualTo(new[] { "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadE2EMode.Paused" }));
+        }
+
+        /// <summary>
         /// What: a non-const field initializer change still emits the generic outside-method-body
         /// warning (const stripping must not hide ordinary field initializer drift).
         /// </summary>
@@ -2904,6 +2936,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(omitted.files[0].addedFieldNames, Is.Null, "Omitted addedFieldNames must deserialize as null.");
             Assert.That(omitted.files[0].addedConstNames, Is.Null, "Omitted addedConstNames must deserialize as null.");
             Assert.That(
+                omitted.files[0].addedEnumMemberNames,
+                Is.Null,
+                "Omitted addedEnumMemberNames must deserialize as null.");
+            Assert.That(
                 omitted.entries[0].calledAddedMethodKeys,
                 Is.Null,
                 "Omitted calledAddedMethodKeys must deserialize as null.");
@@ -2917,6 +2953,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(omitted.files[0].addedFieldNames, Is.Empty);
             Assert.That(omitted.files[0].addedConstNames, Is.Not.Null);
             Assert.That(omitted.files[0].addedConstNames, Is.Empty);
+            Assert.That(omitted.files[0].addedEnumMemberNames, Is.Not.Null);
+            Assert.That(omitted.files[0].addedEnumMemberNames, Is.Empty);
             string nullNamesJson =
                 "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\","
                 + "\"addedFieldNames\":null}]}";
@@ -3009,6 +3047,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(coalesced.addedFieldNames, Is.Empty);
             Assert.That(coalesced.addedConstNames, Is.Not.Null);
             Assert.That(coalesced.addedConstNames, Is.Empty);
+            Assert.That(coalesced.addedEnumMemberNames, Is.Not.Null);
+            Assert.That(coalesced.addedEnumMemberNames, Is.Empty);
             Assert.That(coalesced.baselineDisabledByDuplicateKeys, Is.False);
         }
 

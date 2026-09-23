@@ -51,12 +51,15 @@ internal static class PlannedAddedMemberNames
     /// name and the member name joined by a dot. Hot reload never adds an enum member, so these
     /// stay absent from every compilation until a compile.
     /// </summary>
-    internal static string[] CollectCompiledEnumMembers(WorkerSourceUnit unit, WorkerTypeHome home)
+    internal static string[] CollectCompiledEnumMembers(
+        CompilationUnitSyntax root,
+        SemanticModel semanticModel,
+        WorkerTypeHome home)
     {
         HashSet<string> names = new HashSet<string>(System.StringComparer.Ordinal);
-        foreach (EnumDeclarationSyntax declaration in unit.Root.DescendantNodes().OfType<EnumDeclarationSyntax>())
+        foreach (EnumDeclarationSyntax declaration in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
         {
-            INamedTypeSymbol sourceType = unit.SemanticModel.GetDeclaredSymbol(declaration);
+            INamedTypeSymbol sourceType = semanticModel.GetDeclaredSymbol(declaration);
             INamedTypeSymbol compiledType = sourceType == null ? null : home.FindCompiledType(sourceType);
             if (compiledType == null)
             {
