@@ -4,7 +4,6 @@ using System.Globalization;
 
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -65,68 +64,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // whose only failure was a refused declaration would otherwise answer Success.
             hasFailure = hasFailure || HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
 
-            List<string> warnings = new List<string>(result.Warnings);
-            if (additionalWarnings != null)
-            {
-                warnings.AddRange(additionalWarnings);
-            }
-
-            // Why before the pause-point extras: this warning is cleared by compile, so it must
-            // count toward the single-compile resolution suffix instead of suppressing it.
-            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
-                warnings,
-                result.Methods,
-                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
-                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot,
-                toProjectRelativeScriptPath,
-                result.ReappliedSiblingPaths);
-
-            // Why before the count snapshot: a Skipped method is applied by 'uloop compile' like
-            // the warnings above it, so it must count toward the single-compile resolution suffix.
-            AppendSkippedWarnings(warnings, result.Methods);
-            int orchestratorWarningCount = warnings.Count;
-            AppendRetargetLineDriftWarnings(warnings);
-            AppendExpiredNotRetargetedWarnings(warnings);
-
-            if (result.RetargetedPausePointIds != null && result.RetargetedPausePointIds.Count > 0)
-            {
-                List<string> details = new List<string>(result.RetargetedPausePointIds.Count);
-                for (int index = 0; index < result.RetargetedPausePointIds.Count; index++)
-                {
-                    details.Add(FormatRetargetedPausePointIdDetail(result.RetargetedPausePointIds[index]));
-                }
-
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.RetargetedPausePointsMessageFormat,
-                        string.Join(", ", details)));
-            }
-
-            if (result.SuppressedPausePointIds != null && result.SuppressedPausePointIds.Count > 0)
-            {
-                string ids = string.Join(", ", result.SuppressedPausePointIds);
-                warnings.Add(
-                    "Armed pause points could not be re-targeted and will not fire until the patch "
-                    + $"is reverted or compiled for real: {ids}");
-            }
-
-            // Why after the count snapshot: wiring is a step the caller takes by hand, and a
-            // compile does not bring the values back, so this must suppress the single-compile
-            // suffix the way the pause-point extras do.
-            HotReloadRewireAfterDomainReloadWarning.Append(
-                warnings,
-                result.AddedFields,
-                recoveredDropIdentities);
-
-            // Why snapshot here: hold warnings are not compile-resolution extras, so they
-            // must not hide the single-compile suffix the way pause-point extras do.
-            int warningCountBeforeHold = warnings.Count;
-            HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
-                warnings,
-                result.AutoRefreshHoldReleaseDeferred);
-            HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
-                warnings,
-                result.AutoRefreshHoldSceneRefreshWarning);
+            HotReloadResponseWarnings warnings = HotReloadApplyWarningsAssembler.Assemble(
+                result,
+                additionalWarnings,
+                recoveredDropIdentities,
+                toProjectRelativeScriptPath);
             bool allRequestedSkipped = DecideAllRequestedSkipped(result, toProjectRelativeScriptPath);
             int reappliedSiblingCount = HotReloadRequestedFileOutcomeSummary.CountReappliedSiblingOutcomes(
                 result.Methods,
@@ -137,17 +79,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailure,
                 hasMethodFailure,
                 warnings.Count,
-                appendCompileResolution: DecideAppendCompileResolution(
-                    result,
-                    orchestratorWarningCount,
-                    warningCountBeforeHold),
+                appendCompileResolution: DecideAppendCompileResolution(result, warnings),
                 allRequestedSkipped,
                 reappliedSiblingCount);
             return new HotReloadResponse
             {
                 Success = !hasFailure,
                 Methods = methods,
-                Warnings = warnings,
+                Warnings = warnings.ToList(),
                 IntroducedTypes = HotReloadIntroducedTypeResponseSection.BuildRows(result.IntroducedTypes),
                 ActiveIntroducedTypeTotal = services.Domain.IntroducedTypeCount,
                 PatchedTotal = result.PatchedTotal,
@@ -186,53 +125,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.Methods,
                 result.ReappliedSiblingPaths,
                 toProjectRelativeScriptPath);
-        }
-
-        private static void AppendRetargetLineDriftWarnings(List<string> warnings)
-        {
-            IReadOnlyList<(string Id, string OldText, string NewText)> driftWarnings =
-                HotReloadPausePointCoordination.PausePointSide?.ConsumeRetargetLineDriftWarnings();
-            if (driftWarnings == null || driftWarnings.Count == 0)
-            {
-                return;
-            }
-
-            for (int index = 0; index < driftWarnings.Count; index++)
-            {
-                (string id, string oldText, string newText) = driftWarnings[index];
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.RetargetLineDriftWarningFormat,
-                        id,
-                        oldText,
-                        newText));
-            }
-        }
-
-        private static void AppendExpiredNotRetargetedWarnings(List<string> warnings)
-        {
-            IReadOnlyList<string> expiredIds =
-                HotReloadPausePointCoordination.PausePointSide?.ConsumeExpiredNotRetargetedMarkerIds();
-            if (expiredIds == null || expiredIds.Count == 0)
-            {
-                return;
-            }
-
-            warnings.Add(
-                string.Format(
-                    HotReloadConstants.ExpiredPausePointsNotRetargetedMessageFormat,
-                    string.Join(", ", expiredIds)));
-        }
-
-        private static string FormatRetargetedPausePointIdDetail(string id)
-        {
-            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(id);
-            string lineText = status.ResolvedLineText ?? string.Empty;
-            return string.Format(
-                HotReloadConstants.RetargetedPausePointIdDetailFormat,
-                id,
-                status.ResolvedLine,
-                lineText);
         }
 
         private static string BuildApplyMessage(
@@ -279,14 +171,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Whether the Message may say one compile clears every warning and none has to be cleared
-        // first: only for two or more hot reload warnings with no pause-point extras after them,
-        // and never when a declared type needs a compile before it exists, which contradicts it.
+        // first: only when the warnings allow it, and never when a declared type needs a compile
+        // before it exists, which contradicts it.
         private static bool DecideAppendCompileResolution(
             HotReloadOrchestratorResult result,
-            int orchestratorWarningCount,
-            int warningCountBeforeHold)
+            HotReloadResponseWarnings warnings)
         {
-            if (orchestratorWarningCount < 2 || orchestratorWarningCount != warningCountBeforeHold)
+            if (!warnings.AllowsSingleCompileResolution)
             {
                 return false;
             }
@@ -518,17 +409,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Lists the Skipped methods in Warnings so a reader who only checks Warnings still sees
-        /// that the edit was not applied.
-        /// </summary>
-        private static void AppendSkippedWarnings(
-            List<string> warnings,
-            IReadOnlyList<HotReloadMethodOutcome> methods)
-        {
-            HotReloadSkippedWarningCollapser.Append(warnings, methods);
         }
 
         private static string AppendWarningCount(
