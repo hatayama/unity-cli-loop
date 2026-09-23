@@ -48,7 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 contentPathOverrideByFile);
             HotReloadFileSinks sinks = new HotReloadFileSinks(
                 run.SiblingDerivedWarnings,
-                run.OneShotCallerNoteCandidates);
+                run.OneShotCallerNoteCandidates,
+                run.DisplayedRemovedMembers);
             List<HotReloadMethodOutcome> alreadyActiveOutcomes = new List<HotReloadMethodOutcome>();
 
             HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(

@@ -69,10 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         file.FileOutput.removedMembers,
                         file.FileOutput.removedMethodSignatures,
                         gateResult.GatedReplacementMethodKeys);
-                file.Sinks.DisplayedRemovedMembers = displayedRemovedMembers;
                 bool isSameAsLastDisplayed = patcher.IsSameAsLastDisplayedRemovedMembers(
                     file.ProjectRelativePath,
                     displayedRemovedMembers);
+                file.Sinks.DisplayedRemovedMembers?.Stage(file.ProjectRelativePath, displayedRemovedMembers);
                 if (displayedRemovedMembers.Count > 0)
                 {
                     file.Sinks.Warnings.Add(

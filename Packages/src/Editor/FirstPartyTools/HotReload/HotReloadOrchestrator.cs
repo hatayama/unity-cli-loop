@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             run.RecordAppliedSourceHashes();
-            run.RecordDisplayedRemovedMembers();
+            run.DisplayedRemovedMembers.ApplyTo(_patcher);
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));

@@ -16,7 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal HotReloadFileSinks(
             List<string> siblingDerivedWarnings,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates)
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates,
+            HotReloadRunDisplayedRemovedMembers displayedRemovedMembers = null)
         {
             Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
 
@@ -28,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IntroducedTypes = new List<HotReloadIntroducedTypeOutcome>();
             SiblingDerivedWarnings = siblingDerivedWarnings;
             OneShotCallerNoteCandidates = oneShotCallerNoteCandidates;
+            DisplayedRemovedMembers = displayedRemovedMembers;
         }
 
         internal List<HotReloadMethodOutcome> Outcomes { get; }
@@ -48,16 +50,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // group that ends unapplied still carries the rows the commit boundary wrote.
         internal List<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
-        // The removed-member names this file's warning listed; null until the removed-member
-        // notices ran. Why carried out instead of recorded where the warning is chosen: the record
-        // is compared by every later group of the same run, and an input that lists one file
-        // twice runs its second copy in a later group, which must not read the first copy's record.
-        internal IReadOnlyList<string> DisplayedRemovedMembers { get; set; }
-
         // Shared across the whole run so sibling-derived text can be deduped once at the end.
         internal List<string> SiblingDerivedWarnings { get; }
 
         // Shared across the whole run; null when the caller collects no one-shot caller notes.
         internal List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates { get; }
+
+        // Shared across the whole run so the removed-member record is written once the run ends;
+        // null when the caller keeps no such record.
+        internal HotReloadRunDisplayedRemovedMembers DisplayedRemovedMembers { get; }
     }
 }
