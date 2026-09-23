@@ -262,13 +262,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "serialize until 'uloop compile': {0}. To put a value in one now, follow "
             + "references/added-field-wiring.md in the uloop-hot-reload skill.";
 
-        // Why name the fields: the domain reload dropped the values an earlier run wired into
-        // them, and nothing else in the response says the wiring has to be done again. Why
-        // conditional: a field was active before the reload, but nothing records whether a value
-        // was ever wired into it.
+        // Why name the fields: the domain reload or revert dropped the values an earlier run wired
+        // into them, and nothing else in the response says the wiring has to be done again. Why
+        // conditional: a field was active before the reload or revert, but nothing records whether
+        // a value was ever wired into it.
         public const string RewireAfterDomainReloadWarningFormat =
-            "If values were wired into these added fields before the last domain reload, they are "
-            + "gone; wire them again before code that reads them runs: {0}.";
+            "If values were wired into these added fields before the last domain reload or revert, "
+            + "they are gone; wire them again before code that reads them runs: {0}.";
+
+        // Why at the revert already: the revert drops the declarations and their values, and the
+        // re-apply that brings the fields back is the step a reader would otherwise not connect
+        // to rewiring.
+        public const string RevertDroppedAddedFieldValuesWarningFormat =
+            "This revert dropped {0} added field(s) and any values wired into them; after the next "
+            + "hot reload adds them again, wire them again before code that reads them runs: {1}.";
 
         // Why a warning rather than a re-run of the initializer: a stored value cannot be told
         // apart from one the edited code assigned, so re-running would overwrite live state. The
