@@ -130,6 +130,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             runningLease.Dispose();
         }
 
+        /// <summary>
+        /// Verifies ExecuteToolAsync hands the request token to the session, so a cancelled execute-dynamic-code run that never returns stops blocking other tools after the grace period.
+        /// </summary>
+        [Test]
+        public async Task ExecuteToolAsync_WhenDynamicCodeRequestIsCancelledAndNeverReturns_ShouldLetOtherToolRunAfterGrace()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            registry.RegisterTool(new NeverReturningDynamicCodeTool());
+            BusyRouteRequestedTool requestedTool = new BusyRouteRequestedTool();
+            registry.RegisterTool(requestedTool);
+            UnityCliLoopToolExecutionService executionService =
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), session);
+            MainThreadSwitcher.RegisterService(new ImmediateMainThreadDispatcher());
+            using CancellationTokenSource requestCancellation = new CancellationTokenSource();
+
+            try
+            {
+                Task<UnityCliLoopToolResponse> stuckTask = executionService.ExecuteToolAsync(
+                    registry,
+                    UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                    null,
+                    requestCancellation.Token);
+                requestCancellation.Cancel();
+
+                Assert.ThrowsAsync<UnityCliLoopToolBusyException>(
+                    () => executionService.ExecuteToolAsync(
+                        registry,
+                        requestedTool.ToolName,
+                        null,
+                        CancellationToken.None));
+                timestamp += ToolExecutionSession.CancelledLeaseGraceSeconds * Stopwatch.Frequency;
+                UnityCliLoopToolResponse response = await executionService.ExecuteToolAsync(
+                    registry,
+                    requestedTool.ToolName,
+                    null,
+                    CancellationToken.None);
+
+                Assert.That(stuckTask.IsCompleted, Is.False);
+                Assert.That(response, Is.InstanceOf<PendingTypedResponse>());
+            }
+            finally
+            {
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
         [Test]
         public void ScreenshotUseCase_CreateTimedOutResult_PreservesTimeoutDetails()
         {
@@ -229,6 +277,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void Complete()
             {
                 _completionSource.TrySetResult(new PendingTypedResponse());
+            }
+        }
+
+        // Stands in for an execute-dynamic-code run stuck on an await that ignores cancellation.
+        private sealed class NeverReturningDynamicCodeTool : IUnityCliLoopTool
+        {
+            private readonly TaskCompletionSource<UnityCliLoopToolResponse> _neverCompleted = new();
+
+            public string ToolName => UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE;
+
+            public ToolParameterSchema ParameterSchema => new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                return _neverCompleted.Task;
             }
         }
 

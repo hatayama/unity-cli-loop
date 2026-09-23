@@ -62,7 +62,9 @@ Each line is one JSON object:
    first lead behind a BUSY error: the Editor is single-flight, so while one request never
    finishes, every later command is rejected with BUSY after the CLI's bounded retry. Before
    treating the missing completion as proof, check the next UTC day's file and confirm that the
-   operation logs its completion at all.
+   operation logs its completion at all. A `tool_execution_lease_revoked` entry means the
+   Editor stopped waiting for a cancelled `execute-dynamic-code` request that had not finished
+   and let other commands run; that request is the one that was stuck.
 3. Read the entries around the orphan in time order: the last operation logged for its ID shows
    how far it got, and neighboring `domain_reload_*`, `startup_protection_active`, or
    `binding_*` entries show what the server was doing at that moment.
