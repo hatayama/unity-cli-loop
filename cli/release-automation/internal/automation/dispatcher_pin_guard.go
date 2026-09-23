@@ -22,6 +22,7 @@ var requiredDispatcherPinAssets = []string{
 	"install.ps1",
 	"uloop-dispatcher-darwin-amd64.tar.gz",
 	"uloop-dispatcher-darwin-arm64.tar.gz",
+	"uloop-dispatcher-linux-amd64.tar.gz",
 	"uloop-dispatcher-windows-amd64.zip",
 }
 

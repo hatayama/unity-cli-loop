@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.5.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.4.0...uloop-project-runner-v3.5.0) (2026-09-23)
+
+
+### Features
+
+* hot-reload says whether the CLI should compile the edits it could not apply, chosen by --compile-on-skip ([#2819](https://github.com/hatayama/unity-cli-loop/issues/2819)) ([edf54a3](https://github.com/hatayama/unity-cli-loop/commit/edf54a34a1440c5a130477f406248033ea977d88))
+* uloop finds and launches the Unity Editor on Linux ([#2854](https://github.com/hatayama/unity-cli-loop/issues/2854)) ([ba61348](https://github.com/hatayama/unity-cli-loop/commit/ba613489bbe2f65b0807859562e8720a75f4300c))
+* uloop hot-reload runs the compile itself when a reload leaves edits unapplied ([#2820](https://github.com/hatayama/unity-cli-loop/issues/2820)) ([ce5bb08](https://github.com/hatayama/unity-cli-loop/commit/ce5bb0895e13c61f4e323be78486694ff3edf1f2))
+
+
+### Bug Fixes
+
+* A busy error while the Editor is paused says the running command cannot finish and how to recover ([#2860](https://github.com/hatayama/unity-cli-loop/issues/2860)) ([63e4ac5](https://github.com/hatayama/unity-cli-loop/commit/63e4ac58b8b18ce1f83ea00ba8c57e9a8159ec51))
+* Hot reload refuses edits that would drop earlier added methods, gives the right advice in Play Mode, and reports its results accurately ([#2834](https://github.com/hatayama/unity-cli-loop/issues/2834)) ([6d4a57e](https://github.com/hatayama/unity-cli-loop/commit/6d4a57e3ea8bc397ef561d9f70f740c3e2508a69))
+* Hot reload reports what a run actually did and skips added methods it cannot verify ([#2830](https://github.com/hatayama/unity-cli-loop/issues/2830)) ([c90d226](https://github.com/hatayama/unity-cli-loop/commit/c90d2265a7f5f1bdafe958c24e4bf26aa44f69f4))
+
 ## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.3.0...uloop-project-runner-v3.4.0) (2026-09-08)
 
 
