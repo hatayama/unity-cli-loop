@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFilePaths groupFilePaths,
             string correlationId,
             IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes,
+            HotReloadCompileFailureNoteSources noteSources,
             CancellationToken ct)
         {
             if (compileResult.Errors.Count == 0)
@@ -64,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
                 workerOutput.entries,
                 attribution,
-                workerOutput.skipped,
+                noteSources,
                 groupFilePaths,
                 groupPaths);
             List<HotReloadMethodOutcome> failedMethodOutcomes =

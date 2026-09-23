@@ -27,7 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
             IReadOnlyList<HotReloadGroupFile> files,
-            HotReloadPreparedIntroducedTypes preparedIntroducedTypes)
+            HotReloadPreparedIntroducedTypes preparedIntroducedTypes,
+            HotReloadCompileFailureNoteSources compileFailureNoteSources)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be empty.");
@@ -37,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(workerInput != null, "workerInput must not be null.");
             Debug.Assert(workerOutput != null, "workerOutput must not be null.");
             Debug.Assert(files != null && files.Count > 0, "A group must hold a file.");
+            Debug.Assert(compileFailureNoteSources != null, "compileFailureNoteSources must not be null.");
 
             ProjectRoot = projectRoot;
             AssemblyName = assemblyName;
@@ -48,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WorkerOutput = workerOutput;
             Files = files;
             PreparedIntroducedTypes = preparedIntroducedTypes;
+            CompileFailureNoteSources = compileFailureNoteSources;
 
             List<(string ProjectRelativePath, string AssemblyResolvePath)> filePaths =
                 new List<(string ProjectRelativePath, string AssemblyResolvePath)>(files.Count);
@@ -94,6 +97,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal TransformWorkerInputDto WorkerInput { get; }
 
         internal TransformWorkerOutputDto WorkerOutput { get; }
+
+        // What a shim compile failure of this group can be explained with.
+        internal HotReloadCompileFailureNoteSources CompileFailureNoteSources { get; }
 
         // The edited files of this group, in the order they were sent to the worker.
         internal IReadOnlyList<HotReloadGroupFile> Files { get; }

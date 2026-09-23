@@ -141,6 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.GroupFilePaths,
                 context.CorrelationId,
                 introducedTypeArtifactHomes,
+                context.CompileFailureNoteSources,
                 ct).ConfigureAwait(false);
             if (isolation == null)
             {
@@ -187,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadSkippedMemberCompileNote.AppendNotes(
                     compileResult.ErrorMessage,
                     fallbackErrorMessages,
-                    context.WorkerOutput.skipped));
+                    context.CompileFailureNoteSources));
         }
 
         private static HotReloadGroupCompileResult ResolveIsolatedEntriesToPatch(

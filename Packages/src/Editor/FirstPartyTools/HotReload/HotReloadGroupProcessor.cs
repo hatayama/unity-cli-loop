@@ -241,7 +241,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerInput,
                 workerOutput,
                 files,
-                prepared);
+                prepared,
+                new HotReloadCompileFailureNoteSources(workerOutput.skipped));
             HotReloadGroupGateAndCompileResult gateAndCompile = await _dependencies
                 .GateAndCompile(context, ct)
                 .ConfigureAwait(false);
