@@ -165,12 +165,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why only the owner-file ledger takes the surviving types: the identity ledger reports
-        // what Play entry discarded, and the revert discarded none of these types.
-        internal static void NotifyRevertAll(IReadOnlyList<HotReloadPlayModeEntryDropSource> survivingIntroducedSources)
+        // what Play entry discarded, and the revert discarded none of these types. Why the dropped
+        // fields go to the rewire ledger alone: --status counts the identity ledger as changes
+        // Play entry discarded, which a revert is not.
+        internal static void NotifyRevertAll(
+            IReadOnlyList<HotReloadPlayModeEntryDropSource> survivingIntroducedSources,
+            IReadOnlyList<string> droppedAddedFields)
         {
             Debug.Assert(survivingIntroducedSources != null, "survivingIntroducedSources must not be null");
+            Debug.Assert(droppedAddedFields != null, "droppedAddedFields must not be null");
             ClearLedgers();
             HotReloadPlayModeEntryDropSourceLedger.Record(survivingIntroducedSources);
+            HotReloadRewireLedger.Record(droppedAddedFields);
         }
 
         internal static void ResetPendingForTesting()

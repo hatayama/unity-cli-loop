@@ -32,6 +32,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public HotReloadResponse ExecuteRevertAll()
         {
             int clearedCount = _patcher.ActiveChangeCount;
+            // Read before the revert, which empties the domain's added fields.
+            IReadOnlyList<string> droppedAddedFields =
+                HotReloadPlayModeEntryDropRecorder.CollectActiveAddedFields(_domain);
             _patcher.RevertAll();
             // The added methods are gone with the revert, so the proxies that forward Unity
             // messages into them come off in the same step rather than at the next update tick.
@@ -39,7 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Read after the revert, so the ledger lists the types it left loaded rather than the
             // state it reverted.
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
-                HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources(_domain));
+                HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources(_domain),
+                droppedAddedFields);
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
             List<string> warnings = new List<string>();
@@ -49,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 hold.SceneRefreshWarning);
+            HotReloadRewireAfterDomainReloadWarning.AppendRevertDropped(warnings, droppedAddedFields);
             // Why one snapshot: the total and the sentence that names it must agree, and a second
             // read could answer after another reload activated a type.
             HotReloadActiveChangeSnapshot snapshot = _domain.CountActiveChanges();

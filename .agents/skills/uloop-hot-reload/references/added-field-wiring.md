@@ -92,6 +92,8 @@ So the recovery order is always **re-apply the hot reload first, then re-run the
 usually the one you want; it works while play mode is running. A new file that declares a type hot
 reload introduced is never a changed file, but after entering play mode or `--revert-all` it is
 selected again too, so the field it declares comes back with the rest.
+The `--revert-all` response's `Warnings` names the added fields it dropped, and the re-apply that
+adds them back names them again as fields to wire again, so you can see which wiring to re-run.
 
 After `uloop compile` there is a second case: if the compile included the edit that added the
 field, the field is a real compiled field now, and the wiring call says so instead of the message

@@ -7,7 +7,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Stores the added fields whose wired values a domain reload discarded, as
+    /// Stores the added fields whose wired values a domain reload or revert discarded, as
     /// "Type.field" display names, in SessionState so the next apply that adds them again can
     /// ask for them to be wired again.
     /// </summary>
