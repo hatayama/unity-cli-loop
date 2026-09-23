@@ -3274,7 +3274,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 workerOutput,
                 new[] { file },
-                null);
+                null,
+                new HotReloadCompileFailureNoteSources(workerOutput.skipped));
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(

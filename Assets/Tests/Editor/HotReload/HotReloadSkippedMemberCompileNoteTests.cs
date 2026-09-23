@@ -289,7 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string message = HotReloadSkippedMemberCompileNote.AppendNotes(
                 composed,
                 new[] { Surface11Cs1061 },
-                skipped);
+                new HotReloadCompileFailureNoteSources(skipped));
 
             Assert.That(message, Is.EqualTo(expected));
         }

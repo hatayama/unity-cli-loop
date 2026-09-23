@@ -72,16 +72,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string AppendNotes(
             string composedMessage,
             IReadOnlyList<string> errorMessages,
-            TransformWorkerSkippedDto[] skipped)
+            HotReloadCompileFailureNoteSources noteSources)
         {
             Debug.Assert(composedMessage != null, "composedMessage must not be null.");
+            Debug.Assert(noteSources != null, "noteSources must not be null.");
 
             string[] unresolvedNames = ExtractUnresolvedMemberNames(errorMessages);
             string message = composedMessage;
             for (int index = 0; index < unresolvedNames.Length; index++)
             {
                 string unresolvedName = unresolvedNames[index];
-                string reason = FindSkippedMemberNote(unresolvedName, skipped);
+                string reason = FindSkippedMemberNote(unresolvedName, noteSources.SkippedMembers);
                 if (reason == null)
                 {
                     continue;
