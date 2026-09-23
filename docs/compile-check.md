@@ -120,6 +120,18 @@ directory a `Packages/manifest.json` dependency points at with a `file:` path â€
 develops locally lives outside the project root and would otherwise look like one whose assembly
 definitions were deleted.
 
+## One run per project at a time
+
+Two runs against the same project would write the same output directory and the same compiler
+outputs, and could each report what the other half-wrote. A run therefore holds an exclusive lock
+on `Library/uloop/compile-check.lock` from the moment it has found the Bee build until it returns.
+A second run on the same project waits for it, up to five minutes, and then stops with
+`COMPILE_CHECK_PROJECT_BUSY`. Runs on different projects do not wait for each other. The lock is
+the operating system's own (`flock` on macOS and Linux, `LockFileEx` on Windows), so a run that
+crashes or is killed releases it with its process and leaves nothing stale behind. The lock file
+sits outside `Library/uloop/compile-check/` so that deleting the disposable output directory never
+removes a lock another run is holding.
+
 ## Output
 
 The compiled DLLs land in `Library/uloop/compile-check/<dag>/` and are never handed to Unity. The
@@ -213,6 +225,10 @@ goes undetected. In that case the run succeeds against the previous configuratio
 Both a debug and a release dag exist and neither `tundra.log.json` nor
 `Library/EditorOnlyScriptingSettings.json` could be read. Building once from the Editor restores the
 log.
+
+**`COMPILE_CHECK_PROJECT_BUSY`**
+Another `compile-check` on the same project held the lock for the whole wait. Let it finish, then
+run `compile-check` once more; retrying in a loop only queues behind it again.
 
 **The Editor install cannot be found**
 The version in `ProjectVersion.txt` is not installed, or it lives outside the locations the Editor
