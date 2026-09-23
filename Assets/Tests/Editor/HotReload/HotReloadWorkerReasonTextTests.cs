@@ -493,6 +493,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Methods that raise a field-like event added in this edit are skipped; "
                 + "the compiled assembly has no backing field yet. Use uloop compile.");
             yield return Case(
+                HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
+                new[] { "Ns.Publisher.Changed" },
+                "Subscribes to the event 'Ns.Publisher.Changed', which this edit adds; the compiled "
+                + "assembly has no such event yet, so the subscription cannot bind until 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.EventNameof,
                 NoArgs,
                 "Methods that name a field-like event inside nameof are skipped; the shim is a different "

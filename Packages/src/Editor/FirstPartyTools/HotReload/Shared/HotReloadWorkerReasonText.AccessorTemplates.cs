@@ -48,6 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "the compiled assembly has no backing field yet. Use uloop compile.",
                     0));
             templates.Add(
+                HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
+                Plain(
+                    "Subscribes to the event '{0}', which this edit adds; the compiled assembly has no "
+                    + "such event yet, so the subscription cannot bind until 'uloop compile'.",
+                    1));
+            templates.Add(
                 HotReloadWorkerReasonCode.EventNameof,
                 Plain(
                     "Methods that name a field-like event inside nameof are skipped; the shim is a different "

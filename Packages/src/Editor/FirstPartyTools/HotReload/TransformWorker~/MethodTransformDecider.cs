@@ -27,7 +27,8 @@ internal static class MethodTransformDecider
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
-        AddedMemberAccessLookup addedMemberAccess)
+        AddedMemberAccessLookup addedMemberAccess,
+        AddedEventLookup addedEvents)
     {
         WorkerReason hardSkip = EvaluateHardSkipReason(
             typeDeclaration,
@@ -52,7 +53,8 @@ internal static class MethodTransformDecider
         WorkerReason eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
             bodyNode,
             semanticModel,
-            compiledType);
+            compiledType,
+            addedEvents);
         if (eventUseReason != null)
         {
             return MethodTransformDecision.Skip(eventUseReason);

@@ -64,6 +64,7 @@ internal static class PropertyGetterClassifier
         SyntaxNode getterBodyNode,
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
+        AddedEventLookup addedEvents,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog,
@@ -77,7 +78,8 @@ internal static class PropertyGetterClassifier
             getterBodyNode,
             semanticModel,
             compiledType,
-            addedMemberAccess: null);
+            addedMemberAccess: null,
+            addedEvents);
         if (decision.SkipReason != null)
         {
             skipped.Add(new WorkerSkipped

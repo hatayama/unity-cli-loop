@@ -53,7 +53,8 @@ internal static class TypeEmitPlanner
                 TypeDeclaration = typeDeclaration,
                 TypeSymbol = typeSymbol,
                 TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax,
-                TargetAssembly = home.AssemblySymbol
+                TargetAssembly = home.AssemblySymbol,
+                AddedEvents = new AddedEventLookup(home, sourceUnit, semanticModel)
             };
 
             // Why the counterpart is resolved before anything is classified: every stage below
