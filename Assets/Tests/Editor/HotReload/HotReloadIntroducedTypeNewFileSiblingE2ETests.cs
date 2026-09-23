@@ -285,7 +285,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             hasBaseline: true,
                             changedProjectRelativePaths: new List<string> { callerPath },
                             scanLimitWarnings: new List<string>()),
-                        HotReloadDroppedIntroducedSourceFiles.ListExistingOnDisk());
+                        HotReloadDroppedIntroducedSourceFiles.ListExistingOnDisk(),
+                        path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                            HotReloadCompositionRoot.Services.PackageRootCapture,
+                            path));
 
                     Assert.That(
                         selection.Files,
