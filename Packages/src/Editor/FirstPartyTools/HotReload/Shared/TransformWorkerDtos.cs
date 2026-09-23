@@ -119,6 +119,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
         // read that would crash the whole file under the no-try-catch policy.
         public string snapshotSource;
+
+        // True for a file the run pulled in to re-bind its active patches, not one the caller
+        // passed. An older worker ignores it, which only keeps today's Failed rows for such files.
+        public bool reappliedSibling;
     }
 
     /// <summary>
