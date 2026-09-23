@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
             finally
             {
-                _executionSession.Exit();
+                beginResult.Lease.Dispose();
             }
         }
 
