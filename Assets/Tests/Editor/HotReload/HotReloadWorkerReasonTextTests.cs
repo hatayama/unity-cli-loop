@@ -273,6 +273,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "checks). Accessor rewrite unavailable: " + GenericMethodFragment
                 + " Run 'uloop compile' to keep the code as written.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodNotForwardedUnityMessageNeedsCompile,
+                new[] { "OnEnable" },
+                "The added 'OnEnable' is a Unity message that hot reload does not forward (Awake, "
+                + "OnEnable, OnDisable, OnDestroy, and the editor-only messages), so no rewrite of its "
+                + "body would make the engine call it. Run 'uloop compile' to have Unity invoke it.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
                 new[] { "CS1503: Argument 1: cannot convert" },
                 "The added member's body could not be fully bound in the hot-reload compilation "

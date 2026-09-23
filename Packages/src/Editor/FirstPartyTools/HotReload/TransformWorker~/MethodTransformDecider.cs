@@ -335,13 +335,32 @@ internal static class MethodTransformDecider
                 out WorkerReason accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
-                WorkerReason.Composite(
-                    HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite,
-                    accessorRejectReason));
+                DescribeAccessorPlanFailure(methodSymbol, typeSymbol, accessorRejectReason));
         }
 
         bool usesDelegation = feasibilityPlan.Entries.Count > 0;
         return MethodTransformDecision.AddedMethod(usesDelegation);
+    }
+
+    private static WorkerReason DescribeAccessorPlanFailure(
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol,
+        WorkerReason accessorRejectReason)
+    {
+        // Why the accessor hint is dropped for these messages: hot reload never forwards them, so
+        // no rewrite of the body would make the engine call the method, and following the hint
+        // would only spend a reload on an added method nothing invokes.
+        if (ShimMethodEmitter.IsUnityEngineMonoBehaviourDerived(typeSymbol)
+            && HotReloadNotForwardedUnityMessageNames.Contains(methodSymbol.Name))
+        {
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedMethodNotForwardedUnityMessageNeedsCompile,
+                methodSymbol.Name);
+        }
+
+        return WorkerReason.Composite(
+            HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite,
+            accessorRejectReason);
     }
 
     internal static WorkerReason EvaluateAddedMethodSkipReason(
