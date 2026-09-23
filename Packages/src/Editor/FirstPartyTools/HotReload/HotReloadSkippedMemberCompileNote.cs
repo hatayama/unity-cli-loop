@@ -5,8 +5,8 @@ using System.Diagnostics;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Extracts unresolved member names from shim compile errors and matches them to
-    /// skipped rows from the same hot-reload run.
+    /// Extracts unresolved member and type names from shim compile errors and matches them to
+    /// the members skipped and the types refused by the same hot-reload run.
     /// </summary>
     internal static class HotReloadSkippedMemberCompileNote
     {
@@ -15,6 +15,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string Cs0103Prefix = "CS0103:";
         private const string DefinitionForMarker = "does not contain a definition for '";
         private const string NameMarker = "The name '";
+        private const string Cs0246Prefix = "CS0246:";
+        private const string Cs0234Prefix = "CS0234:";
+        private const string Cs0426Prefix = "CS0426:";
+        private const string TypeNameMarker = "The type or namespace name '";
+        private const string NestedTypeNameMarker = "The type name '";
 
         internal static string[] ExtractUnresolvedMemberNames(IReadOnlyList<string> errorMessages)
         {
@@ -94,7 +99,98 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     reason);
             }
 
+            return AppendRefusedTypeNotes(message, errorMessages, noteSources.RefusedIntroducedTypes);
+        }
+
+        /// <summary>
+        /// The type name a refused declaration leaves unresolved: the last segment of the metadata
+        /// name, whichever separator nests it, without the generic arity.
+        /// </summary>
+        internal static string ExtractSimpleTypeName(string metadataName)
+        {
+            Debug.Assert(metadataName != null, "metadataName must not be null.");
+
+            int start = metadataName.LastIndexOfAny(new[] { '.', '/', '+' }) + 1;
+            int backtick = metadataName.IndexOf('`', start);
+            int end = backtick >= 0 ? backtick : metadataName.Length;
+            return metadataName.Substring(start, end - start);
+        }
+
+        private static string AppendRefusedTypeNotes(
+            string message,
+            IReadOnlyList<string> errorMessages,
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes)
+        {
+            if (refusedTypes.Count == 0 || errorMessages == null)
+            {
+                return message;
+            }
+
+            HashSet<string> unresolvedTypeNames = ExtractUnresolvedTypeNames(errorMessages);
+            for (int index = 0; index < refusedTypes.Count; index++)
+            {
+                HotReloadRefusedIntroducedType refused = refusedTypes[index];
+                string simpleName = ExtractSimpleTypeName(refused.MetadataName);
+                // Why remove on match: two refusals of one simple name would repeat the same note.
+                if (!unresolvedTypeNames.Remove(simpleName))
+                {
+                    continue;
+                }
+
+                message += "\n" + string.Format(
+                    HotReloadConstants.RefusedIntroducedTypeCompileFailureNoteFormat,
+                    simpleName,
+                    refused.NoticeText);
+            }
+
             return message;
+        }
+
+        // Why separate from member names: a member note and a type note of one name would
+        // otherwise match each other's rows.
+        private static HashSet<string> ExtractUnresolvedTypeNames(IReadOnlyList<string> errorMessages)
+        {
+            HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 0; index < errorMessages.Count; index++)
+            {
+                string error = errorMessages[index];
+                string name = string.IsNullOrEmpty(error) ? null : ExtractTypeNameFromDiagnostic(error);
+                if (name == null)
+                {
+                    continue;
+                }
+
+                // CS0246 quotes a generic reference with its arguments ('Pool<int>').
+                int angle = name.IndexOf('<');
+                names.Add(angle >= 0 ? name.Substring(0, angle) : name);
+            }
+
+            return names;
+        }
+
+        private static string ExtractTypeNameFromDiagnostic(string error)
+        {
+            if (error.StartsWith(Cs0246Prefix, StringComparison.Ordinal)
+                || error.StartsWith(Cs0234Prefix, StringComparison.Ordinal))
+            {
+                return ExtractQuotedNameAfter(error, TypeNameMarker);
+            }
+
+            // CS0426 is what a reference to a refused type nested in a compiled type fails with.
+            if (error.StartsWith(Cs0426Prefix, StringComparison.Ordinal))
+            {
+                return ExtractQuotedNameAfter(error, NestedTypeNameMarker);
+            }
+
+            // A static member access binds the type name as an expression, so a refused type
+            // fails with CS0103 and a refused nested type with CS0117 instead of the type errors.
+            if (error.StartsWith(Cs0103Prefix, StringComparison.Ordinal)
+                || error.StartsWith(Cs0117Prefix, StringComparison.Ordinal))
+            {
+                return ExtractNameFromDiagnostic(error);
+            }
+
+            return null;
         }
 
         private static string ExtractNameFromDiagnostic(string error)

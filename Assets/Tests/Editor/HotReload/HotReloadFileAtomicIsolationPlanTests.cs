@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
                 entries,
                 CreateAttribution(brokenAddedMethod),
-                new HotReloadCompileFailureNoteSources(Array.Empty<TransformWorkerSkippedDto>()),
+                new HotReloadCompileFailureNoteSources(Array.Empty<TransformWorkerSkippedDto>(), Array.Empty<HotReloadRefusedIntroducedType>()),
                 CreateGroupFilePaths(FirstFile),
                 new[] { FirstFile });
 
@@ -92,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
                 entries,
                 CreateAttribution(brokenBody),
-                new HotReloadCompileFailureNoteSources(Array.Empty<TransformWorkerSkippedDto>()),
+                new HotReloadCompileFailureNoteSources(Array.Empty<TransformWorkerSkippedDto>(), Array.Empty<HotReloadRefusedIntroducedType>()),
                 CreateGroupFilePaths(FirstFile, SecondFile),
                 new[] { FirstFile, SecondFile });
 

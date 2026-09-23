@@ -459,7 +459,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
                 new[] { CreateAtomicEntry(BrokenSourcePath), brokenEntry },
                 CreateAtomicAttribution(brokenEntry),
-                new HotReloadCompileFailureNoteSources(Array.Empty<TransformWorkerSkippedDto>()),
+                new HotReloadCompileFailureNoteSources(Array.Empty<TransformWorkerSkippedDto>(), Array.Empty<HotReloadRefusedIntroducedType>()),
                 CreateAtomicGroupFilePaths(BrokenSourcePath, HealthySourcePath),
                 new[] { BrokenSourcePath, HealthySourcePath });
 
@@ -1159,7 +1159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 workerOutput,
                 new[] { callerFile, targetFile },
                 null,
-                new HotReloadCompileFailureNoteSources(workerOutput.skipped));
+                new HotReloadCompileFailureNoteSources(workerOutput.skipped, Array.Empty<HotReloadRefusedIntroducedType>()));
         }
 
         private static HotReloadApplyContext CreateEmptyEntriesContext(
@@ -1186,7 +1186,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 emptyWorkerOutput,
                 context.Files,
                 null,
-                new HotReloadCompileFailureNoteSources(emptyWorkerOutput.skipped));
+                new HotReloadCompileFailureNoteSources(emptyWorkerOutput.skipped, Array.Empty<HotReloadRefusedIntroducedType>()));
         }
 
         private static Assembly FindCompilationAssembly()

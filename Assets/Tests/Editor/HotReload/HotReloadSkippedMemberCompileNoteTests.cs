@@ -289,9 +289,141 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string message = HotReloadSkippedMemberCompileNote.AppendNotes(
                 composed,
                 new[] { Surface11Cs1061 },
-                new HotReloadCompileFailureNoteSources(skipped));
+                new HotReloadCompileFailureNoteSources(skipped, Array.Empty<HotReloadRefusedIntroducedType>()));
 
             Assert.That(message, Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// What: a CS0246 error naming a type this run refused gets a note that quotes the refusal.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Cs0246NamingRefusedType_AppendsRefusedTypeNote()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0246 },
+                CreateRefusedTypeSources("Game.Units.Spawner"));
+
+            Assert.That(message, Is.EqualTo("composed\n" + ExpectedRefusedTypeNote));
+        }
+
+        /// <summary>
+        /// What: a CS0234 error naming a type this run refused gets the same note as CS0246.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Cs0234NamingRefusedType_AppendsRefusedTypeNote()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0234 },
+                CreateRefusedTypeSources("Game.Units.Spawner"));
+
+            Assert.That(message, Is.EqualTo("composed\n" + ExpectedRefusedTypeNote));
+        }
+
+        /// <summary>
+        /// What: a CS0426 error naming a nested type this run refused inside a compiled type gets
+        /// the note, matched through the '/' the worker's metadata name nests with.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Cs0426NamingRefusedNestedType_AppendsRefusedTypeNote()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0426 },
+                CreateRefusedTypeSources("Game.Units.Barracks/Spawner"));
+
+            Assert.That(message, Is.EqualTo("composed\n" + ExpectedRefusedTypeNote));
+        }
+
+        /// <summary>
+        /// What: a CS0103 error, which a static member access on a refused type fails with, gets
+        /// the note.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Cs0103NamingRefusedType_AppendsRefusedTypeNote()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0103 },
+                CreateRefusedTypeSources("Game.Units.Spawner"));
+
+            Assert.That(message, Is.EqualTo("composed\n" + ExpectedRefusedTypeNote));
+        }
+
+        /// <summary>
+        /// What: a CS0117 error, which a static member access on a refused type nested in a
+        /// compiled type fails with, gets the note.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Cs0117NamingRefusedNestedType_AppendsRefusedTypeNote()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0117 },
+                CreateRefusedTypeSources("Game.Units.Barracks/Spawner"));
+
+            Assert.That(message, Is.EqualTo("composed\n" + ExpectedRefusedTypeNote));
+        }
+
+        /// <summary>
+        /// What: a CS0246 error whose name matches no refused type adds no note.
+        /// </summary>
+        [Test]
+        public void AppendNotes_WhenNoRefusedTypeMatches_AppendsNothing()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0246 },
+                CreateRefusedTypeSources("Game.Units.Launcher"));
+
+            Assert.That(message, Is.EqualTo("composed"));
+        }
+
+        /// <summary>
+        /// What: the simple name of a refused type drops the namespace, the enclosing type in any
+        /// separator form, and the generic arity.
+        /// </summary>
+        [TestCase("Game.Units.Spawner", "Spawner")]
+        [TestCase("Game.Outer/Inner", "Inner")]
+        [TestCase("Game.Outer+Inner", "Inner")]
+        [TestCase("Game.Pool`1", "Pool")]
+        [TestCase("Spawner", "Spawner")]
+        public void ExtractSimpleTypeName_StripsQualifierAndArity(string metadataName, string expected)
+        {
+            Assert.That(HotReloadSkippedMemberCompileNote.ExtractSimpleTypeName(metadataName), Is.EqualTo(expected));
+        }
+
+        private const string RefusedTypeCs0246 =
+            "CS0246: The type or namespace name 'Spawner' could not be found "
+            + "(are you missing a using directive or an assembly reference?) (line 12)";
+
+        private const string RefusedTypeCs0234 =
+            "CS0234: The type or namespace name 'Spawner' does not exist in the namespace 'Game.Units' "
+            + "(are you missing an assembly reference?) (line 12)";
+
+        private const string RefusedTypeCs0426 =
+            "CS0426: The type name 'Spawner' does not exist in the type 'Barracks' (line 12)";
+
+        private const string RefusedTypeCs0103 =
+            "CS0103: The name 'Spawner' does not exist in the current context (line 12)";
+
+        private const string RefusedTypeCs0117 =
+            "CS0117: 'Barracks' does not contain a definition for 'Spawner' (line 12)";
+
+        private const string RefusedTypeNotice =
+            "Unity object introduced type requires a compile: Game.Units.Spawner";
+
+        private const string ExpectedRefusedTypeNote =
+            "'Spawner' was refused by this hot reload run (" + RefusedTypeNotice
+            + "), which is why this compile failed; run 'uloop compile'.";
+
+        private static HotReloadCompileFailureNoteSources CreateRefusedTypeSources(string refusedMetadataName)
+        {
+            return new HotReloadCompileFailureNoteSources(
+                Array.Empty<TransformWorkerSkippedDto>(),
+                new[] { new HotReloadRefusedIntroducedType(refusedMetadataName, RefusedTypeNotice) });
         }
     }
 }

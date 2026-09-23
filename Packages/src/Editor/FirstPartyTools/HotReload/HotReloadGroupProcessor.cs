@@ -113,9 +113,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes =
+                HotReloadRefusedIntroducedType.CollectFrom(preparation.Notices);
             if (preparation.Prepared == null)
             {
-                return await TransformAndApplyGroupAsync(files, workerInput, null, correlationId, ct)
+                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, correlationId, ct)
                     .ConfigureAwait(false);
             }
 
@@ -123,6 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 files,
                 workerInput,
                 preparation.Prepared,
+                refusedTypes,
                 correlationId,
                 ct).ConfigureAwait(false);
         }
@@ -145,6 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
             HotReloadPreparedIntroducedTypes prepared,
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             string correlationId,
             CancellationToken ct)
         {
@@ -168,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // the membership again, so registering anywhere the finally does not cover
                     // would leave the run's membership behind when the scope itself throws.
                     registry.RegisterPrepared(artifact);
-                    return await TransformAndApplyGroupAsync(files, workerInput, prepared, correlationId, ct)
+                    return await TransformAndApplyGroupAsync(files, workerInput, prepared, refusedTypes, correlationId, ct)
                         .ConfigureAwait(false);
                 }
                 finally
@@ -184,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
             HotReloadPreparedIntroducedTypes prepared,
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             string correlationId,
             CancellationToken ct)
         {
@@ -242,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput,
                 files,
                 prepared,
-                new HotReloadCompileFailureNoteSources(workerOutput.skipped));
+                new HotReloadCompileFailureNoteSources(workerOutput.skipped, refusedTypes));
             HotReloadGroupGateAndCompileResult gateAndCompile = await _dependencies
                 .GateAndCompile(context, ct)
                 .ConfigureAwait(false);
