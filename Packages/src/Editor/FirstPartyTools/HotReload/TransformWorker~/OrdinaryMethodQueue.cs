@@ -294,7 +294,8 @@ internal static class OrdinaryMethodQueue
                 decision,
                 typeState.AddedMemberAccess,
                 typeState.SourceUnit.ArtifactMap,
-                typeState.TargetAssembly);
+                typeState.TargetAssembly,
+                typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
         }
 
         return decision;

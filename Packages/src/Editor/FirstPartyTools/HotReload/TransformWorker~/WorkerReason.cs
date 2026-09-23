@@ -16,6 +16,10 @@ internal sealed class WorkerReason
     // to their files. Null when the reason names none.
     public string[] TypeMetadataNames { get; set; }
 
+    // Project-relative paths of the run's files that declare those types, for a reason whose
+    // types only this process can resolve to files. Null when the Editor resolves them instead.
+    public string[] DeclaringFiles { get; set; }
+
     internal static WorkerReason Of(HotReloadWorkerReasonCode code, params string[] args)
     {
         return new WorkerReason

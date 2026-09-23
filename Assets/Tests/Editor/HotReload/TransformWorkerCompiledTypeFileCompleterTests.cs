@@ -21,6 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadBindingSplitRegistry";
         private const string RegistryProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadBindingSplitRegistry.cs";
+        private const string MissingTypeMetadataName = "Example.Kinds";
+        private const string WorkerPlacedPath = "Assets/Scripts/Kinds.cs";
 
         /// <summary>
         /// What: a split reason carried as the detail of another reason, as when a member reads an
@@ -86,6 +88,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 Directory.Delete(directory, true);
             }
+        }
+
+        /// <summary>
+        /// What: a type the PDB places leaves its file in declaringFiles beside the sentence value.
+        /// </summary>
+        [Test]
+        public void Complete_TypeThePdbPlaces_RecordsItsFileAsDeclaringFile()
+        {
+            TransformWorkerReasonDto split = SplitReason();
+
+            Complete(split);
+
+            Assert.That(split.declaringFiles, Is.EqualTo(new[] { RegistryProjectRelativePath }));
+        }
+
+        /// <summary>
+        /// What: a type the PDB cannot place is named in the sentence and left out of
+        /// declaringFiles, which becomes empty rather than staying unresolved.
+        /// </summary>
+        [Test]
+        public void Complete_TypeThePdbCannotPlace_LeavesDeclaringFilesEmpty()
+        {
+            TransformWorkerReasonDto split = SplitReason();
+            split.typeMetadataNames = new[] { MissingTypeMetadataName };
+
+            Complete(split);
+
+            Assert.That(split.declaringFiles, Is.Empty);
+            Assert.That(split.args[3], Is.EqualTo("the file that declares '" + MissingTypeMetadataName + "'"));
+        }
+
+        /// <summary>
+        /// What: files the worker already placed are kept and named in the sentence, even for a
+        /// type the PDB cannot place, such as an enum with no method body.
+        /// </summary>
+        [Test]
+        public void Complete_FilesTheWorkerPlaced_AreKeptAndNamedInTheSentence()
+        {
+            TransformWorkerReasonDto reason = new TransformWorkerReasonDto
+            {
+                code = HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
+                args = new[] { "CS0266", "'Example.Behaviours'", "'" + MissingTypeMetadataName + "'" },
+                typeMetadataNames = new[] { MissingTypeMetadataName },
+                declaringFiles = new[] { WorkerPlacedPath }
+            };
+
+            Complete(reason);
+
+            Assert.That(reason.declaringFiles, Is.EqualTo(new[] { WorkerPlacedPath }));
+            Assert.That(reason.args[3], Is.EqualTo("'" + WorkerPlacedPath + "'"));
+        }
+
+        private static void Complete(TransformWorkerReasonDto reason)
+        {
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                skipped = new[] { new TransformWorkerSkippedDto { method = "Example.Host.Wire()", reason = reason } }
+            };
+            new TransformWorkerCompiledTypeFileCompleter().Complete(
+                new TransformWorkerInputDto { targetTypesAssemblyPath = TargetAssemblyPath() },
+                output);
         }
 
         private static TransformWorkerReasonDto SplitReason()

@@ -159,7 +159,8 @@ internal static class AddedPropertyAccessorGuard
             decision,
             addedMemberAccess: null,
             typeState.SourceUnit.ArtifactMap,
-            typeState.TargetAssembly);
+            typeState.TargetAssembly,
+            typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

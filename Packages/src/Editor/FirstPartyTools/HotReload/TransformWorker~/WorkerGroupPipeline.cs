@@ -98,9 +98,16 @@ internal static class WorkerGroupPipeline
             syntaxTrees: bindingTrees,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        Dictionary<SyntaxTree, string> projectRelativePathsByBindingTree = new Dictionary<SyntaxTree, string>();
+        foreach (WorkerSourceUnit transformUnit in transformUnits)
+        {
+            projectRelativePathsByBindingTree[transformUnit.BindingSyntaxTree] = transformUnit.Input.ProjectRelativePath;
+        }
+
         foreach (WorkerSourceUnit unit in transformUnits)
         {
             unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
+            unit.RunProjectRelativePathsByBindingTree = projectRelativePathsByBindingTree;
         }
 
         WorkerTypeHome home = new WorkerTypeHome(
