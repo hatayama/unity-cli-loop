@@ -56,6 +56,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         run.SiblingBaselineNotices));
             }
 
+            IReadOnlyList<string> changedCompanionPaths = rebind.ChangedCompanionPaths;
+            for (int index = 0; index < changedCompanionPaths.Count; index++)
+            {
+                run.NoteChangedCompanion(changedCompanionPaths[index]);
+            }
+
             AddChangedSinceApplyWarnings(firstFile, rebind);
         }
 

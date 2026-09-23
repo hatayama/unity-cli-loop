@@ -55,6 +55,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a companion whose source changed since it was recorded is dropped from the
+        /// ledger, so the next reload does not warn about it again.
+        /// </summary>
+        [Test]
+        public void ApplyTo_ChangedCompanion_IsRemovedFromTheLedger()
+        {
+            using (HotReloadDomain domain = HotReloadCompositionRoot.CreateProductionDomain())
+            {
+                domain.CompanionSources.Record(EnumPath, OlderHash);
+                HotReloadRunSiblingLedgerUpdates updates = new HotReloadRunSiblingLedgerUpdates(domain);
+                updates.NoteChangedCompanion(EnumPath);
+                updates.ApplyTo(domain);
+
+                Assert.That(domain.CompanionSources.TryGetHash(EnumPath), Is.Null);
+            }
+        }
+
+        /// <summary>
         /// What: a file that applied nothing now but holds changes of an earlier reload reads as
         /// active from an earlier run.
         /// </summary>

@@ -114,8 +114,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string CompanionSiblingChangedWarningFormat =
             "'{0}' was given to an earlier reload beside its changes, but its source changed since, "
-            + "so it was not brought back; pass it to hot-reload too if an added member needs it to "
-            + "bind.";
+            + "so it was not brought back and is no longer remembered; pass it to hot-reload again if "
+            + "an added member needs it to bind.";
 
         // Why a second wording: the failed-rebind sentence sends the reader to the sibling's own
         // rows, and a reload that stopped before re-applying anything wrote none. Pointing at
