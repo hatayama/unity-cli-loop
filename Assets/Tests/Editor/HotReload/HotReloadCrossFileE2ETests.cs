@@ -955,6 +955,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an existing method of a file brought back to re-bind its active patches, whose
+        /// body subscribes to an event the host added, is Skipped rather than Failed once a later
+        /// reload no longer brings the host back, and its reason names the host file to pass.
+        /// </summary>
+        [Test]
+        public async Task Run_ReappliedSiblingBodyNoLongerBinds_IsSkippedAndNamesTheMissingFile()
+        {
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string otherPath = FixturePath(OtherSameAssemblyFileName);
+            string callerSource = ReplaceInSource(ReadFixture(CallerFileName), CallerOtherBodyAnchor, "return 8;");
+            callerSource = ReplaceInSource(callerSource, CallerCallBodyAnchor, "host.Hit += OnHit;\n            return host.Value();");
+            callerSource = ReplaceInSource(callerSource, CallerMemberAnchor, "        private void OnHit()\n        {\n        }\n\n" + CallerMemberAnchor);
+            Dictionary<string, string> overrides = new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "ReappliedUnboundHost.cs",
+                    InsertHostMember(
+                        "        public event System.Action Hit;\n\n        public void RaiseHit()\n        {\n            Hit?.Invoke();\n        }\n\n")),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource("ReappliedUnboundCaller.cs", callerSource)
+            };
+
+            HotReloadOrchestratorResult first = await RunWithOverridesAsync(new[] { hostPath, callerPath }, overrides);
+            Assert.That(
+                FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".Call(").WorkerReason?.Code,
+                Is.EqualTo(HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent),
+                FormatOutcomes(first));
+            FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".RaiseHit(");
+            FindOutcome(first, HotReloadMethodOutcomeKind.Patched, ".Other(");
+            Assert.That(CountOutcomesOfKindForFile(first, HostFileName, HotReloadMethodOutcomeKind.Patched, HotReloadMethodOutcomeKind.Added), Is.Zero, FormatOutcomes(first));
+
+            overrides[otherPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "ReappliedUnboundOther2.cs",
+                ReplaceInSource(ReadFixture(OtherSameAssemblyFileName), OtherExistingValueAnchor, OtherExistingValueEdited));
+            HotReloadOrchestratorResult second = await RunWithOverridesAsync(new[] { otherPath }, overrides);
+            Assert.That(second.ReappliedSiblingPaths, Does.Contain(HostProjectRelativePath()), FormatOutcomes(second));
+            FindOutcome(second, HotReloadMethodOutcomeKind.Skipped, ".Call(");
+
+            overrides[otherPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "ReappliedUnboundOther3.cs",
+                ReplaceInSource(
+                    ReadFixture(OtherSameAssemblyFileName),
+                    OtherExistingValueAnchor,
+                    OtherExistingValueEdited.Replace("return 2;", "return 3;")));
+            HotReloadOrchestratorResult third = await RunWithOverridesAsync(new[] { otherPath }, overrides);
+
+            Assert.That(third.ReappliedSiblingPaths, Does.Not.Contain(HostProjectRelativePath()), FormatOutcomes(third));
+            Assert.That(CountOutcomesOfKindForFile(third, null, HotReloadMethodOutcomeKind.Failed), Is.Zero, FormatOutcomes(third));
+            HotReloadMethodOutcome call = FindOutcome(third, HotReloadMethodOutcomeKind.Skipped, ".Call(");
+            Assert.That(call.Reason, Does.Contain(HostFileName).And.Contain("uloop compile"), FormatOutcomes(third));
+            Assert.That(CountWarningsContaining(third, SiblingRebindFailedWarningNeedle), Is.Zero, string.Join("\n", third.Warnings));
+        }
+
+        /// <summary>
         /// What: when a refused type declaration stops the reload before anything is re-applied,
         /// the sibling pulled in to re-bind its active patches is told those patches are
         /// unchanged, instead of being sent to rows this run never wrote.
@@ -1154,6 +1208,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         editedFileNamePrefix + "Caller.cs",
                         editedCallerSource)
                 });
+        }
+
+        private static Task<HotReloadOrchestratorResult> RunWithOverridesAsync(
+            string[] files,
+            Dictionary<string, string> overrides)
+        {
+            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                files,
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>(overrides));
+        }
+
+        // Counts the outcomes of the given kinds, only those of the named file when one is given.
+        private static int CountOutcomesOfKindForFile(
+            HotReloadOrchestratorResult result,
+            string fileName,
+            params HotReloadMethodOutcomeKind[] kinds)
+        {
+            int count = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                bool fileMatches = fileName == null || (outcome.FilePath != null && outcome.FilePath.EndsWith(fileName, StringComparison.Ordinal));
+                if (fileMatches && Array.IndexOf(kinds, outcome.Kind) >= 0)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static string InsertHostMember(string memberText)
