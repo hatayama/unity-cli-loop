@@ -43,7 +43,7 @@ func TestUnityServerBusyNextActions_WhenHolderWaitsForStalledMainThread_GuidesWa
 	actions := unityServerBusyNextActions(data)
 
 	expected := []string{
-		"'execute-dynamic-code' is waiting for the Editor main thread, not running tool code, so waiting for it to finish does not help on its own.",
+		"'execute-dynamic-code' is waiting for the Editor main thread, not running tool code; the Editor itself must become responsive first.",
 		"Wait for the Editor to become responsive (a synchronous asset refresh or script compilation can block it for minutes), then run the command again.",
 		"Restart with `uloop launch -r` only if the Editor stays unresponsive for several minutes.",
 	}
