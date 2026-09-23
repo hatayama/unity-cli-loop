@@ -338,6 +338,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a CS0103 error, which a static member access on a refused type fails with, gets
+        /// the note.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Cs0103NamingRefusedType_AppendsRefusedTypeNote()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0103 },
+                CreateRefusedTypeSources("Game.Units.Spawner"));
+
+            Assert.That(message, Is.EqualTo("composed\n" + ExpectedRefusedTypeNote));
+        }
+
+        /// <summary>
+        /// What: a CS0117 error, which a static member access on a refused type nested in a
+        /// compiled type fails with, gets the note.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Cs0117NamingRefusedNestedType_AppendsRefusedTypeNote()
+        {
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                "composed",
+                new[] { RefusedTypeCs0117 },
+                CreateRefusedTypeSources("Game.Units.Barracks/Spawner"));
+
+            Assert.That(message, Is.EqualTo("composed\n" + ExpectedRefusedTypeNote));
+        }
+
+        /// <summary>
         /// What: a CS0246 error whose name matches no refused type adds no note.
         /// </summary>
         [Test]
@@ -375,6 +405,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string RefusedTypeCs0426 =
             "CS0426: The type name 'Spawner' does not exist in the type 'Barracks' (line 12)";
+
+        private const string RefusedTypeCs0103 =
+            "CS0103: The name 'Spawner' does not exist in the current context (line 12)";
+
+        private const string RefusedTypeCs0117 =
+            "CS0117: 'Barracks' does not contain a definition for 'Spawner' (line 12)";
 
         private const string RefusedTypeNotice =
             "Unity object introduced type requires a compile: Game.Units.Spawner";

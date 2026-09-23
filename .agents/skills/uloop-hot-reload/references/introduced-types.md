@@ -20,7 +20,7 @@ continues, and `Warnings` carries `<file>: <reason>: <type>` where the reason is
 `Nested type requires a compile` · `Nested declaration inside an introduced type requires a compile`
 
 When an edited body in the same run names a refused type, its shim compile fails with CS0246,
-CS0234, or CS0426. That `Failed` row's `Reason` then ends with a note that quotes the refusal
+CS0234, or CS0426, or with CS0103 or CS0117 when the body reads a static member of it. That `Failed` row's `Reason` then ends with a note that quotes the refusal
 and says `uloop compile` clears it.
 
 Three conditions produce a `Failed` row in `IntroducedTypes` instead, and a `Failed` row makes

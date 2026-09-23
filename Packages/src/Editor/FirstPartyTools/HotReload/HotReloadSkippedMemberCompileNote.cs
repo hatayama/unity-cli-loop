@@ -182,6 +182,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ExtractQuotedNameAfter(error, NestedTypeNameMarker);
             }
 
+            // A static member access binds the type name as an expression, so a refused type
+            // fails with CS0103 and a refused nested type with CS0117 instead of the type errors.
+            if (error.StartsWith(Cs0103Prefix, StringComparison.Ordinal)
+                || error.StartsWith(Cs0117Prefix, StringComparison.Ordinal))
+            {
+                return ExtractNameFromDiagnostic(error);
+            }
+
             return null;
         }
 

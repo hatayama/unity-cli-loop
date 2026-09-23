@@ -36,24 +36,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "{\n"
             + "    public sealed class " + RefusedTypeSimpleName + " : UnityEngine.ScriptableObject\n"
             + "    {\n"
+            + "        public static int Count = 3;\n"
             + "    }\n"
             + "}\n";
-
-        private const string AddedReferrerMember =
-            "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
-            + "        public int UseRefused()\n"
-            + "        {\n"
-            + "            return typeof(" + RefusedTypeSimpleName + ").Name.Length;\n"
-            + "        }\n\n";
 
         /// <summary>
         /// What: a method added to a compiled file that names a type the same reload refused
         /// fails, and its reason says the refusal caused the compile error and that 'uloop compile'
         /// clears it. The compile error alone says the type does not exist, while the source the
-        /// reader sees still declares it.
+        /// reader sees still declares it. A type reference and a static member access fail with
+        /// different compile errors, so both are covered.
         /// </summary>
-        [Test]
-        public async Task Run_AddedMethodNamingARefusedType_FailureReasonNamesTheRefusal()
+        [TestCase("typeof(" + RefusedTypeSimpleName + ").Name.Length")]
+        [TestCase(RefusedTypeSimpleName + ".Count")]
+        public async Task Run_AddedMethodNamingARefusedType_FailureReasonNamesTheRefusal(string referrerExpression)
         {
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
 
@@ -62,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadOrchestratorResult result = await RunReloadAsync(
                     OwnerRequestedPath,
                     callerPath,
-                    CreateEdits(callerPath));
+                    CreateEdits(callerPath, referrerExpression));
 
                 foreach (HotReloadMethodOutcome outcome in result.Methods)
                 {
@@ -79,8 +75,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
-        private static Dictionary<string, string> CreateEdits(string callerPath)
+        private static Dictionary<string, string> CreateEdits(string callerPath, string referrerExpression)
         {
+            string addedReferrerMember =
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int UseRefused()\n"
+                + "        {\n"
+                + "            return " + referrerExpression + ";\n"
+                + "        }\n\n";
             string callerSource = File.ReadAllText(callerPath);
             Assert.That(callerSource, Does.Contain(CallerDeclarationAnchor), "Precondition: caller declaration anchor must exist.");
             return new Dictionary<string, string>
@@ -92,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "RefusedUnityObjectReferrer.cs",
                     callerSource.Replace(
                         CallerDeclarationAnchor,
-                        AddedReferrerMember + CallerDeclarationAnchor,
+                        addedReferrerMember + CallerDeclarationAnchor,
                         StringComparison.Ordinal))
             };
         }
