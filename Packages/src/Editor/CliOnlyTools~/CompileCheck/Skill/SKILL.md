@@ -80,6 +80,10 @@ A JSON payload:
 
 The process exits 1 when `ErrorCount` is greater than zero.
 
+Only one compile-check runs per project at a time. A second one waits for the first, up to five
+minutes, then fails with `COMPILE_CHECK_PROJECT_BUSY`: wait for the other run to finish and run
+compile-check once more rather than retrying in a loop.
+
 ## Limitations
 
 - It replays the last Unity build's response files. A new or deleted `.asmdef`, a changed `.asmdef`

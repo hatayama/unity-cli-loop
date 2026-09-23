@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -117,6 +118,112 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// Verifies that a switch queued for the Editor main thread reports a wait to the current
+        /// observer, and reports its end when the Editor queue resumes the continuation.
+        /// </summary>
+        [Test]
+        public void Awaiter_WhenContinuationIsQueued_ReportsWaitUntilEditorQueueResumes()
+        {
+            QueueingDispatcher dispatcher = new QueueingDispatcher();
+            CountingWaitObserver observer = new CountingWaitObserver();
+            MainThreadSwitcher.RegisterService(dispatcher);
+            MainThreadWaitObservation.SetCurrent(observer);
+
+            try
+            {
+                SwitchToMainThreadAwaitable.Awaiter awaiter =
+                    MainThreadSwitcher.SwitchToMainThread(CancellationToken.None).GetAwaiter();
+                bool resumed = false;
+
+                awaiter.OnCompleted(() => resumed = true);
+
+                Assert.That(observer.Started, Is.EqualTo(1));
+                Assert.That(observer.Ended, Is.EqualTo(0));
+
+                dispatcher.RunQueued();
+
+                Assert.That(resumed, Is.True);
+                Assert.That(observer.Started, Is.EqualTo(1));
+                Assert.That(observer.Ended, Is.EqualTo(1));
+            }
+            finally
+            {
+                MainThreadWaitObservation.SetCurrent(null);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a queued switch resumed by cancellation reports the end of its wait exactly
+        /// once, even when the stalled Editor queue later runs the same continuation.
+        /// </summary>
+        [Test]
+        public void Awaiter_WhenQueuedSwitchIsCancelled_ReportsWaitEndedOnce()
+        {
+            QueueingDispatcher dispatcher = new QueueingDispatcher();
+            CountingWaitObserver observer = new CountingWaitObserver();
+            MainThreadSwitcher.RegisterService(dispatcher);
+            MainThreadWaitObservation.SetCurrent(observer);
+            CancellationTokenSource cancellation = new CancellationTokenSource();
+
+            try
+            {
+                SwitchToMainThreadAwaitable.Awaiter awaiter =
+                    MainThreadSwitcher.SwitchToMainThread(cancellation.Token).GetAwaiter();
+                int resumeCount = 0;
+
+                awaiter.OnCompleted(() => resumeCount++);
+                cancellation.Cancel();
+
+                Assert.That(resumeCount, Is.EqualTo(1));
+                Assert.That(observer.Ended, Is.EqualTo(1));
+
+                dispatcher.RunQueued();
+
+                Assert.That(resumeCount, Is.EqualTo(1));
+                Assert.That(observer.Started, Is.EqualTo(1));
+                Assert.That(observer.Ended, Is.EqualTo(1));
+            }
+            finally
+            {
+                cancellation.Dispose();
+                MainThreadWaitObservation.SetCurrent(null);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a switch that needs no queueing, because the caller is already on the main
+        /// thread, reports no wait to the observer.
+        /// </summary>
+        [Test]
+        public void Awaiter_WhenAlreadyOnMainThread_ReportsNoWait()
+        {
+            CountingWaitObserver observer = new CountingWaitObserver();
+            MainThreadSwitcher.RegisterService(new MainThreadReportingDispatcher());
+            MainThreadWaitObservation.SetCurrent(observer);
+
+            try
+            {
+                SwitchToMainThreadAwaitable.Awaiter awaiter =
+                    MainThreadSwitcher.SwitchToMainThread(CancellationToken.None).GetAwaiter();
+                bool resumed = false;
+
+                Assert.That(awaiter.IsCompleted, Is.True);
+                awaiter.OnCompleted(() => resumed = true);
+
+                Assert.That(resumed, Is.True);
+                Assert.That(observer.Started, Is.EqualTo(0));
+                Assert.That(observer.Ended, Is.EqualTo(0));
+            }
+            finally
+            {
+                MainThreadWaitObservation.SetCurrent(null);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
         private static async Task AwaitSwitchAsync(CancellationToken ct)
         {
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -127,6 +234,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             EditorMainThreadDispatcher dispatcher = new EditorMainThreadDispatcher();
             MainThreadSwitcher.RegisterService(dispatcher);
             dispatcher.Initialize();
+        }
+
+        // Reports a background thread and keeps queued continuations until the test runs them, as a
+        // stalled Editor main thread would.
+        private sealed class QueueingDispatcher : IMainThreadDispatcher
+        {
+            private readonly List<Action> _queued = new();
+
+            public bool IsMainThread => false;
+
+            public void Initialize()
+            {
+            }
+
+            public void AddContinuation(Action continuation)
+            {
+                _queued.Add(continuation);
+            }
+
+            public void RunQueued()
+            {
+                foreach (Action continuation in _queued)
+                {
+                    continuation();
+                }
+
+                _queued.Clear();
+            }
+        }
+
+        private sealed class MainThreadReportingDispatcher : IMainThreadDispatcher
+        {
+            public bool IsMainThread => true;
+
+            public void Initialize()
+            {
+            }
+
+            public void AddContinuation(Action continuation)
+            {
+                Assert.Fail("A caller already on the main thread must not queue a continuation.");
+            }
+        }
+
+        private sealed class CountingWaitObserver : IMainThreadWaitObserver
+        {
+            public int Started { get; private set; }
+
+            public int Ended { get; private set; }
+
+            public void OnWaitStarted()
+            {
+                Started++;
+            }
+
+            public void OnWaitEnded()
+            {
+                Ended++;
+            }
         }
 
         // Reports a background thread and cancels on the first check, which reproduces a cancellation

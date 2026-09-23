@@ -45,11 +45,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     beginResult.RunningToolName,
                     toolName,
                     _editorRuntimeStatePort,
-                    beginResult.RunningToolElapsedSeconds);
+                    beginResult.RunningToolElapsedSeconds,
+                    beginResult.RunningToolPhase?.ToString());
             }
 
             try
             {
+                // Why an async-flow observer instead of marking phases here: the request can also
+                // wait for the main thread inside the tool, after its work is done (for example
+                // execute-dynamic-code reading the pause state), and only the switch itself sees that.
+                // The value set here flows into the tool and is restored for this method's caller.
+                MainThreadWaitObservation.SetCurrent(new ToolExecutionLeaseWaitObserver(beginResult.Lease));
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 ct.ThrowIfCancellationRequested();
                 UnityCliLoopEditorStateGuard.Validate(toolName, _editorRuntimeStatePort);
@@ -72,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
             string runningToolName,
             string requestedToolName,
             IEditorRuntimeStatePort editorRuntimeStatePort,
-            int? runningToolElapsedSeconds = null)
+            int? runningToolElapsedSeconds = null,
+            string runningToolPhase = null)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace");
             Debug.Assert(!string.IsNullOrWhiteSpace(requestedToolName), "requestedToolName must not be null or whitespace");
@@ -87,7 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     editorRuntimeStatePort.IsPaused,
                     editorRuntimeStatePort.IsCompiling,
                     editorRuntimeStatePort.IsUpdating,
-                    runningToolElapsedSeconds);
+                    runningToolElapsedSeconds,
+                    runningToolPhase);
             }
 
             (bool HasValue, bool IsPlaying, bool IsPaused) playState =
@@ -99,13 +107,41 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     requestedToolName,
                     playState.IsPlaying,
                     playState.IsPaused,
-                    runningToolElapsedSeconds: runningToolElapsedSeconds);
+                    runningToolElapsedSeconds: runningToolElapsedSeconds,
+                    runningToolPhase: runningToolPhase);
             }
 
             return new UnityCliLoopToolBusyException(
                 runningToolName,
                 requestedToolName,
-                runningToolElapsedSeconds: runningToolElapsedSeconds);
+                runningToolElapsedSeconds: runningToolElapsedSeconds,
+                runningToolPhase: runningToolPhase);
+        }
+    }
+
+    /// <summary>
+    /// Forwards the main-thread waits of one request to the lease it holds, so a busy rejection can
+    /// tell that the holder is only waiting for the Editor main thread.
+    /// </summary>
+    internal sealed class ToolExecutionLeaseWaitObserver : IMainThreadWaitObserver
+    {
+        private readonly ToolExecutionLease _lease;
+
+        internal ToolExecutionLeaseWaitObserver(ToolExecutionLease lease)
+        {
+            Debug.Assert(lease != null, "lease must not be null");
+
+            _lease = lease;
+        }
+
+        public void OnWaitStarted()
+        {
+            _lease.MarkMainThreadWaitStarted();
+        }
+
+        public void OnWaitEnded()
+        {
+            _lease.MarkMainThreadWaitEnded();
         }
     }
 }

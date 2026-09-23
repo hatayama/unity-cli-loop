@@ -14,6 +14,7 @@ type serverBusyErrorData struct {
 	IsUpdating                     *bool    `json:"isUpdating"`
 	SecondsSinceLastMainThreadTick *float64 `json:"secondsSinceLastMainThreadTick"`
 	RunningToolElapsedSeconds      *int     `json:"runningToolElapsedSeconds"`
+	RunningToolPhase               string   `json:"runningToolPhase"`
 }
 
 // Mirrors Packages/src/Editor/Infrastructure/Api/CliUpdateRequiredErrorData.cs public properties.

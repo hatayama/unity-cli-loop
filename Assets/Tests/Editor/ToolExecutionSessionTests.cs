@@ -245,6 +245,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a busy decision reports the holder as executing while it is not waiting for the main thread.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenHolderIsNotWaitingForMainThread_ShouldReportExecutingPhase()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease runningLease = session.TryEnter("running-tool").Lease;
+
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("requested-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.Executing));
+
+            runningLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a busy decision reports the holder as waiting for the main thread until every
+        /// overlapping wait of that holder has ended.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenHolderWaitsForMainThread_ShouldReportWaitingUntilLastWaitEnds()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease runningLease = session.TryEnter("running-tool").Lease;
+
+            runningLease.MarkMainThreadWaitStarted();
+            runningLease.MarkMainThreadWaitStarted();
+            ToolExecutionSessionEnterResult whileBothWait = session.TryEnter("requested-tool");
+            runningLease.MarkMainThreadWaitEnded();
+            ToolExecutionSessionEnterResult whileOneWaits = session.TryEnter("requested-tool");
+            runningLease.MarkMainThreadWaitEnded();
+            ToolExecutionSessionEnterResult afterWaitsEnd = session.TryEnter("requested-tool");
+
+            Assert.That(whileBothWait.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.WaitingForMainThread));
+            Assert.That(whileOneWaits.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.WaitingForMainThread));
+            Assert.That(afterWaitsEnd.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.Executing));
+
+            runningLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a shared execution slot is reported as waiting for the main thread only when
+        /// every lease in it is waiting, because one executing lease means tool code is running.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenSharedSlotLeasesWait_ShouldReportWaitingOnlyWhenAllWait()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease firstLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
+            ToolExecutionLease secondLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
+
+            firstLease.MarkMainThreadWaitStarted();
+            ToolExecutionSessionEnterResult whileOneWaits = session.TryEnter("other-tool");
+            secondLease.MarkMainThreadWaitStarted();
+            ToolExecutionSessionEnterResult whileAllWait = session.TryEnter("other-tool");
+
+            Assert.That(whileOneWaits.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.Executing));
+            Assert.That(whileAllWait.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.WaitingForMainThread));
+
+            firstLease.Dispose();
+            secondLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies Begin busy results carry the holder phase from the same snapshot as TryEnter.
+        /// </summary>
+        [Test]
+        public void Begin_WhenHolderWaitsForMainThread_ShouldReturnBusyWithWaitingPhase()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            SessionTestTool requestedTool = new SessionTestTool("requested-tool");
+            UnityCliLoopToolRegistry registry = CreateRegistry(new InMemoryToolSettingsPort(), new IUnityCliLoopTool[] { requestedTool });
+            ToolExecutionLease runningLease = session.TryEnter("running-tool").Lease;
+            runningLease.MarkMainThreadWaitStarted();
+
+            ToolExecutionSessionBeginResult result = session.Begin(registry, requestedTool.ToolName, CancellationToken.None);
+
+            Assert.That(result.IsEntered, Is.False);
+            Assert.That(result.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.WaitingForMainThread));
+
+            runningLease.Dispose();
+        }
+
+        /// <summary>
         /// Verifies a busy decision returns the running tool name and elapsed seconds from one snapshot.
         /// </summary>
         [Test]
