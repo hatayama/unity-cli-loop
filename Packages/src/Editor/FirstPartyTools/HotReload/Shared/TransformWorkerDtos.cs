@@ -387,6 +387,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Metadata names of the compiled types the sentence names, for the Editor to resolve to the
         // files that declare them before the sentence is worded. Null when the reason names none.
         public string[] typeMetadataNames;
+
+        // Project-relative forward-slash paths of the files declaring the typeMetadataNames types.
+        // The worker fills it for a type only its compilation can place, such as the source copy
+        // an introduced type's signature now differs from; otherwise the Editor fills it from the
+        // compiled assembly's debug data. A type neither can place is left out. Null until one of
+        // them resolves the types, and for a reason that names none.
+        public string[] declaringFiles;
     }
 
     [Serializable]

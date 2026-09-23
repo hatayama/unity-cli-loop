@@ -29,16 +29,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
+                    // Why the worker's files win: a type with no method body, such as an enum,
+                    // has no sequence point in the PDB, while the worker names the run's file that
+                    // declares its source copy.
+                    if (reason.declaringFiles != null)
+                    {
+                        reason.args = AppendPassTarget(reason.args, QuoteFiles(reason.declaringFiles));
+                        continue;
+                    }
+
                     filesByType ??= ReadDeclaringFiles(input.targetTypesAssemblyPath);
-                    reason.args = AppendPassTarget(reason.args, reason.typeMetadataNames, filesByType);
+                    List<string> resolvedFiles = new List<string>();
+                    List<string> targets = CollectPassTargets(reason.typeMetadataNames, filesByType, resolvedFiles);
+                    reason.declaringFiles = resolvedFiles.ToArray();
+                    reason.args = AppendPassTarget(reason.args, targets);
                 }
             }
         }
 
-        private static string[] AppendPassTarget(
-            string[] args,
+        // The quoted file of every type that resolved, and a phrase naming each type that did not.
+        // The resolved files are also added, once each, to resolvedFiles.
+        private static List<string> CollectPassTargets(
             string[] typeMetadataNames,
-            Dictionary<string, List<string>> filesByType)
+            Dictionary<string, List<string>> filesByType,
+            List<string> resolvedFiles)
         {
             List<string> targets = new List<string>();
             foreach (string typeMetadataName in typeMetadataNames)
@@ -55,10 +69,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     if (!targets.Contains(quoted))
                     {
                         targets.Add(quoted);
+                        resolvedFiles.Add(file);
                     }
                 }
             }
 
+            return targets;
+        }
+
+        private static List<string> QuoteFiles(string[] files)
+        {
+            List<string> targets = new List<string>();
+            foreach (string file in files)
+            {
+                string quoted = "'" + file + "'";
+                if (!targets.Contains(quoted))
+                {
+                    targets.Add(quoted);
+                }
+            }
+
+            return targets;
+        }
+
+        private static string[] AppendPassTarget(string[] args, List<string> targets)
+        {
             List<string> completed = new List<string>(args ?? Array.Empty<string>());
             completed.Add(string.Join(" and ", targets));
             return completed.ToArray();

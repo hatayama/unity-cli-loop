@@ -11,8 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         /// <summary>
         /// Converts retry-worker skips that are not already in the first-pass skipped list into
-        /// outcomes. Match is (Method, Reason) Ordinal equality so a method skipped for a new
-        /// reason on retry still surfaces. The trigger decides whether the retry-only reasons are
+        /// outcomes. Match is the same method with a reason of the same code, values, and detail,
+        /// so a method skipped for a new reason on retry still surfaces. The trigger decides whether the retry-only reasons are
         /// rewritten before they become outcomes.
         /// </summary>
         internal List<HotReloadMethodOutcome> CollectRetryOnlySkippedOutcomes(
@@ -47,9 +47,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 retryOnly.Add(
                     HotReloadMethodOutcome.Skipped(
-                        retryRow.method ?? "(unknown)",
-                        HotReloadWorkerReasonText.Render(retryRow.reason),
-                        groupFilePaths.ResolveAssemblyResolvePath(retryRow.sourceProjectRelativePath)));
+                            retryRow.method ?? "(unknown)",
+                            HotReloadWorkerReasonText.Render(retryRow.reason),
+                            groupFilePaths.ResolveAssemblyResolvePath(retryRow.sourceProjectRelativePath))
+                        .WithWorkerReason(HotReloadWorkerReasonFacts.From(retryRow.reason)));
             }
 
             return retryOnly;
@@ -60,13 +61,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerSkippedDto retryRow)
         {
             string retryMethod = retryRow.method ?? string.Empty;
-            string retryReason = HotReloadWorkerReasonText.Render(retryRow.reason);
+            HotReloadWorkerReasonFacts retryReason = HotReloadWorkerReasonFacts.From(retryRow.reason);
             foreach (TransformWorkerSkippedDto firstPassRow in firstPassSkipped)
             {
                 string firstMethod = firstPassRow.method ?? string.Empty;
-                string firstReason = HotReloadWorkerReasonText.Render(firstPassRow.reason);
                 if (string.Equals(firstMethod, retryMethod, StringComparison.Ordinal)
-                    && string.Equals(firstReason, retryReason, StringComparison.Ordinal))
+                    && HotReloadWorkerReasonFacts.From(firstPassRow.reason).Matches(retryReason))
                 {
                     return true;
                 }

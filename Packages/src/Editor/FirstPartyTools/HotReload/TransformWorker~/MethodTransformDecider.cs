@@ -242,7 +242,8 @@ internal static class MethodTransformDecider
         SyntaxNode methodBodyNode,
         Diagnostic bindingError,
         IntroducedTypeArtifactMap artifactMap,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
     {
         string diagnosticText = bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture);
         CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(
@@ -250,17 +251,20 @@ internal static class MethodTransformDecider
             methodBodyNode,
             AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode),
             artifactMap,
-            targetAssembly);
+            targetAssembly,
+            projectRelativePathsByBindingTree);
         // Checked first: a compile clears this split and any other one, while the advice to
         // pass a file would leave this one in place.
         if (split.ArtifactHostMetadataNames.Count > 0)
         {
-            return WorkerReason.NamingCompiledTypes(
+            WorkerReason artifactBoundReason = WorkerReason.NamingCompiledTypes(
                 HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
                 split.ArtifactBoundTypeMetadataNames.ToArray(),
                 diagnosticText,
                 QuoteNames(split.ArtifactHostMetadataNames),
                 QuoteNames(split.ArtifactBoundTypeMetadataNames));
+            artifactBoundReason.DeclaringFiles = split.ArtifactBoundDeclaringFiles.ToArray();
+            return artifactBoundReason;
         }
 
         if (split.DeclaringTypeMetadataNames.Count == 0)
@@ -293,7 +297,8 @@ internal static class MethodTransformDecider
         MethodTransformDecision current,
         AddedMemberAccessLookup addedMemberAccess,
         IntroducedTypeArtifactMap artifactMap,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
     {
         // Checked before the delegation path: a closure that binds one private access still takes
         // that path, and an unbound call beside it would reach the shim unrewritten.
@@ -301,7 +306,13 @@ internal static class MethodTransformDecider
         if (bindingError != null)
         {
             return MethodTransformDecision.Skip(
-                DescribeUnboundBody(semanticModel, methodBodyNode, bindingError, artifactMap, targetAssembly));
+                DescribeUnboundBody(
+                    semanticModel,
+                    methodBodyNode,
+                    bindingError,
+                    artifactMap,
+                    targetAssembly,
+                    projectRelativePathsByBindingTree));
         }
 
         if (current.UsesDelegation)
