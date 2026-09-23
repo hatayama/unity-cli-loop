@@ -38,12 +38,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             new Dictionary<string, HotReloadNewSourceMembershipEvidence>(
                 HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
 
-        // Why the last displayed set is kept per file rather than derived from the worker output:
-        // the removed members of a run are recomputed from scratch every time, so nothing in a
-        // single run can tell a set the previous run already reported from one it never did.
-        private readonly Dictionary<string, HashSet<string>> _displayedRemovedMembersByPath =
-            new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-
         // The identity keys of the serialized added fields the last run left active. Why the whole
         // active set and not an append-only history: a field that stops being active (removed,
         // attribute dropped, file reverted) is new again when it comes back, and the reader
@@ -83,6 +77,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// store here, because the next reload of those patches needs them exactly as much.
         /// </summary>
         internal HotReloadCompanionSourceLedger CompanionSources { get; } = new HotReloadCompanionSourceLedger();
+
+        internal HotReloadDisplayedRemovedMemberLedger DisplayedRemovedMembers { get; } =
+            new HotReloadDisplayedRemovedMemberLedger();
 
         /// <summary>
         /// Where the types of <paramref name="assemblyName"/> live for this domain: the artifact
@@ -317,22 +314,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
             HotReloadFileGeneration generation = FindGeneration(projectRelativePath);
             return generation != null && generation.IsActiveMember(methodKey);
-        }
-
-        /// <summary>
-        /// Answers whether the last run that reported removed members for one file reported
-        /// exactly this set, without changing the record.
-        /// </summary>
-        internal bool IsSameAsLastDisplayedRemovedMembers(
-            string projectRelativePath,
-            IReadOnlyList<string> displayedNames)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
-
-            return displayedNames.Count > 0
-                && _displayedRemovedMembersByPath.TryGetValue(projectRelativePath, out HashSet<string> lastDisplayed)
-                && lastDisplayed.SetEquals(displayedNames);
         }
 
         /// <summary>
@@ -616,32 +597,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Takes the removed-member names a run is about to report for one file and answers
-        /// whether the last run that reported any for it reported exactly the same set. An empty
-        /// set drops the record, so a run that reports nothing is not a gap inside a continuation.
-        /// </summary>
-        internal bool RecordDisplayedRemovedMembers(
-            string projectRelativePath,
-            IReadOnlyList<string> displayedNames)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
-
-            if (displayedNames.Count == 0)
-            {
-                _displayedRemovedMembersByPath.Remove(projectRelativePath);
-                return false;
-            }
-
-            HashSet<string> displayed = new HashSet<string>(displayedNames, StringComparer.Ordinal);
-            bool isSameAsLastDisplayed =
-                _displayedRemovedMembersByPath.TryGetValue(projectRelativePath, out HashSet<string> lastDisplayed)
-                && lastDisplayed.SetEquals(displayed);
-            _displayedRemovedMembersByPath[projectRelativePath] = displayed;
-            return isSameAsLastDisplayed;
-        }
-
-        /// <summary>
         /// The display names of the active added fields declared with a serialization attribute
         /// that no earlier run has reported, sorted ordinal; the active set becomes the new record.
         /// Two fields that read the same in C# are both listed.
@@ -714,7 +669,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _generationsByPath.Clear();
             _appliedSourceByPath.Clear();
             _newSourceMembershipEvidenceByPath.Clear();
-            _displayedRemovedMembersByPath.Clear();
+            DisplayedRemovedMembers.Clear();
             _reportedSerializedAddedFields.Clear();
             AddedFieldValues.Clear();
             Invocations.Clear();

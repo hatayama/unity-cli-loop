@@ -299,7 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             IReadOnlyList<string> displayedNames)
         {
-            return _domain.IsSameAsLastDisplayedRemovedMembers(projectRelativePath, displayedNames);
+            return _domain.DisplayedRemovedMembers.IsSameAsLastDisplayed(projectRelativePath, displayedNames);
         }
 
         /// <summary>
@@ -310,7 +310,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             IReadOnlyList<string> displayedNames)
         {
-            return _domain.RecordDisplayedRemovedMembers(projectRelativePath, displayedNames);
+            return _domain.DisplayedRemovedMembers.Record(projectRelativePath, displayedNames);
         }
 
         // Why projectRelativePath, not DescribeActivePatches FilePath filtering by callers: a
