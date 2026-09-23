@@ -1,12 +1,20 @@
 ---
 name: uloop-compile
 toolName: compile
-description: "Compile the Unity project and report errors/warnings. Use after C# edits."
+description: "Compile the Unity project and report errors/warnings. Use after C# edits; to try edits in the running Editor without a domain reload, use hot-reload."
 ---
 
 # uloop compile
 
 Execute Unity project compilation.
+
+## When to use
+
+- After C# edits, to check for compile errors and make the change live in the Editor (Play
+  Mode, tests, a tool call): to land edits you finished trying with hot reload, or to apply
+  structural changes hot reload cannot.
+- To try an edit in the running Editor, especially during Play Mode, run `uloop hot-reload`
+  instead: a compile drops every hot-reload patch and discards the Play session.
 
 ## Usage
 

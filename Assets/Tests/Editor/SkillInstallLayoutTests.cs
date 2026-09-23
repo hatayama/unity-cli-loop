@@ -163,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             IReadOnlyDictionary<string, string> descriptions = SkillInstallLayout.GetToolDescriptionsByToolName(_projectRoot);
 
-            Assert.That(descriptions["compile"], Is.EqualTo("Compile the Unity project and report errors/warnings. Use after C# edits."));
+            Assert.That(descriptions["compile"], Does.StartWith("Compile the Unity project"));
             Assert.That(descriptions[UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT], Does.StartWith("Pauses Unity playback"));
         }
 

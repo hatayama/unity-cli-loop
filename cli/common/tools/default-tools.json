@@ -2,7 +2,7 @@
   "tools": [
     {
       "name": "compile",
-      "description": "Compile the Unity project and report errors/warnings. Use after C# edits.",
+      "description": "Compile the Unity project and report errors/warnings. Use after C# edits; to try edits in the running Editor without a domain reload, use hot-reload.",
       "inputSchema": {
         "type": "object",
         "properties": {

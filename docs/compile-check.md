@@ -52,12 +52,16 @@ references, scripting defines and analyzers. `compile-check` replays those respo
    compiles every assembly in the build and skips nothing. Assemblies this step leaves out are
    counted in `SkippedAssemblies`; an assembly the run later stops short of because one it
    references has errors is named in `BlockedAssemblies` instead, and counted nowhere. An
-   assembly's sources are re-globbed from its own directory, stopping at nested assembly
-   boundaries; the files an `.asmref` attaches to it are taken from the last build's response file
-   instead, wherever that folder sits — including inside a nested assembly's directory, which the
-   glob never reaches. Such a file is kept only while an `.asmref` still attaches its folder to this
-   assembly: the walk up from the file to the first folder holding an `.asmref` or an `.asmdef` says
-   which assembly owns it today. An `.asmref` naming an assembly the build never produced — an
+   assembly's sources are re-globbed from its own directory and from every folder an `.asmref`
+   attaches to it, wherever that folder sits — including inside a nested assembly's directory,
+   which the glob of its own directory never reaches — each glob stopping at nested assembly
+   boundaries, so a `.cs` file created in any of them since the last build is compiled. Assemblies
+   under `Library/PackageCache` are the exception: the package manager restores them and nothing
+   edits them in place, so their recorded sources are reused as-is and neither their directory nor
+   their `.asmref` folders are re-globbed. A source
+   the last build recorded for this assembly that no glob produces any more stops the run unless an
+   `.asmref` still attaches its folder to this assembly: the walk up from the file to the first
+   folder holding an `.asmref` or an `.asmdef` says which assembly owns it today. An `.asmref` naming an assembly the build never produced — an
    unresolvable reference, or one excluded by platform or package settings — attaches nothing, so
    its folder is treated as an ordinary part of the assembly around it, which is what Unity compiles
    it as. A package shipping a sample for a render pipeline the project does not install is the
@@ -156,10 +160,6 @@ and the ones left out because every assembly they reference kept the same public
 - **Changed scripting defines are not detected**; the defines recorded in the last build are reused.
 - **The predefined assemblies** (`Assembly-CSharp` and friends) keep the source list of the last
   build, so a brand-new `.cs` file outside any `.asmdef` is not compiled until Unity imports it.
-- **A new `.cs` file inside an `.asmref` folder is not compiled either.** The sources an `.asmref`
-  attaches come only from the last build's response file, because the glob stops at the folder's
-  assembly boundary, so a file added there waits for Unity to import it just as the predefined
-  assemblies do.
 - **An `.editorconfig` or global analyzer config that is not named by a response file does not
   invalidate a reused result**, because it is not part of the input digest — the same exposure the
   dependent skip in step 3 already has. One handed to the compiler as `/analyzerconfig:` is read by
