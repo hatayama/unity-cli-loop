@@ -90,6 +90,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a companion recorded while its source was edited and then restored is warned
+        /// about once by the next unrelated reload and forgotten, so the reload after that does
+        /// not repeat the warning.
+        /// </summary>
+        [Test]
+        public async Task Run_CompanionRestoredAfterItWasRecordedEdited_WarnsOnlyOnce()
+        {
+            Dictionary<string, string> overrides = PayloadAndHostOverrides(WireMethod);
+            string registryPath = FixturePath(RegistryFileName);
+            overrides[registryPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "SiblingCompanionE2ECommentedRegistry.cs",
+                ReplaceOnce(File.ReadAllText(registryPath), RegistryAssignment, "// edited\n            " + RegistryAssignment));
+            await RunWireWithRegistryAsync(overrides);
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.CompanionSources.TryGetHash(ProjectRelativePath(RegistryFileName)),
+                Is.Not.Null,
+                "Precondition: the edited registry must be recorded as a companion.");
+            overrides.Remove(registryPath);
+
+            HotReloadOrchestratorResult second = await RunAsync(UnrelatedEdit(overrides, "return 1;"), overrides);
+            Assert.That(CountChangedCompanionWarnings(second), Is.EqualTo(1), FormatOutcomes(second));
+
+            HotReloadOrchestratorResult third = await RunAsync(UnrelatedEdit(overrides, "return 2;"), overrides);
+            Assert.That(CountChangedCompanionWarnings(third), Is.Zero, FormatOutcomes(third));
+        }
+
+        /// <summary>
         /// What: after --revert-all the companion is still remembered, so reloading the host and the
         /// payload again brings the registry back without the reader listing it a second time.
         /// </summary>
@@ -248,6 +275,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
                 if (outcome.Kind == kind)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static int CountChangedCompanionWarnings(HotReloadOrchestratorResult result)
+        {
+            string registryPath = ProjectRelativePath(RegistryFileName);
+            int count = 0;
+            foreach (string warning in result.Warnings ?? new List<string>())
+            {
+                if (warning.Contains(registryPath) && warning.Contains("but its source changed since"))
                 {
                     count++;
                 }

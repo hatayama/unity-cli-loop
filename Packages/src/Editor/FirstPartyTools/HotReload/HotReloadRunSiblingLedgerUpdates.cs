@@ -38,6 +38,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _reasonByPath[projectRelativePath] = reason;
         }
 
+        /// <summary>Takes in a companion the run did not bring back because its source changed.</summary>
+        internal void NoteChangedCompanion(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+        }
+
         /// <summary>Why a sibling came back; a file the run was passed reads as active changes.</summary>
         internal HotReloadSiblingInclusionReason ReasonOf(string projectRelativePath)
         {
