@@ -208,6 +208,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "A call is rewritten, so wrapping the method group in a lambda that calls "
                     + "it{1} keeps hot reloading.",
                     2));
+            // Why no lambda is offered: a lambda on the right of '-=' is a new delegate, so the
+            // rewrite would compile and silently leave the original handler subscribed.
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape,
+                Plain(
+                    "inaccessible method group '{0}' on the right of '-=' has no accessor rewrite shape, "
+                    + "and wrapping it in a lambda would remove a different delegate and leave the handler "
+                    + "subscribed.",
+                    1));
         }
     }
 }

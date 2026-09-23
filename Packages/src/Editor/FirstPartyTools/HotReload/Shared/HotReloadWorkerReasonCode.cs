@@ -108,6 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AccessorNamedArgumentNotRewritten,
         AccessorOptionalOrParamsArgumentNotRewritten,
         AccessorMethodGroupNoShape,
+        AccessorMethodGroupUnsubscribeNoShape,
         IntroducedTypeSymbolUnresolved,
         IntroducedTypeGeneric,
         IntroducedTypePartial,

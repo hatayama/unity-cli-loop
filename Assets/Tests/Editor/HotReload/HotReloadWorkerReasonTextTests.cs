@@ -657,6 +657,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "A call is rewritten, so wrapping the method group in a lambda that calls it "
                 + "keeps hot reloading.");
             yield return Case(
+                HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape,
+                new[] { "Helper" },
+                "inaccessible method group 'Helper' on the right of '-=' has no accessor rewrite shape, "
+                + "and wrapping it in a lambda would remove a different delegate and leave the handler "
+                + "subscribed.");
+            yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeSymbolUnresolved,
                 new string[0],
                 "Could not resolve a declared type symbol.");
