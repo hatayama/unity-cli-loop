@@ -55,7 +55,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 toProjectRelativeScriptPath,
                 result.ReappliedSiblingPaths);
 
-            // A Skipped method is applied by 'uloop compile' like the warnings above it.
+            // A Skipped method is applied by 'uloop compile' like the warnings above it, so its
+            // line counts as one. Whether the Message may add the single-compile sentence is
+            // decided from the method rows themselves.
             HotReloadSkippedWarningCollapser.Append(lines, result.Methods);
             return lines;
         }

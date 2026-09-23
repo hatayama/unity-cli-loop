@@ -1682,7 +1682,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: every apply-message branch appends the warning-count suffix when Warnings is
-        /// non-empty, and the applied branch mentions Skipped before that suffix.
+        /// non-empty, the applied branch mentions Skipped before that suffix, and a Skipped
+        /// method row keeps the single-compile resolution sentence off.
         /// </summary>
         [Test]
         public void BuildApplyResponse_WithWarnings_AppendsWarningCountOnEveryBranch()
@@ -1744,8 +1745,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedOnly.Message,
                 Is.EqualTo(
                     HotReloadConstants.RequestedFilesAllSkippedMessage
-                    + " 2 warning(s). See Warnings. "
-                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+                    + " 2 warning(s). See Warnings."));
 
             HotReloadResponse applied = HotReloadTool.BuildApplyResponse(
                 new HotReloadOrchestratorResult(
@@ -1777,8 +1777,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 appliedWithSkipped.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1. "
-                    + "3 warning(s). See Warnings. "
-                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+                    + "3 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: a Failed method row beside two orchestrator warnings keeps the single-compile
+        /// resolution sentence off, because that method has to be fixed before the agent goes on.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_FailedMethodBesideTwoOrchestratorWarnings_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs"),
+                        HotReloadMethodOutcome.Failed("Type.Broken", "reason", "Assets/A.cs")
+                    },
+                    new List<string> { "warn-a", "warn-b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+
+            Assert.That(response.Message, Does.Contain("2 warning(s). See Warnings."));
+            Assert.That(
+                response.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
 
         /// <summary>
