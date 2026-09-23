@@ -41,7 +41,10 @@ const (
 	// ErrorCodeCompileCheckUnityBuildRequired is returned when compile-check cannot replay the Bee
 	// response files because the project changed in a way only a Unity build can record.
 	ErrorCodeCompileCheckUnityBuildRequired = "COMPILE_CHECK_UNITY_BUILD_REQUIRED"
-	ErrorCodeInternalError                  = "INTERNAL_ERROR"
+	// ErrorCodeCompileCheckProjectBusy is returned when another compile-check on the same project
+	// kept its lock for longer than this run was willing to wait.
+	ErrorCodeCompileCheckProjectBusy = "COMPILE_CHECK_PROJECT_BUSY"
+	ErrorCodeInternalError           = "INTERNAL_ERROR"
 
 	ErrorPhaseArgumentParsing = "argument_parsing"
 	ErrorPhaseProjectResolve  = "project_resolution"

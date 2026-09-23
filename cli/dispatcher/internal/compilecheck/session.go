@@ -30,6 +30,8 @@ type Options struct {
 	EditorExecutablePath string
 	All                  bool
 	Jobs                 int // how many assemblies compile at once; 0 asks for the default
+	// LockTimeout bounds the wait for another run on the same project; 0 asks for the default.
+	LockTimeout time.Duration
 }
 
 // Result is everything one compile-check run produced.
@@ -49,6 +51,14 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+
+	// Why the lock is taken only after the dag resolved: a directory Unity never built has nothing
+	// to protect, and taking the lock would create Library/uloop inside it.
+	releaseLock, err := acquireProjectLock(ctx, options.ProjectRoot, projectLockTimeout(options))
+	if err != nil {
+		return Result{}, err
+	}
+	defer releaseLock()
 
 	paths, err := ResolveEditorCompilerPaths(options.EditorExecutablePath)
 	if err != nil {
