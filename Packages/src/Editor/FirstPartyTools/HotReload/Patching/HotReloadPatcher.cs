@@ -292,14 +292,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Records the removed-member names this run reports for one file, and returns true when
-        /// the last run that reported any for it reported exactly the same set.
+        /// Returns true when the last run that reported removed members for one file reported
+        /// exactly this set.
         /// </summary>
-        public bool RecordDisplayedRemovedMembers(
+        public bool IsSameAsLastDisplayedRemovedMembers(
             string projectRelativePath,
             IReadOnlyList<string> displayedNames)
         {
-            return _domain.RecordDisplayedRemovedMembers(projectRelativePath, displayedNames);
+            return _domain.IsSameAsLastDisplayedRemovedMembers(projectRelativePath, displayedNames);
+        }
+
+        /// <summary>
+        /// Records the removed-member names a run reported for one file.
+        /// </summary>
+        public void RecordDisplayedRemovedMembers(
+            string projectRelativePath,
+            IReadOnlyList<string> displayedNames)
+        {
+            _domain.RecordDisplayedRemovedMembers(projectRelativePath, displayedNames);
         }
 
         // Why projectRelativePath, not DescribeActivePatches FilePath filtering by callers: a

@@ -48,6 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // group that ends unapplied still carries the rows the commit boundary wrote.
         internal List<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
+        // The removed-member names this file's warning listed; null until the removed-member
+        // notices ran. Why carried out instead of recorded where the warning is chosen: the record
+        // is compared by every later group of the same run, and an input that lists one file
+        // twice runs its second copy in a later group, which must not read the first copy's record.
+        internal IReadOnlyList<string> DisplayedRemovedMembers { get; set; }
+
         // Shared across the whole run so sibling-derived text can be deduped once at the end.
         internal List<string> SiblingDerivedWarnings { get; }
 

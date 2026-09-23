@@ -33,6 +33,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence { get; }
 
+        /// <summary>
+        /// The removed-member names this file's warning listed, for the run to record once it
+        /// ends. Null when the file never reached the removed-member notices, which leaves the
+        /// record alone.
+        /// </summary>
+        public IReadOnlyList<string> DisplayedRemovedMembers { get; }
+
         public HotReloadFileProcessResult(
             List<HotReloadMethodOutcome> outcomes,
             List<string> warnings,
@@ -47,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] addedConstNames = null,
             int revertedUnchangedCount = 0,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null,
+            IReadOnlyList<string> displayedRemovedMembers = null)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -64,6 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RevertedUnchangedCount = revertedUnchangedCount;
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
+            DisplayedRemovedMembers = displayedRemovedMembers;
         }
     }
 }

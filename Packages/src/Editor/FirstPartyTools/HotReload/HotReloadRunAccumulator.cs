@@ -38,6 +38,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _appliedSourceHashByPath =
                 new Dictionary<string, (string Hash, bool IsFullyApplied, HotReloadNewSourceMembershipEvidence Evidence)>(
                     StringComparer.Ordinal);
+        // Why staged like the hashes: an input that lists one file twice runs its second copy in a
+        // later group of the same run, and that copy must be compared against the record the run
+        // started with, not the one its first copy would have just written. Keyed by path so the
+        // last result added for a path wins, which is that path's state when the run ends.
+        private readonly Dictionary<string, IReadOnlyList<string>> _displayedRemovedMembersByPath =
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         // Why captured at construction: the 0.5s Auto Refresh reconcile can arm the hold while the
         // run is still awaited, so the sync at the end of the run cannot tell a run that armed the
         // hold from one that merely found it armed. What the caller promised is "the first apply
@@ -106,6 +112,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileResult.SourceContentSha256,
                 fileResult.Outcomes,
                 fileResult.NewSourceMembershipEvidence);
+            if (fileResult.DisplayedRemovedMembers != null)
+            {
+                _displayedRemovedMembersByPath[projectRelativePath] = fileResult.DisplayedRemovedMembers;
+            }
         }
 
         /// <summary>
@@ -137,6 +147,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     _domain.RecordNewSourceMembershipEvidence(pair.Key, pair.Value.Evidence);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Writes the staged removed-member sets to the domain. Call once after every file was
+        /// added, next to <see cref="RecordAppliedSourceHashes"/>, so a run that fails or is
+        /// cancelled before then writes neither.
+        /// </summary>
+        public void RecordDisplayedRemovedMembers()
+        {
+            // Why an empty set is written too: the set is the file's, not this run's, so a run
+            // that reports none has to end the continuation.
+            foreach (KeyValuePair<string, IReadOnlyList<string>> pair in _displayedRemovedMembersByPath)
+            {
+                _patcher.RecordDisplayedRemovedMembers(pair.Key, pair.Value);
             }
         }
 

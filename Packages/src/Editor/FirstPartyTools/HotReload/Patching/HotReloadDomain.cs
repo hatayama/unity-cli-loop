@@ -542,11 +542,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Takes the removed-member names a run is about to report for one file and answers
-        /// whether the last run that reported any for it reported exactly the same set. An empty
-        /// set drops the record, so a run that reports nothing is not a gap inside a continuation.
+        /// Answers whether the last run that reported removed members for one file reported
+        /// exactly this set. Reads only, so every entry of one run is compared against the record
+        /// as it stood when the run started.
         /// </summary>
-        internal bool RecordDisplayedRemovedMembers(
+        internal bool IsSameAsLastDisplayedRemovedMembers(
+            string projectRelativePath,
+            IReadOnlyList<string> displayedNames)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
+
+            if (displayedNames.Count == 0)
+            {
+                return false;
+            }
+
+            return _displayedRemovedMembersByPath.TryGetValue(projectRelativePath, out HashSet<string> lastDisplayed)
+                && lastDisplayed.SetEquals(displayedNames);
+        }
+
+        /// <summary>
+        /// Stores the removed-member names a run reported for one file. An empty set drops the
+        /// record, so a run that reports nothing is not a gap inside a continuation.
+        /// </summary>
+        internal void RecordDisplayedRemovedMembers(
             string projectRelativePath,
             IReadOnlyList<string> displayedNames)
         {
@@ -556,15 +576,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (displayedNames.Count == 0)
             {
                 _displayedRemovedMembersByPath.Remove(projectRelativePath);
-                return false;
+                return;
             }
 
-            HashSet<string> displayed = new HashSet<string>(displayedNames, StringComparer.Ordinal);
-            bool isSameAsLastDisplayed =
-                _displayedRemovedMembersByPath.TryGetValue(projectRelativePath, out HashSet<string> lastDisplayed)
-                && lastDisplayed.SetEquals(displayed);
-            _displayedRemovedMembersByPath[projectRelativePath] = displayed;
-            return isSameAsLastDisplayed;
+            _displayedRemovedMembersByPath[projectRelativePath] =
+                new HashSet<string>(displayedNames, StringComparer.Ordinal);
         }
 
         // Why the evidence is dropped here rather than through its own method: it only means
