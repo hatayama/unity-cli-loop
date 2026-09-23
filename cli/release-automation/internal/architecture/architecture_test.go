@@ -3,6 +3,7 @@ package architecture
 import (
 	"encoding/json"
 	"fmt"
+	"go/version"
 	"io"
 	"os"
 	"os/exec"
@@ -149,9 +150,12 @@ func TestGoToolchainSingleSourceOfTruth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read .go-version: %v", err)
 	}
-	goVersion := strings.TrimSpace(string(goVersionRaw))
-	if goVersion != workDirective && !strings.HasPrefix(goVersion, workDirective+".") {
-		t.Fatalf(".go-version %q must equal or start with %q followed by '.'", goVersion, workDirective)
+	// The directive may carry a patch release (Dependabot writes "1.26.0" when a dependency
+	// requires it), so compare language versions instead of string prefixes.
+	goVersion := "go" + strings.TrimSpace(string(goVersionRaw))
+	directiveVersion := "go" + workDirective
+	if version.Lang(goVersion) != version.Lang(directiveVersion) || version.Compare(goVersion, directiveVersion) < 0 {
+		t.Fatalf(".go-version %q must be in the %s series and at least %s", goVersion, version.Lang(directiveVersion), directiveVersion)
 	}
 }
 
