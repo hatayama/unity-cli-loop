@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Resolve_CarriedInRowWithFileAppliedInThisRun_AsksForCompile()
         {
-            AssertCarriedInRowAsksForCompile(HotReloadCarriedInState.AppliedInThisRun);
+            AssertCarriedInRowAsksForCompile(HotReloadCarriedInState.AppliedInThisRun, Array.Empty<string>());
         }
 
         /// <summary>
@@ -169,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Resolve_CarriedInRowWithFileActiveFromEarlierRun_AsksForCompile()
         {
-            AssertCarriedInRowAsksForCompile(HotReloadCarriedInState.ActiveFromEarlierRun);
+            AssertCarriedInRowAsksForCompile(HotReloadCarriedInState.ActiveFromEarlierRun, Array.Empty<string>());
         }
 
         /// <summary>
@@ -239,6 +239,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a carried-in row whose type file came back as a sibling because it holds an
+        /// earlier reload's patches asks for a compile, as when that file is passed, instead of an
+        /// undo that would not stop it coming back.
+        /// </summary>
+        [Test]
+        public void Resolve_CarriedInRowWithReappliedFileActiveFromEarlierRun_AsksForCompile()
+        {
+            AssertCarriedInRowAsksForCompile(HotReloadCarriedInState.ActiveFromEarlierRun, new[] { KindPath });
+        }
+
+        /// <summary>
+        /// What: a carried-in row whose type file came back as a sibling and applied a change in
+        /// this run asks for a compile, since leaving the file out would drop that change.
+        /// </summary>
+        [Test]
+        public void Resolve_CarriedInRowWithReappliedFileAppliedInThisRun_AsksForCompile()
+        {
+            AssertCarriedInRowAsksForCompile(HotReloadCarriedInState.AppliedInThisRun, new[] { KindPath });
+        }
+
+        /// <summary>
         /// What: rows without worker facts or with another reason code are returned as they are.
         /// </summary>
         [Test]
@@ -271,11 +292,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 () => new HotReloadSkippedNextStepResolver(path => HotReloadCarriedInState.NotInRun, null));
         }
 
-        private static void AssertCarriedInRowAsksForCompile(HotReloadCarriedInState state)
+        private static void AssertCarriedInRowAsksForCompile(
+            HotReloadCarriedInState state,
+            IReadOnlyCollection<string> reappliedPaths)
         {
             HotReloadMethodOutcome row = CarriedInRow(KindType, KindPath);
 
-            List<HotReloadMethodOutcome> resolved = Resolver(StateOf(KindPath, state)).Resolve(new[] { row });
+            List<HotReloadMethodOutcome> resolved = new HotReloadSkippedNextStepResolver(
+                    path => path == KindPath ? state : HotReloadCarriedInState.NotInRun,
+                    reappliedPaths)
+                .Resolve(new[] { row });
 
             Assert.That(
                 resolved[0].Reason,

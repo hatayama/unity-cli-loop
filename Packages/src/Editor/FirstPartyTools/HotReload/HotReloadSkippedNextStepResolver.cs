@@ -32,7 +32,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _describeState = describeState;
-            _reappliedPaths = new HashSet<string>(reappliedPaths, StringComparer.Ordinal);
+            // Why the ledger's comparer: the paths are matched against files the ledger reports, and
+            // a different case rule would split one file into two on Windows.
+            _reappliedPaths = new HashSet<string>(
+                reappliedPaths,
+                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
         }
 
         /// <summary>
@@ -135,12 +139,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool mustUndo = false;
             foreach (string file in facts.DeclaringFiles)
             {
-                if (_reappliedPaths.Contains(file))
-                {
-                    mustUndo = true;
-                    continue;
-                }
-
+                // Why the state before the re-applied set: a file that holds patches comes back as a
+                // sibling too, and an undo does not stop it coming back, so it needs the same compile
+                // as when it is passed.
                 HotReloadCarriedInState state = _describeState(file);
                 if (state == HotReloadCarriedInState.AppliedInThisRun
                     || state == HotReloadCarriedInState.ActiveFromEarlierRun)
@@ -148,9 +149,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return new CarriedInStep(HotReloadSkippedNextStepText.CompileHoldingPatches("'" + file + "'"), false);
                 }
 
-                // Why only a record at the current source asks for an undo: a record of other bytes
-                // brings the file back once the undo restores them.
-                mustUndo |= state == HotReloadCarriedInState.RecordedAtCurrentSource;
+                // Why a record of other bytes does not ask for an undo: it brings the file back once
+                // the undo restores them.
+                mustUndo |= _reappliedPaths.Contains(file)
+                    || state == HotReloadCarriedInState.RecordedAtCurrentSource;
             }
 
             string files = HotReloadSkippedNextStepText.Quote(facts.DeclaringFiles);
