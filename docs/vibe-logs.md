@@ -59,8 +59,10 @@ Each line is one JSON object:
 1. Find the time window from the report or the command output, then open the matching
    `unity_vibe_*.json` (remember the UTC file date).
 2. Count `operation` values in the window. A `*_start` with no matching `*_complete` is the
-   request that never finished; it is the first thing to look for behind a BUSY error, because the
-   Editor is single-flight and every later command waits on it.
+   first lead behind a BUSY error: the Editor is single-flight, so while one request never
+   finishes, every later command is rejected with BUSY after the CLI's bounded retry. Before
+   treating the missing completion as proof, check the next UTC day's file and confirm that the
+   operation logs its completion at all.
 3. Read the entries around the orphan in time order: the last operation logged for its ID shows
    how far it got, and neighboring `domain_reload_*`, `startup_protection_active`, or
    `binding_*` entries show what the server was doing at that moment.
