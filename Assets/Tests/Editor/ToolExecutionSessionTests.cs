@@ -377,6 +377,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies repeated busy retries do not restart the grace period, so the holder is revoked a grace period after the first retry saw the cancellation.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenBusyRetriesRepeatDuringGrace_ShouldMeasureGraceFromFirstObservation()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+            holderCancellation.Cancel();
+
+            for (int second = 0; second < ToolExecutionSession.CancelledLeaseGraceSeconds; second++)
+            {
+                ToolExecutionSessionEnterResult retry = session.TryEnter("other-tool");
+                Assert.That(retry.IsEntered, Is.False, $"retry at {second}s must stay busy");
+                timestamp += Stopwatch.Frequency;
+            }
+
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("other-tool");
+
+            Assert.That(timestamp, Is.EqualTo(GraceTicks));
+            Assert.That(lateAttempt.IsEntered, Is.True);
+
+            lateAttempt.Lease.Dispose();
+            holderLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies the grace period starts when a retry first sees the cancellation, not when the lease was issued or when an earlier retry saw it still live.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenHolderIsCancelledLongAfterIssue_ShouldStartGraceAtFirstObservedCancellation()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+
+            ToolExecutionSessionEnterResult liveAttempt = session.TryEnter("other-tool");
+            timestamp += 10 * GraceTicks;
+            holderCancellation.Cancel();
+            ToolExecutionSessionEnterResult firstCancelledAttempt = session.TryEnter("other-tool");
+            timestamp += GraceTicks - 1;
+            ToolExecutionSessionEnterResult withinGraceAttempt = session.TryEnter("other-tool");
+            timestamp += 1;
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("other-tool");
+
+            Assert.That(liveAttempt.IsEntered, Is.False);
+            Assert.That(firstCancelledAttempt.IsEntered, Is.False);
+            Assert.That(withinGraceAttempt.IsEntered, Is.False);
+            Assert.That(lateAttempt.IsEntered, Is.True);
+
+            lateAttempt.Lease.Dispose();
+            holderLease.Dispose();
+        }
+
+        /// <summary>
         /// Verifies an execute-dynamic-code holder that was never cancelled keeps the slot however long it runs.
         /// </summary>
         [Test]
