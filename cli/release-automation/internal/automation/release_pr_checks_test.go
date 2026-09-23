@@ -908,6 +908,26 @@ func TestReleasePRChecksContinueAfterOneComponentFails(t *testing.T) {
 	assertReleasePRCheckLogDoesNotContainLine(t, commandLogText, "gh pr ready 2001 --repo owner/repository")
 }
 
+// Verifies that the command ends by naming every release PR whose checks failed, so the last line of the job log says which PRs failed instead of a bare exit status.
+func TestReleasePRChecksNameEveryFailedPullRequestLast(t *testing.T) {
+	prListJSON := `[` +
+		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`]`
+
+	exitCode, _, stderr, _ := runMultiReleasePRCheck(t, prListJSON, map[string]bool{"11": true, "21": true})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstderr: %s", exitCode, stderr)
+	}
+	stderrLines := strings.Split(strings.TrimRight(stderr, "\n"), "\n")
+	lastLine := stderrLines[len(stderrLines)-1]
+	expected := "Release PR checks failed for #2001, #2002; the errors above say why."
+	if lastLine != expected {
+		t.Fatalf("expected last stderr line %q, got %q\nstderr: %s", expected, lastLine, stderr)
+	}
+}
+
 // Verifies that a non-package component's release PR body is left alone, so its bare version summary is not relabeled as the Unity package.
 func TestReleasePRChecksLeaveNonPackageComponentBodyUnchanged(t *testing.T) {
 	prListJSON := `[{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"}]`

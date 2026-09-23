@@ -777,7 +777,9 @@ func TestWindowsInstallScriptParsesOnWindows(t *testing.T) {
 		t.Fatalf("failed to write setup script: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// PowerShell's cold start on Windows CI runners exceeds 10 seconds often
+	// enough that a tighter bound fails this parse check without a parse error.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	// The script path must be embedded in the command text: powershell -Command
 	// concatenates trailing arguments into the command instead of exposing them
