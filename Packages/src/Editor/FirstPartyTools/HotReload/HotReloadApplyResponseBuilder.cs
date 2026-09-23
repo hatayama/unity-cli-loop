@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadServices services,
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings,
-            IReadOnlyList<string> recoveredDropIdentities)
+            IReadOnlyList<string> rewireFields)
         {
             Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
@@ -67,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadResponseWarnings warnings = HotReloadApplyWarningsAssembler.Assemble(
                 result,
                 additionalWarnings,
-                recoveredDropIdentities,
+                rewireFields,
                 toProjectRelativeScriptPath);
             bool allRequestedSkipped = DecideAllRequestedSkipped(result, toProjectRelativeScriptPath);
             int reappliedSiblingCount = HotReloadRequestedFileOutcomeSummary.CountReappliedSiblingOutcomes(

@@ -5,6 +5,8 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -43,6 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // or the revert's row would go and the next omitted --files run would miss that file.
         private static List<string> _pendingSourceIdentitiesRecordedInThisDomain;
 
+        // Why only the fields not yet recorded, as with the owner files: a cancelled entry must
+        // not take back a row an earlier Play entry recorded for a field it discarded.
+        private static List<string> _pendingRewireFieldsRecordedInThisDomain;
+
         public static void Initialize()
         {
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
@@ -58,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static bool ShouldRecord(
             PlayModeStateChange state,
             bool isDomainReloadDisabledOnEnterPlayMode,
-            int activeIdentityCount)
+            int activeChangeCount)
         {
             if (state != PlayModeStateChange.ExitingEditMode)
             {
@@ -70,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            return activeIdentityCount > 0;
+            return activeChangeCount > 0;
         }
 
         internal static bool ShouldClearAfterCompilation(int errorCount)
@@ -93,15 +99,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Removes what this apply brought back from the ledgers and returns the identities the
-        /// ledger held, which are the changes a domain reload had discarded.
+        /// Removes what this apply brought back from the ledgers and returns the added fields of
+        /// this apply that a domain reload had discarded, whose wired values are gone.
         /// </summary>
         internal static IReadOnlyList<string> NotifyApplyRecovered(
             IReadOnlyList<HotReloadMethodOutcome> methods,
-            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes)
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes,
+            IReadOnlyList<string> addedFields)
         {
             Debug.Assert(methods != null, "methods must not be null");
             Debug.Assert(introducedTypes != null, "introducedTypes must not be null");
+            Debug.Assert(addedFields != null, "addedFields must not be null");
             List<string> recoveredIdentities = new List<string>();
             for (int index = 0; index < methods.Count; index++)
             {
@@ -131,28 +139,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outcome.MetadataName));
             }
 
-            List<string> heldIdentities = ListHeldByLedger(recoveredIdentities);
             RemoveFromLedgers(recoveredIdentities);
-            return heldIdentities;
+            List<string> rewireFields = ListHeldByRewireLedger(addedFields);
+            // Why removed once named: the next apply adds the same fields again, and asking again
+            // would claim a value wired after this warning was lost too.
+            HotReloadRewireLedger.Remove(rewireFields);
+            return rewireFields;
         }
 
-        // Why only the held ones: a change this run made for the first time was never discarded
-        // by a domain reload, so the caller must not treat it as recovered state.
-        private static List<string> ListHeldByLedger(IReadOnlyList<string> identities)
+        // Why only the held ones: a field this run added for the first time held no value a
+        // domain reload could discard.
+        private static List<string> ListHeldByRewireLedger(IReadOnlyList<string> addedFields)
         {
-            HashSet<string> held = new HashSet<string>(
-                HotReloadPlayModeEntryDropLedger.GetIdentities(),
-                StringComparer.Ordinal);
-            List<string> heldIdentities = new List<string>();
-            for (int index = 0; index < identities.Count; index++)
+            HashSet<string> held = new HashSet<string>(HotReloadRewireLedger.GetFields(), StringComparer.Ordinal);
+            List<string> heldFields = new List<string>();
+            for (int index = 0; index < addedFields.Count; index++)
             {
-                if (held.Contains(identities[index]))
+                if (held.Contains(addedFields[index]))
                 {
-                    heldIdentities.Add(identities[index]);
+                    heldFields.Add(addedFields[index]);
                 }
             }
 
-            return heldIdentities;
+            return heldFields;
         }
 
         // Why only the owner-file ledger takes the surviving types: the identity ledger reports
@@ -168,45 +177,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             _pendingIdentitiesRecordedInThisDomain = null;
             _pendingSourceIdentitiesRecordedInThisDomain = null;
+            _pendingRewireFieldsRecordedInThisDomain = null;
         }
 
         internal static void NotifyPlayModeStateChanged(
             PlayModeStateChange state,
             IReadOnlyList<string> identities,
             IReadOnlyList<HotReloadPlayModeEntryDropSource> introducedSources,
+            IReadOnlyList<string> addedFields,
             bool isDomainReloadDisabledOnEnterPlayMode)
         {
             Debug.Assert(identities != null, "identities must not be null");
             Debug.Assert(introducedSources != null, "introducedSources must not be null");
+            Debug.Assert(addedFields != null, "addedFields must not be null");
             DiscardPendingIfSameDomainSurvived();
-            if (!ShouldRecord(state, isDomainReloadDisabledOnEnterPlayMode, identities.Count))
+            // Why the fields count: a generation that only added fields patches nothing, yet the
+            // reload still discards the values wired into them.
+            if (!ShouldRecord(state, isDomainReloadDisabledOnEnterPlayMode, identities.Count + addedFields.Count))
             {
                 return;
             }
 
             List<string> newSourceIdentities = ListSourceIdentitiesNotYetRecorded(introducedSources);
+            List<string> newRewireFields = ListNotYetRecorded(addedFields, HotReloadRewireLedger.GetFields());
             HotReloadPlayModeEntryDropLedger.Record(identities);
             HotReloadPlayModeEntryDropSourceLedger.Record(introducedSources);
+            HotReloadRewireLedger.Record(addedFields);
             RememberPending(identities, newSourceIdentities);
+            _pendingRewireFieldsRecordedInThisDomain = newRewireFields;
+        }
+
+        private static List<string> ListNotYetRecorded(IReadOnlyList<string> values, IReadOnlyList<string> recorded)
+        {
+            HashSet<string> recordedSet = new HashSet<string>(recorded, StringComparer.Ordinal);
+            List<string> notYetRecorded = new List<string>();
+            for (int index = 0; index < values.Count; index++)
+            {
+                if (!recordedSet.Contains(values[index]))
+                {
+                    notYetRecorded.Add(values[index]);
+                }
+            }
+
+            return notYetRecorded;
         }
 
         private static List<string> ListSourceIdentitiesNotYetRecorded(
             IReadOnlyList<HotReloadPlayModeEntryDropSource> introducedSources)
         {
-            HashSet<string> recorded = new HashSet<string>(
-                HotReloadPlayModeEntryDropSourceLedger.GetIdentities(),
-                StringComparer.Ordinal);
-            List<string> notYetRecorded = new List<string>();
+            List<string> identities = new List<string>(introducedSources.Count);
             for (int index = 0; index < introducedSources.Count; index++)
             {
-                string identity = introducedSources[index].Identity;
-                if (!recorded.Contains(identity))
-                {
-                    notYetRecorded.Add(identity);
-                }
+                identities.Add(introducedSources[index].Identity);
             }
 
-            return notYetRecorded;
+            return ListNotYetRecorded(identities, HotReloadPlayModeEntryDropSourceLedger.GetIdentities());
         }
 
         // Why both ledgers move together: a source line names the type identity it was recorded
@@ -222,6 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadPlayModeEntryDropLedger.Clear();
             HotReloadPlayModeEntryDropSourceLedger.Clear();
+            HotReloadRewireLedger.Clear();
         }
 
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
@@ -230,11 +256,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 state,
                 CollectActiveIdentities(),
                 CollectActiveIntroducedSources(GetServices().Domain),
+                CollectActiveAddedFields(GetServices().Domain),
                 IsDomainReloadDisabledOnEnterPlayMode());
         }
 
         private static void DiscardPendingIfSameDomainSurvived()
         {
+            // Why the fields decide too: a field-only generation records no identity, and its
+            // cancelled entry still has to take its fields back.
+            if (_pendingRewireFieldsRecordedInThisDomain != null)
+            {
+                HotReloadRewireLedger.Remove(_pendingRewireFieldsRecordedInThisDomain);
+                _pendingRewireFieldsRecordedInThisDomain = null;
+            }
+
             if (_pendingIdentitiesRecordedInThisDomain == null
                 || _pendingIdentitiesRecordedInThisDomain.Count == 0)
             {
@@ -360,6 +395,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return sources;
+        }
+
+        /// <summary>
+        /// Every added field the domain holds, as the "Type.field" display name an apply
+        /// response lists it under, which is how the next apply matches it again.
+        /// </summary>
+        internal static IReadOnlyList<string> CollectActiveAddedFields(HotReloadDomain domain)
+        {
+            Debug.Assert(domain != null, "domain must not be null");
+            IReadOnlyList<HotReloadAddedFieldDescription> descriptions = domain.DescribeAddedFields();
+            List<string> fields = new List<string>(descriptions.Count);
+            for (int index = 0; index < descriptions.Count; index++)
+            {
+                fields.Add(descriptions[index].TypeName + "." + descriptions[index].FieldName);
+            }
+
+            return fields;
         }
 
         private static bool IsDomainReloadDisabledOnEnterPlayMode()
