@@ -5,8 +5,8 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// How a Warnings line of the apply response goes away, which decides whether the Message may
-    /// say that one compile clears every warning.
+    /// How a Warnings line of the apply response goes away, which decides whether the warnings
+    /// allow the Message to say that one compile clears every warning.
     /// </summary>
     internal enum HotReloadWarningResolution
     {
@@ -23,7 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     /// <summary>
     /// Collects the Warnings lines of an apply response in order, each with how it is cleared, and
-    /// decides from those kinds whether the single-compile resolution suffix applies.
+    /// says whether those lines alone allow the single-compile resolution suffix. The builder
+    /// makes the final call, because the method and type rows can still rule the suffix out.
     /// </summary>
     internal sealed class HotReloadResponseWarnings
     {
