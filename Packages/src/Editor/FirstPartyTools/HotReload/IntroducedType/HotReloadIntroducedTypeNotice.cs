@@ -10,11 +10,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </remarks>
     internal sealed class HotReloadIntroducedTypeNotice
     {
-        internal HotReloadIntroducedTypeNotice(string ownerProjectRelativePath, string text, bool namesDeclaration)
+        internal HotReloadIntroducedTypeNotice(
+            string ownerProjectRelativePath,
+            string text,
+            bool namesDeclaration,
+            string refusedTypeMetadataName)
         {
             OwnerProjectRelativePath = ownerProjectRelativePath ?? string.Empty;
             Text = text ?? string.Empty;
             NamesDeclaration = namesDeclaration;
+            RefusedTypeMetadataName = refusedTypeMetadataName;
         }
 
         internal string OwnerProjectRelativePath { get; }
@@ -27,5 +32,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool NamesDeclaration { get; }
 
         internal string Text { get; }
+
+        /// <summary>
+        /// The metadata name of the type this notice refused, or null when the notice does not
+        /// refuse a type by name. A caller in the same run fails to compile against that type.
+        /// </summary>
+        internal string RefusedTypeMetadataName { get; }
     }
 }

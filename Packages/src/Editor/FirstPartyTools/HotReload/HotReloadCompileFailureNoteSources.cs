@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -13,13 +14,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </remarks>
     internal sealed class HotReloadCompileFailureNoteSources
     {
-        internal HotReloadCompileFailureNoteSources(TransformWorkerSkippedDto[] skippedMembers)
+        internal HotReloadCompileFailureNoteSources(
+            TransformWorkerSkippedDto[] skippedMembers,
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedIntroducedTypes)
         {
             SkippedMembers = skippedMembers ?? Array.Empty<TransformWorkerSkippedDto>();
+            RefusedIntroducedTypes = refusedIntroducedTypes ?? Array.Empty<HotReloadRefusedIntroducedType>();
         }
 
         // Members the worker skipped in this run; a compile error naming one of them is
         // explained by the reason it was skipped.
         internal TransformWorkerSkippedDto[] SkippedMembers { get; }
+
+        // Types the preparation refused in this run; a compile error that cannot find one of
+        // them is explained by the refusal, since the source still declares the type.
+        internal IReadOnlyList<HotReloadRefusedIntroducedType> RefusedIntroducedTypes { get; }
     }
 }

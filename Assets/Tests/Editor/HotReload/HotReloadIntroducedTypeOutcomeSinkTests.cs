@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadIntroducedTypeOutcomeSink.AppendNotices(
                 new[] { owner },
-                new[] { new HotReloadIntroducedTypeNotice(OwnerPath, "refused", namesDeclaration: true) });
+                new[] { new HotReloadIntroducedTypeNotice(OwnerPath, "refused", namesDeclaration: true, refusedTypeMetadataName: null) });
 
             Assert.That(owner.DeclaresRefusedIntroducedType, Is.True);
         }
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadIntroducedTypeOutcomeSink.AppendNotices(
                 new[] { owner },
-                new[] { new HotReloadIntroducedTypeNotice(OwnerPath, "run scoped", namesDeclaration: false) });
+                new[] { new HotReloadIntroducedTypeNotice(OwnerPath, "run scoped", namesDeclaration: false, refusedTypeMetadataName: null) });
 
             Assert.That(
                 owner.Sinks.Warnings,

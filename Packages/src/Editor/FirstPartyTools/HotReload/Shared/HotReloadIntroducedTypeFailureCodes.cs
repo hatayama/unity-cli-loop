@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -18,6 +20,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return code == HotReloadWorkerReasonCode.IntroducedTypeChanged
                 || code == HotReloadWorkerReasonCode.IntroducedTypeMemberBodyChanged;
         }
+
+        /// <summary>
+        /// The metadata name of the declaration the diagnostic refused, or null when it refuses
+        /// none by name. Why listed rather than derived: the argument that holds the type differs
+        /// by code, and the run-scoped and redefinition codes hold none, so a new code stays out
+        /// until someone checks its arguments.
+        /// </summary>
+        internal static string FindRefusedTypeMetadataName(HotReloadWorkerReasonCode code, string[] args)
+        {
+            return RefusedTypeArgumentIndexByCode.TryGetValue(code, out int index) ? args[index] : null;
+        }
+
+        private const int DeclarationArgument = 0;
+
+        // The const codes name the const first and the type that references it second.
+        private const int ConstReferrerArgument = 1;
+
+        private static readonly Dictionary<HotReloadWorkerReasonCode, int> RefusedTypeArgumentIndexByCode =
+            new Dictionary<HotReloadWorkerReasonCode, int>
+            {
+                [HotReloadWorkerReasonCode.IntroducedTypeGeneric] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypePartial] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeRecord] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeNonPublic] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeRefLike] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeUnsafe] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeUnityObject] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeSerializable] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeModuleInitializer] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeUnsupported] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeDelegate] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeNested] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeNestedDeclaration] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeConstValueUnverifiable] = ConstReferrerArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeConstChanged] = ConstReferrerArgument
+            };
 
         /// <summary>
         /// Whether the diagnostic is about the whole run rather than a declaration. The worker

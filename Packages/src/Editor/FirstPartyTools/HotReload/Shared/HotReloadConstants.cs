@@ -296,6 +296,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string SkippedMemberCompileFailureNoteFormat =
             "'{0}' was skipped by this hot reload run, which is why this compile failed: {1}";
 
+        // Why a separate note for types: CS0246/CS0234 only say the type is missing, while the
+        // source still declares it. The type was refused by this run, so only a compile adds it.
+        public const string RefusedIntroducedTypeCompileFailureNoteFormat =
+            "'{0}' was refused by this hot reload run ({1}), which is why this compile failed; run 'uloop compile'.";
+
         // Wire value for TransformWorkerEntryDto.patchKind when the worker rewrote inaccessible
         // accesses into accessor delegates.
         public const string PatchKindDelegation = "delegation";
