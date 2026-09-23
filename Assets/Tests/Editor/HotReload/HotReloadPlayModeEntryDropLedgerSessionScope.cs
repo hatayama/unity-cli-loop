@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private readonly string _capturedCompanionsRaw;
 
+        private readonly string _capturedRewireFieldsRaw;
+
         public HotReloadPlayModeEntryDropLedgerSessionScope()
         {
             _capturedRaw = SessionState.GetString(
@@ -28,7 +30,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _capturedCompanionsRaw = SessionState.GetString(
                 HotReloadConstants.CompanionSourcesSessionStateKey,
                 string.Empty);
+            _capturedRewireFieldsRaw = SessionState.GetString(
+                HotReloadConstants.RewireFieldsSessionStateKey,
+                string.Empty);
             HotReloadPlayModeEntryDropLedger.Clear();
+            HotReloadRewireLedger.Clear();
             HotReloadPlayModeEntryDropSourceLedger.Clear();
             HotReloadPlayModeEntryDropRecorder.ResetPendingForTesting();
         }
@@ -45,6 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             SessionState.SetString(
                 HotReloadConstants.CompanionSourcesSessionStateKey,
                 _capturedCompanionsRaw);
+            SessionState.SetString(
+                HotReloadConstants.RewireFieldsSessionStateKey,
+                _capturedRewireFieldsRaw);
         }
     }
 }

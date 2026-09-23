@@ -264,8 +264,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why name the fields: the domain reload dropped the values an earlier run wired into
         // them, and nothing else in the response says the wiring has to be done again. Why
-        // conditional: the list holds every added field of the changed types, including one this
-        // run adds for the first time, so it cannot claim that each of them held a wired value.
+        // conditional: a field was active before the reload, but nothing records whether a value
+        // was ever wired into it.
         public const string RewireAfterDomainReloadWarningFormat =
             "If values were wired into these added fields before the last domain reload, they are "
             + "gone; wire them again before code that reads them runs: {0}.";
@@ -667,6 +667,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // "identity<TAB>project-relative path" line per type.
         public const string PlayModeEntryDropSourcesSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIntroducedSources";
+
+        // SessionState key for the added fields whose wired values a domain reload discarded, one
+        // "Type.field" display name per line, as the apply response lists added fields.
+        public const string RewireFieldsSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.rewireAddedFields";
 
         // SessionState key for the unchanged files earlier reloads were given beside what they
         // applied, one "project-relative path<TAB>hash" line per file, so a Play-entry domain

@@ -1978,17 +1978,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: after a domain reload discarded an earlier apply, the response asks to wire again
-        /// the added fields of the types whose changes this run recovered, and names no other field.
+        /// What: the response asks to wire again exactly the added fields a domain reload had
+        /// discarded and this run added back, and names no other added field.
         /// </summary>
         [Test]
-        public void Build_RecoveredIdentityOfAddedFieldType_WarnsToWireTheFieldAgain()
+        public void Build_RewireFields_WarnsToWireOnlyThoseFieldsAgain()
         {
             HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                 HotReloadCompositionRoot.Services,
                 CreateResultWithAddedFields(),
                 Array.Empty<string>(),
-                new[] { "Ns.Host.Tick()" });
+                new[] { "Ns.Host.Speed" });
 
             string warning = response.Warnings.FirstOrDefault(
                 entry => entry.Contains(RewireAfterDomainReloadWarningMarker));
@@ -1998,30 +1998,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a recovered constructor, whose label ends in "..ctor", still identifies its type,
-        /// so the added fields of that type are named.
+        /// What: a run that added back no field a domain reload discarded does not ask to wire
+        /// added fields again, because nothing was wired into them before.
         /// </summary>
         [Test]
-        public void Build_RecoveredConstructorOfAddedFieldType_WarnsToWireTheFieldAgain()
-        {
-            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
-                HotReloadCompositionRoot.Services,
-                CreateResultWithAddedFields(),
-                Array.Empty<string>(),
-                new[] { "Ns.Host..ctor()" });
-
-            string warning = response.Warnings.FirstOrDefault(
-                entry => entry.Contains(RewireAfterDomainReloadWarningMarker));
-            Assert.That(warning, Is.Not.Null, string.Join(" | ", response.Warnings));
-            Assert.That(warning, Does.Contain("Ns.Host.Speed"));
-        }
-
-        /// <summary>
-        /// What: a run that recovered nothing a domain reload discarded does not ask to wire added
-        /// fields again, because nothing was wired into them before.
-        /// </summary>
-        [Test]
-        public void Build_NoRecoveredIdentity_DoesNotWarnToWireAgain()
+        public void Build_NoRewireField_DoesNotWarnToWireAgain()
         {
             HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                 HotReloadCompositionRoot.Services,
@@ -2037,8 +2018,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: the rewire warning suppresses the single-compile resolution sentence, because a
-        /// compile does not bring wired values back, while the same result without a recovered
-        /// identity keeps that sentence.
+        /// compile does not bring wired values back, while the same result without a field to
+        /// wire again keeps that sentence.
         /// </summary>
         [Test]
         public void Build_RewireWarningBesideTwoOrchestratorWarnings_OmitsSingleCompileResolution()
@@ -2047,7 +2028,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadCompositionRoot.Services,
                 CreatePatchedResultWithTwoWarningsAndAddedField(),
                 Array.Empty<string>(),
-                new[] { "Ns.Host.Tick()" });
+                new[] { "Ns.Host.Speed" });
             HotReloadResponse withoutRewire = HotReloadApplyResponseBuilder.Build(
                 HotReloadCompositionRoot.Services,
                 CreatePatchedResultWithTwoWarningsAndAddedField(),

@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static HotReloadResponseWarnings Assemble(
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings,
-            IReadOnlyList<string> recoveredDropIdentities,
+            IReadOnlyList<string> rewireFields,
             Func<string, string> toProjectRelativeScriptPath)
         {
             Debug.Assert(result != null, "result must not be null.");
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CollectClearedByCompile(result, additionalWarnings, toProjectRelativeScriptPath));
             warnings.Add(
                 HotReloadWarningResolution.NeedsCallerAction,
-                CollectNeedsCallerAction(result, recoveredDropIdentities));
+                CollectNeedsCallerAction(result, rewireFields));
             warnings.Add(
                 HotReloadWarningResolution.NotCounted,
                 CollectAutoRefreshHold(result));
@@ -66,17 +66,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // compile does not bring back values wired into added fields.
         private static List<string> CollectNeedsCallerAction(
             HotReloadOrchestratorResult result,
-            IReadOnlyList<string> recoveredDropIdentities)
+            IReadOnlyList<string> rewireFields)
         {
             List<string> lines = new List<string>();
             AppendRetargetLineDriftWarnings(lines);
             AppendExpiredNotRetargetedWarnings(lines);
             AppendRetargetedPausePointsWarning(lines, result.RetargetedPausePointIds);
             AppendSuppressedPausePointsWarning(lines, result.SuppressedPausePointIds);
-            HotReloadRewireAfterDomainReloadWarning.Append(
-                lines,
-                result.AddedFields,
-                recoveredDropIdentities);
+            HotReloadRewireAfterDomainReloadWarning.Append(lines, rewireFields);
             return lines;
         }
 

@@ -248,16 +248,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            IReadOnlyList<string> recoveredDropIdentities = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
                 result.Methods,
-                result.IntroducedTypes);
+                result.IntroducedTypes,
+                result.AddedFields);
             HotReloadCompanionSourceSessionStore.Save(services.Domain.CompanionSources);
 
             HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                 services,
                 result,
                 selection.ScanLimitWarnings,
-                recoveredDropIdentities);
+                rewireFields);
             // isPlaying and the Play Mode compile setting are read here because the switch above
             // put this path on the main thread.
             ApplyCompileFallbackDecision(
