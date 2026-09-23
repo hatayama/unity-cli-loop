@@ -17,10 +17,13 @@ in `Library/uloop/compile-check/` and are never handed to the Editor.
 - The Editor is not running and you only want to know whether the code compiles.
 - You want compiler errors quickly, without waiting for an import and a domain reload.
 - You are iterating on code whose result does not need to be live in the Editor yet.
+- Hot-reload changes are active and you want to confirm the edits compile project-wide, callers
+  in other assemblies included, without dropping the patches (`uloop compile` drops them).
 
 ## When not to use
 
 - You want the change reflected in the Editor (play mode, tests, a tool call): run `uloop compile`.
+- You want to try an edit in the running Editor without a domain reload: run `uloop hot-reload`.
 - You just added or removed an `.asmdef`, added a reference to one, or changed scripting defines:
   run `uloop compile` once first. The response files describe the previous build only, so
   compile-check refuses the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED` instead of reporting

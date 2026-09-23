@@ -8,6 +8,15 @@ description: "Compile the Unity project and report errors/warnings. Use after C#
 
 Execute Unity project compilation.
 
+## When to use
+
+- The change must be live in the Editor (Play Mode, tests, a tool call), or hot-reloaded edits
+  and structural changes hot reload cannot apply need to land.
+- To only learn whether the code compiles — the Editor is not running, or a domain reload is
+  unwanted — run `uloop compile-check` instead; it never contacts the Editor.
+- To try an edit in the running Editor, especially during Play Mode, run `uloop hot-reload`
+  instead: a compile drops every hot-reload patch and discards the Play session.
+
 ## Usage
 
 ```bash

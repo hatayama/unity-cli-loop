@@ -43,8 +43,8 @@ automatically — pass it with `--files`.
 ## Status
 
 `uloop hot-reload --status` lists the currently active changes; it cannot be combined with
-`--files` or `--revert-all`. Every kind of change is static Editor state, so after a domain
-reload it authoritatively reports zero. Each `Active` row's `InvocationCount` counts calls
+`--files` or `--revert-all`. Every change is static Editor state, so after a domain
+reload it reports zero. Each `Active` row's `InvocationCount` counts calls
 into the patched body since the patch was applied — a reachability signal only while the code
 is being driven.
 
@@ -83,7 +83,9 @@ changed are patched (`UnchangedTotal` counts the rest).
 
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase:
 keep edits inside the edited files, collect structural changes, and compile once —
-every compile drops all patches and pause points and resets the PlayMode session (the compile response's Warning states how many were live).
+every compile drops all patches and pause points and resets Play Mode.
+`uloop compile-check` checks the edits compile project-wide (other assemblies' callers
+too) without touching the Editor or its patches.
 While hot-reload changes are active, `AutoRefreshHeld` is true so returning focus does not
 recompile; `uloop compile` releases the hold, and `--revert-all` only when no introduced type
 remains.
@@ -94,7 +96,7 @@ a `const`; its body is patched on a compiled type and on an introduced type alik
 
 ## Reference Guides
 
-All files live in `references/` beside this skill; read the one whose trigger matches:
+Read the `references/` file whose trigger matches:
 
 - `references/scope-and-limits.md` — full scope rules: added members, signature changes, `Skipped`/`Failed` tables, source baselines, one-shot code, tunable getters.
 - `references/mechanism-and-lifecycle.md` — patch mechanism, convergence, what survives which reload, Editor-code iteration without PlayMode.
