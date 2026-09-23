@@ -303,6 +303,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Answers whether the last run that reported removed members for one file reported
+        /// exactly this set, without changing the record.
+        /// </summary>
+        internal bool IsSameAsLastDisplayedRemovedMembers(
+            string projectRelativePath,
+            IReadOnlyList<string> displayedNames)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
+
+            return displayedNames.Count > 0
+                && _displayedRemovedMembersByPath.TryGetValue(projectRelativePath, out HashSet<string> lastDisplayed)
+                && lastDisplayed.SetEquals(displayedNames);
+        }
+
+        /// <summary>
         /// The live patches this domain holds on the methods one assembly declares on one type,
         /// which is what a run peels when an edited body matches that assembly's own code again.
         /// </summary>

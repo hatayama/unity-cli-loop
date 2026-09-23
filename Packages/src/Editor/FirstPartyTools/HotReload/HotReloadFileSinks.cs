@@ -16,7 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal HotReloadFileSinks(
             List<string> siblingDerivedWarnings,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates)
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates,
+            HotReloadRunDisplayedRemovedMembers displayedRemovedMembers = null)
         {
             Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
 
@@ -28,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IntroducedTypes = new List<HotReloadIntroducedTypeOutcome>();
             SiblingDerivedWarnings = siblingDerivedWarnings;
             OneShotCallerNoteCandidates = oneShotCallerNoteCandidates;
+            DisplayedRemovedMembers = displayedRemovedMembers;
         }
 
         internal List<HotReloadMethodOutcome> Outcomes { get; }
@@ -53,5 +55,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Shared across the whole run; null when the caller collects no one-shot caller notes.
         internal List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates { get; }
+
+        // Shared across the whole run so the removed-member record is written once the run ends;
+        // null when the caller keeps no such record.
+        internal HotReloadRunDisplayedRemovedMembers DisplayedRemovedMembers { get; }
     }
 }

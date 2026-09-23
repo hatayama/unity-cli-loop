@@ -759,12 +759,135 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Alpha")));
         }
 
+        /// <summary>
+        /// What: a run that lists the same file twice prints the full warning for both entries,
+        /// because the second entry is not a later run. Fails if the first entry's record is what
+        /// the second entry is compared against.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_WhenOneRunListsTheSameFileTwice_PrintsTheFullWarningForBoth()
+        {
+            IReadOnlyList<string> warnings = AppendDuplicateFileRemovedMembersRun(
+                new[] { "Alpha", "Beta" },
+                new[] { "Alpha", "Beta" });
+
+            string fullWarning = string.Format(HotReloadConstants.RemovedMembersWarningFormat, "Alpha, Beta");
+            Assert.That(warnings, Is.EqualTo(new[] { fullWarning, fullWarning }));
+        }
+
+        /// <summary>
+        /// What: the set a run that listed the same file twice reported is still recorded when the
+        /// run ends, so the next run with the same set collapses to the continuation line. Fails if
+        /// the record is no longer written once it is deferred to the end of the run.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_AfterARunListedTheSameFileTwice_CollapsesTheNextRunToTheContinuationLine()
+        {
+            AppendDuplicateFileRemovedMembersRun(new[] { "Alpha", "Beta" }, new[] { "Alpha", "Beta" });
+
+            string nextWarning = AppendRemovedMembersRun("Alpha", "Beta");
+
+            Assert.That(
+                nextWarning,
+                Is.EqualTo(string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.ContinuingRemovedMembersWarningFormat,
+                    2,
+                    "Alpha, Beta")));
+        }
+
+        /// <summary>
+        /// What: when one run lists the same file twice with different removed sets, the set of
+        /// the later entry is what the run records, so the next run continues from it. Fails if
+        /// the first entry's set wins.
+        /// </summary>
+        [Test]
+        public void AppendRemovedMemberNotices_WhenOneRunListsTheSameFileTwiceWithDifferentSets_RecordsTheLaterSet()
+        {
+            AppendDuplicateFileRemovedMembersRun(new[] { "Alpha" }, new[] { "Alpha", "Beta" });
+
+            string nextWarning = AppendRemovedMembersRun("Alpha", "Beta");
+
+            Assert.That(
+                nextWarning,
+                Is.EqualTo(string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.ContinuingRemovedMembersWarningFormat,
+                    2,
+                    "Alpha, Beta")));
+        }
+
+        /// <summary>
+        /// What: a run that staged nothing for the file leaves the record alone, so the run after
+        /// it still continues from the earlier report. Fails if ending such a run clears or
+        /// overwrites the record.
+        /// </summary>
+        [Test]
+        public void ApplyTo_RunThatStagedNothingForTheFile_KeepsTheRecord()
+        {
+            AppendRemovedMembersRun("Alpha");
+
+            new HotReloadRunDisplayedRemovedMembers().ApplyTo(HotReloadCompositionRoot.Services.Patcher);
+            string thirdWarning = AppendRemovedMembersRun("Alpha");
+
+            Assert.That(
+                thirdWarning,
+                Is.EqualTo(string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.ContinuingRemovedMembersWarningFormat,
+                    1,
+                    "Alpha")));
+        }
+
         // Runs the removed-member notices for one file of a fresh run context against the domain
-        // installed right now, and returns the removed-members warning that run produced.
+        // installed right now, ends the run the way the orchestrator does, and returns the
+        // removed-members warning that run produced.
         private static string AppendRemovedMembersRun(params string[] removedMemberNames)
         {
-            HotReloadApplyContext context = CreateContext();
+            HotReloadRunDisplayedRemovedMembers run = new HotReloadRunDisplayedRemovedMembers();
+            HotReloadApplyContext context = CreateContext(displayedRemovedMembers: run);
             HotReloadGroupFile file = context.Files[0];
+            file.FileOutput.removedMembers = CreateRemovedFields(removedMemberNames);
+
+            HotReloadGroupNotices.AppendRemovedMemberNotices(
+                HotReloadCompositionRoot.Services.Patcher,
+                context,
+                CreateEmptyGateResult());
+            run.ApplyTo(HotReloadCompositionRoot.Services.Patcher);
+
+            return FindRemovedMembersWarning(file);
+        }
+
+        // Runs one input that lists a file twice the way the orchestrator does: each copy in its
+        // own group of the same run, and the record written once the run ends. Returns the
+        // removed-members warning of each copy in input order.
+        private static IReadOnlyList<string> AppendDuplicateFileRemovedMembersRun(
+            string[] firstRemovedMemberNames,
+            string[] secondRemovedMemberNames)
+        {
+            HotReloadRunDisplayedRemovedMembers run = new HotReloadRunDisplayedRemovedMembers();
+            HotReloadApplyContext firstContext = CreateContext(displayedRemovedMembers: run);
+            HotReloadApplyContext secondContext = CreateContext(displayedRemovedMembers: run);
+            HotReloadGroupFile first = firstContext.Files[0];
+            HotReloadGroupFile second = secondContext.Files[0];
+            first.FileOutput.removedMembers = CreateRemovedFields(firstRemovedMemberNames);
+            second.FileOutput.removedMembers = CreateRemovedFields(secondRemovedMemberNames);
+
+            HotReloadGroupNotices.AppendRemovedMemberNotices(
+                HotReloadCompositionRoot.Services.Patcher,
+                firstContext,
+                CreateEmptyGateResult());
+            HotReloadGroupNotices.AppendRemovedMemberNotices(
+                HotReloadCompositionRoot.Services.Patcher,
+                secondContext,
+                CreateEmptyGateResult());
+            run.ApplyTo(HotReloadCompositionRoot.Services.Patcher);
+
+            return new[] { FindRemovedMembersWarning(first), FindRemovedMembersWarning(second) };
+        }
+
+        private static TransformWorkerRemovedMemberDto[] CreateRemovedFields(string[] removedMemberNames)
+        {
             List<TransformWorkerRemovedMemberDto> removedMembers = new List<TransformWorkerRemovedMemberDto>();
             foreach (string removedMemberName in removedMemberNames)
             {
@@ -775,13 +898,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
             }
 
-            file.FileOutput.removedMembers = removedMembers.ToArray();
+            return removedMembers.ToArray();
+        }
 
-            HotReloadGroupNotices.AppendRemovedMemberNotices(
-                HotReloadCompositionRoot.Services.Patcher,
-                context,
-                CreateEmptyGateResult());
-
+        private static string FindRemovedMembersWarning(HotReloadGroupFile file)
+        {
             foreach (string warning in file.Sinks.Warnings)
             {
                 if (warning.Contains("Alpha", StringComparison.Ordinal)
@@ -1001,12 +1122,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private static HotReloadApplyContext CreateContext(
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null,
+            HotReloadRunDisplayedRemovedMembers displayedRemovedMembers = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             Assembly compilationAssembly = FindCompilationAssembly();
             HotReloadGroupFile callerFile = CreateFile(
-                "Assets/CoverageCaller.cs", projectRoot, compilationAssembly, newSourceMembershipEvidence);
+                "Assets/CoverageCaller.cs", projectRoot, compilationAssembly, newSourceMembershipEvidence,
+                displayedRemovedMembers);
             HotReloadGroupFile targetFile = CreateFile(
                 "Assets/CoverageTarget.cs", projectRoot, compilationAssembly);
             TransformWorkerEntryDto caller = CreateCallerEntry(callerFile.ProjectRelativePath);
@@ -1078,7 +1201,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string path,
             string projectRoot,
             Assembly compilationAssembly,
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null,
+            HotReloadRunDisplayedRemovedMembers displayedRemovedMembers = null)
         {
             // Why a real worker source with its hash: the commit boundary verifies each request
             // source still hashes to what the transform run reported, and refuses a file it
@@ -1089,7 +1213,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadGroupFile file = new HotReloadGroupFile(
                 path, workerSourcePath, path, AssemblyName, compilationAssembly,
                 HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, AssemblyName),
-                projectRoot, new HotReloadFileSinks(new List<string>(), null), newSourceMembershipEvidence);
+                projectRoot, new HotReloadFileSinks(new List<string>(), null, displayedRemovedMembers),
+                newSourceMembershipEvidence);
             file.FileOutput = new TransformWorkerFileOutputDto
             {
                 projectRelativePath = path,
