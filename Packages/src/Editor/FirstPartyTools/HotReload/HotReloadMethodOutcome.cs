@@ -110,6 +110,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote, WorkerReason);
         }
 
+        public HotReloadMethodOutcome WithReason(string reason)
+        {
+            return new HotReloadMethodOutcome(Kind, Method, reason, FilePath, LifecycleNote, WorkerReason);
+        }
+
         public HotReloadMethodOutcome WithWorkerReason(HotReloadWorkerReasonFacts workerReason)
         {
             return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, LifecycleNote, workerReason);

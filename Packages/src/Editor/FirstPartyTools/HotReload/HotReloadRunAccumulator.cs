@@ -203,6 +203,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public HotReloadOrchestratorResult BuildResult(string correlationId)
         {
+            // Why before anything reads the rows: the response copies each Skipped row's reason
+            // into Warnings, so a step added later would reach the row but not its warning.
+            ResolveSkippedNextSteps();
             // Why first: the per-file warnings of the re-applied files were merged last, so the
             // summary of their missing baselines lands right after them.
             _siblingBaselineNotices.AppendTo(_warnings);
@@ -240,6 +243,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 autoRefreshHoldNewlyArmed: newlyArmed,
                 introducedTypeNoticeCount: _introducedTypeNoticeCount,
                 serializedAddedFieldsReported: _serializedAddedFieldsReported);
+        }
+
+        private void ResolveSkippedNextSteps()
+        {
+            HotReloadSkippedNextStepResolver resolver = new HotReloadSkippedNextStepResolver(
+                DescribeCarriedInState,
+                _reappliedSiblingPaths);
+            List<HotReloadMethodOutcome> resolved = resolver.Resolve(_outcomes);
+            _outcomes.Clear();
+            _outcomes.AddRange(resolved);
+        }
+
+        // Where the file stands once this run's sibling records are written. Valid only after
+        // RecordAppliedSourceHashes.
+        private HotReloadCarriedInState DescribeCarriedInState(string projectRelativePath)
+        {
+            return _siblingLedgerUpdates.DescribeAfterApply(new HotReloadDomainCarriedInLookup(_domain), projectRelativePath);
         }
 
         private void AppendInlineRiskWarning()

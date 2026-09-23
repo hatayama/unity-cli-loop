@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 output);
 
             string text = HotReloadWorkerReasonText.Render(output.skipped[0].reason);
-            Assert.That(text, Does.Contain("Pass '" + RegistryProjectRelativePath + "'"), text);
+            Assert.That(text, Does.Contain("declared in '" + RegistryProjectRelativePath + "'"), text);
         }
 
         /// <summary>
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     output);
 
                 string text = HotReloadWorkerReasonText.Render(split);
-                Assert.That(text, Does.Contain("Pass the file that declares '" + RegistryTypeMetadataName + "'"), text);
+                Assert.That(text, Does.Contain("declared in the file that declares '" + RegistryTypeMetadataName + "'"), text);
             }
             finally
             {
