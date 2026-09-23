@@ -21,6 +21,8 @@ type NativeCommandEntry struct {
 	Name        string
 	Description string
 	Owner       CommandOwner
+	// Hidden keeps a command routable while leaving it out of help, `list --names`, and completion.
+	Hidden bool
 }
 
 type CommandOwner string
@@ -32,7 +34,9 @@ const (
 
 var NativeCommands = []NativeCommandEntry{
 	{Name: LaunchCommandName, Description: "Open this Unity project with the matching Editor version", Owner: DispatcherOwned},
-	{Name: CompileCheckCommandName, Description: "Compile changed assemblies with the Editor's bundled C# compiler without launching Unity", Owner: DispatcherOwned},
+	// Why compile-check is hidden: it covers too few situations to recommend yet, so it stays
+	// runnable for anyone who already uses it but is no longer advertised.
+	{Name: CompileCheckCommandName, Description: "Compile changed assemblies with the Editor's bundled C# compiler without launching Unity", Owner: DispatcherOwned, Hidden: true},
 	{Name: "list", Description: "Show Unity tools currently exposed by the Editor", Owner: RunnerOwned},
 	{Name: "sync", Description: "Refresh .uloop/tools.json from the running Editor", Owner: RunnerOwned},
 	{Name: "focus-window", Description: "Bring the Unity Editor window to the foreground", Owner: RunnerOwned},
@@ -78,9 +82,22 @@ func NativeCommand(command string) (NativeCommandEntry, bool) {
 	return NativeCommandEntry{}, false
 }
 
+// VisibleNativeCommands lists the native commands shown to users, in registry order.
+func VisibleNativeCommands() []NativeCommandEntry {
+	entries := make([]NativeCommandEntry, 0, len(NativeCommands))
+	for _, entry := range NativeCommands {
+		if entry.Hidden {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
 func NativeCommandNamesForCompletion() []string {
-	names := make([]string, 0, len(NativeCommands))
-	for _, command := range NativeCommands {
+	visible := VisibleNativeCommands()
+	names := make([]string, 0, len(visible))
+	for _, command := range visible {
 		names = append(names, command.Name)
 	}
 	return names

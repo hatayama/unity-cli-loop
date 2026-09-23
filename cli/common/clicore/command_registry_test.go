@@ -106,3 +106,23 @@ func TestPausePointStatusNativeCommandDescription(t *testing.T) {
 		t.Fatalf("description = %q, want %q", entry.Description, want)
 	}
 }
+
+// Verifies a hidden native command stays routable but is left out of every user-facing command list.
+func TestHiddenNativeCommandIsRoutableButNotListed(t *testing.T) {
+	if !IsDispatcherOwnedCommandName(CompileCheckCommandName) {
+		t.Fatalf("%s must stay registered as a dispatcher-owned command", CompileCheckCommandName)
+	}
+	for _, entry := range VisibleNativeCommands() {
+		if entry.Name == CompileCheckCommandName {
+			t.Fatalf("%s must not be listed: %#v", CompileCheckCommandName, VisibleNativeCommands())
+		}
+	}
+	for _, name := range NativeCommandNamesForCompletion() {
+		if name == CompileCheckCommandName {
+			t.Fatalf("%s must not be offered as a completion: %#v", CompileCheckCommandName, NativeCommandNamesForCompletion())
+		}
+	}
+	if len(VisibleNativeCommands()) != len(NativeCommands)-1 {
+		t.Fatalf("only %s should be hidden: %#v", CompileCheckCommandName, VisibleNativeCommands())
+	}
+}

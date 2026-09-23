@@ -78,7 +78,7 @@ func printMainHelp(stdout io.Writer, displayVersion string, description string, 
 
 func printNativeCommandHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Native commands:")
-	for _, entry := range clicore.NativeCommands {
+	for _, entry := range clicore.VisibleNativeCommands() {
 		clicore.WriteFormat(stdout, "  %-14s %s\n", entry.Name, entry.Description)
 	}
 }
