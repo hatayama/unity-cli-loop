@@ -298,6 +298,18 @@ internal static class OrdinaryMethodQueue
                 typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
         }
 
+        if (!isAddedMethod && decision.SkipReason == null && typeState.SourceUnit.Input.ReappliedSibling)
+        {
+            WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
+                semanticModel,
+                methodBodyNode,
+                typeState.TargetAssembly);
+            if (siblingSkip != null)
+            {
+                decision = MethodTransformDecision.Skip(siblingSkip);
+            }
+        }
+
         return decision;
     }
 

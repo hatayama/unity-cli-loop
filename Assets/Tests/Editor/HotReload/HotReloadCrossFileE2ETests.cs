@@ -1005,6 +1005,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(CountOutcomesOfKindForFile(third, null, HotReloadMethodOutcomeKind.Failed), Is.Zero, FormatOutcomes(third));
             HotReloadMethodOutcome call = FindOutcome(third, HotReloadMethodOutcomeKind.Skipped, ".Call(");
             Assert.That(call.Reason, Does.Contain(HostFileName).And.Contain("uloop compile"), FormatOutcomes(third));
+            FindOutcome(third, HotReloadMethodOutcomeKind.Added, ".OnHit(");
             Assert.That(CountWarningsContaining(third, SiblingRebindFailedWarningNeedle), Is.Zero, string.Join("\n", third.Warnings));
         }
 

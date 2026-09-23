@@ -229,6 +229,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "Explicit interface implementations are skipped.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformSiblingBodyBindsCompiledType,
+                new[] { "CS1061: 'Host' does not contain a definition for 'Hit'", "'Host'", "'Assets/Host.cs'" },
+                "This file was brought back to re-bind its active patches, but this method's body no longer "
+                + "binds here (CS1061: 'Host' does not contain a definition for 'Hit'): it uses a member of "
+                + "'Host' that this reload was not given the source of. Any earlier patch of this method stays "
+                + "active. Pass 'Assets/Host.cs' to --files together with this file, or run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformSiblingBodyUnbound,
+                new[] { "CS0103: The name 'Missing' does not exist" },
+                "This file was brought back to re-bind its active patches, but this method's body no longer "
+                + "binds here (CS0103: The name 'Missing' does not exist), so it is skipped rather than failed; "
+                + "any earlier patch of it stays active. Pass the file that declares the missing name to --files "
+                + "together with this file, or run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodVirtualOrAbstract,
                 NoArgs,
                 "Added virtual, override, or abstract methods are skipped; the loaded type has no vtable slot. "
