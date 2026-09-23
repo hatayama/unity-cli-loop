@@ -70,31 +70,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "declared in a new file, pass that file to --files too (new files are not selected "
                     + "automatically); run 'uloop compile' only if it still does not bind.",
                     1));
+            // Why the next step is not worded here: which step works (pass the file, leave it
+            // out, undo the edit and leave it out, or compile) depends on how the file entered the
+            // run and what the run recorded for it, which only the Editor knows once the run is
+            // written. HotReloadSkippedNextStepResolver appends it there.
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
                 Plain(
                     "The added member's body could not be fully bound in the hot-reload compilation ({0}): "
-                    + "this reload declares {1} from source, while the compiled signatures of {2} still name "
-                    + "the compiled {1}, so it is skipped. Pass {3} to this reload as well so both bind to "
-                    + "the same type. Otherwise run 'uloop compile'.",
+                    + "this reload declares {1} from source, while the compiled signatures of {2}, declared in "
+                    + "{3}, still name the compiled {1}, so it is skipped.",
                     4));
-            // Why "undo it and leave it out" and not just "leave it out": the file declaring the
-            // compiled type is carried into a reload while its current source hashes to one an
-            // earlier reload recorded, so dropping it from --files alone brings it back. Undoing
-            // the edit only stops that when the restored source matches no recorded hash, which
-            // is why the text falls back to 'uloop compile' when the file is still carried in.
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
                 Plain(
                     "The added member's body could not be fully bound in the hot-reload compilation ({0}): "
                     + "the members of the introduced type {1} were bound to the compiled {2} when that type "
-                    + "was introduced, while this reload builds {2} from source ({3}, passed or carried in to "
-                    + "keep an earlier reload's binding), so the {2} this body uses no longer matches and it "
-                    + "is skipped. Run 'uloop compile', or, if the edit in {3} can wait for that compile (for "
-                    + "example an added enum member, which hot reload does not apply), undo it until then and "
-                    + "leave {3} out of --files; leaving it out alone does not help while its source matches what an "
-                    + "earlier reload was given, because it is carried in again, and if it is still carried "
-                    + "in after the undo, run 'uloop compile'.",
+                    + "was introduced, while this reload builds {2} from source ({3}), so the {2} this body "
+                    + "uses no longer matches and it is skipped.",
                     4));
 
             templates.Add(
@@ -263,7 +256,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Uses an added property that hot reload cannot emit.",
                     0,
                     " The property body was refused because: ",
-                    "").EndingWith(CompileCallToAction));
+                    "").EndingWith(CompileCallToAction).EndingWithWhenDetailIsCarriedIn(AccessorRowNamesTheStep));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedPropertyAccessorExcludedFromReload,
                 // Why no single row is named: an accessor is left out when its own shim failed to

@@ -1571,13 +1571,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssertHasFailed(result, "ReadSiblingEnum");
                 Assert.That(
                     result.Warnings,
-                    Has.Some.EqualTo(ExpectedAddedSiblingEnumMemberWarning),
+                    Has.Some.EqualTo(ExpectedSiblingEnumMemberWarning),
                     "Expected the added-enum-member warning.\n" + string.Join("\n", result.Warnings));
                 Assert.That(
                     result.Warnings,
-                    Has.None.EqualTo(ExpectedSiblingEnumMemberWarning),
-                    "The enum file is in this reload, so no copy of the warning may drop the advice "
-                    + "about leaving it out of --files.\n" + string.Join("\n", result.Warnings));
+                    Has.None.Contains("leave that file out of --files"),
+                    "The step for a skipped member belongs to its Skipped row, so the warning must not "
+                    + "name one.\n" + string.Join("\n", result.Warnings));
                 Assert.That(
                     result.Warnings,
                     Has.None.Contains("needs no compile"),
@@ -8562,10 +8562,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string ExpectedSiblingEnumMemberWarning =
             "enum member io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum.Third exists only in the edited source, not in the compiled assembly. Hot reload does not fold an added enum member into patched bodies, so every body that names it fails shim compilation (CS0117), including bodies in this reload's files. Write the underlying value as a cast instead ('(io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum)3'; ToString() then prints the number, not the name), or run 'uloop compile' to add the member.";
-
-        private const string ExpectedAddedSiblingEnumMemberWarning =
-            ExpectedSiblingEnumMemberWarning
-            + " With the file that declares io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum in this reload, an added member that passes io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum to or takes it from compiled code or a type hot reload introduced is skipped; to keep such a member hot reloading, leave that file out of --files until you compile; if it is carried in anyway because an earlier reload was given this same source, also undo the enum edit until you compile, and run 'uloop compile' if it is still carried in.";
 
         private static IDisposable MutateSiblingEnumToAddMemberAndUseIt()
         {

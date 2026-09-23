@@ -284,22 +284,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "CS1503: Argument 1: cannot convert", "'Example.Payload'", "'Example.Registry'", "'Assets/Registry.cs'" },
                 "The added member's body could not be fully bound in the hot-reload compilation "
                 + "(CS1503: Argument 1: cannot convert): this reload declares 'Example.Payload' from source, "
-                + "while the compiled signatures of 'Example.Registry' still name the compiled 'Example.Payload', "
-                + "so it is skipped. Pass 'Assets/Registry.cs' to this reload as well so both bind to the same type. "
-                + "Otherwise run 'uloop compile'.");
+                + "while the compiled signatures of 'Example.Registry', declared in 'Assets/Registry.cs', "
+                + "still name the compiled 'Example.Payload', so it is skipped.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
                 new[] { "CS1503: Argument 1: cannot convert", "'Example.Sink'", "'Example.Payload'", "'Assets/Payload.cs'" },
                 "The added member's body could not be fully bound in the hot-reload compilation "
                 + "(CS1503: Argument 1: cannot convert): the members of the introduced type 'Example.Sink' were "
                 + "bound to the compiled 'Example.Payload' when that type was introduced, while this reload builds "
-                + "'Example.Payload' from source ('Assets/Payload.cs', passed or carried in to keep an earlier "
-                + "reload's binding), so the 'Example.Payload' this body uses no longer matches and it is skipped. "
-                + "Run 'uloop compile', or, if the edit in 'Assets/Payload.cs' can wait for that compile (for "
-                + "example an added enum member, which hot reload does not apply), undo it until then and leave "
-                + "'Assets/Payload.cs' out of --files; leaving it out alone does not help while its source "
-                + "matches what an earlier reload was given, because it is carried in again, and if it is "
-                + "still carried in after the undo, run 'uloop compile'.");
+                + "'Example.Payload' from source ('Assets/Payload.cs'), so the 'Example.Payload' this body uses "
+                + "no longer matches and it is skipped.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,
@@ -761,6 +755,89 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Calls the added method 'Host.Added()', which this reload did not apply; the caller was left unpatched. "
                 + "That method's own row gives the reason: fix its compile error when it Failed, or the failure "
                 + "elsewhere in its file when it was Skipped, and reload again, or run 'uloop compile'.");
+        }
+
+        /// <summary>
+        /// What: a carried-in skip nested under an added property keeps only its facts, so the
+        /// step chosen for the accessor's own row is not repeated here with other wording.
+        /// </summary>
+        [Test]
+        public void Render_AddedPropertyWithCarriedInDetail_KeepsTheDetailToItsFacts()
+        {
+            string rendered = HotReloadWorkerReasonText.Render(
+                AddedPropertyWithDetail(CarriedInDetail(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature)));
+
+            Assert.That(
+                rendered,
+                Does.EndWith(
+                    "The property body was refused because: The added member's body could not be fully bound "
+                    + "in the hot-reload compilation (CS1503: cannot convert): this reload declares "
+                    + "'Example.Payload' from source, while the compiled signatures of 'Example.Registry', "
+                    + "declared in 'Assets/Registry.cs', still name the compiled 'Example.Payload', so it is skipped."));
+            Assert.That(rendered, Does.Not.Contain("Pass "));
+        }
+
+        /// <summary>
+        /// What: an added property refused for a carried-in skip ends by pointing to the accessor's
+        /// Skipped row instead of asking for a compile, for either carried-in reason.
+        /// </summary>
+        [Test]
+        public void Render_AddedPropertyWithCarriedInDetail_PointsToTheAccessorRow()
+        {
+            string compiledSignature = HotReloadWorkerReasonText.Render(
+                AddedPropertyWithDetail(CarriedInDetail(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature)));
+            string carriedIn = HotReloadWorkerReasonText.Render(
+                AddedPropertyWithDetail(
+                    CarriedInDetail(HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType)));
+
+            string expectedStart = "Uses an added property that hot reload cannot emit. "
+                + "The Skipped row for the property's accessor names the step to take. "
+                + "The property body was refused because: ";
+            Assert.That(compiledSignature, Does.StartWith(expectedStart));
+            Assert.That(carriedIn, Does.StartWith(expectedStart));
+            Assert.That(compiledSignature, Does.Not.Contain("uloop compile"));
+            Assert.That(carriedIn, Does.Not.Contain("uloop compile"));
+        }
+
+        /// <summary>
+        /// What: an added property refused for any other reason still ends with the compile call.
+        /// </summary>
+        [Test]
+        public void Render_AddedPropertyWithOtherDetail_KeepsTheCompileCall()
+        {
+            TransformWorkerReasonDto detail = new TransformWorkerReasonDto
+            {
+                code = HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
+                args = new[] { "CS0103: missing" }
+            };
+
+            string rendered = HotReloadWorkerReasonText.Render(AddedPropertyWithDetail(detail));
+
+            Assert.That(
+                rendered,
+                Does.StartWith(
+                    "Uses an added property that hot reload cannot emit. Run 'uloop compile'. "
+                    + "The property body was refused because: "));
+            Assert.That(rendered, Does.Not.Contain("accessor names the step"));
+        }
+
+        private static TransformWorkerReasonDto AddedPropertyWithDetail(TransformWorkerReasonDto detail)
+        {
+            return new TransformWorkerReasonDto
+            {
+                code = HotReloadWorkerReasonCode.AddedPropertyUnavailableAddedProperty,
+                args = NoArgs,
+                detail = detail
+            };
+        }
+
+        private static TransformWorkerReasonDto CarriedInDetail(HotReloadWorkerReasonCode code)
+        {
+            return new TransformWorkerReasonDto
+            {
+                code = code,
+                args = new[] { "CS1503: cannot convert", "'Example.Payload'", "'Example.Registry'", "'Assets/Registry.cs'" }
+            };
         }
 
         private static TestCaseData Case(HotReloadWorkerReasonCode code, string[] args, string expected)

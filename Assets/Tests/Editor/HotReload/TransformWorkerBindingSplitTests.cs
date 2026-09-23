@@ -115,8 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: when the added method cannot bind because this run declares the payload from source
         /// while a compiled API still takes the compiled payload, the skipped row names the compiled
-        /// type whose signature holds the old payload and the file that declares it, so the reader
-        /// knows which file to pass as well instead of only being told to compile.
+        /// type whose signature holds the old payload and the file that declares it, and leaves the
+        /// next step to the Editor, which knows whether that file is already in the run.
         /// </summary>
         [Test]
         public async Task Run_HostWithThePayloadFile_NamesTheFileDeclaringTheCompiledSignature()
@@ -132,8 +132,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string text = HotReloadWorkerReasonText.Render(skipped.reason);
             Assert.That(text, Does.Contain("'" + PayloadTypeMetadataName + "'"), text);
             Assert.That(text, Does.Contain("'" + RegistryTypeMetadataName + "'"), text);
-            Assert.That(text, Does.Contain("Pass 'Assets/Tests/Editor/HotReload/" + RegistryFileName + "'"), text);
-            Assert.That(text, Does.Contain("uloop compile"), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + RegistryFileName + "'"), text);
+            Assert.That(text, Does.EndWith("so it is skipped."), text);
         }
 
         /// <summary>
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
             string text = HotReloadWorkerReasonText.Render(skipped.reason);
             Assert.That(text, Does.Contain("'" + NestedRegistryTypeMetadataName + "'"), text);
-            Assert.That(text, Does.Contain("Pass 'Assets/Tests/Editor/HotReload/" + NestedRegistryFileName + "'"), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + NestedRegistryFileName + "'"), text);
         }
 
         /// <summary>
@@ -198,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(skipped, Is.Not.Null, "Missing skipped row for Twice.\n" + FormatSkipped(result));
             string text = HotReloadWorkerReasonText.Render(skipped.reason);
             Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature), text);
-            Assert.That(text, Does.Contain("Pass 'Assets/Tests/Editor/HotReload/" + ExtensionsFileName + "'"), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + ExtensionsFileName + "'"), text);
         }
 
         /// <summary>
@@ -218,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string text = HotReloadWorkerReasonText.Render(skipped.reason);
             Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature), text);
             Assert.That(text, Does.Contain("'" + RegistryTypeMetadataName + "'"), text);
-            Assert.That(text, Does.Contain("Pass 'Assets/Tests/Editor/HotReload/" + RegistryFileName + "'"), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + RegistryFileName + "'"), text);
         }
 
         /// <summary>
