@@ -272,6 +272,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a script listed twice in --files reaches the run once, as the first raw entry, and
+        /// the response message starts with the sentence saying so.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilesListAScriptTwice_RunsItOnceAndSaysSo()
+        {
+            using IDisposable detectorScope = BeginChangedFiles("Assets/Changed1.cs");
+            List<string> appliedFiles = new List<string>();
+            using IDisposable orchestratorScope = BeginRecordingOrchestrator(appliedFiles);
+
+            HotReloadResponse response = await ExecuteAsync(
+                new JObject { ["Files"] = new JArray("./Assets/Explicit.cs", "Assets/Explicit.cs") });
+
+            Assert.That(appliedFiles, Is.EqualTo(new[] { "./Assets/Explicit.cs" }));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "--files listed 'Assets/Explicit.cs' 2 times; it was processed once. "
+                    + AppliedMessageTail));
+        }
+
+        /// <summary>
         /// What: without compile snapshots an omitted --files run still fails, even when a discarded
         /// owner file could be selected.
         /// </summary>

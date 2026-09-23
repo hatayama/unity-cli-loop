@@ -6,7 +6,8 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Files and response details chosen when callers omit the hot-reload files parameter.
+    /// Files and response details chosen for a hot-reload run: the explicit files reduced to one
+    /// entry per script, or the changed files selected when callers omit the files parameter.
     /// </summary>
     internal sealed class HotReloadDefaultFileSelection
     {
@@ -32,28 +33,84 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Resolves omitted hot-reload files from compile snapshots without mixing selection with apply execution.
+    /// Resolves the files a hot-reload run applies, from the explicit files parameter or, when it is
+    /// omitted, from compile snapshots, without mixing selection with apply execution.
     /// </summary>
     internal static class HotReloadDefaultFileSelector
     {
         internal static HotReloadDefaultFileSelection Resolve(
             string[] files,
             Func<HotReloadChangedFileAggregationResult> changedFileDetector,
-            IReadOnlyList<string> droppedIntroducedSourcePaths)
+            IReadOnlyList<string> droppedIntroducedSourcePaths,
+            Func<string, string> toProjectRelativePath)
         {
             Debug.Assert(changedFileDetector != null, "changedFileDetector must not be null.");
             Debug.Assert(droppedIntroducedSourcePaths != null, "droppedIntroducedSourcePaths must not be null.");
+            Debug.Assert(toProjectRelativePath != null, "toProjectRelativePath must not be null.");
 
             if (files != null && files.Length > 0)
             {
-                return new HotReloadDefaultFileSelection(
-                    files,
-                    Array.Empty<string>(),
-                    string.Empty,
-                    validationFailure: null);
+                return SelectExplicitFiles(files, toProjectRelativePath);
             }
 
             return SelectChangedFiles(changedFileDetector(), droppedIntroducedSourcePaths);
+        }
+
+        // Why duplicates are dropped here rather than in the run: a script listed twice was applied
+        // twice, and the second copy's rows and warnings repeated the first or contradicted it.
+        // The first raw entry is kept so the run sees the same string the caller typed.
+        private static HotReloadDefaultFileSelection SelectExplicitFiles(
+            string[] files,
+            Func<string, string> toProjectRelativePath)
+        {
+            Dictionary<string, int> countByPath =
+                new Dictionary<string, int>(HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
+            List<string> pathsInFirstSeenOrder = new List<string>();
+            List<string> distinctFiles = new List<string>();
+            for (int index = 0; index < files.Length; index++)
+            {
+                string path = toProjectRelativePath(files[index]);
+                if (countByPath.TryGetValue(path, out int count))
+                {
+                    countByPath[path] = count + 1;
+                    continue;
+                }
+
+                countByPath.Add(path, 1);
+                pathsInFirstSeenOrder.Add(path);
+                distinctFiles.Add(files[index]);
+            }
+
+            return new HotReloadDefaultFileSelection(
+                distinctFiles,
+                Array.Empty<string>(),
+                BuildDuplicateFilesMessage(pathsInFirstSeenOrder, countByPath),
+                validationFailure: null);
+        }
+
+        private static string BuildDuplicateFilesMessage(
+            IReadOnlyList<string> pathsInFirstSeenOrder,
+            IReadOnlyDictionary<string, int> countByPath)
+        {
+            List<string> repeated = new List<string>();
+            for (int index = 0; index < pathsInFirstSeenOrder.Count; index++)
+            {
+                string path = pathsInFirstSeenOrder[index];
+                int count = countByPath[path];
+                if (count > 1)
+                {
+                    repeated.Add("'" + path + "' " + count + " times");
+                }
+            }
+
+            if (repeated.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return "--files listed "
+                + string.Join(" and ", repeated)
+                + (repeated.Count == 1 ? "; it was processed once." : "; each was processed once.");
         }
 
         private static HotReloadDefaultFileSelection SelectChangedFiles(
