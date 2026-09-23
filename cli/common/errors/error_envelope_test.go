@@ -289,7 +289,7 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
 		t.Fatalf("retry flags mismatch: %#v", cliErr)
 	}
-	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. uloop is single-flight per Editor, so the CLI already retried for up to 10 seconds. Wait for 'compile' to complete, then run the command once more; do not retry in a loop."
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. uloop is single-flight per Editor. Wait for 'compile' to complete, then run the command once more; do not retry in a loop."
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %s", cliErr.Message)
 	}
@@ -312,7 +312,7 @@ func TestClassifyServerBusyRPCError_WhenElapsedSecondsPresent_IncludesElapsedMes
 	}
 
 	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-logs"})
-	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile' (running for 12s). uloop is single-flight per Editor, so the CLI already retried for up to 10 seconds. Wait for 'compile' to complete, then run the command once more; do not retry in a loop."
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile' (running for 12s). uloop is single-flight per Editor. Wait for 'compile' to complete, then run the command once more; do not retry in a loop."
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %s", cliErr.Message)
 	}
@@ -387,7 +387,7 @@ func TestWriteClassifiedServerBusyRPCErrorWritesErrorEnvelope(t *testing.T) {
 	if envelope.Error.ErrorCode != errorCodeUnityServerBusy {
 		t.Fatalf("error code mismatch: %#v", envelope)
 	}
-	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. uloop is single-flight per Editor, so the CLI already retried for up to 10 seconds. Wait for 'compile' to complete, then run the command once more; do not retry in a loop."
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. uloop is single-flight per Editor. Wait for 'compile' to complete, then run the command once more; do not retry in a loop."
 	if envelope.Error.Message != expectedMessage {
 		t.Fatalf("message mismatch: %#v", envelope)
 	}
