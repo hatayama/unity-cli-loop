@@ -35,7 +35,7 @@ const (
 var NativeCommands = []NativeCommandEntry{
 	{Name: LaunchCommandName, Description: "Open this Unity project with the matching Editor version", Owner: DispatcherOwned},
 	// Why compile-check is hidden: it covers too few situations to recommend yet, so it stays
-	// runnable for anyone who already uses it but is no longer advertised.
+	// runnable for development while nothing user-facing advertises it.
 	{Name: CompileCheckCommandName, Description: "Compile changed assemblies with the Editor's bundled C# compiler without launching Unity", Owner: DispatcherOwned, Hidden: true},
 	{Name: "list", Description: "Show Unity tools currently exposed by the Editor", Owner: RunnerOwned},
 	{Name: "sync", Description: "Refresh .uloop/tools.json from the running Editor", Owner: RunnerOwned},
