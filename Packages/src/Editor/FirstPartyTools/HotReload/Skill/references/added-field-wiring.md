@@ -109,3 +109,7 @@ What play mode costs depends on the project's Enter Play Mode Options.
 
 Values never survive either way: play mode builds the scene's objects again, and an added field on
 a new instance starts at its initializer. Wire the instance you are actually looking at.
+When the re-apply brings back changes the domain reload discarded, its `Warnings` names the added
+fields of those changed types: any value wired into them before the domain reload is gone, so wire
+them again before code that reads them runs. The list can include a field the re-apply adds for the
+first time, which never held a wired value.

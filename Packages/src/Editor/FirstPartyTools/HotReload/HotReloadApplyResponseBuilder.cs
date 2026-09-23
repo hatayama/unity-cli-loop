@@ -17,7 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static HotReloadResponse Build(
             HotReloadServices services,
             HotReloadOrchestratorResult result,
-            IReadOnlyList<string> additionalWarnings)
+            IReadOnlyList<string> additionalWarnings,
+            IReadOnlyList<string> recoveredDropIdentities)
         {
             Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
@@ -108,6 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Armed pause points could not be re-targeted and will not fire until the patch "
                     + $"is reverted or compiled for real: {ids}");
             }
+
+            // Why after the count snapshot: wiring is a step the caller takes by hand, and a
+            // compile does not bring the values back, so this must suppress the single-compile
+            // suffix the way the pause-point extras do.
+            HotReloadRewireAfterDomainReloadWarning.Append(
+                warnings,
+                result.AddedFields,
+                recoveredDropIdentities);
 
             // Why snapshot here: hold warnings are not compile-resolution extras, so they
             // must not hide the single-compile suffix the way pause-point extras do.

@@ -458,6 +458,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an apply returns only the identities the ledger held, so a change first made
+        /// by this run is not reported as one the domain reload discarded.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_ReturnsOnlyIdentitiesTheLedgerHeld()
+        {
+            string introducedIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1");
+            HotReloadPlayModeEntryDropLedger.Record(new[] { "Type.Patched()", introducedIdentity, "Type.Kept()" });
+
+            IReadOnlyList<string> recovered = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Patched()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Added("Type.New()", "Assets/A.cs")
+                },
+                new List<HotReloadIntroducedTypeOutcome>
+                {
+                    HotReloadIntroducedTypeOutcome.Introduced("Fixture.T1", "Fixture.Assembly", "Assets/A.cs"),
+                    HotReloadIntroducedTypeOutcome.Introduced("Fixture.T2", "Fixture.Assembly", "Assets/A.cs")
+                });
+
+            Assert.That(recovered, Is.EquivalentTo(new[] { "Type.Patched()", introducedIdentity }));
+        }
+
+        /// <summary>
         /// What: a domain with no patch, no added member, and no introduced type collects nothing,
         /// which is what keeps Play entry from recording a drop that never happened.
         /// </summary>
