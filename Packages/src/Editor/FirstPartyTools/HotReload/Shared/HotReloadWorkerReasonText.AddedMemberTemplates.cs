@@ -100,14 +100,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic,
                 Plain(
-                    "Added field initializer is not a literal or an externally visible static member "
+                    "Added field '{0}' has an initializer that is not a literal or an externally visible static member "
                     + "(object creation other than an introduced type, and instance, host-type, or same-file "
                     + "added members cannot run in the shim lambda). Drop the initializer and assign the field inside the patched method "
                     + "instead - an added field without an initializer applies without compiling and starts "
                     + "at default(T); for a reference type, guard the assignment with "
                     + "'if (_field == null) { _field = ...; }' ('??=' is not rewritable). "
                     + "Or run 'uloop compile'.",
-                    0));
+                    1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldFieldTypeNotExternallyVisible,
                 Plain("Added field type is not visible to the shim assembly.", 0).EndingWith(CompileCallToAction));

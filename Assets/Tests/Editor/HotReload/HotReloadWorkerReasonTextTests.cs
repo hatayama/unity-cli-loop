@@ -304,8 +304,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "Run 'uloop compile' to add the field.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic,
-                NoArgs,
-                "Added field initializer is not a literal or an externally visible static member "
+                new[] { "_cache" },
+                "Added field '_cache' has an initializer that is not a literal or an externally visible static member "
                 + "(object creation other than an introduced type, and instance, host-type, or same-file "
                 + "added members cannot run in the shim lambda). Drop the initializer and assign the field inside the patched method "
                 + "instead - an added field without an initializer applies without compiling and starts "

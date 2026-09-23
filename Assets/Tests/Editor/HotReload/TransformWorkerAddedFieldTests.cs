@@ -729,7 +729,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an added field initializer that touches a host instance member skips, including
-        /// private fields, because the static shim lambda cannot bind those names.
+        /// private fields, because the static shim lambda cannot bind those names, and the
+        /// reason names the added field.
         /// </summary>
         [Test]
         public async Task Skip_PrivateInitializer_UsesLiteralOrExternalStaticReason()
@@ -748,6 +749,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "Drop the initializer");
+            AssertHasSkip(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                "Added field 'AddedFromPrivate' has an initializer");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
         }
 

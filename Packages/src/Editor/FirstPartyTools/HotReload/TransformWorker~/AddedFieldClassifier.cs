@@ -146,7 +146,7 @@ internal static class AddedFieldClassifier
             binding.Initializer,
             sourceUnit,
             out ITypeSymbol unresolvedStoreType);
-        return DescribeStoreAvailability(availability, unresolvedStoreType);
+        return DescribeStoreAvailability(availability, unresolvedStoreType, fieldSymbol.Name);
     }
 
     /// <summary>
@@ -200,7 +200,8 @@ internal static class AddedFieldClassifier
     /// <summary>Words a store outcome as the skip reason an added field reports.</summary>
     private static WorkerReason DescribeStoreAvailability(
         AddedFieldStoreAvailability availability,
-        ITypeSymbol unresolvedType)
+        ITypeSymbol unresolvedType,
+        string fieldName)
     {
         switch (availability)
         {
@@ -215,7 +216,9 @@ internal static class AddedFieldClassifier
             case AddedFieldStoreAvailability.ValueTypeNotExternallyVisible:
                 return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldFieldTypeNotExternallyVisible);
             default:
-                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic);
+                return WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic,
+                    fieldName);
         }
     }
 
