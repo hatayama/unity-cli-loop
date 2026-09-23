@@ -47,9 +47,10 @@ internal static class ReappliedSiblingBodyGuard
     // Why not CompiledSignatureSplitCollector: it names a compiled API whose signature still takes
     // the compiled copy of a type this run declares, while here the member itself is missing from
     // the compiled type, so there is no split for it to find.
-    // Why only a receiver of the target assembly that no run file declares: a type the run declares
-    // is already in source, so no file is left to pass, and a type of another assembly cannot be
-    // supplied through --files of this assembly's reload.
+    // Why only a receiver of the target assembly that no run file declares, even as a compiled copy
+    // reached through a compiled API: a type the run declares is already in source, so no file is
+    // left to pass, and a type of another assembly cannot be supplied through --files of this
+    // assembly's reload.
     private static INamedTypeSymbol FindCompiledReceiverOfUnboundMember(
         SemanticModel semanticModel,
         SyntaxNode methodBodyNode,
@@ -68,6 +69,14 @@ internal static class ReappliedSiblingBodyGuard
             }
 
             if (receiver.DeclaringSyntaxReferences.Length > 0)
+            {
+                continue;
+            }
+
+            // Why also look the type up in source: a compiled API hands out the compiled copy even
+            // when a run file declares the same type, and that copy has no syntax references.
+            string reflectionName = CecilTypeNames.ToMetadataName(receiver.OriginalDefinition).Replace('/', '+');
+            if (semanticModel.Compilation.Assembly.GetTypeByMetadataName(reflectionName) != null)
             {
                 continue;
             }
