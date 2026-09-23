@@ -80,6 +80,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // null for a file the caller passed, which keeps one warning per file.
         internal HotReloadSiblingBaselineNotices SiblingBaselineNotices { get; private set; }
 
+        // Only ForActiveSibling sets the notices, so they mark a file the run pulled in itself.
+        internal bool ReappliedSibling => SiblingBaselineNotices != null;
+
         // The path the caller asked to reload, used as the outcome file path.
         internal string AssemblyResolvePath { get; }
 

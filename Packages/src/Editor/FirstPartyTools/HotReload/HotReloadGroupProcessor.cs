@@ -462,7 +462,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     sourcePath = Path.GetFullPath(file.WorkerSourcePath),
                     projectRelativePath = file.ProjectRelativePath,
-                    snapshotSource = file.SnapshotSource
+                    snapshotSource = file.SnapshotSource,
+                    reappliedSibling = file.ReappliedSibling
                 };
             }
 

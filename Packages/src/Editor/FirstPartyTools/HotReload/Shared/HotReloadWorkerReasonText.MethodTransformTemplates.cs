@@ -54,6 +54,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 Plain("Explicit interface implementations are skipped.", 0));
+            // Why {2} is not a worker value: it is the file that declares the compiled type,
+            // which only the Editor resolves, and TransformWorkerCompiledTypeFileCompleter appends it.
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformSiblingBodyBindsCompiledType,
+                Plain(
+                    "This file was brought back to re-bind its active patches, but this method's body no "
+                    + "longer binds here ({0}): it uses a member of {1} that this reload was not given the "
+                    + "source of. Any earlier patch of this method stays active. Pass {2} to --files "
+                    + "together with this file, or run 'uloop compile'.",
+                    3));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformSiblingBodyUnbound,
+                Plain(
+                    "This file was brought back to re-bind its active patches, but this method's body no "
+                    + "longer binds here ({0}), so it is skipped rather than failed; any earlier patch of it "
+                    + "stays active. Pass the file that declares the missing name to --files together with "
+                    + "this file, or run 'uloop compile'.",
+                    1));
         }
     }
 }

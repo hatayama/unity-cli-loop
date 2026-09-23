@@ -242,6 +242,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonText.Render(skipped.reason));
         }
 
+        /// <summary>
+        /// What: in a file the run pulled in as a sibling, an existing body that reaches a member
+        /// the run's own copy of the payload adds, through a compiled API that hands out the
+        /// compiled payload, gets the plain unbound reason rather than a reason telling the reader
+        /// to pass the payload file, which this run already holds.
+        /// </summary>
+        [Test]
+        public async Task Run_ReappliedSiblingReachingACompiledCopyOfARunType_DoesNotNameThatTypeToPass()
+        {
+            TransformWorkerInputDto input = BuildInput(
+                new[] { HostFileName, PayloadFileName },
+                new[]
+                {
+                    ReadOnDisk(HostFileName).Replace(
+                        "_handled += payload.Value;",
+                        "_handled += _registry[3].Tripled();",
+                        StringComparison.Ordinal),
+                    ReadOnDisk(PayloadFileName).Replace(
+                        "        public int Scaled()",
+                        "        public int Tripled()\n        {\n            return Value * 3;\n        }\n\n        public int Scaled()",
+                        StringComparison.Ordinal)
+                });
+            input.sources[0].reappliedSibling = true;
+
+            TransformWorkerClientResult result =
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Handle");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Handle.\n" + FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformSiblingBodyUnbound),
+                HotReloadWorkerReasonText.Render(skipped.reason));
+        }
+
         private static string WithMethod(string hostSource, string method)
         {
             Assert.That(hostSource, Does.Contain(InsertionAnchor), "Precondition: anchor must exist.");
@@ -301,6 +337,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // project-relative path, with the source on disk as the snapshot the worker diffs against.
         private static async Task<TransformWorkerClientResult> RunAsync(string[] fileNames, string[] editedSources)
         {
+            TransformWorkerInputDto input = BuildInput(fileNames, editedSources);
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+        }
+
+        private static TransformWorkerInputDto BuildInput(string[] fileNames, string[] editedSources)
+        {
             Assert.That(editedSources.Length, Is.EqualTo(fileNames.Length), "One edited source per file.");
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(projectRoot, "Library", "ScriptAssemblies", TestAssemblyName + ".dll");
@@ -320,7 +362,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 };
             }
 
-            TransformWorkerInputDto input = new TransformWorkerInputDto
+            return new TransformWorkerInputDto
             {
                 sources = sources,
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
@@ -330,8 +372,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 excludedMethodKeys = Array.Empty<string>(),
                 excludedAddedMethodKeys = Array.Empty<string>()
             };
-
-            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         private static UnityEditor.Compilation.Assembly FindCompilationAssembly()
