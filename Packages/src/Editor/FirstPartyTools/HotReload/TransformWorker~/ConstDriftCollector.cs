@@ -26,6 +26,18 @@ internal static class ConstDriftCollector
     internal const string NewEnumMemberWarningFormat =
         "enum member {0} exists only in the edited source, not in the compiled assembly. Hot reload does not fold an added enum member into patched bodies, so every body that names it fails shim compilation (CS0117), including bodies in this reload's files. Write the underlying value as a cast instead ('({1}){2}'; ToString() then prints the number, not the name), or run 'uloop compile' to add the member.";
 
+    // Why only for a file in this reload: the enum file then builds the enum from source, so an
+    // added member whose compiled neighbours still name the compiled enum cannot bind and is
+    // skipped. A changed file outside the reload is already left out, and the cast alone lets
+    // such members through, so the advice would send the user the wrong way.
+    // Why not "only while": only added members that pass the enum to, or take it from, compiled
+    // code or an introduced type are skipped; other added members still hot reload.
+    // Why the carried-in fallback: the worker cannot tell a passed file from one carried in
+    // because an earlier reload recorded the same source, and leaving the latter out of --files
+    // does nothing, so the advice has to cover that case too.
+    internal const string EnumFileInReloadWarningFormat =
+        " With the file that declares {0} in this reload, an added member that passes {0} to or takes it from compiled code or a type hot reload introduced is skipped; to keep such a member hot reloading, leave that file out of --files until you compile; if it is carried in anyway because an earlier reload was given this same source, also undo the enum edit until you compile, and run 'uloop compile' if it is still carried in.";
+
     internal const string ChangedConstWarningFormat =
         "const {0} is {1} in the edited source but {2} in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with {1} yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change.";
 
@@ -35,11 +47,14 @@ internal static class ConstDriftCollector
     /// C# inlines const values at compile time and shims compile against the already-compiled
     /// assembly, so value edits silently keep the old value at runtime; new consts fold into
     /// the bodies patched by this reload but fail shim compilation in files outside it.
+    /// isFileInReload tells whether the scanned file is passed or carried into this reload,
+    /// which decides whether an added enum member warns about keeping the file out of --files.
     /// </summary>
     internal static List<string> CollectConstDriftWarnings(
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
-        WorkerTypeHome home)
+        WorkerTypeHome home,
+        bool isFileInReload)
     {
         List<string> warnings = new List<string>();
         if (home.AssemblySymbol == null)
@@ -72,6 +87,9 @@ internal static class ConstDriftCollector
                 continue;
             }
 
+            // Why once per enum: several added members of one enum each get a warning, and the
+            // file advice is about the enum's file, so repeating it on every line adds nothing.
+            bool needsEnumFileInReloadAdvice = isFileInReload && sourceType.TypeKind == TypeKind.Enum;
             foreach (IFieldSymbol sourceField in sourceType.GetMembers().OfType<IFieldSymbol>())
             {
                 if (!sourceField.HasConstantValue)
@@ -92,7 +110,17 @@ internal static class ConstDriftCollector
                 string constDisplayName = sourceType.ToDisplayString() + "." + sourceField.Name;
                 if (compiledField == null)
                 {
-                    warnings.Add(FormatNewConstWarning(sourceType, sourceField, constDisplayName));
+                    string newConstWarning = FormatNewConstWarning(sourceType, sourceField, constDisplayName);
+                    if (needsEnumFileInReloadAdvice)
+                    {
+                        newConstWarning += string.Format(
+                            CultureInfo.InvariantCulture,
+                            EnumFileInReloadWarningFormat,
+                            sourceType.ToDisplayString());
+                        needsEnumFileInReloadAdvice = false;
+                    }
+
+                    warnings.Add(newConstWarning);
                     continue;
                 }
 
