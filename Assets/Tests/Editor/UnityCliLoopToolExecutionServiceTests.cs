@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             long timestamp = 0;
             ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
-            session.TryEnter("running-tool");
+            ToolExecutionLease runningLease = session.TryEnter("running-tool").Lease;
             timestamp += 5 * Stopwatch.Frequency;
 
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
@@ -127,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(exception.RequestedToolName, Is.EqualTo(requestedTool.ToolName));
             Assert.That(exception.RunningToolElapsedSeconds, Is.EqualTo(5));
 
-            session.Exit();
+            runningLease.Dispose();
         }
 
         [Test]

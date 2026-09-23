@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -14,8 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
         private readonly object _executionStateLock = new();
         private readonly Func<long> _timestampProvider;
+        private readonly HashSet<ToolExecutionLease> _activeLeases = new();
         private string _runningToolName;
-        private int _runningExecutionCount;
         private long _runningStartedTimestamp;
 
         internal ToolExecutionSession(Func<long> timestampProvider = null)
@@ -52,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     enterResult.RunningToolElapsedSeconds);
             }
 
-            return ToolExecutionSessionBeginResult.Entered(tool);
+            return ToolExecutionSessionBeginResult.Entered(tool, enterResult.Lease);
         }
 
         internal ToolExecutionSessionEnterResult TryEnter(string requestedToolName)
@@ -61,20 +62,18 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             lock (_executionStateLock)
             {
-                if (_runningExecutionCount == 0)
+                if (_activeLeases.Count == 0)
                 {
                     _runningToolName = requestedToolName;
-                    _runningExecutionCount = 1;
                     _runningStartedTimestamp = _timestampProvider();
-                    return ToolExecutionSessionEnterResult.Entered();
+                    return ToolExecutionSessionEnterResult.Entered(IssueLeaseInsideLock());
                 }
 
                 if (CanShareExecutionSlot(_runningToolName, requestedToolName))
                 {
                     // Why not refresh the start timestamp: shared-slot re-entry is the same
                     // flight, so elapsed must keep measuring from the first Begin.
-                    _runningExecutionCount++;
-                    return ToolExecutionSessionEnterResult.Entered();
+                    return ToolExecutionSessionEnterResult.Entered(IssueLeaseInsideLock());
                 }
 
                 return ToolExecutionSessionEnterResult.Busy(
@@ -83,13 +82,20 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
         }
 
-        internal void Exit()
+        // Returns the slot a lease holds. Only a lease that is still active gives anything back,
+        // so a second Dispose of the same lease cannot release a slot a later holder owns.
+        internal void Release(ToolExecutionLease lease)
         {
+            Debug.Assert(lease != null, "lease must not be null");
+
             lock (_executionStateLock)
             {
-                Debug.Assert(_runningExecutionCount > 0, "running execution count must be positive before exit");
-                _runningExecutionCount--;
-                if (_runningExecutionCount > 0)
+                if (!_activeLeases.Remove(lease))
+                {
+                    return;
+                }
+
+                if (_activeLeases.Count > 0)
                 {
                     return;
                 }
@@ -97,6 +103,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 _runningToolName = null;
                 _runningStartedTimestamp = 0;
             }
+        }
+
+        private ToolExecutionLease IssueLeaseInsideLock()
+        {
+            ToolExecutionLease lease = new ToolExecutionLease(this);
+            _activeLeases.Add(lease);
+            return lease;
         }
 
         private static bool CanShareExecutionSlot(string runningToolName, string requestedToolName)
@@ -121,40 +134,65 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     }
 
     /// <summary>
+    /// Holds one entry of the execution slot; disposing it gives the entry back to its session.
+    /// </summary>
+    internal sealed class ToolExecutionLease : IDisposable
+    {
+        private readonly ToolExecutionSession _session;
+
+        internal ToolExecutionLease(ToolExecutionSession session)
+        {
+            Debug.Assert(session != null, "session must not be null");
+
+            _session = session;
+        }
+
+        public void Dispose()
+        {
+            _session.Release(this);
+        }
+    }
+
+    /// <summary>
     /// Reports whether a tool execution request passed admission and entered the session.
     /// </summary>
     internal readonly struct ToolExecutionSessionBeginResult
     {
         public readonly bool IsEntered;
         public readonly IUnityCliLoopTool Tool;
+        public readonly ToolExecutionLease Lease;
         public readonly string RunningToolName;
         public readonly int? RunningToolElapsedSeconds;
 
         private ToolExecutionSessionBeginResult(
             bool isEntered,
             IUnityCliLoopTool tool,
+            ToolExecutionLease lease,
             string runningToolName,
             int? runningToolElapsedSeconds)
         {
             Debug.Assert(isEntered == (tool != null), "entered sessions must carry a tool");
+            Debug.Assert(isEntered == (lease != null), "entered sessions must carry a lease");
             Debug.Assert(isEntered || !string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace for busy decisions");
 
             IsEntered = isEntered;
             Tool = tool;
+            Lease = lease;
             RunningToolName = runningToolName;
             RunningToolElapsedSeconds = runningToolElapsedSeconds;
         }
 
-        public static ToolExecutionSessionBeginResult Entered(IUnityCliLoopTool tool)
+        public static ToolExecutionSessionBeginResult Entered(IUnityCliLoopTool tool, ToolExecutionLease lease)
         {
             Debug.Assert(tool != null, "tool must not be null");
+            Debug.Assert(lease != null, "lease must not be null");
 
-            return new ToolExecutionSessionBeginResult(true, tool, string.Empty, null);
+            return new ToolExecutionSessionBeginResult(true, tool, lease, string.Empty, null);
         }
 
         public static ToolExecutionSessionBeginResult Busy(string runningToolName, int? runningToolElapsedSeconds = null)
         {
-            return new ToolExecutionSessionBeginResult(false, null, runningToolName, runningToolElapsedSeconds);
+            return new ToolExecutionSessionBeginResult(false, null, null, runningToolName, runningToolElapsedSeconds);
         }
     }
 
@@ -164,26 +202,35 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     internal readonly struct ToolExecutionSessionEnterResult
     {
         public readonly bool IsEntered;
+        public readonly ToolExecutionLease Lease;
         public readonly string RunningToolName;
         public readonly int? RunningToolElapsedSeconds;
 
-        private ToolExecutionSessionEnterResult(bool isEntered, string runningToolName, int? runningToolElapsedSeconds)
+        private ToolExecutionSessionEnterResult(
+            bool isEntered,
+            ToolExecutionLease lease,
+            string runningToolName,
+            int? runningToolElapsedSeconds)
         {
+            Debug.Assert(isEntered == (lease != null), "entered sessions must carry a lease");
             Debug.Assert(isEntered || !string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace for busy decisions");
 
             IsEntered = isEntered;
+            Lease = lease;
             RunningToolName = runningToolName;
             RunningToolElapsedSeconds = runningToolElapsedSeconds;
         }
 
-        public static ToolExecutionSessionEnterResult Entered()
+        public static ToolExecutionSessionEnterResult Entered(ToolExecutionLease lease)
         {
-            return new ToolExecutionSessionEnterResult(true, string.Empty, null);
+            Debug.Assert(lease != null, "lease must not be null");
+
+            return new ToolExecutionSessionEnterResult(true, lease, string.Empty, null);
         }
 
         public static ToolExecutionSessionEnterResult Busy(string runningToolName, int? runningToolElapsedSeconds = null)
         {
-            return new ToolExecutionSessionEnterResult(false, runningToolName, runningToolElapsedSeconds);
+            return new ToolExecutionSessionEnterResult(false, null, runningToolName, runningToolElapsedSeconds);
         }
     }
 }
