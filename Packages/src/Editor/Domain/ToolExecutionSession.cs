@@ -55,7 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             {
                 return ToolExecutionSessionBeginResult.Busy(
                     enterResult.RunningToolName,
-                    enterResult.RunningToolElapsedSeconds);
+                    enterResult.RunningToolElapsedSeconds,
+                    enterResult.RunningToolPhase);
             }
 
             return ToolExecutionSessionBeginResult.Entered(tool, enterResult.Lease);
@@ -97,7 +98,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             return ToolExecutionSessionEnterResult.Busy(
                 GetRunningToolNameInsideLock(),
-                GetRunningToolElapsedSecondsInsideLock());
+                GetRunningToolElapsedSecondsInsideLock(),
+                GetRunningToolPhaseInsideLock());
+        }
+
+        // Why every lease must wait: in a shared slot, one lease that is not waiting means tool
+        // code may be running, and calling the whole slot "waiting" would hide that.
+        private ToolExecutionPhase GetRunningToolPhaseInsideLock()
+        {
+            foreach (ToolExecutionLease lease in _activeLeases)
+            {
+                if (!lease.IsWaitingForMainThread)
+                {
+                    return ToolExecutionPhase.Executing;
+                }
+            }
+
+            return ToolExecutionPhase.WaitingForMainThread;
         }
 
         // A request whose client has gone away can stay stuck on an await that ignores its
@@ -227,6 +244,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         private readonly ToolExecutionSession _session;
         private readonly CancellationToken _requestCancellation;
         private long? _cancellationObservedTimestamp;
+        // A count, not a flag: one request can have several switches queued at once (WhenAll).
+        private int _pendingMainThreadWaits;
 
         internal ToolExecutionLease(
             ToolExecutionSession session,
@@ -248,6 +267,20 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         internal long IssuedTimestamp { get; }
 
         internal long CancellationObservedTimestamp => _cancellationObservedTimestamp ?? 0;
+
+        internal bool IsWaitingForMainThread => Volatile.Read(ref _pendingMainThreadWaits) > 0;
+
+        // Called from the main-thread switch path of this lease's request, which may run on any
+        // thread and must not throw, so this only updates the counter.
+        internal void MarkMainThreadWaitStarted()
+        {
+            Interlocked.Increment(ref _pendingMainThreadWaits);
+        }
+
+        internal void MarkMainThreadWaitEnded()
+        {
+            Interlocked.Decrement(ref _pendingMainThreadWaits);
+        }
 
         public void Dispose()
         {
@@ -309,13 +342,15 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public readonly ToolExecutionLease Lease;
         public readonly string RunningToolName;
         public readonly int? RunningToolElapsedSeconds;
+        public readonly ToolExecutionPhase? RunningToolPhase;
 
         private ToolExecutionSessionBeginResult(
             bool isEntered,
             IUnityCliLoopTool tool,
             ToolExecutionLease lease,
             string runningToolName,
-            int? runningToolElapsedSeconds)
+            int? runningToolElapsedSeconds,
+            ToolExecutionPhase? runningToolPhase)
         {
             Debug.Assert(isEntered == (tool != null), "entered sessions must carry a tool");
             Debug.Assert(isEntered == (lease != null), "entered sessions must carry a lease");
@@ -326,6 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Lease = lease;
             RunningToolName = runningToolName;
             RunningToolElapsedSeconds = runningToolElapsedSeconds;
+            RunningToolPhase = runningToolPhase;
         }
 
         public static ToolExecutionSessionBeginResult Entered(IUnityCliLoopTool tool, ToolExecutionLease lease)
@@ -333,12 +369,21 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(tool != null, "tool must not be null");
             Debug.Assert(lease != null, "lease must not be null");
 
-            return new ToolExecutionSessionBeginResult(true, tool, lease, string.Empty, null);
+            return new ToolExecutionSessionBeginResult(true, tool, lease, string.Empty, null, null);
         }
 
-        public static ToolExecutionSessionBeginResult Busy(string runningToolName, int? runningToolElapsedSeconds = null)
+        public static ToolExecutionSessionBeginResult Busy(
+            string runningToolName,
+            int? runningToolElapsedSeconds,
+            ToolExecutionPhase? runningToolPhase)
         {
-            return new ToolExecutionSessionBeginResult(false, null, null, runningToolName, runningToolElapsedSeconds);
+            return new ToolExecutionSessionBeginResult(
+                false,
+                null,
+                null,
+                runningToolName,
+                runningToolElapsedSeconds,
+                runningToolPhase);
         }
     }
 
@@ -351,12 +396,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public readonly ToolExecutionLease Lease;
         public readonly string RunningToolName;
         public readonly int? RunningToolElapsedSeconds;
+        public readonly ToolExecutionPhase? RunningToolPhase;
 
         private ToolExecutionSessionEnterResult(
             bool isEntered,
             ToolExecutionLease lease,
             string runningToolName,
-            int? runningToolElapsedSeconds)
+            int? runningToolElapsedSeconds,
+            ToolExecutionPhase? runningToolPhase)
         {
             Debug.Assert(isEntered == (lease != null), "entered sessions must carry a lease");
             Debug.Assert(isEntered || !string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace for busy decisions");
@@ -365,18 +412,32 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Lease = lease;
             RunningToolName = runningToolName;
             RunningToolElapsedSeconds = runningToolElapsedSeconds;
+            RunningToolPhase = runningToolPhase;
         }
 
         public static ToolExecutionSessionEnterResult Entered(ToolExecutionLease lease)
         {
             Debug.Assert(lease != null, "lease must not be null");
 
-            return new ToolExecutionSessionEnterResult(true, lease, string.Empty, null);
+            return new ToolExecutionSessionEnterResult(true, lease, string.Empty, null, null);
         }
 
-        public static ToolExecutionSessionEnterResult Busy(string runningToolName, int? runningToolElapsedSeconds = null)
+        public static ToolExecutionSessionEnterResult Busy(
+            string runningToolName,
+            int? runningToolElapsedSeconds,
+            ToolExecutionPhase? runningToolPhase)
         {
-            return new ToolExecutionSessionEnterResult(false, null, runningToolName, runningToolElapsedSeconds);
+            return new ToolExecutionSessionEnterResult(false, null, runningToolName, runningToolElapsedSeconds, runningToolPhase);
         }
+    }
+
+    /// <summary>
+    /// Tells a busy rejection whether the slot holder may be running tool code or is only waiting
+    /// for the Editor main thread. Member names are the wire values of runningToolPhase.
+    /// </summary>
+    internal enum ToolExecutionPhase
+    {
+        Executing,
+        WaitingForMainThread
     }
 }

@@ -126,8 +126,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(exception.RunningToolName, Is.EqualTo("running-tool"));
             Assert.That(exception.RequestedToolName, Is.EqualTo(requestedTool.ToolName));
             Assert.That(exception.RunningToolElapsedSeconds, Is.EqualTo(5));
+            Assert.That(exception.RunningToolPhase, Is.EqualTo("Executing"));
 
             runningLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a request that holds the slot while its switch to the Editor main thread is still
+        /// queued is reported as waiting for the main thread, not as running, and that the slot is
+        /// released once the main thread resumes it.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenHolderWaitsForMainThread_ShouldThrowBusyWithWaitingPhase()
+        {
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            registry.RegisterTool(new ImmediateTool(ImmediateTool.HolderName));
+            registry.RegisterTool(new ImmediateTool(ImmediateTool.RequestedName));
+            UnityCliLoopToolExecutionService executionService =
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), new ToolExecutionSession());
+            QueueingMainThreadDispatcher dispatcher = new QueueingMainThreadDispatcher();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            try
+            {
+                Task<UnityCliLoopToolResponse> holderTask = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.HolderName,
+                    null,
+                    CancellationToken.None);
+
+                UnityCliLoopToolBusyException exception = Assert.ThrowsAsync<UnityCliLoopToolBusyException>(
+                    () => executionService.ExecuteToolAsync(
+                        registry,
+                        ImmediateTool.RequestedName,
+                        null,
+                        CancellationToken.None));
+
+                Assert.That(exception.RunningToolName, Is.EqualTo(ImmediateTool.HolderName));
+                Assert.That(exception.RunningToolPhase, Is.EqualTo("WaitingForMainThread"));
+
+                // Why synchronous: every switch in this test, including the retry below, is queued on
+                // the fake dispatcher, so the test resumes them itself instead of spanning frames.
+                dispatcher.RunQueued();
+
+                Assert.That(holderTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+
+                Task<UnityCliLoopToolResponse> requestedTask = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.RequestedName,
+                    null,
+                    CancellationToken.None);
+                dispatcher.RunQueued();
+
+                Assert.That(requestedTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            }
+            finally
+            {
+                RestoreEditorMainThreadDispatcher();
+            }
         }
 
         /// <summary>
@@ -231,6 +287,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void AddContinuation(System.Action continuation)
             {
                 Assert.That(continuation, Is.Not.Null);
+            }
+        }
+
+        // Keeps queued continuations until the test runs them, as a stalled Editor main thread would.
+        private sealed class QueueingMainThreadDispatcher : IMainThreadDispatcher
+        {
+            private readonly List<Action> _queued = new List<Action>();
+
+            public bool IsMainThread => false;
+
+            public void Initialize()
+            {
+            }
+
+            public void AddContinuation(Action continuation)
+            {
+                Assert.That(continuation, Is.Not.Null);
+                _queued.Add(continuation);
+            }
+
+            public void RunQueued()
+            {
+                List<Action> queued = new List<Action>(_queued);
+                _queued.Clear();
+                foreach (Action continuation in queued)
+                {
+                    continuation();
+                }
+            }
+        }
+
+        private sealed class ImmediateTool : IUnityCliLoopTool
+        {
+            public const string HolderName = "holder-tool";
+            public const string RequestedName = "requested-tool";
+
+            public ImmediateTool(string toolName)
+            {
+                ToolName = toolName;
+            }
+
+            public string ToolName { get; }
+
+            public ToolParameterSchema ParameterSchema => new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                return Task.FromResult<UnityCliLoopToolResponse>(new PendingTypedResponse());
             }
         }
 

@@ -31,7 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 secondsSinceLastMainThreadTick: 1.5,
                 isCompiling: true,
                 isUpdating: false,
-                runningToolElapsedSeconds: 12);
+                runningToolElapsedSeconds: 12,
+                runningToolPhase: "WaitingForMainThread");
             string json = JsonConvert.SerializeObject(
                 errorData,
                 Formatting.None,
@@ -43,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(actualData.Value<string>("type"), Is.EqualTo("server_busy"));
             Assert.That(actualData.Value<string>("runningToolName"), Is.EqualTo("compile"));
             Assert.That(actualData.Value<string>("requestedToolName"), Is.EqualTo("get-logs"));
+            Assert.That(actualData.Value<string>("runningToolPhase"), Is.EqualTo("WaitingForMainThread"));
         }
 
         private static JObject ReadSharedErrorDataFieldShape()
