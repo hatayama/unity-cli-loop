@@ -49,14 +49,15 @@ func TestSkillGuidanceLineOmittedForUnmappedCommands(t *testing.T) {
 	}
 }
 
-// Verifies every skill named in the guidance map exists as a SKILL.md frontmatter name, so the
-// instruction can never tell an agent to load a skill that was renamed or removed.
+// Verifies every skill named in the guidance map exists as a SKILL.md frontmatter name and is not
+// marked internal, so the instruction can never tell an agent to load a skill that was renamed,
+// removed, or is never installed.
 func TestSkillGuidanceMapNamesExistingSkills(t *testing.T) {
 	existing := installedSkillNames(t)
 
 	for command, skillName := range commandSkillNames {
 		if !existing[skillName] {
-			t.Errorf("command %s points at skill %q, which no SKILL.md declares", command, skillName)
+			t.Errorf("command %s points at skill %q, which no installable SKILL.md declares", command, skillName)
 		}
 	}
 }
@@ -74,6 +75,9 @@ func installedSkillNames(t *testing.T) map[string]bool {
 			t.Fatalf("failed to glob %s: %v", pattern, err)
 		}
 		for _, match := range matches {
+			if isInternalSkill(t, match) {
+				continue
+			}
 			names[skillFrontmatterName(t, match)] = true
 		}
 	}
@@ -82,6 +86,24 @@ func installedSkillNames(t *testing.T) map[string]bool {
 		t.Fatalf("found no SKILL.md files to validate against")
 	}
 	return names
+}
+
+// isInternalSkill reports whether a SKILL.md is marked `internal: true`, which keeps it out of every
+// skill install.
+func isInternalSkill(t *testing.T, path string) bool {
+	t.Helper()
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.TrimSpace(line) == "internal: true" {
+			return true
+		}
+	}
+	return false
 }
 
 func skillFrontmatterName(t *testing.T, path string) string {

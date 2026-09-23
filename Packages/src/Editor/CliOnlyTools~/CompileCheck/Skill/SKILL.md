@@ -1,6 +1,7 @@
 ---
 name: uloop-compile-check
 description: "Compile C# with the Unity-bundled Roslyn compiler without launching or contacting the Unity Editor; reports errors and warnings only."
+internal: true
 ---
 
 # uloop compile-check
