@@ -1039,6 +1039,170 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: one compile-resolvable warning plus a deferred hold warning counts both lines
+        /// but does not append the single-compile resolution sentence, because the hold line
+        /// is not a warning a compile clears.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_OneCompileWarningPlusDeferredHold_OmitsSingleCompileSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(false, false, true));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            AssertTwoWarningsWithoutSingleCompileSentence(response);
+        }
+
+        /// <summary>
+        /// What: one compile-resolvable warning plus a blocked scene Refresh warning counts both
+        /// lines but does not append the single-compile resolution sentence.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_OneCompileWarningPlusSceneRefreshHold_OmitsSingleCompileSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(
+                    true,
+                    false,
+                    false,
+                    HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Does.Contain(HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+            AssertTwoWarningsWithoutSingleCompileSentence(response);
+        }
+
+        /// <summary>
+        /// What: a retargeted pause-point warning beside two compile-resolvable warnings keeps
+        /// the single-compile resolution sentence off, because a compile does not clear it.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RetargetedPausePointBesideTwoCompileWarnings_OmitsSingleCompileSentence()
+        {
+            UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
+            try
+            {
+                const string id = "Assets/Scripts/A.cs:10";
+                UloopPausePointRegistry.Enable(id, 30);
+                UloopPausePointRegistry.SetResolvedLine(id, 12, "return value;");
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "compile warning one", "compile warning two" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    retargetedPausePointIds: new List<string> { id });
+
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+                Assert.That(response.Warnings, Has.Count.EqualTo(3));
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            }
+            finally
+            {
+                UloopPausePointRegistry.ResetForTests();
+            }
+        }
+
+        /// <summary>
+        /// What: a pause-point line-drift warning beside two compile-resolvable warnings keeps
+        /// the single-compile resolution sentence off.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RetargetLineDriftBesideTwoCompileWarnings_OmitsSingleCompileSentence()
+        {
+            PausePointSidePortScope pausePointScope = new PausePointSidePortScope();
+            pausePointScope.Port.RetargetLineDriftWarnings = () =>
+                new List<(string, string, string)>
+                {
+                    ("Assets/Scripts/A.cs:10", "return a;", "return a + 1;")
+                };
+            try
+            {
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                    CreatePatchedResultWithTwoCompileWarnings());
+
+                Assert.That(response.Warnings, Has.Count.EqualTo(3));
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            }
+            finally
+            {
+                pausePointScope.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// What: an expired-not-retargeted pause-point warning beside two compile-resolvable
+        /// warnings keeps the single-compile resolution sentence off.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_ExpiredNotRetargetedBesideTwoCompileWarnings_OmitsSingleCompileSentence()
+        {
+            PausePointSidePortScope pausePointScope = new PausePointSidePortScope();
+            pausePointScope.Port.ExpiredNotRetargetedMarkerIds = () =>
+                new List<string> { "Assets/Scripts/A.cs:10" };
+            try
+            {
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                    CreatePatchedResultWithTwoCompileWarnings());
+
+                Assert.That(response.Warnings, Has.Count.EqualTo(3));
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            }
+            finally
+            {
+                pausePointScope.Dispose();
+            }
+        }
+
+        private static HotReloadOrchestratorResult CreatePatchedResultWithTwoCompileWarnings()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one", "compile warning two" },
+                patchedTotal: 1,
+                activePatchTotal: 1);
+        }
+
+        private static void AssertTwoWarningsWithoutSingleCompileSentence(HotReloadResponse response)
+        {
+            Assert.That(response.Warnings, Has.Count.EqualTo(2));
+            Assert.That(response.Message, Does.Contain("2 warning(s). See Warnings."));
+            Assert.That(
+                response.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
         /// What: --status Sync warnings for a deferred release and a blocked scene Refresh
         /// appear on the response.
         /// </summary>

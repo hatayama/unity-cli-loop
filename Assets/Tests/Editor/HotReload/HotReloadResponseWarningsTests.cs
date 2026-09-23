@@ -78,12 +78,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadResponseWarnings warnings = new HotReloadResponseWarnings();
 
-            warnings.Add(HotReloadWarningResolution.ClearedByCompile, new[] { "compile-1", "compile-2" });
-            warnings.Add(HotReloadWarningResolution.NeedsCallerAction, new[] { "caller" });
             warnings.Add(HotReloadWarningResolution.NotCounted, new[] { "hold" });
+            warnings.Add(HotReloadWarningResolution.ClearedByCompile, new[] { "compile-1" });
+            warnings.Add(HotReloadWarningResolution.NeedsCallerAction, new[] { "caller" });
+            warnings.Add(HotReloadWarningResolution.ClearedByCompile, new[] { "compile-2" });
             List<string> lines = warnings.ToList();
 
-            Assert.That(lines, Is.EqualTo(new[] { "compile-1", "compile-2", "caller", "hold" }));
+            Assert.That(lines, Is.EqualTo(new[] { "hold", "compile-1", "caller", "compile-2" }));
         }
     }
 }
