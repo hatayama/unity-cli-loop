@@ -528,6 +528,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindSkipReason(result, "OnEnable"), Does.Not.Contain("lambda"));
         }
 
+        /// <summary>
+        /// What: a method group on the right of '-=' is not offered the lambda rewrite, because a
+        /// lambda there is a different delegate and would leave the handler subscribed.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_UnsubscribingAMethodGroup_DoesNotSuggestALambda()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedDetach()\n        {\n            PrivateChanged -= AddedHandler;\n        }\n\n"
+                + "        private void AddedHandler()\n        {\n        }");
+
+            AssertHasSkip(result, "AddedDetach", "'-='");
+            Assert.That(FindSkipReason(result, "AddedDetach"), Does.Not.Contain("=> AddedHandler"));
+            Assert.That(FindSkipReason(result, "AddedDetach"), Does.Not.Contain("keeps hot reloading"));
+        }
+
         private static void AssertAddedAndNotSkipped(TransformWorkerClientResult result, string methodNameFragment)
         {
             Assert.That(result.Success, Is.True, result.ErrorMessage);
