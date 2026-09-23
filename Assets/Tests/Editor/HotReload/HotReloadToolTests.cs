@@ -1988,7 +1988,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadCompositionRoot.Services,
                 CreateResultWithAddedFields(),
                 Array.Empty<string>(),
-                new[] { "Ns.Host.Speed" });
+                new[] { "Ns.Host.Speed" },                isPlaying: false,                isPaused: false);
 
             string warning = response.Warnings.FirstOrDefault(
                 entry => entry.Contains(RewireAfterDomainReloadWarningMarker));
@@ -2008,7 +2008,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadCompositionRoot.Services,
                 CreateResultWithAddedFields(),
                 Array.Empty<string>(),
-                Array.Empty<string>());
+                Array.Empty<string>(),                isPlaying: false,                isPaused: false);
 
             Assert.That(
                 response.Warnings.Any(entry => entry.Contains(RewireAfterDomainReloadWarningMarker)),
@@ -2028,12 +2028,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadCompositionRoot.Services,
                 CreatePatchedResultWithTwoWarningsAndAddedField(),
                 Array.Empty<string>(),
-                new[] { "Ns.Host.Speed" });
+                new[] { "Ns.Host.Speed" },                isPlaying: false,                isPaused: false);
             HotReloadResponse withoutRewire = HotReloadApplyResponseBuilder.Build(
                 HotReloadCompositionRoot.Services,
                 CreatePatchedResultWithTwoWarningsAndAddedField(),
                 Array.Empty<string>(),
-                Array.Empty<string>());
+                Array.Empty<string>(),                isPlaying: false,                isPaused: false);
 
             Assert.That(
                 withRewire.Message,

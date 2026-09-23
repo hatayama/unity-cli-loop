@@ -270,6 +270,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "If values were wired into these added fields before the last domain reload or revert, "
             + "they are gone; wire them again before code that reads them runs: {0}.";
 
+        // Why a pause and not only "wire them": while Play Mode runs, a frame can read an added
+        // field before the caller wires it, and the reader then fails every frame until it is
+        // wired. Pausing first was measured to avoid that.
+        public const string PauseBeforeWiringDuringPlayWarning =
+            "Play Mode is running, so code that reads these added fields may already have run with "
+            + "them unset (for example a NullReferenceException every frame). Pause Play Mode "
+            + "('uloop control-play-mode --action Pause'), wire them, then resume "
+            + "('uloop control-play-mode --action Play'); to wire them before any read next time, "
+            + "pause before the hot reload.";
+
         // Why at the revert already: the revert drops the declarations and their values, and the
         // re-apply that brings the fields back is the step a reader would otherwise not connect
         // to rewiring.

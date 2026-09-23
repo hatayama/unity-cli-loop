@@ -28,6 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // How many of Warnings are type notices, each saying its type needs a compile.
         public int IntroducedTypeNoticeCount { get; }
 
+        // The serialized added fields this run's warning named for the first time.
+        public IReadOnlyList<string> SerializedAddedFieldsReported { get; }
+
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
             IReadOnlyList<string> warnings,
@@ -43,7 +46,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> reappliedSiblingPaths = null,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
             bool autoRefreshHoldNewlyArmed = false,
-            int introducedTypeNoticeCount = 0)
+            int introducedTypeNoticeCount = 0,
+            IReadOnlyList<string> serializedAddedFieldsReported = null)
         {
             Methods = methods;
             Warnings = warnings;
@@ -66,6 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ReappliedSiblingPaths = reappliedSiblingPaths ?? Array.Empty<string>();
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             IntroducedTypeNoticeCount = introducedTypeNoticeCount;
+            SerializedAddedFieldsReported = serializedAddedFieldsReported ?? Array.Empty<string>();
         }
     }
 }

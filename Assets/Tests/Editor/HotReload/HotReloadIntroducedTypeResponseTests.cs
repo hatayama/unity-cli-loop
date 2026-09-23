@@ -323,7 +323,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "IntroducedTypeAbsentCaller.cs",
                         EditTheCallerBody(File.ReadAllText(callerPath))),
                     CancellationToken.None);
-                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
 
                 Assert.That(response.IntroducedTypes.Count, Is.EqualTo(0));
                 Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(0));
@@ -350,7 +350,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "IntroducedTypeAndBodyHost.cs",
                     EditTheScaledBody(InsertIntroducedType(File.ReadAllText(hostPath)))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
         }
 
         private static HotReloadIntroducedTypeOutcome CreateInjectedTypeFailure()
@@ -410,7 +410,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "RetainedTypeOnlyCaller.cs",
                     EditTheCallerBody(File.ReadAllText(callerPath))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
         }
 
         // The production pipeline with the preparation reporting one retained declaration and the
@@ -515,7 +515,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "IntroducedTypeNoticeHost.cs",
                         InsertUnintroducibleDeclaration(File.ReadAllText(hostPath))),
                     CancellationToken.None);
-                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
 
                 Assert.That(
                     response.Success,
@@ -559,7 +559,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "IntroducedTypeNoticeHostWithoutBaseline.cs",
                         InsertUnintroducibleDeclaration(File.ReadAllText(hostPath))),
                     CancellationToken.None);
-                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
 
                 Assert.That(
                     FindWarning(response, "requires a compile"),
@@ -749,7 +749,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "IntroducedTypeFailureHost.cs",
                     InsertIntroducedType(File.ReadAllText(hostPath))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
         }
 
         private static int CountTypeRows(HotReloadResponse response, string kind)
@@ -806,7 +806,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindFailureReason(result),
                 Is.Null,
                 "Precondition: a reload that only introduces a type must not fail a method.");
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>());
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
         }
 
         private static string FindFailureReason(HotReloadOrchestratorResult result)
@@ -874,7 +874,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadCompositionRoot.Services,
                     result,
                     null,
-                    Array.Empty<string>());
+                    Array.Empty<string>(),                    isPlaying: false,                    isPaused: false);
 
                 Assert.That(
                     response.Message,

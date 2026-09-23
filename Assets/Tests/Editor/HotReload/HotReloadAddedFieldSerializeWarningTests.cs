@@ -69,6 +69,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the result carries the serialized added fields the warning named, so the response
+        /// can tell it names fields to wire; a run that names none carries none.
+        /// </summary>
+        [Test]
+        public async Task Run_SerializedAddedFieldApplied_ResultCarriesTheFieldsTheWarningNamed()
+        {
+            HotReloadOrchestratorResult first = await RunWithDeclarationAsync(
+                SerializedDeclaration,
+                "SerializeWarningReportedFirst.cs");
+            HotReloadOrchestratorResult second = await RunWithDeclarationAsync(
+                SerializedDeclaration,
+                "SerializeWarningReportedSecond.cs");
+
+            Assert.That(
+                first.SerializedAddedFieldsReported,
+                Is.EqualTo(new[] { typeof(HotReloadAddedFieldApplyFixture).FullName + ".AddedCount" }));
+            Assert.That(second.SerializedAddedFieldsReported, Is.Empty);
+        }
+
+        /// <summary>
         /// What: a file that fails to apply leaves its serialized added field out of the warning,
         /// because the field never became active.
         /// </summary>
