@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             ct.ThrowIfCancellationRequested();
 
-            ToolExecutionSessionBeginResult beginResult = _executionSession.Begin(registry, toolName);
+            ToolExecutionSessionBeginResult beginResult = _executionSession.Begin(registry, toolName, ct);
             if (!beginResult.IsEntered)
             {
                 throw CreateBusyException(
