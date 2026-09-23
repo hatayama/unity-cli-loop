@@ -329,17 +329,24 @@ func TestResolveLaunchProjectRootAcceptsUnityProjectWithoutUloopSettings(t *test
 	}
 }
 
+// Verifies quit reports that no Unity is running instead of launching one.
 func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	// The real process lookup starts PowerShell on Windows, whose cold start on CI
+	// runners exceeds the lookup timeout often enough to fail this test for a
+	// reason unrelated to the quit branch it covers.
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{quit: true, projectPath: projectRoot},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 0 {

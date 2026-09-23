@@ -94,10 +94,6 @@ func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions,
 	return options, nil
 }
 
-func runLaunch(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer) int {
-	return runLaunchWithDeps(ctx, options, startPath, stdout, stderr, defaultLaunchDeps())
-}
-
 func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer, deps launchDeps) int {
 	writeLaunchProjectSearch(stdout, options, startPath)
 
