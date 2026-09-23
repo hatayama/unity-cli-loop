@@ -874,7 +874,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadCompositionRoot.Services,
                     result,
                     null,
-                    Array.Empty<string>(),                    isPlaying: false,                    isPaused: false);
+                    Array.Empty<string>(),
+                    isPlaying: false,
+                    isPaused: false);
 
                 Assert.That(
                     response.Message,

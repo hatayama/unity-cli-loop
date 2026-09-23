@@ -83,7 +83,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a run in unpaused Play Mode whose serialized added field warning names a field
-        /// gets the pause warning even with no field to rewire after a reload or revert.
+        /// gets the pause warning even with no field to rewire after a reload or revert, and the
+        /// warning, being a caller action, drops the single-compile sentence the same result keeps
+        /// outside Play Mode.
         /// </summary>
         [Test]
         public void Build_WhilePlayingWithReportedSerializedField_AddsThePauseWarning()
@@ -92,8 +94,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreatePatchedResultWithTwoWarnings(new[] { SerializedFieldName }),
                 Array.Empty<string>(),
                 isPlaying: true);
+            HotReloadResponse notPlaying = Build(
+                CreatePatchedResultWithTwoWarnings(new[] { SerializedFieldName }),
+                Array.Empty<string>(),
+                isPlaying: false);
 
             Assert.That(CountPauseWarnings(response), Is.EqualTo(1), string.Join(" | ", response.Warnings));
+            Assert.That(
+                response.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            Assert.That(
+                notPlaying.Message,
+                Does.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage),
+                "Precondition: outside Play Mode the same result keeps the single-compile sentence.");
         }
 
         private static HotReloadResponse Build(

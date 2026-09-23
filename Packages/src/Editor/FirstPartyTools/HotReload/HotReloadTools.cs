@@ -255,21 +255,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.AddedFields);
             HotReloadCompanionSourceSessionStore.Save(services.Domain.CompanionSources);
 
-            // Play Mode is read here, on the main thread the switch above returned to.
+            // Play Mode state and the Play Mode compile setting are read here because the switch
+            // above put this path on the main thread. isPlaying is read once so the response and
+            // the compile fallback decide from the same state.
+            bool isPlaying = EditorApplication.isPlaying;
             HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                 services,
                 result,
                 selection.ScanLimitWarnings,
                 rewireFields,
-                EditorApplication.isPlaying,
+                isPlaying,
                 EditorApplication.isPaused);
-            // isPlaying and the Play Mode compile setting are read here because the switch above
-            // put this path on the main thread.
             ApplyCompileFallbackDecision(
                 response,
                 result,
                 parameters.CompileOnSkip,
-                EditorApplication.isPlaying,
+                isPlaying,
                 EditorPrefs.GetInt(HotReloadConstants.ScriptCompilationDuringPlayEditorPrefsKey, 0)
                     == HotReloadConstants.ScriptCompilationDuringPlayRecompileAfterFinishedPlaying);
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
