@@ -78,7 +78,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void ApplyTo(HotReloadDomain domain)
         {
             Debug.Assert(domain != null, "domain must not be null.");
-            _appliedToDomain = true;
 
             // Why a retry that applied nothing forgets the record: that record is what makes the
             // file a retry candidate, and one more try at the same bytes cannot end differently.
@@ -95,6 +94,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 domain.CompanionSources.Remove(_appliedPaths[index]);
             }
 
+            RecordCompanions(domain);
+            // Why set only after every write: a write that throws leaves the records half written,
+            // and DescribeAfterApply must not answer from them.
+            _appliedToDomain = true;
+        }
+
+        private void RecordCompanions(HotReloadDomain domain)
+        {
             // Why only a run that applied something records companions: an unchanged file matters
             // only as the context of a change, and a run of unchanged files alone bound nothing.
             if (_appliedPaths.Count == 0)
