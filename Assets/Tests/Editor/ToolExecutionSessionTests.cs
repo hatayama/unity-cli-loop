@@ -20,13 +20,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionSession session = new ToolExecutionSession();
             UnityCliLoopToolRegistry registry = CreateRegistry(new InMemoryToolSettingsPort(), new IUnityCliLoopTool[0]);
 
-            ArgumentException exception = Assert.Throws<ArgumentException>(() => session.Begin(registry, "missing-tool"));
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => session.Begin(registry, "missing-tool", CancellationToken.None));
             ToolExecutionSessionEnterResult enterResult = session.TryEnter("other-tool");
 
             Assert.That(exception.Message, Is.EqualTo("Unknown tool: missing-tool"));
             Assert.That(enterResult.IsEntered, Is.True);
 
-            session.Exit();
+            enterResult.Lease.Dispose();
         }
 
         [Test]
@@ -39,14 +39,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             settingsPort.SetToolEnabled(disabledTool.ToolName, false);
             UnityCliLoopToolRegistry registry = CreateRegistry(settingsPort, new IUnityCliLoopTool[] { disabledTool });
 
-            ToolDisabledException exception = Assert.Throws<ToolDisabledException>(() => session.Begin(registry, disabledTool.ToolName));
+            ToolDisabledException exception = Assert.Throws<ToolDisabledException>(() => session.Begin(registry, disabledTool.ToolName, CancellationToken.None));
             ToolExecutionSessionEnterResult enterResult = session.TryEnter("other-tool");
 
             Assert.That(exception.Message, Is.EqualTo("Tool 'disabled-tool' is disabled"));
             Assert.That(exception.ToolName, Is.EqualTo(disabledTool.ToolName));
             Assert.That(enterResult.IsEntered, Is.True);
 
-            session.Exit();
+            enterResult.Lease.Dispose();
         }
 
         [Test]
@@ -57,14 +57,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SecurityBlockedSessionTestTool blockedTool = new SecurityBlockedSessionTestTool();
             UnityCliLoopToolRegistry registry = CreateRegistry(new InMemoryToolSettingsPort(), new IUnityCliLoopTool[] { blockedTool });
 
-            UnityCliLoopSecurityException exception = Assert.Throws<UnityCliLoopSecurityException>(() => session.Begin(registry, blockedTool.ToolName));
+            UnityCliLoopSecurityException exception = Assert.Throws<UnityCliLoopSecurityException>(() => session.Begin(registry, blockedTool.ToolName, CancellationToken.None));
             ToolExecutionSessionEnterResult enterResult = session.TryEnter("other-tool");
 
             Assert.That(exception.SecurityReason, Is.EqualTo("Tool is blocked by security settings"));
             Assert.That(exception.ToolName, Is.EqualTo(blockedTool.ToolName));
             Assert.That(enterResult.IsEntered, Is.True);
 
-            session.Exit();
+            enterResult.Lease.Dispose();
         }
 
         [Test]
@@ -75,13 +75,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SessionTestTool tool = new SessionTestTool("allowed-tool");
             UnityCliLoopToolRegistry registry = CreateRegistry(new InMemoryToolSettingsPort(), new IUnityCliLoopTool[] { tool });
 
-            ToolExecutionSessionBeginResult result = session.Begin(registry, tool.ToolName);
+            ToolExecutionSessionBeginResult result = session.Begin(registry, tool.ToolName, CancellationToken.None);
 
             Assert.That(result.IsEntered, Is.True);
             Assert.That(result.Tool, Is.SameAs(tool));
             Assert.That(result.RunningToolName, Is.Empty);
 
-            session.Exit();
+            result.Lease.Dispose();
         }
 
         [Test]
@@ -91,15 +91,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionSession session = new ToolExecutionSession();
             SessionTestTool requestedTool = new SessionTestTool("requested-tool");
             UnityCliLoopToolRegistry registry = CreateRegistry(new InMemoryToolSettingsPort(), new IUnityCliLoopTool[] { requestedTool });
-            session.TryEnter("running-tool");
+            ToolExecutionLease runningLease = session.TryEnter("running-tool").Lease;
 
-            ToolExecutionSessionBeginResult result = session.Begin(registry, requestedTool.ToolName);
+            ToolExecutionSessionBeginResult result = session.Begin(registry, requestedTool.ToolName, CancellationToken.None);
 
             Assert.That(result.IsEntered, Is.False);
             Assert.That(result.Tool, Is.Null);
             Assert.That(result.RunningToolName, Is.EqualTo("running-tool"));
 
-            session.Exit();
+            runningLease.Dispose();
         }
 
         [Test]
@@ -109,14 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionSession session = new ToolExecutionSession();
 
             ToolExecutionSessionEnterResult firstResult = session.TryEnter("first-tool");
-            session.Exit();
+            firstResult.Lease.Dispose();
             ToolExecutionSessionEnterResult secondResult = session.TryEnter("second-tool");
 
             Assert.That(firstResult.IsEntered, Is.True);
             Assert.That(firstResult.RunningToolName, Is.Empty);
             Assert.That(secondResult.IsEntered, Is.True);
 
-            session.Exit();
+            secondResult.Lease.Dispose();
         }
 
         [Test]
@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(busyResult.IsEntered, Is.False);
             Assert.That(busyResult.RunningToolName, Is.EqualTo("running-tool"));
 
-            session.Exit();
+            firstResult.Lease.Dispose();
         }
 
         [Test]
@@ -149,8 +149,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(firstResult.IsEntered, Is.True);
             Assert.That(secondResult.IsEntered, Is.True);
 
-            session.Exit();
-            session.Exit();
+            firstResult.Lease.Dispose();
+            secondResult.Lease.Dispose();
         }
 
         [Test]
@@ -159,13 +159,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that shared execute-dynamic-code entries keep the session busy until every entry exits.
             ToolExecutionSession session = new ToolExecutionSession();
 
-            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
-            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            ToolExecutionLease firstLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
+            ToolExecutionLease secondLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
 
             ToolExecutionSessionEnterResult busyBeforeExit = session.TryEnter("other-tool");
-            session.Exit();
+            firstLease.Dispose();
             ToolExecutionSessionEnterResult busyAfterOneExit = session.TryEnter("other-tool");
-            session.Exit();
+            secondLease.Dispose();
             ToolExecutionSessionEnterResult enteredAfterBothExit = session.TryEnter("other-tool");
 
             Assert.That(busyBeforeExit.IsEntered, Is.False);
@@ -174,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(busyAfterOneExit.RunningToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
             Assert.That(enteredAfterBothExit.IsEntered, Is.True);
 
-            session.Exit();
+            enteredAfterBothExit.Lease.Dispose();
         }
 
         /// <summary>
@@ -186,9 +186,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             long timestamp = 0;
             ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
 
-            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            ToolExecutionLease firstLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
             timestamp += 3 * Stopwatch.Frequency;
-            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            ToolExecutionLease secondLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
             timestamp += 4 * Stopwatch.Frequency;
             ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
 
@@ -196,8 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(busyResult.RunningToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
             Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(7));
 
-            session.Exit();
-            session.Exit();
+            firstLease.Dispose();
+            secondLease.Dispose();
         }
 
         /// <summary>
@@ -209,16 +209,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             long timestamp = 0;
             ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
 
-            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
-            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            ToolExecutionLease firstLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
+            ToolExecutionLease secondLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
             timestamp += 5 * Stopwatch.Frequency;
-            session.Exit();
+            firstLease.Dispose();
             ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
 
             Assert.That(busyResult.IsEntered, Is.False);
             Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(5));
 
-            session.Exit();
+            secondLease.Dispose();
         }
 
         /// <summary>
@@ -230,10 +230,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             long timestamp = 0;
             ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
 
-            session.TryEnter("first-tool");
+            ToolExecutionLease firstLease = session.TryEnter("first-tool").Lease;
             timestamp += 10 * Stopwatch.Frequency;
-            session.Exit();
-            session.TryEnter("second-tool");
+            firstLease.Dispose();
+            ToolExecutionLease secondLease = session.TryEnter("second-tool").Lease;
             timestamp += 2 * Stopwatch.Frequency;
             ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
 
@@ -241,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(busyResult.RunningToolName, Is.EqualTo("second-tool"));
             Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(2));
 
-            session.Exit();
+            secondLease.Dispose();
         }
 
         /// <summary>
@@ -253,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             long timestamp = 0;
             ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
 
-            session.TryEnter("running-tool");
+            ToolExecutionLease runningLease = session.TryEnter("running-tool").Lease;
             timestamp += 4 * Stopwatch.Frequency + (Stopwatch.Frequency - 1);
             ToolExecutionSessionEnterResult busyResult = session.TryEnter("requested-tool");
 
@@ -261,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(busyResult.RunningToolName, Is.EqualTo("running-tool"));
             Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(4));
 
-            session.Exit();
+            runningLease.Dispose();
         }
 
         /// <summary>
@@ -274,17 +274,268 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
             SessionTestTool requestedTool = new SessionTestTool("requested-tool");
             UnityCliLoopToolRegistry registry = CreateRegistry(new InMemoryToolSettingsPort(), new IUnityCliLoopTool[] { requestedTool });
-            session.TryEnter("running-tool");
+            ToolExecutionLease runningLease = session.TryEnter("running-tool").Lease;
             timestamp += 6 * Stopwatch.Frequency;
 
-            ToolExecutionSessionBeginResult result = session.Begin(registry, requestedTool.ToolName);
+            ToolExecutionSessionBeginResult result = session.Begin(registry, requestedTool.ToolName, CancellationToken.None);
 
             Assert.That(result.IsEntered, Is.False);
             Assert.That(result.RunningToolName, Is.EqualTo("running-tool"));
             Assert.That(result.RunningToolElapsedSeconds, Is.EqualTo(6));
 
-            session.Exit();
+            runningLease.Dispose();
         }
+
+        /// <summary>
+        /// Verifies a second Dispose of a returned lease does not release the slot a later tool holds.
+        /// </summary>
+        [Test]
+        public void Dispose_WhenLeaseIsDisposedTwice_ShouldKeepLaterHolderSlot()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+
+            ToolExecutionLease firstLease = session.TryEnter("first-tool").Lease;
+            firstLease.Dispose();
+            ToolExecutionLease secondLease = session.TryEnter("second-tool").Lease;
+            firstLease.Dispose();
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolName, Is.EqualTo("second-tool"));
+
+            secondLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies disposing one shared execute-dynamic-code lease twice keeps the other shared holder's slot.
+        /// </summary>
+        [Test]
+        public void Dispose_WhenOneSharedLeaseIsDisposedTwice_ShouldKeepSlotBusyForOtherSharedHolder()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+
+            ToolExecutionLease firstLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
+            ToolExecutionLease secondLease = session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE).Lease;
+            firstLease.Dispose();
+            firstLease.Dispose();
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+
+            secondLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a cancelled execute-dynamic-code holder still keeps other tools busy while its grace period runs.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenDynamicCodeHolderIsCancelledWithinGrace_ShouldStayBusy()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+            holderCancellation.Cancel();
+
+            ToolExecutionSessionEnterResult firstAttempt = session.TryEnter("other-tool");
+            timestamp += GraceTicks - 1;
+            ToolExecutionSessionEnterResult secondAttempt = session.TryEnter("other-tool");
+
+            Assert.That(firstAttempt.IsEntered, Is.False);
+            Assert.That(secondAttempt.IsEntered, Is.False);
+            Assert.That(secondAttempt.RunningToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+
+            holderLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies another tool enters once a cancelled execute-dynamic-code holder has outlived its grace period.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenDynamicCodeHolderIsCancelledPastGrace_ShouldLetOtherToolEnter()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+            holderCancellation.Cancel();
+
+            ToolExecutionSessionEnterResult firstAttempt = session.TryEnter("other-tool");
+            timestamp += GraceTicks;
+            ToolExecutionSessionEnterResult secondAttempt = session.TryEnter("other-tool");
+
+            Assert.That(firstAttempt.IsEntered, Is.False);
+            Assert.That(secondAttempt.IsEntered, Is.True);
+
+            secondAttempt.Lease.Dispose();
+            holderLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies repeated busy retries do not restart the grace period, so the holder is revoked a grace period after the first retry saw the cancellation.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenBusyRetriesRepeatDuringGrace_ShouldMeasureGraceFromFirstObservation()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+            holderCancellation.Cancel();
+
+            for (int second = 0; second < ToolExecutionSession.CancelledLeaseGraceSeconds; second++)
+            {
+                ToolExecutionSessionEnterResult retry = session.TryEnter("other-tool");
+                Assert.That(retry.IsEntered, Is.False, $"retry at {second}s must stay busy");
+                timestamp += Stopwatch.Frequency;
+            }
+
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("other-tool");
+
+            Assert.That(timestamp, Is.EqualTo(GraceTicks));
+            Assert.That(lateAttempt.IsEntered, Is.True);
+
+            lateAttempt.Lease.Dispose();
+            holderLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies the grace period starts when a retry first sees the cancellation, not when the lease was issued or when an earlier retry saw it still live.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenHolderIsCancelledLongAfterIssue_ShouldStartGraceAtFirstObservedCancellation()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+
+            ToolExecutionSessionEnterResult liveAttempt = session.TryEnter("other-tool");
+            timestamp += 10 * GraceTicks;
+            holderCancellation.Cancel();
+            ToolExecutionSessionEnterResult firstCancelledAttempt = session.TryEnter("other-tool");
+            timestamp += GraceTicks - 1;
+            ToolExecutionSessionEnterResult withinGraceAttempt = session.TryEnter("other-tool");
+            timestamp += 1;
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("other-tool");
+
+            Assert.That(liveAttempt.IsEntered, Is.False);
+            Assert.That(firstCancelledAttempt.IsEntered, Is.False);
+            Assert.That(withinGraceAttempt.IsEntered, Is.False);
+            Assert.That(lateAttempt.IsEntered, Is.True);
+
+            lateAttempt.Lease.Dispose();
+            holderLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies an execute-dynamic-code holder that was never cancelled keeps the slot however long it runs.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenDynamicCodeHolderIsNotCancelled_ShouldStayBusyRegardlessOfElapsedTime()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+
+            session.TryEnter("other-tool");
+            timestamp += 100 * GraceTicks;
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("other-tool");
+
+            Assert.That(lateAttempt.IsEntered, Is.False);
+
+            holderLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies disposing a revoked lease late does not release the slot of the holder that entered after it.
+        /// </summary>
+        [Test]
+        public void Dispose_WhenRevokedLeaseIsDisposedLate_ShouldKeepNewHolderSlot()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease revokedLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                holderCancellation.Token).Lease;
+            holderCancellation.Cancel();
+            session.TryEnter("new-tool");
+            timestamp += GraceTicks;
+            ToolExecutionLease newLease = session.TryEnter("new-tool").Lease;
+
+            revokedLease.Dispose();
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolName, Is.EqualTo("new-tool"));
+
+            newLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies revoking a stale cancelled shared lease keeps the slot busy while another shared lease is live.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenOnlyOneSharedDynamicCodeLeaseIsCancelledPastGrace_ShouldStayBusy()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource staleCancellation = new CancellationTokenSource();
+            ToolExecutionLease staleLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                staleCancellation.Token).Lease;
+            ToolExecutionLease liveLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                CancellationToken.None).Lease;
+            staleCancellation.Cancel();
+
+            session.TryEnter("other-tool");
+            timestamp += GraceTicks;
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("other-tool");
+
+            Assert.That(lateAttempt.IsEntered, Is.False);
+            Assert.That(lateAttempt.RunningToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+
+            staleLease.Dispose();
+            liveLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a cancelled holder of a tool other than execute-dynamic-code is never revoked, since run-tests keeps cleaning up after a cancel.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenNonDynamicCodeHolderIsCancelledPastGrace_ShouldStayBusy()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource holderCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter("run-tests", holderCancellation.Token).Lease;
+            holderCancellation.Cancel();
+
+            session.TryEnter("other-tool");
+            timestamp += 100 * GraceTicks;
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("other-tool");
+
+            Assert.That(lateAttempt.IsEntered, Is.False);
+            Assert.That(lateAttempt.RunningToolName, Is.EqualTo("run-tests"));
+
+            holderLease.Dispose();
+        }
+
+        private static long GraceTicks => ToolExecutionSession.CancelledLeaseGraceSeconds * Stopwatch.Frequency;
 
         private static UnityCliLoopToolRegistry CreateRegistry(InMemoryToolSettingsPort settingsPort, IUnityCliLoopTool[] tools)
         {

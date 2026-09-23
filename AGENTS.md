@@ -68,7 +68,7 @@ Do not directly edit skill files under the project-root `.agents/` or `.claude/`
 These files are generated copies. Update the source skill definitions instead, then regenerate the copies.
 
 - Sources: `Packages/src/Editor/FirstPartyTools/<Tool>/Skill/SKILL.md` and `Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/SKILL.md` (plus each skill's `references/` files, which are copied along with it).
-- Regenerate: `dist/darwin-arm64/uloop skills install --claude --agents` from the project root, substituting the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows). Only `.claude/` and `.agents/` are tracked in git; other targets are local-only.
+- Regenerate: `dist/darwin-arm64/uloop skills install --claude --agents` from the project root, substituting the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows, `dist/linux-amd64/uloop` on Linux). Only `.claude/` and `.agents/` are tracked in git; other targets are local-only.
 
 Every `SKILL.md` must stay at or under 8,000 bytes as a whole file (frontmatter included):
 8,000 bytes is the strictest skill-injection cap in the Codex source, and released Codex
@@ -200,7 +200,7 @@ source changes) so validation uses the code under review:
 dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)"
 ```
 
-Substitute the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows).
+Substitute the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows, `dist/linux-amd64/uloop` on Linux).
 
 When an AI agent runs these dev-binary commands through a sandboxed shell, Unity IPC over the
 Unix socket is denied with EPERM even though plain `uloop ...` may appear to work: the sandbox
@@ -230,6 +230,15 @@ not work.
 response files through the Editor-bundled Roslyn compiler; it never contacts the Editor and its
 output is never loaded by Unity. What it can and cannot detect, and why it sometimes refuses to
 run, are in `docs/compile-check.md`.
+
+## Tool-Side Logs (VibeLogs)
+
+Before calling a BUSY error, a hang, or an unexplained `uloop` result undiagnosable, read the
+tool's own logs in the Unity project the command ran against:
+`<project>/.uloop/outputs/VibeLogs/unity_vibe_YYYYMMDD.json` (Editor side) and
+`cli_vibe_YYYYMMDD.json` (CLI side). They are written only when `ULOOP_DEBUG` is set, the file
+date is UTC, and they survive git resets. A `*_start` entry with no matching `*_complete` is the
+first thing to look for behind BUSY. Details: `docs/vibe-logs.md`.
 
 ## Unity Freeze Prevention
 

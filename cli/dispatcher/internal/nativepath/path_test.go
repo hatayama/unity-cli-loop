@@ -127,9 +127,25 @@ func TestDefaultInstallDirRejectsMissingWindowsLocalAppData(t *testing.T) {
 	}
 }
 
+func TestDefaultInstallDirForLinuxUsesHome(t *testing.T) {
+	// Verifies Linux uses the same user-local default directory as macOS and install.sh.
+	installDir, err := DefaultInstallDir("linux", Environment{
+		UserHomeDir: func() (string, error) {
+			return "/home/tester", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("DefaultInstallDir failed: %v", err)
+	}
+
+	if installDir != "/home/tester/.local/bin" {
+		t.Fatalf("install dir mismatch: %s", installDir)
+	}
+}
+
 func TestDefaultInstallDirRejectsUnsupportedOS(t *testing.T) {
 	// Verifies install directory resolution reports unsupported platforms before building commands.
-	_, err := DefaultInstallDir("linux", Environment{})
+	_, err := DefaultInstallDir("freebsd", Environment{})
 	if !errors.Is(err, ErrUnsupportedOS) {
 		t.Fatalf("expected ErrUnsupportedOS, got %v", err)
 	}

@@ -1499,12 +1499,23 @@ func TestRunDispatcherMissingPinEmitsPinResolutionGuidance(t *testing.T) {
 	}
 }
 
-func TestDispatcherReleaseAssetNameRejectsUnsupportedPlatform(t *testing.T) {
-	// Verifies dispatcher does not invent download assets for unsupported platforms.
-	_, err := dispatcherReleaseAssetName("linux", "amd64")
+func TestDispatcherReleaseAssetNameForLinuxAmd64(t *testing.T) {
+	// Verifies Linux x86_64 resolves to the published linux-amd64 project runner archive.
+	assetName, err := dispatcherReleaseAssetName("linux", "amd64")
+	if err != nil {
+		t.Fatalf("dispatcherReleaseAssetName failed: %v", err)
+	}
+	if assetName != "uloop-project-runner-linux-amd64.tar.gz" {
+		t.Fatalf("asset name mismatch: %s", assetName)
+	}
+}
 
-	if err == nil {
-		t.Fatal("expected unsupported platform error")
+func TestDispatcherReleaseAssetNameRejectsUnsupportedPlatform(t *testing.T) {
+	// Verifies dispatcher does not invent download assets for unpublished platforms.
+	for _, platform := range [][2]string{{"linux", "arm64"}, {"freebsd", "amd64"}} {
+		if _, err := dispatcherReleaseAssetName(platform[0], platform[1]); err == nil {
+			t.Fatalf("expected unsupported platform error for %s-%s", platform[0], platform[1])
+		}
 	}
 }
 

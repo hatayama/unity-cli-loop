@@ -54,11 +54,19 @@ remove_path_block() {
         return 1
     fi
 
+    # Why: install writes a blank line before the start marker, so removing only
+    # the marker block would leave that blank line behind on every install /
+    # uninstall cycle. Hold one blank line back and drop it when the start
+    # marker follows; any other line flushes it unchanged.
     awk -v start="$PathBlockStart" -v end="$PathBlockEnd" '
+        pending_blank && $0 == start { pending_blank = 0; skipping = 1; changed = 1; next }
+        pending_blank { print ""; pending_blank = 0 }
         $0 == start { skipping = 1; changed = 1; next }
         $0 == end { skipping = 0; next }
-        !skipping { print }
-        END { if (changed) exit 0; exit 2 }
+        skipping { next }
+        $0 == "" { pending_blank = 1; next }
+        { print }
+        END { if (pending_blank) print ""; if (changed) exit 0; exit 2 }
     ' "$profile_write_path" > "$tmp_path"
     status=$?
     if [ "$status" -ne 0 ]; then
@@ -88,6 +96,7 @@ cleanup_shell_path_blocks() {
     remove_path_block "$HOME/.bash_profile" || return 1
     remove_path_block "$HOME/.bash_login" || return 1
     remove_path_block "$HOME/.profile" || return 1
+    remove_path_block "$HOME/.bashrc" || return 1
 
     if [ -n "${ZDOTDIR:-}" ]; then
         remove_path_block "$ZDOTDIR/.zshrc" || return 1

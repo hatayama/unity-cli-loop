@@ -86,6 +86,31 @@ func TestWriteInstallCompletionForMacMentionsPathAndLegacyCleanup(t *testing.T) 
 	}
 }
 
+func TestWriteInstallCompletionForLinuxMentionsPathAndLegacyCleanup(t *testing.T) {
+	// Verifies Linux install output explains both native setup responsibilities.
+	var stdout bytes.Buffer
+
+	writeInstallCompletion(&stdout, "linux")
+
+	output := stdout.String()
+	for _, expected := range []string{"shell PATH", "Legacy npm uloop-cli"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("install completion missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+func TestPrintInstallHelpAdvertisesLinuxSupport(t *testing.T) {
+	// Verifies install help keeps the "On Linux," line that scripts/install.sh greps to detect native install support.
+	var stdout bytes.Buffer
+
+	printInstallHelp(&stdout)
+
+	if !strings.Contains(stdout.String(), "\nOn Linux,") {
+		t.Fatalf("install help missing the On Linux line:\n%s", stdout.String())
+	}
+}
+
 func TestInstallSetupFailureErrorIncludesInstallerStderr(t *testing.T) {
 	// Verifies installer stderr is preserved inside the JSON error envelope details.
 	cliErr := installSetupFailureError(context.Canceled, "warning before failure\n")

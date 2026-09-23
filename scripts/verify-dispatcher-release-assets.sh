@@ -11,6 +11,8 @@ uloop-dispatcher-darwin-amd64.tar.gz
 uloop-dispatcher-darwin-amd64.tar.gz.sha256
 uloop-dispatcher-darwin-arm64.tar.gz
 uloop-dispatcher-darwin-arm64.tar.gz.sha256
+uloop-dispatcher-linux-amd64.tar.gz
+uloop-dispatcher-linux-amd64.tar.gz.sha256
 uloop-dispatcher-windows-amd64.zip
 uloop-dispatcher-windows-amd64.zip.sha256
 "
@@ -104,12 +106,14 @@ done
 
 verify_checksum "uloop-dispatcher-darwin-amd64.tar.gz"
 verify_checksum "uloop-dispatcher-darwin-arm64.tar.gz"
+verify_checksum "uloop-dispatcher-linux-amd64.tar.gz"
 verify_checksum "uloop-dispatcher-windows-amd64.zip"
 verify_checksum "install.sh"
 verify_checksum "install.ps1"
 
 require_tar_entry "uloop-dispatcher-darwin-amd64.tar.gz" "uloop"
 require_tar_entry "uloop-dispatcher-darwin-arm64.tar.gz" "uloop"
+require_tar_entry "uloop-dispatcher-linux-amd64.tar.gz" "uloop"
 require_zip_entry "uloop-dispatcher-windows-amd64.zip" "uloop.exe"
 
 echo "Dispatcher release assets are complete."

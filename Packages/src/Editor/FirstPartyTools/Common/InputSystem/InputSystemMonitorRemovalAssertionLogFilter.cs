@@ -11,8 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// and forwards every other log to the wrapped handler.
     /// Why: when an input callback removes a state monitor while uloop applies state outside event
     /// processing, the Input System's FireStateChangeNotifications removes the monitor immediately and
-    /// DynamicBitfield.ClearBit then trips its range assert. Player builds strip that Debug.Assert, so
-    /// dropping it keeps the Editor's observable result the same as a player's.
+    /// DynamicBitfield.ClearBit then trips its range assert. Real device input goes through the event
+    /// loop, where that removal is deferred, so the assert never fires for real input; dropping it keeps
+    /// simulated input observably the same as real input.
     /// A log is dropped only when both the text matches exactly and the origin check confirms the
     /// assert came from the Input System's monitor-removal path. Why not text alone: a user's bare
     /// Debug.Assert(false) inside an input callback renders the same text, and hiding it would both
