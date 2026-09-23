@@ -91,8 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "was introduced, while this reload builds {2} from source ({3}, passed or carried in to "
                     + "keep an earlier reload's binding), so the {2} this body uses no longer matches and it "
                     + "is skipped. Run 'uloop compile', or, if the edit in {3} can wait for that compile (for "
-                    + "example an added enum member, which hot reload does not apply), undo it and leave {3} "
-                    + "out of --files; leaving it out alone does not help while its source matches what an "
+                    + "example an added enum member, which hot reload does not apply), undo it until then and "
+                    + "leave {3} out of --files; leaving it out alone does not help while its source matches what an "
                     + "earlier reload was given, because it is carried in again, and if it is still carried "
                     + "in after the undo, run 'uloop compile'.",
                     4));

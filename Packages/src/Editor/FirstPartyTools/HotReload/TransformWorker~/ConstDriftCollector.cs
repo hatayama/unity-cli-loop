@@ -32,8 +32,11 @@ internal static class ConstDriftCollector
     // such members through, so the advice would send the user the wrong way.
     // Why not "only while": only added members that pass the enum to, or take it from, compiled
     // code or an introduced type are skipped; other added members still hot reload.
+    // Why the carried-in fallback: the worker cannot tell a passed file from one carried in
+    // because an earlier reload recorded the same source, and leaving the latter out of --files
+    // does nothing, so the advice has to cover that case too.
     internal const string EnumFileInReloadWarningFormat =
-        " With the file that declares {0} in this reload, an added member that passes {0} to or takes it from compiled code or a type hot reload introduced is skipped; to keep such a member hot reloading, leave that file out of --files until you compile.";
+        " With the file that declares {0} in this reload, an added member that passes {0} to or takes it from compiled code or a type hot reload introduced is skipped; to keep such a member hot reloading, leave that file out of --files until you compile; if it is carried in anyway because an earlier reload was given this same source, also undo the enum edit until you compile, and run 'uloop compile' if it is still carried in.";
 
     internal const string ChangedConstWarningFormat =
         "const {0} is {1} in the edited source but {2} in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with {1} yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change.";

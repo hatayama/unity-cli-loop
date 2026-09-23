@@ -8565,7 +8565,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string ExpectedAddedSiblingEnumMemberWarning =
             ExpectedSiblingEnumMemberWarning
-            + " With the file that declares io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum in this reload, an added member that passes io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum to or takes it from compiled code or a type hot reload introduced is skipped; to keep such a member hot reloading, leave that file out of --files until you compile.";
+            + " With the file that declares io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum in this reload, an added member that passes io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum to or takes it from compiled code or a type hot reload introduced is skipped; to keep such a member hot reloading, leave that file out of --files until you compile; if it is carried in anyway because an earlier reload was given this same source, also undo the enum edit until you compile, and run 'uloop compile' if it is still carried in.";
 
         private static IDisposable MutateSiblingEnumToAddMemberAndUseIt()
         {

@@ -153,7 +153,8 @@ internal static class CompiledSignatureSplitCollector
 
             // Why apart from the same-assembly split: an introduced type was compiled once, against
             // whichever copy of the type was compiled then, and no file this reload passes rebuilds
-            // it, so only a compile makes both sides name the same type again. Why only a type of
+            // it, so both sides name the same type again only after a compile, or once the file that
+            // builds that type from source is left out of the reload. Why only a type of
             // the target assembly: the introduced type was compiled against that assembly, so a
             // same-named type of another assembly is a real mismatch, not this split. Why by
             // identity: the target symbol comes from a wider-import compilation, so it is never
