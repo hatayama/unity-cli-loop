@@ -48,6 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "the compiled assembly has no backing field yet. Use uloop compile.",
                     0));
             templates.Add(
+                HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
+                Plain(
+                    "Subscribes to the event '{0}', which this edit adds; the compiled assembly has no "
+                    + "such event yet, so the subscription cannot bind until 'uloop compile'.",
+                    1));
+            templates.Add(
                 HotReloadWorkerReasonCode.EventNameof,
                 Plain(
                     "Methods that name a field-like event inside nameof are skipped; the shim is a different "
@@ -199,9 +205,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
                 Plain(
                     "inaccessible method group '{0}' (non-invocation) has no accessor rewrite shape. "
-                    + "A call is rewritten, so wrapping the method group in a lambda that calls it "
-                    + "(such as '(a, b) => {0}(a, b)') keeps hot reloading.",
-                    1));
+                    + "A call is rewritten, so wrapping the method group in a lambda that calls "
+                    + "it{1} keeps hot reloading.",
+                    2));
         }
     }
 }

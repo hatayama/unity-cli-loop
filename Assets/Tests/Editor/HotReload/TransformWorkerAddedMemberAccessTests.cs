@@ -271,6 +271,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the lambda the method-group reason offers takes as many parameters as the method,
+        /// so it compiles as written: none, one without parentheses, and two in parentheses.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompiledPrivateMethodGroup_ReasonLambdaMatchesTheParameterCount()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedCaptureNone()\n        {\n"
+                + "            Func<int> read = PrivateCall;\n            return read();\n        }\n\n"
+                + "        public int AddedCaptureOne()\n        {\n"
+                + "            Func<int, int> add = PrivateAddSeed;\n            return add(1);\n        }\n\n"
+                + "        public int AddedCaptureTwo()\n        {\n"
+                + "            Func<int, int, int> sum = PrivateSumWithSeed;\n            return sum(1, 2);\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, "AddedCaptureNone"),
+                Does.Contain("(such as '() => PrivateCall()')"));
+            string oneReason = FindSkipReason(result, "AddedCaptureOne");
+            Assert.That(oneReason, Does.Contain("(such as 'a => PrivateAddSeed(a)')"));
+            Assert.That(oneReason, Does.Not.Contain("(a, b)"));
+            Assert.That(
+                FindSkipReason(result, "AddedCaptureTwo"),
+                Does.Contain("(such as '(a, b) => PrivateSumWithSeed(a, b)')"));
+        }
+
+        /// <summary>
+        /// What: a method group whose method has an out parameter gets the reason without an
+        /// example lambda, because a lambda for it needs the modifier and an explicit type.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompiledPrivateMethodGroupWithOutParameter_ReasonOffersNoExample()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public bool AddedCaptureOut()\n        {\n"
+                + "            SeedReader read = TryReadPrivateSeed;\n            return read(out int value);\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "AddedCaptureOut");
+            Assert.That(reason, Does.Contain("method group 'TryReadPrivateSeed' (non-invocation)"));
+            Assert.That(reason, Does.Contain("a lambda that calls it keeps hot reloading."));
+            Assert.That(reason, Does.Not.Contain("such as"));
+        }
+
+        /// <summary>
         /// What: an added method that reads a compiled private static property is added, and the
         /// shim calls the getter delegate with no receiver argument.
         /// </summary>

@@ -24,17 +24,26 @@ internal static class EventAccessorRules
 {
     /// <summary>
     /// What: the skip reason for a body's event uses, or null when every use is either a
-    /// subscription (+= / -=) or rewritable through the backing field.
+    /// subscription (+= / -=) to an event the compiled assembly already has, or rewritable
+    /// through the backing field.
     /// </summary>
     internal static WorkerReason EvaluateEventUseSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
-        INamedTypeSymbol compiledType)
+        INamedTypeSymbol compiledType,
+        AddedEventLookup addedEvents)
     {
         foreach (EventUse use in EnumerateEventUses(bodyNode, semanticModel))
         {
             if (use.IsSubscription)
             {
+                if (addedEvents.IsAddedInThisEdit(use.EventSymbol))
+                {
+                    return WorkerReason.Of(
+                        HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
+                        use.EventSymbol.ContainingType.ToDisplayString() + "." + use.EventSymbol.Name);
+                }
+
                 continue;
             }
 

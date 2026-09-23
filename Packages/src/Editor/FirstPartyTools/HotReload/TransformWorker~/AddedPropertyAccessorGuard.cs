@@ -144,7 +144,8 @@ internal static class AddedPropertyAccessorGuard
             bodyNode,
             typeState.SourceUnit.SemanticModel,
             typeState.CompiledType,
-            addedMemberAccess: null);
+            addedMemberAccess: null,
+            typeState.AddedEvents);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

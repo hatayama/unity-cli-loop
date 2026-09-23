@@ -73,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         EventNoBackingField,
         EventDelegateTypeNotVisible,
         EventAddedInThisEdit,
+        EventSubscriptionToAddedEvent,
         EventNameof,
         EventConditionalReceiver,
         EventPassedByRef,
