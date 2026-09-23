@@ -3,6 +3,7 @@ package automation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -17,9 +18,23 @@ func TestValidateDispatcherPinOfflineRejectsManifestWithoutRequiredArchive(t *te
 	}
 }
 
+func TestValidateDispatcherPinOfflineRejectsManifestWithoutLinuxArchive(t *testing.T) {
+	// Verifies a pin that omits the published Linux archive cannot authorize bootstrap.
+	pin := []byte(`{"projectRunnerVersion":"3.0.0-beta.47","minimumDispatcherVersion":"3.0.1-beta.6","dispatcherReleaseTag":"dispatcher-v3.0.1-beta.6","dispatcherArchiveManifest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\ncccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-amd64.tar.gz\ndddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  uloop-dispatcher-darwin-arm64.tar.gz\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  uloop-dispatcher-windows-amd64.zip"}`)
+
+	err := ValidateDispatcherPinOffline(pin, pin)
+
+	if err == nil {
+		t.Fatal("expected required Linux archive failure")
+	}
+	if !strings.Contains(err.Error(), "uloop-dispatcher-linux-amd64.tar.gz") {
+		t.Fatalf("error = %q, want it to name the missing Linux archive", err)
+	}
+}
+
 func TestValidateDispatcherPinOfflineRejectsUnsortedManifest(t *testing.T) {
 	// Verifies the guard requires canonical manifest order so a re-stamp is byte reproducible.
-	pin := []byte(`{"projectRunnerVersion":"3.0.0-beta.47","minimumDispatcherVersion":"3.0.1-beta.6","dispatcherReleaseTag":"dispatcher-v3.0.1-beta.6","dispatcherArchiveManifest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\ncccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-amd64.tar.gz\ndddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  uloop-dispatcher-darwin-arm64.tar.gz\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  uloop-dispatcher-windows-amd64.zip"}`)
+	pin := []byte(`{"projectRunnerVersion":"3.0.0-beta.47","minimumDispatcherVersion":"3.0.1-beta.6","dispatcherReleaseTag":"dispatcher-v3.0.1-beta.6","dispatcherArchiveManifest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\ncccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-amd64.tar.gz\ndddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  uloop-dispatcher-darwin-arm64.tar.gz\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  uloop-dispatcher-windows-amd64.zip\nffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  uloop-dispatcher-linux-amd64.tar.gz"}`)
 
 	err := ValidateDispatcherPinOffline(pin, pin)
 
@@ -53,7 +68,7 @@ func TestValidateDispatcherPinOfflineRejectsMalformedManifest(t *testing.T) {
 
 func TestValidateDispatcherPinOfflineRejectsPinnedVersionBelowMinimum(t *testing.T) {
 	// Verifies bootstrap never stamps a dispatcher release that the package immediately rejects.
-	pin := []byte(`{"projectRunnerVersion":"3.0.0-beta.47","minimumDispatcherVersion":"3.0.2","dispatcherReleaseTag":"dispatcher-v3.0.1-beta.6","dispatcherArchiveManifest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\ncccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-amd64.tar.gz\ndddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  uloop-dispatcher-darwin-arm64.tar.gz\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  uloop-dispatcher-windows-amd64.zip"}`)
+	pin := []byte(`{"projectRunnerVersion":"3.0.0-beta.47","minimumDispatcherVersion":"3.0.2","dispatcherReleaseTag":"dispatcher-v3.0.1-beta.6","dispatcherArchiveManifest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\ncccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-amd64.tar.gz\ndddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  uloop-dispatcher-darwin-arm64.tar.gz\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  uloop-dispatcher-windows-amd64.zip\nffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  uloop-dispatcher-linux-amd64.tar.gz"}`)
 
 	err := ValidateDispatcherPinOffline(pin, pin)
 
@@ -73,7 +88,8 @@ func TestVerifyDispatcherPinSubjectsRejectsManifestThatDoesNotExactlyMatchSubjec
 			"uloop-dispatcher-darwin-amd64.tar.gz": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 			"uloop-dispatcher-darwin-arm64.tar.gz": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 			"uloop-dispatcher-windows-amd64.zip":   "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-			"uloop-dispatcher-unexpected.tar.gz":   "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			"uloop-dispatcher-linux-amd64.tar.gz":  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			"uloop-dispatcher-unexpected.tar.gz":   "9999999999999999999999999999999999999999999999999999999999999999",
 		}, nil
 	}
 
@@ -122,6 +138,7 @@ func validDispatcherPinGuardDeps() dispatcherPinStampDeps {
 				{Name: "uloop-dispatcher-darwin-amd64.tar.gz", URL: "https://example.invalid/darwin-amd64.tar.gz"},
 				{Name: "uloop-dispatcher-darwin-arm64.tar.gz", URL: "https://example.invalid/darwin-arm64.tar.gz"},
 				{Name: "uloop-dispatcher-windows-amd64.zip", URL: "https://example.invalid/windows-amd64.zip"},
+				{Name: "uloop-dispatcher-linux-amd64.tar.gz", URL: "https://example.invalid/linux-amd64.tar.gz"},
 			}, nil
 		},
 		fetchBundle:       func(context.Context, string) ([]byte, error) { return []byte("bundle"), nil },
@@ -133,11 +150,12 @@ func validDispatcherPinGuardDeps() dispatcherPinStampDeps {
 				"uloop-dispatcher-darwin-amd64.tar.gz": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 				"uloop-dispatcher-darwin-arm64.tar.gz": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 				"uloop-dispatcher-windows-amd64.zip":   "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+				"uloop-dispatcher-linux-amd64.tar.gz":  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
 			}, nil
 		},
 	}
 }
 
 func validDispatcherPinGuardFixture() []byte {
-	return []byte(`{"projectRunnerVersion":"3.0.0-beta.47","minimumDispatcherVersion":"3.0.1-beta.6","dispatcherReleaseTag":"dispatcher-v3.0.1-beta.6","dispatcherArchiveManifest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\ncccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-amd64.tar.gz\ndddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  uloop-dispatcher-darwin-arm64.tar.gz\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  uloop-dispatcher-windows-amd64.zip"}`)
+	return []byte(`{"projectRunnerVersion":"3.0.0-beta.47","minimumDispatcherVersion":"3.0.1-beta.6","dispatcherReleaseTag":"dispatcher-v3.0.1-beta.6","dispatcherArchiveManifest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\ncccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-amd64.tar.gz\ndddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  uloop-dispatcher-darwin-arm64.tar.gz\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  uloop-dispatcher-windows-amd64.zip\nffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  uloop-dispatcher-linux-amd64.tar.gz"}`)
 }
