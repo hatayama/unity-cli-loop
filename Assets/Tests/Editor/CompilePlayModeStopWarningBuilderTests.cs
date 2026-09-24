@@ -114,6 +114,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: the hot-reload drop sentence says values wired into added fields are not kept,
+        /// instead of claiming the whole behavior stays after the reload.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenHotReloadChangesActive_SaysWiredValuesOfAddedFieldsAreNotKept()
+        {
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 0,
+                activePersistedPausePointCount: 0,
+                activeHotReloadChangeCount: 1);
+
+            Assert.That(warning, Does.Contain("Values wired into fields that hot reload added are not kept"));
+            Assert.That(warning, Does.Not.Contain("behavior stays"));
+        }
+
+        /// <summary>
         /// What: Play plus active hot-reload changes keeps the Play sentence and appends the drop sentence.
         /// </summary>
         [Test]
