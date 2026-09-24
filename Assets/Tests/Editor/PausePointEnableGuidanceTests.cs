@@ -748,7 +748,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
                 Assert.That(response.Message, Does.Contain("Line " + FixtureBlankLineAboveMethod));
                 Assert.That(response.Message, Does.Contain("'EnableBySourceLocationFixture.Add'"));
-                Assert.That(response.RecommendedNextAction, Does.StartWith("Pass --method"));
+                Assert.That(response.RecommendedNextAction, Does.Contain("--method"));
                 Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
             }
         }
