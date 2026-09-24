@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -28,6 +30,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// The hash of the file's current bytes, or null when the file cannot be read.
+        /// </summary>
+        /// <remarks>
+        /// Why a failed read is null rather than a throw: the file can be deleted or locked by an
+        /// external editor between the transform run and this instant, which is the very window
+        /// the callers' drift checks exist for.
+        /// </remarks>
+        internal string TryComputeContentHashOfFileOrNull(string path)
+        {
+            try
+            {
+                return ComputeContentHash(File.ReadAllBytes(path));
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
         }
     }
 }
