@@ -76,12 +76,14 @@ if [ ! -f "$SOURCE_ABS" ]; then
     exit 2
 fi
 
-# Why fail fast here: with Domain Reload on, Play entry drops the whole hot reload, so
-# every assertion below would fail for a reason this harness does not test.
+# Why fail fast here: with Domain Reload on, Play entry drops the whole hot reload, and with
+# Scene Reload off no host is rebuilt, so every assertion below would fail for a reason this
+# harness does not test. Bit 1 is DisableDomainReload and bit 2 DisableSceneReload; bit 4
+# (DisableSceneBackupUnlessDirty) does not matter here.
 options_enabled="$(sed -n 's/^ *m_EnterPlayModeOptionsEnabled: *\([0-9]*\).*/\1/p' "$EDITOR_SETTINGS")"
 options="$(sed -n 's/^ *m_EnterPlayModeOptions: *\([0-9]*\).*/\1/p' "$EDITOR_SETTINGS")"
-if [ "$options_enabled" != "1" ] || [ -z "$options" ] || [ $((options % 2)) -ne 1 ]; then
-    printf '%s\n' "This harness requires Domain Reload OFF (Enter Play Mode Options enabled, Reload Domain unchecked)." >&2
+if [ "$options_enabled" != "1" ] || [ -z "$options" ] || [ $((options & 1)) -eq 0 ] || [ $((options & 2)) -ne 0 ]; then
+    printf '%s\n' "This harness requires Domain Reload OFF and Scene Reload ON (Enter Play Mode Options enabled, Reload Domain unchecked, Reload Scene checked)." >&2
     printf '%s\n' "Found m_EnterPlayModeOptionsEnabled=${options_enabled} m_EnterPlayModeOptions=${options} in $EDITOR_SETTINGS" >&2
     exit 1
 fi
