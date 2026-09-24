@@ -290,8 +290,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: when the restorer has nothing, the initializer fills the slot and the restorer is
-        /// not asked again for that field of that host.
+        /// What: when the restorer has nothing, the initializer's value is what the field reads, and
+        /// later reads only retry the restore instead of asking for a first restore again.
         /// </summary>
         [Test]
         public void GetOrInit_RestorerHasNothing_RunsInitializerAndDoesNotAskAgain()
@@ -344,11 +344,128 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(values.GetOrInit(host, FieldKey(), () => 8), Is.EqualTo(8));
         }
 
+        /// <summary>
+        /// What: a read whose restore failed keeps asking on later reads, so a value whose host
+        /// came back reaches the field instead of the initializer staying for good.
+        /// </summary>
+        [Test]
+        public void GetOrInit_RestoreFailsThenSucceeds_ReturnsTheRestoredValueOnTheLaterRead()
+        {
+            CountingRestorer restorer = new CountingRestorer(false, null);
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
 
+            int first = values.GetOrInit(host, FieldKey(), () => 1);
+            restorer.RetryHasValue = true;
+            restorer.RetryValue = 5;
+            int second = values.GetOrInit(host, FieldKey(), () => 1);
+            int third = values.GetOrInit(host, FieldKey(), () => 1);
 
+            Assert.That(first, Is.EqualTo(1));
+            Assert.That(second, Is.EqualTo(5));
+            Assert.That(third, Is.EqualTo(5));
+            Assert.That(restorer.RetryCalls, Is.EqualTo(1));
+        }
 
+        /// <summary>
+        /// What: the store hands the restorer back the generation it stored on the last retry, so
+        /// the restorer can skip a retry nothing has changed for.
+        /// </summary>
+        [Test]
+        public void GetOrInit_OnAPendingSlot_PassesTheGenerationTheRestorerStoredLastTime()
+        {
+            CountingRestorer restorer = new CountingRestorer(false, null) { GenerationToStore = 7 };
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
 
+            values.GetOrInit(host, FieldKey(), () => 1);
+            values.GetOrInit(host, FieldKey(), () => 1);
+            values.GetOrInit(host, FieldKey(), () => 1);
 
+            Assert.That(restorer.GenerationsSeen, Is.EqualTo(new[] { 0, 7 }));
+        }
+
+        /// <summary>
+        /// What: a write to a field whose restore is pending settles it, so the written value is
+        /// never replaced by a later restore.
+        /// </summary>
+        [Test]
+        public void Set_OnAPendingSlot_StopsAskingTheRestorer()
+        {
+            CountingRestorer restorer = new CountingRestorer(false, null);
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
+            values.GetOrInit(host, FieldKey(), () => 1);
+
+            values.Set(host, FieldKey(), 8);
+            restorer.RetryHasValue = true;
+            restorer.RetryValue = 5;
+            int value = values.GetOrInit(host, FieldKey(), () => 1);
+
+            Assert.That(value, Is.EqualTo(8));
+            Assert.That(restorer.RetryCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: the read-back of a field whose restore is pending retries it and reports the
+        /// restored value, matching what the next GetOrInit returns.
+        /// </summary>
+        [Test]
+        public void TryGet_OnAPendingSlot_RetriesAndReportsTheRestoredValue()
+        {
+            CountingRestorer restorer = new CountingRestorer(false, null);
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
+            values.GetOrInit(host, FieldKey(), () => 1);
+
+            restorer.RetryHasValue = true;
+            restorer.RetryValue = 5;
+            bool read = values.TryGet(host, FieldKey(), typeof(int), out object stored);
+
+            Assert.That(read, Is.True);
+            Assert.That(stored, Is.EqualTo(5));
+            Assert.That(values.GetOrInit(host, FieldKey(), () => 1), Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: the read-back of a field whose restore is still pending reports the initializer's
+        /// value, which is what the shim reads.
+        /// </summary>
+        [Test]
+        public void TryGet_OnAPendingSlotStillUnrestored_ReportsTheInitializerValue()
+        {
+            CountingRestorer restorer = new CountingRestorer(false, null);
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
+            values.GetOrInit(host, FieldKey(), () => 1);
+
+            bool read = values.TryGet(host, FieldKey(), typeof(int), out object stored);
+
+            Assert.That(read, Is.True);
+            Assert.That(stored, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a retry that brings back a value the field's type cannot hold keeps the
+        /// initializer's value and settles the slot, so the restorer is not asked forever.
+        /// </summary>
+        [Test]
+        public void GetOrInit_RestoredValueOfAnotherTypeOnAPendingSlot_KeepsTheInitializerAndStopsRetrying()
+        {
+            CountingRestorer restorer = new CountingRestorer(false, null);
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
+            values.GetOrInit(host, FieldKey(), () => 1);
+
+            restorer.RetryHasValue = true;
+            restorer.RetryValue = "text";
+            int second = values.GetOrInit(host, FieldKey(), () => 9);
+            int third = values.GetOrInit(host, FieldKey(), () => 9);
+
+            Assert.That(second, Is.EqualTo(1));
+            Assert.That(third, Is.EqualTo(1));
+            Assert.That(restorer.RetryCalls, Is.EqualTo(1));
+        }
 
         private static string FieldKey()
         {
