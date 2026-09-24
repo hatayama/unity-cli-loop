@@ -8,7 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Turns wired values that a scene reload did not restore into response rows and the warning
-    /// line that asks to wire them again.
+    /// line that names them with the reason each did not come back.
     /// </summary>
     internal static class HotReloadWiredValueRestoreWarning
     {

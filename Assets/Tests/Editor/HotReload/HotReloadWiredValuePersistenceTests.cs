@@ -257,7 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _persistence.Record(NamedHost(), OtherFieldKey, new SceneRef(TargetIdentity));
             _resolver.MissingHosts.Add(HostIdentity);
 
-            _persistence.ReportMissingHosts();
+            _persistence.ReportMissingHosts(false);
             IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.TakeUnreportedFailures();
 
             Assert.That(failures.Count, Is.EqualTo(2));
@@ -270,7 +270,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(fieldKeys, Is.EquivalentTo(new[] { FieldKey, OtherFieldKey }));
-            _persistence.ReportMissingHosts();
+            _persistence.ReportMissingHosts(false);
             Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
             Assert.That(_persistence.Ledger.Count, Is.EqualTo(2));
         }
@@ -284,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _persistence.Record(NamedHost(), FieldKey, 7);
 
-            _persistence.ReportMissingHosts();
+            _persistence.ReportMissingHosts(false);
 
             Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
             Assert.That(_persistence.Report.Failures, Is.Empty);
@@ -302,13 +302,187 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _persistence.Record(NamedHost(), FieldKey, 7);
             _persistence.Record(NamedHost(), OtherFieldKey, 3);
             _resolver.MissingHosts.Add(HostIdentity);
-            _persistence.ReportMissingHosts();
+            _persistence.ReportMissingHosts(false);
             Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(2));
 
             _persistence.BeginSceneReloadSession();
-            _persistence.ReportMissingHosts();
+            _persistence.ReportMissingHosts(false);
 
             Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: a host wired during Play that is not at its place once Play Mode is left is named
+        /// once with the Play-only reason and forgotten, so no later session names it or restores it.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_PlayOnlyHostAfterLeavingPlayMode_NamesItOnceAndForgetsIt()
+        {
+            _resolver.IsPlayModeRunning = true;
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.IsPlayModeRunning = false;
+            _resolver.MissingHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts(true);
+
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.TakeUnreportedFailures();
+            Assert.That(failures.Count, Is.EqualTo(1));
+            Assert.That(failures[0].Reason, Is.EqualTo(HotReloadWiredValuePersistence.PlayOnlyHostReason));
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(0));
+
+            _persistence.BeginSceneReloadSession();
+            _persistence.ReportMissingHosts(false);
+
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.False);
+        }
+
+        /// <summary>
+        /// What: a host wired during Play that the Edit-time scene still has at its place is
+        /// neither named nor forgotten when Play Mode is left.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_PlayOnlyHostStillAtItsPlaceAfterLeavingPlayMode_KeepsIt()
+        {
+            _resolver.IsPlayModeRunning = true;
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.IsPlayModeRunning = false;
+
+            _persistence.ReportMissingHosts(true);
+
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a host wired during Play in a scene Edit Mode cannot read counts as missing once
+        /// Play Mode is left, so it is named once with the Play-only reason and forgotten.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_PlayWiredHostInASceneEditModeCannotReadAfterLeavingPlayMode_NamesItOnceAndForgetsIt()
+        {
+            _resolver.IsPlayModeRunning = true;
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.IsPlayModeRunning = false;
+            _resolver.UnloadedSceneHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts(true);
+
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.TakeUnreportedFailures();
+            Assert.That(failures.Count, Is.EqualTo(1));
+            Assert.That(failures[0].Reason, Is.EqualTo(HotReloadWiredValuePersistence.PlayOnlyHostReason));
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a host wired in Edit Mode whose scene cannot be read stays silent and kept, even
+        /// when Play Mode is left, because an unread scene is out of sight, not gone.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_EditWiredHostInAnUnreadableScene_StaysSilentAndKept()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.UnloadedSceneHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts(true);
+
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a host wired in Edit Mode that is missing once Play Mode is left is named with the
+        /// host-missing reason and kept, since putting the host back brings the value back.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_HostWiredInEditModeMissingAfterLeavingPlayMode_KeepsItWithTheHostMissingReason()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.MissingHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts(true);
+
+            AssertOneFailureWithReasonAndLedgerCount(HotReloadWiredValuePersistence.HostMissingReason, 1);
+        }
+
+        /// <summary>
+        /// What: a host wired during Play that is missing when Play Mode is entered again is named
+        /// with the host-missing reason and kept; only leaving Play Mode forgets Play-only hosts.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_PlayWiredHostMissingWhenEnteringPlayMode_KeepsItWithTheHostMissingReason()
+        {
+            _resolver.IsPlayModeRunning = true;
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.MissingHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts(false);
+
+            AssertOneFailureWithReasonAndLedgerCount(HotReloadWiredValuePersistence.HostMissingReason, 1);
+        }
+
+        /// <summary>
+        /// What: wiring the same host and field again in Edit Mode drops the Play-only mark, so a
+        /// later absence is reported with the host-missing reason and the value is kept.
+        /// </summary>
+        [Test]
+        public void Record_SameKeyAgainInEditMode_ClearsThePlayOnlyMark()
+        {
+            _resolver.IsPlayModeRunning = true;
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.IsPlayModeRunning = false;
+            _persistence.Record(NamedHost(), FieldKey, 8);
+            _resolver.MissingHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts(true);
+
+            AssertOneFailureWithReasonAndLedgerCount(HotReloadWiredValuePersistence.HostMissingReason, 1);
+        }
+
+        /// <summary>
+        /// What: a value that comes back after its host was named missing drops that failure, so
+        /// the report no longer lists it and a later drain hands nothing out.
+        /// </summary>
+        [Test]
+        public void TryRestore_AfterAReportedFailure_ClearsThatFailure()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts(false);
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+            _resolver.MissingHosts.Remove(HostIdentity);
+
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.True);
+
+            (int restoredCount, IReadOnlyList<HotReloadWiredValueRestoreFailure> failures) = _persistence.ReadReport();
+            Assert.That(failures, Is.Empty);
+            Assert.That(restoredCount, Is.EqualTo(1));
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a value that comes back before its failure was drained drops that failure, so the
+        /// drain hands nothing out.
+        /// </summary>
+        [Test]
+        public void TryRestore_AfterAFailureNotYetTaken_ClearsItBeforeTheDrain()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts(false);
+            _resolver.MissingHosts.Remove(HostIdentity);
+
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.True);
+
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+        }
+
+        private void AssertOneFailureWithReasonAndLedgerCount(string reason, int ledgerCount)
+        {
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.TakeUnreportedFailures();
+            Assert.That(failures.Count, Is.EqualTo(1));
+            Assert.That(failures[0].Reason, Is.EqualTo(reason));
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(ledgerCount));
         }
 
         private PersistenceHost NamedHost()
@@ -329,9 +503,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             internal HashSet<string> MissingHosts { get; } = new HashSet<string>();
 
+            internal HashSet<string> UnloadedSceneHosts { get; } = new HashSet<string>();
+
             public bool IsMainThread { get; set; } = true;
 
-            public bool IsHostMissing(string hostIdentity) => MissingHosts.Contains(hostIdentity);
+            public bool IsPlayModeRunning { get; set; }
+
+            public bool IsHostMissing(string hostIdentity, bool unloadedSceneCountsAsMissing) =>
+                MissingHosts.Contains(hostIdentity)
+                || (unloadedSceneCountsAsMissing && UnloadedSceneHosts.Contains(hostIdentity));
 
             public string DescribeHost(object host)
             {

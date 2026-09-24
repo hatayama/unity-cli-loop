@@ -131,7 +131,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadServices outer = HotReloadCompositionRoot.Services;
                 outer.WiredValuePersistence.Ledger.Record(
                     new HotReloadWiredValueHostKey("scene:S|path:Host[0]", "Ns.Host::target"),
-                    HotReloadWiredValueDescriptor.Plain(1));
+                    HotReloadWiredValueDescriptor.Plain(1),
+                    false);
                 Assert.That(outer.Domain.AddedFieldValues.Restorer, Is.SameAs(outer.WiredValuePersistence));
                 Assert.That(HotReloadAddedFieldCoordination.WiredValues, Is.SameAs(outer.WiredValuePersistence));
 
@@ -160,7 +161,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadServices services = HotReloadCompositionRoot.Services;
                 services.WiredValuePersistence.Ledger.Record(
                     new HotReloadWiredValueHostKey("scene:S|path:Host[0]", "Ns.Host::target"),
-                    HotReloadWiredValueDescriptor.Plain(1));
+                    HotReloadWiredValueDescriptor.Plain(1),
+                    false);
 
                 services.StatusExecutor.ExecuteRevertAll();
 

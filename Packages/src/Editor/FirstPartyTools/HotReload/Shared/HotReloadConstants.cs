@@ -275,11 +275,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "they are gone; wire them again before code that reads them runs: {0}.";
 
         // Why name each one: the ledger brings wired values back after a scene reload without a
-        // domain reload, so a value that did not come back is the exception the caller has to
-        // wire by hand. Each item reads "{Type.field} on {host}: {reason}".
+        // domain reload, so a value that did not come back is the exception the caller has to act
+        // on; each item's reason says what brings it back. Each item reads
+        // "{Type.field} on {host}: {reason}".
         public const string WiredValueNotRestoredWarningFormat =
-            "Wired added-field value(s) could not be restored after the scene reload; wire them "
-            + "again: {0}.";
+            "Wired added-field value(s) did not come back after the scene reload: {0}.";
 
         // Why a pause and not only "wire them": while Play Mode runs, a frame can read an added
         // field before the caller wires it, and the reader then fails every frame until it is

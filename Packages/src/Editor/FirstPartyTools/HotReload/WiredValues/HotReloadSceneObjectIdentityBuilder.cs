@@ -126,15 +126,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Whether a component identity names a place in a readable scene where no component of
-        /// that type sits any more. False when the scene cannot be read: the host is then out of
-        /// sight, not gone, and is found again once that scene is open.
+        /// that type sits any more. When the scene cannot be read, the answer is
+        /// <paramref name="unloadedSceneCountsAsMissing"/>: a host wired in Edit Mode is then out
+        /// of sight, not gone, and is found again once that scene is open, while a host wired
+        /// during Play cannot be in a scene Edit Mode does not have.
         /// </summary>
-        internal bool IsComponentMissing(string identity)
+        internal bool IsComponentMissing(string identity, bool unloadedSceneCountsAsMissing)
         {
-            if (!TrySplitSceneIdentity(identity, out string sceneId, out _)
-                || !TryFindLoadedScene(sceneId, out _))
+            if (!TrySplitSceneIdentity(identity, out string sceneId, out _))
             {
                 return false;
+            }
+
+            if (!TryFindLoadedScene(sceneId, out _))
+            {
+                return unloadedSceneCountsAsMissing;
             }
 
             return !TryResolveComponent(identity, out _);

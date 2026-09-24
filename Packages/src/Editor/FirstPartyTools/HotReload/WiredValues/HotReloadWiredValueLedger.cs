@@ -14,16 +14,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<HotReloadWiredValueHostKey, HotReloadWiredValueDescriptor> _entries =
             new Dictionary<HotReloadWiredValueHostKey, HotReloadWiredValueDescriptor>();
 
+        private readonly HashSet<HotReloadWiredValueHostKey> _wiredWhilePlaying =
+            new HashSet<HotReloadWiredValueHostKey>();
+
         internal int Count => _entries.Count;
 
         /// <summary>
         /// Remembers <paramref name="descriptor"/>, replacing what was wired into the same field of
-        /// the same host before.
+        /// the same host before, and whether it was wired while Play Mode ran. Wiring the key again
+        /// outside Play Mode drops that mark, since the host is then known to be in the Edit-time
+        /// scene.
         /// </summary>
-        internal void Record(HotReloadWiredValueHostKey key, HotReloadWiredValueDescriptor descriptor)
+        internal void Record(
+            HotReloadWiredValueHostKey key, HotReloadWiredValueDescriptor descriptor, bool wiredWhilePlaying)
         {
             Debug.Assert(descriptor != null, "descriptor must not be null.");
             _entries[key] = descriptor;
+            if (wiredWhilePlaying)
+            {
+                _wiredWhilePlaying.Add(key);
+                return;
+            }
+
+            _wiredWhilePlaying.Remove(key);
+        }
+
+        internal bool WasWiredWhilePlaying(HotReloadWiredValueHostKey key)
+        {
+            return _wiredWhilePlaying.Contains(key);
+        }
+
+        internal void Remove(HotReloadWiredValueHostKey key)
+        {
+            _entries.Remove(key);
+            _wiredWhilePlaying.Remove(key);
         }
 
         internal bool TryGet(HotReloadWiredValueHostKey key, out HotReloadWiredValueDescriptor descriptor)
@@ -58,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void Clear()
         {
             _entries.Clear();
+            _wiredWhilePlaying.Clear();
         }
     }
 }

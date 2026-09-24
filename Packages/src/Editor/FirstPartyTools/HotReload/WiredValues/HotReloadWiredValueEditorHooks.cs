@@ -16,6 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// restores it was meant to count.
     /// Why the missing-host check on the Entered states: the scene reload has finished there, so a
     /// host that the rebuilt scene does not put back is known to be gone.
+    /// Why EnteredEditMode says Play Mode was left: a host wired during Play that the Edit-time
+    /// scene lacks cannot come back by any reload, so it is named once there and forgotten.
     /// Why a named static handler: registering unsubscribes first, and a lambda would be a new
     /// delegate each time.
     /// </remarks>
@@ -43,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            GetPersistence().ReportMissingHosts();
+            GetPersistence().ReportMissingHosts(state == PlayModeStateChange.EnteredEditMode);
         }
     }
 }
