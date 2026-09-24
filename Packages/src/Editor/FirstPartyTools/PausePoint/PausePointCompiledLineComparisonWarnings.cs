@@ -257,7 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchedMethod), false);
         }
 
-        private static bool IsTrivialToken(string trimmed)
+        internal static bool IsTrivialToken(string trimmed)
         {
             foreach (char character in trimmed)
             {

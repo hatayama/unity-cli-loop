@@ -30,10 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "System.Int32 io.github.hatayama.UnityCliLoop.Tests.SourcePausePointResolverFixtures.EditedLineRemapFixture::UniqueTarget(System.Int32)";
 
         private const string ExpectedRemapWarning =
-            "--line 16 did not resolve in method 'UniqueTarget' against the last compiled source; the edited line's text was found at line 10 inside that method's compiled span, so the marker was placed there. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers.";
+            "--line 16 in method 'UniqueTarget' was matched by its text to line 10 in the last compiled source, so the marker was placed at line 10, not at line 16. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers.";
 
         private const string ExpectedSuccessWarning =
-            "--line 16 did not resolve in method 'UniqueTarget' against the last compiled source; the edited line's text was found at line 10 inside that method's compiled span, so the marker was placed there. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers. The target method body is very small and may be inlined by Mono's JIT into its callers; if HitCount stays 0 while the line demonstrably runs, move the pause point into the calling method.";
+            "--line 16 in method 'UniqueTarget' was matched by its text to line 10 in the last compiled source, so the marker was placed at line 10, not at line 16. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers. The target method body is very small and may be inlined by Mono's JIT into its callers; if HitCount stays 0 while the line demonstrably runs, move the pause point into the calling method.";
 
         private const string ExpectedZeroMatchFailureMessage =
             "No method named 'UniqueTarget' with a sequence point on or after line 36 was found. Nearby methods in the last compiled source: 'EditedLineRemapFixture.ZeroMatchOther' spans lines 35-38.";
@@ -335,7 +335,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: UseCase resolve failure remaps onto the unique compiled span line and patches there.
+        /// What: an edited line outside the named method remaps onto its unique compiled span line and patches there.
         /// </summary>
         [Test]
         public void Enable_WhenEditedLineMatchesOnceInNamedMethodSpan_RemapsAndPatches()
@@ -452,6 +452,117 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
             Assert.That(response.Message, Is.EqualTo(ExpectedRoundForwardFailureMessage));
+        }
+
+        /// <summary>
+        /// What: a line whose text sits at the same line but outside the --method region is still
+        /// matched by text instead of snapping to that method's entry brace, and the snap
+        /// disclosure is not added on top of the remap warning. This also pins the no-drift
+        /// exception: same text at the same line counts as no drift only inside the method region.
+        /// </summary>
+        [Test]
+        public void Enable_WhenLineAboveNamedMethodMatchesItsBodyText_RemapsInsteadOfSnappingToEntry()
+        {
+            InstallSnapshotFromFile(RemapFixtureFile);
+            _hotReloadSideScope.Port.ActiveHotReloadChangesInFile = _ => true;
+
+            PausePointResponse response = EnableRemapFixture(UniqueTargetStatementLine, "UniqueOther");
+
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ResolvedLine, Is.EqualTo(UniqueOtherStatementLine));
+            Assert.That(
+                response.Warning,
+                Does.Contain("--line 10 in method 'UniqueOther' was matched by its text to line 16"));
+            Assert.That(response.Warning, Does.Not.Contain("snapped forward"));
+        }
+
+        /// <summary>
+        /// What: a line inside the named method whose statement moved in the compiled source is
+        /// matched by text instead of resolving to the other statement now at that line number.
+        /// </summary>
+        [Test]
+        public void Enable_WhenStatementMovedInsideNamedMethod_RemapsToItsCompiledLine()
+        {
+            InstallSnapshotWithLinesSwapped(RemapFixtureFile, 10, 11);
+
+            PausePointResponse response = EnableRemapFixture(11, "UniqueTarget");
+
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ResolvedLine, Is.EqualTo(10));
+            Assert.That(
+                response.Warning,
+                Does.Contain("--line 11 in method 'UniqueTarget' was matched by its text to line 10"));
+        }
+
+        /// <summary>
+        /// What: a brace-only edited line is not text-matched and keeps the plain forward resolve.
+        /// </summary>
+        [Test]
+        public void Enable_WhenEditedLineIsBraceOnly_KeepsPlainResolve()
+        {
+            InstallSnapshotFromFile(RemapFixtureFile);
+
+            PausePointResponse response = EnableRemapFixture(9, "UniqueOther");
+
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ResolvedLine, Is.EqualTo(15));
+            Assert.That(response.Warning, Does.Not.Contain("was matched by its text"));
+        }
+
+        /// <summary>
+        /// What: a statement line that has not drifted resolves in place without a remap warning.
+        /// </summary>
+        [Test]
+        public void Enable_WhenStatementLineHasNotDrifted_ResolvesInPlaceWithoutRemapWarning()
+        {
+            InstallSnapshotFromFile(RemapFixtureFile);
+
+            PausePointResponse response = EnableRemapFixture(UniqueTargetStatementLine, "UniqueTarget");
+
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ResolvedLine, Is.EqualTo(UniqueTargetStatementLine));
+            Assert.That(response.Warning, Does.Not.Contain("was matched by its text"));
+        }
+
+        /// <summary>
+        /// What: a declaration line that has not drifted keeps the plain round-forward to the entry
+        /// brace without a remap warning, even though its text match reports the span start.
+        /// </summary>
+        [Test]
+        public void Enable_WhenDeclarationLineHasNotDrifted_RoundsForwardWithoutRemapWarning()
+        {
+            InstallSnapshotFromFile(RemapFixtureFile);
+
+            PausePointResponse response = EnableRemapFixture(8, "UniqueTarget");
+
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ResolvedLine, Is.EqualTo(9));
+            Assert.That(response.Warning, Does.Not.Contain("was matched by its text"));
+        }
+
+        private static PausePointResponse EnableRemapFixture(int line, string method)
+        {
+            return new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = RemapFixtureFile,
+                Line = line,
+                Method = method,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+        }
+
+        private void InstallSnapshotWithLinesSwapped(string projectRelativeFile, int lineA, int lineB)
+        {
+            string absoluteFilePath = Path.Combine(
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                projectRelativeFile);
+            string[] lines = File.ReadAllText(absoluteFilePath).Split('\n');
+            string swapped = lines[lineA - 1];
+            lines[lineA - 1] = lines[lineB - 1];
+            lines[lineB - 1] = swapped;
+            string snapshotSource = string.Join("\n", lines);
+            _hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => snapshotSource;
         }
 
         private void InstallSnapshotFromFile(string projectRelativeFile)
