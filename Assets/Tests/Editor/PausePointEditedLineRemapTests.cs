@@ -540,6 +540,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Warning, Does.Not.Contain("was matched by its text"));
         }
 
+        /// <summary>
+        /// What: when the plain resolve fails, a brace-only edited line is still text-matched inside
+        /// the named method, as before the text-first match, so the enable keeps succeeding.
+        /// </summary>
+        [Test]
+        public void Enable_WhenPlainResolveFailsOnBraceOnlyLine_StillRemapsInsideNamedMethod()
+        {
+            InstallSnapshotFromFile(RemapFixtureFile);
+
+            PausePointResponse response = EnableRemapFixture(15, "UniqueTarget");
+
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ResolvedLine, Is.EqualTo(9));
+            Assert.That(
+                response.Warning,
+                Does.Contain("--line 15 in method 'UniqueTarget' was matched by its text to line 9"));
+        }
+
         private static PausePointResponse EnableRemapFixture(int line, string method)
         {
             return new PausePointUseCase().Enable(new EnablePausePointSchema

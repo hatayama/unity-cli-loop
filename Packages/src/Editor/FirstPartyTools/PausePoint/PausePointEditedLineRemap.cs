@@ -14,6 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why text first: after a hot reload the edited line numbers drift from the compiled
         // spans, and the plain resolve rounds to the first sequence point at or after --line,
         // so it succeeds on a different statement. A unique text match is the intended one.
+        // Why a second match after a failed plain resolve: brace-only lines are left to the plain
+        // resolve first, and when it fails their unique match is still the only way to arm.
         internal static (SourcePausePointResolveResult resolveResult, string remapWarning)
             ResolveWithEditedLineRemap(
                 string file,
@@ -21,28 +23,78 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string method,
                 SourcePausePointSnapshotTiming snapshotTiming)
         {
-            if (!string.IsNullOrEmpty(method) && line > 0 && !string.IsNullOrEmpty(file))
+            bool canTextMatch = !string.IsNullOrEmpty(method) && line > 0 && !string.IsNullOrEmpty(file);
+            if (canTextMatch)
             {
-                int remappedLine = FindTextMatchedCompiledLineOrZero(file, line, method);
-                if (remappedLine > 0 && remappedLine != line)
+                SourcePausePointResolveResult remapped = ResolveRemappedLineOrNull(
+                    file, line, method, snapshotTiming, afterPlainResolveFailure: false);
+                if (remapped != null)
                 {
-                    SourcePausePointResolveResult retry =
-                        SourcePausePointResolver.Resolve(file, remappedLine, method, snapshotTiming);
-                    // Why exact line: Resolve rounds a comment or continuation forward, and the
-                    // remap warning claims the marker was placed at remappedLine.
-                    if (retry.Success && retry.Resolution.ResolvedLine == remappedLine)
-                    {
-                        return (
-                            retry,
-                            PausePointEnableWarnings.BuildEditedLineRemapWarning(line, method, remappedLine));
-                    }
+                    return (remapped, BuildRemapWarning(line, method, remapped));
                 }
             }
 
-            return (SourcePausePointResolver.Resolve(file, line, method, snapshotTiming), string.Empty);
+            SourcePausePointResolveResult resolveResult =
+                SourcePausePointResolver.Resolve(file, line, method, snapshotTiming);
+            if (resolveResult.Success || !canTextMatch)
+            {
+                return (resolveResult, string.Empty);
+            }
+
+            SourcePausePointResolveResult remappedAfterFailure = ResolveRemappedLineOrNull(
+                file, line, method, snapshotTiming, afterPlainResolveFailure: true);
+            if (remappedAfterFailure == null)
+            {
+                return (resolveResult, string.Empty);
+            }
+
+            return (remappedAfterFailure, BuildRemapWarning(line, method, remappedAfterFailure));
         }
 
-        private static int FindTextMatchedCompiledLineOrZero(string file, int line, string method)
+        private static string BuildRemapWarning(
+            int line,
+            string method,
+            SourcePausePointResolveResult remapped)
+        {
+            return PausePointEnableWarnings.BuildEditedLineRemapWarning(
+                line,
+                method,
+                remapped.Resolution.ResolvedLine);
+        }
+
+        private static SourcePausePointResolveResult ResolveRemappedLineOrNull(
+            string file,
+            int line,
+            string method,
+            SourcePausePointSnapshotTiming snapshotTiming,
+            bool afterPlainResolveFailure)
+        {
+            int remappedLine = FindTextMatchedCompiledLineOrZero(file, line, method, afterPlainResolveFailure);
+            if (remappedLine <= 0 || remappedLine == line)
+            {
+                return null;
+            }
+
+            SourcePausePointResolveResult retry =
+                SourcePausePointResolver.Resolve(file, remappedLine, method, snapshotTiming);
+            // Why exact line: Resolve rounds a comment or continuation forward, and the
+            // remap warning claims the marker was placed at remappedLine.
+            if (!retry.Success || retry.Resolution.ResolvedLine != remappedLine)
+            {
+                return null;
+            }
+
+            return retry;
+        }
+
+        // Why afterPlainResolveFailure matches brace-only lines and skips the no-drift check: the
+        // plain resolve already failed, so it has no answer to defer to, and an undrifted line
+        // inside the method region would not have failed.
+        private static int FindTextMatchedCompiledLineOrZero(
+            string file,
+            int line,
+            string method,
+            bool afterPlainResolveFailure)
         {
             // Why snapshot-only: the on-disk file can already include uncompiled edits, so
             // scanning it against the last PDB span can unique-match a later statement onto
@@ -68,18 +120,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string editedTrimmed = editedLineText.Trim();
-            // Why skip braces: "{" is in every method, and resolving it to the entry is the
-            // plain resolve's job, not a text match's.
-            if (editedTrimmed.Length == 0 || PausePointCompiledLineComparisonWarnings.IsTrivialToken(editedTrimmed))
+            if (editedTrimmed.Length == 0)
             {
                 return 0;
             }
 
             string[] compiledSourceLines =
                 SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
-            if (IsUndriftedLineInsideMethodRegion(line, editedTrimmed, compiledSourceLines, spans))
+            if (!afterPlainResolveFailure)
             {
-                return 0;
+                // Why skip braces: "{" is in every method, and resolving it to the entry is the
+                // plain resolve's job, not a text match's.
+                if (PausePointCompiledLineComparisonWarnings.IsTrivialToken(editedTrimmed)
+                    || IsUndriftedLineInsideMethodRegion(line, editedTrimmed, compiledSourceLines, spans))
+                {
+                    return 0;
+                }
             }
 
             return FindUniqueMatchingCompiledLineOrZero(method, editedLineText, compiledSourceLines, spans);
