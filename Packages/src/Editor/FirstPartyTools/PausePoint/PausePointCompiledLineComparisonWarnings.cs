@@ -103,6 +103,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 methodDisplay);
         }
 
+        /// <summary>
+        /// Reads the edited lines behind an enable and composes its drift and snap warning.
+        /// </summary>
+        // Why the early return comes first: without a compiled comparison the edited-file reads
+        // and the snapshot split would be wasted IO.
+        internal static (string warning, bool comparedAndMatched) BuildEnableComparisonWarningOrEmpty(
+            bool compareCompiledLineDrift,
+            string file,
+            int requestedLine,
+            int resolvedLine,
+            string resolvedMethod,
+            string compiledResolvedLineText,
+            string compiledSnapshotSource,
+            int compiledMethodStartLine,
+            int compiledMethodEndLine)
+        {
+            if (!compareCompiledLineDrift)
+            {
+                return (string.Empty, false);
+            }
+
+            (bool resolvedEditedReadOk, string resolvedEditedLineText) = ReadEditedLineText(file, resolvedLine);
+            (bool requestedEditedReadOk, string requestedEditedLineText) = ReadEditedLineText(file, requestedLine);
+            string[] compiledSourceLines = SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
+            return ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+                file,
+                requestedLine,
+                resolvedLine,
+                resolvedMethod,
+                compiledResolvedLineText,
+                resolvedEditedReadOk,
+                resolvedEditedLineText,
+                requestedEditedReadOk,
+                requestedEditedLineText,
+                compiledMethodStartLine,
+                compiledMethodEndLine,
+                compiledSourceLines);
+        }
+
         // Why snap before resolved-line drift: the requested line is what the agent passed;
         // the armed line is what actually paused.
         // Why resolved-text candidates only with a drift sentence: a snap-only warning already
