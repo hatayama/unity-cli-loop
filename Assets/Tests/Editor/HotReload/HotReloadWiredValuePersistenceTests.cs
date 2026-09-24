@@ -679,6 +679,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.Report.Failures, Is.Empty);
         }
 
+        /// <summary>
+        /// What: wiring a value again from the main thread removes the row an earlier
+        /// off-main-thread read of the same field added under the host's type name.
+        /// </summary>
+        [Test]
+        public void Record_AfterAnOffMainThreadRow_RemovesThatRow()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            PersistenceHost host = NamedHost();
+            _resolver.IsMainThread = false;
+            _persistence.TryRestore(host, FieldKey, out _);
+            Assert.That(_persistence.Report.Failures.Count, Is.EqualTo(1), "Precondition: the off-main read must be named.");
+
+            _resolver.IsMainThread = true;
+            _persistence.Record(host, FieldKey, 8);
+
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+        }
+
         // One retry in the current generation, the trigger, then a second retry with the same
         // generation variable: only a trigger that moved the generation lets it ask the resolver.
         private void AssertRetryAsksAgainAfter(System.Action trigger)
