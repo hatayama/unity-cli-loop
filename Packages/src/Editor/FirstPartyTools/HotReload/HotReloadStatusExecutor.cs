@@ -15,22 +15,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadPatcher _patcher;
         private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
         private readonly HotReloadWiredValuePersistence _wiredValuePersistence;
+        private readonly HotReloadWiredValueRestoreRefresh _restoreRefresh;
 
         internal HotReloadStatusExecutor(
             HotReloadDomain domain,
             HotReloadPatcher patcher,
             HotReloadUnityMessageForwarding unityMessageForwarding,
-            HotReloadWiredValuePersistence wiredValuePersistence)
+            HotReloadWiredValuePersistence wiredValuePersistence,
+            HotReloadWiredValueRestoreRefresh restoreRefresh)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
             Debug.Assert(
                 unityMessageForwarding != null, "unityMessageForwarding must not be null.");
             Debug.Assert(wiredValuePersistence != null, "wiredValuePersistence must not be null.");
+            Debug.Assert(restoreRefresh != null, "restoreRefresh must not be null.");
             _domain = domain;
             _patcher = patcher;
             _unityMessageForwarding = unityMessageForwarding;
             _wiredValuePersistence = wiredValuePersistence;
+            _restoreRefresh = restoreRefresh;
         }
 
         public HotReloadResponse ExecuteRevertAll()
@@ -164,6 +168,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 hold.SceneRefreshWarning);
+            // A value is otherwise restored only when game code next reads its field, so without
+            // this a host put back at its place kept its host-missing row for the whole session.
+            _restoreRefresh.Run();
             (int restoredWiredValueCount, IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues) =
                 _wiredValuePersistence.ReadReport();
             HotReloadWiredValueRestoreWarning.Append(warnings, unrestoredWiredValues);
