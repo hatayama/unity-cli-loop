@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings,
             IReadOnlyList<string> rewireFields,
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues,
             Func<string, string> toProjectRelativeScriptPath,
             bool isPlaying,
             bool isPaused)
@@ -31,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CollectClearedByCompile(result, additionalWarnings, toProjectRelativeScriptPath));
             warnings.Add(
                 HotReloadWarningResolution.NeedsCallerAction,
-                CollectNeedsCallerAction(result, rewireFields, isPlaying, isPaused));
+                CollectNeedsCallerAction(result, rewireFields, unrestoredWiredValues, isPlaying, isPaused));
             warnings.Add(
                 HotReloadWarningResolution.NotCounted,
                 CollectAutoRefreshHold(result));
@@ -69,6 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static List<string> CollectNeedsCallerAction(
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> rewireFields,
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues,
             bool isPlaying,
             bool isPaused)
         {
@@ -78,11 +80,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendRetargetedPausePointsWarning(lines, result.RetargetedPausePointIds);
             AppendSuppressedPausePointsWarning(lines, result.SuppressedPausePointIds);
             HotReloadRewireAfterDomainReloadWarning.Append(lines, rewireFields);
+            HotReloadWiredValueRestoreWarning.Append(lines, unrestoredWiredValues);
             HotReloadPauseBeforeWiringWarning.Append(
                 lines,
                 isPlaying,
                 isPaused,
-                namesFieldsToWire: rewireFields.Count > 0 || result.SerializedAddedFieldsReported.Count > 0);
+                namesFieldsToWire: rewireFields.Count > 0
+                    || unrestoredWiredValues.Count > 0
+                    || result.SerializedAddedFieldsReported.Count > 0);
             return lines;
         }
 

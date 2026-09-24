@@ -145,6 +145,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int DroppedByPlayModeEntryCount { get; set; }
 
         /// <summary>
+        /// On --status, how many wired added-field values came back to the objects the last scene
+        /// reload built in place of their hosts. Omitted when zero.
+        /// </summary>
+        public int RestoredWiredValueCount { get; set; }
+
+        /// <summary>
+        /// On --status, the wired added-field values the last scene reload could not restore.
+        /// Omitted when empty.
+        /// </summary>
+        public IReadOnlyList<HotReloadUnrestoredWiredValue> UnrestoredWiredValues { get; set; } =
+            Array.Empty<HotReloadUnrestoredWiredValue>();
+
+        /// <summary>
         /// True while Auto Refresh is held because at least one hot-reload patch is active.
         /// </summary>
         public bool AutoRefreshHeld { get; set; }
@@ -178,6 +191,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeDroppedByPlayModeEntryCount()
         {
             return DroppedByPlayModeEntryCount > 0;
+        }
+
+        public bool ShouldSerializeRestoredWiredValueCount()
+        {
+            return RestoredWiredValueCount > 0;
+        }
+
+        public bool ShouldSerializeUnrestoredWiredValues()
+        {
+            return UnrestoredWiredValues != null && UnrestoredWiredValues.Count > 0;
         }
     }
 
@@ -254,6 +277,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.IntroducedTypes,
                 result.AddedFields);
             HotReloadCompanionSourceSessionStore.Save(services.Domain.CompanionSources);
+            // Why taken here and handed to Build: taking empties the unreported list, so only the
+            // apply a caller runs may take it, not every path that builds an apply response.
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues =
+                services.WiredValuePersistence.TakeUnreportedFailures();
 
             // Play Mode state and the Play Mode compile setting are read here because the switch
             // above put this path on the main thread. isPlaying is read once so the response and
@@ -264,6 +291,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result,
                 selection.ScanLimitWarnings,
                 rewireFields,
+                unrestoredWiredValues,
                 isPlaying,
                 EditorApplication.isPaused);
             ApplyCompileFallbackDecision(
@@ -319,6 +347,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result,
                 additionalWarnings,
                 Array.Empty<string>(),
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
                 isPaused: false);
         }

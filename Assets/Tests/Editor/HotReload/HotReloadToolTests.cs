@@ -1989,6 +1989,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateResultWithAddedFields(),
                 Array.Empty<string>(),
                 new[] { "Ns.Host.Speed" },
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
                 isPaused: false);
 
@@ -2011,6 +2012,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateResultWithAddedFields(),
                 Array.Empty<string>(),
                 Array.Empty<string>(),
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
                 isPaused: false);
 
@@ -2033,6 +2035,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreatePatchedResultWithTwoWarningsAndAddedField(),
                 Array.Empty<string>(),
                 new[] { "Ns.Host.Speed" },
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
                 isPaused: false);
             HotReloadResponse withoutRewire = HotReloadApplyResponseBuilder.Build(
@@ -2040,6 +2043,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreatePatchedResultWithTwoWarningsAndAddedField(),
                 Array.Empty<string>(),
                 Array.Empty<string>(),
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
                 isPaused: false);
 

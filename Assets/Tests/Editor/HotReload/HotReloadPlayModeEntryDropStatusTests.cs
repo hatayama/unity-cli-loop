@@ -172,6 +172,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCompositionRoot.Services.Domain.IntroducedTypes.Activate(artifact);
         }
 
+        /// <summary>
+        /// What: --status reports the wired values the last scene reload restored and names the
+        /// ones it could not restore, both as rows and as a warning, and reading it twice does not
+        /// use them up; with none it omits both fields.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_WithWiredValueRestoreResults_ReportsThemWithoutConsumingThem()
+        {
+            HotReloadResponse empty = await ExecuteStatusAsync(CancellationToken.None);
+            JObject emptyJson = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    empty,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+            Assert.That(emptyJson.Property("RestoredWiredValueCount"), Is.Null);
+            Assert.That(emptyJson.Property("UnrestoredWiredValues"), Is.Null);
+
+            HotReloadWiredValueRestoreReport report = HotReloadCompositionRoot.Services.WiredValuePersistence.Report;
+            report.AddRestored();
+            report.AddFailure("asset:guid|local:1", "Ns.Host::target", "the object is gone");
+
+            HotReloadResponse first = await ExecuteStatusAsync(CancellationToken.None);
+            HotReloadResponse second = await ExecuteStatusAsync(CancellationToken.None);
+            JObject json = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    second,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(first.RestoredWiredValueCount, Is.EqualTo(1));
+            Assert.That(first.UnrestoredWiredValues, Has.Count.EqualTo(1));
+            Assert.That(first.UnrestoredWiredValues[0].Host, Is.EqualTo("asset:guid|local:1"));
+            Assert.That(first.UnrestoredWiredValues[0].Field, Is.EqualTo("Ns.Host.target"));
+            Assert.That(first.UnrestoredWiredValues[0].Reason, Is.EqualTo("the object is gone"));
+            Assert.That(
+                first.Warnings,
+                Has.Some.Contains("Ns.Host.target on asset:guid|local:1: the object is gone"));
+            Assert.That(json.Value<int>("RestoredWiredValueCount"), Is.EqualTo(1));
+            Assert.That(json["UnrestoredWiredValues"], Has.Count.EqualTo(1));
+        }
+
         private static async Task<HotReloadResponse> ExecuteStatusAsync(CancellationToken ct)
         {
             HotReloadTool tool = new HotReloadTool();

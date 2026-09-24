@@ -164,6 +164,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 hold.SceneRefreshWarning);
+            (int restoredWiredValueCount, IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues) =
+                _wiredValuePersistence.ReadReport();
+            HotReloadWiredValueRestoreWarning.Append(warnings, unrestoredWiredValues);
             return new HotReloadResponse
             {
                 Success = true,
@@ -175,7 +178,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AddedFieldTotal = addedFields.Count,
                 AutoRefreshHeld = hold.Held,
                 Message = message,
-                DroppedByPlayModeEntryCount = droppedCount
+                DroppedByPlayModeEntryCount = droppedCount,
+                RestoredWiredValueCount = restoredWiredValueCount,
+                UnrestoredWiredValues = HotReloadWiredValueRestoreWarning.BuildRows(unrestoredWiredValues)
             };
         }
 

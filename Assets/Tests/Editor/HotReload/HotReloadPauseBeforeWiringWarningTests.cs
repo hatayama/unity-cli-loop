@@ -109,16 +109,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Precondition: outside Play Mode the same result keeps the single-compile sentence.");
         }
 
+        /// <summary>
+        /// What: a wired value the scene reload could not restore is named in Warnings with its
+        /// field, host and reason, and in unpaused Play Mode it asks for the pause warning too; a
+        /// run with none adds no such line.
+        /// </summary>
+        [Test]
+        public void Build_WithUnrestoredWiredValue_NamesItAndAddsThePauseWarningWhilePlaying()
+        {
+            HotReloadWiredValueRestoreFailure failure = new HotReloadWiredValueRestoreFailure(
+                "scene:Main|path:Host[0]|component:Ns.Host|index:0", "Ns.Outer/Host::target", "no object is there");
+
+            HotReloadResponse response = Build(
+                CreatePatchedResultWithTwoWarnings(serializedAddedFieldsReported: null),
+                Array.Empty<string>(),
+                isPlaying: true,
+                new[] { failure });
+            HotReloadResponse withoutFailure = Build(
+                CreatePatchedResultWithTwoWarnings(serializedAddedFieldsReported: null),
+                Array.Empty<string>(),
+                isPlaying: true);
+
+            string line = response.Warnings.Single(entry => entry.StartsWith("Wired added-field value(s)", StringComparison.Ordinal));
+            Assert.That(
+                line,
+                Does.Contain("Ns.Outer+Host.target on scene:Main|path:Host[0]|component:Ns.Host|index:0: no object is there"));
+            Assert.That(CountPauseWarnings(response), Is.EqualTo(1), string.Join(" | ", response.Warnings));
+            Assert.That(
+                withoutFailure.Warnings.Any(entry => entry.StartsWith("Wired added-field value(s)", StringComparison.Ordinal)),
+                Is.False);
+            Assert.That(CountPauseWarnings(withoutFailure), Is.Zero);
+        }
+
         private static HotReloadResponse Build(
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> rewireFields,
-            bool isPlaying)
+            bool isPlaying,
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues = null)
         {
             return HotReloadApplyResponseBuilder.Build(
                 HotReloadCompositionRoot.Services,
                 result,
                 Array.Empty<string>(),
                 rewireFields,
+                unrestoredWiredValues ?? Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying,
                 isPaused: false);
         }

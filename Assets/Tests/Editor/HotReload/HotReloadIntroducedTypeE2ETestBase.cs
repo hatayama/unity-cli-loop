@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private protected static HotReloadResponse BuildResponse(HotReloadOrchestratorResult result)
         {
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), isPlaying: false, isPaused: false);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
         }
 
         // Why the preparation stage is the only one wrapped: the test reads the edited body back
