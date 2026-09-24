@@ -502,30 +502,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     editedMethodStartLine,
                     editedMethodEndLine));
-            string comparisonWarning = string.Empty;
-            bool comparedAndMatched = false;
-            if (compareCompiledLineDrift)
-            {
-                (bool resolvedEditedReadOk, string resolvedEditedLineText) =
-                    PausePointCompiledLineComparisonWarnings.ReadEditedLineText(parameters.File, resolvedLine);
-                (bool requestedEditedReadOk, string requestedEditedLineText) =
-                    PausePointCompiledLineComparisonWarnings.ReadEditedLineText(parameters.File, parameters.Line);
-                string[] compiledSourceLines = SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
-                (comparisonWarning, comparedAndMatched) =
-                    PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
-                        parameters.File,
-                        parameters.Line,
-                        resolvedLine,
-                        resolvedMethod,
-                        resolvedLineText,
-                        resolvedEditedReadOk,
-                        resolvedEditedLineText,
-                        requestedEditedReadOk,
-                        requestedEditedLineText,
-                        compiledMethodStartLine,
-                        compiledMethodEndLine,
-                        compiledSourceLines);
-            }
+            (string comparisonWarning, bool comparedAndMatched) =
+                PausePointCompiledLineComparisonWarnings.BuildEnableComparisonWarningOrEmpty(
+                    compareCompiledLineDrift,
+                    parameters.File,
+                    parameters.Line,
+                    resolvedLine,
+                    resolvedMethod,
+                    resolvedLineText,
+                    compiledSnapshotSource,
+                    compiledMethodStartLine,
+                    compiledMethodEndLine);
 
             PausePointEnableWarningList.AddIfNotEmpty(
                 warningEntries,

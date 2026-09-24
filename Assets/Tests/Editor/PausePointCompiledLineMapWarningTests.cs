@@ -727,7 +727,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.ResolvedMethod,
                     spanResult.Resolution.CompiledMethodStartLine,
                     spanResult.Resolution.CompiledMethodEndLine);
-                expectedDrift = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                expectedDrift = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                     expectedDrift,
                     "return 424242;",
                     snapshotLines,
@@ -1057,7 +1057,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 1;"
             };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "  return 2;  ",
                 compiledLines);
@@ -1092,7 +1092,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 2, 2)
                 };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines,
@@ -1125,7 +1125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new SourcePausePointNearbyCompiledMethod("Enemy.Inner", 11, 13)
                 };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines,
@@ -1163,7 +1163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new SourcePausePointNearbyCompiledMethod("Enemy.Heal", 4, 4)
                 };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines,
@@ -1202,7 +1202,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new SourcePausePointNearbyCompiledMethod("Enemy.Heal", 5, 5)
                 };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines,
@@ -1235,7 +1235,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 2;"
             };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines);
@@ -1267,7 +1267,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 2;"
             };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines);
@@ -1306,7 +1306,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new SourcePausePointNearbyCompiledMethod("Enemy.Revive", 4, 4)
                 };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines,
@@ -1336,7 +1336,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 1;"
             };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 "return 2;",
                 compiledLines);
@@ -1355,7 +1355,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 2;"
             };
 
-            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                 string.Empty,
                 "return 2;",
                 compiledLines);
@@ -1379,7 +1379,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 1;"
             };
 
-            string warning = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 107,
                 "  return 2;  ",
@@ -1415,7 +1415,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new SourcePausePointNearbyCompiledMethod("Enemy.Heal", 4, 4)
                 };
 
-            string warning = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 107,
                 "return 2;",
@@ -1448,7 +1448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 2;"
             };
 
-            string warning = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string warning = PausePointCandidateCompiledLineWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
                 drift,
                 107,
                 "return 2;",
@@ -1478,7 +1478,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             compiledLines[109] = "            return 2;";
 
-            string result = PausePointEnableWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string result = PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
                 message,
                 116,
                 "  return 2;  ",
@@ -1507,7 +1507,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 2;"
             };
 
-            string result = PausePointEnableWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string result = PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
                 message,
                 116,
                 "return 2;",
@@ -1538,7 +1538,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 2;"
             };
 
-            string result = PausePointEnableWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string result = PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
                 message,
                 116,
                 "return 2;",
@@ -1564,7 +1564,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 0;"
             };
 
-            string result = PausePointEnableWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string result = PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
                 message,
                 116,
                 "return 2;",
@@ -1586,7 +1586,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            return 2;"
             };
 
-            string result = PausePointEnableWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string result = PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
                 message,
                 116,
                 "   ",
@@ -1604,7 +1604,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             const string message =
                 "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
 
-            string result = PausePointEnableWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string result = PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
                 message,
                 116,
                 "return 2;",
