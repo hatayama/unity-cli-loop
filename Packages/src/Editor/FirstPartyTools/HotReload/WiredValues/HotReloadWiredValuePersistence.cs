@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string OffMainThreadReason = "read off the main thread before any main-thread read";
 
         internal const string HostMissingReason =
-            "no object is at the host's place any more, so nothing reads this value (the host was renamed, moved, or removed)";
+            "no object is at the host's place now, so nothing reads this value until one is back there (the host was renamed, moved, or removed, or it exists only while Play Mode runs)";
 
         private readonly object _gate = new object();
         private readonly IHotReloadWiredValueResolver _resolver;
