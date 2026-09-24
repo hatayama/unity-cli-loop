@@ -48,6 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             new HashSet<HotReloadWiredValueHostKey>();
         private readonly HashSet<HotReloadWiredValueHostKey> _undeliveredPlayOnlyFailures =
             new HashSet<HotReloadWiredValueHostKey>();
+        private readonly HashSet<HotReloadWiredValueHostKey> _namedUnreadable =
+            new HashSet<HotReloadWiredValueHostKey>();
 
         // Starts at 1 so it never equals the 0 a slot starts with, and a slot's first retry runs.
         private int _restoreGeneration = 1;
@@ -80,6 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_gate)
             {
                 Ledger.Record(key, descriptor, wiredWhilePlaying);
+                // A value wired again is a new value, so rejecting it is a new failure to hand out.
+                _namedUnreadable.Remove(key);
                 // A value wired again into a host that is back at its place is no longer
                 // unrestored; the row would otherwise outlive the wiring it describes. The store
                 // settles the slot before this runs, so no later read would clear the row.
@@ -205,7 +209,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_gate)
             {
                 Report.RemoveRestored();
-                RecordOrRefreshFailure(key, UnreadableValueReason);
+                bool namedBefore = !_namedUnreadable.Add(key);
+                if (!_reportedFailures.Add(key))
+                {
+                    Report.ReplaceFailureReason(key.Identity, key.StoreFieldKey, UnreadableValueReason);
+                    return;
+                }
+
+                // The restore just before this dropped the row, so re-adding it as new would hand
+                // the same rejected value to every apply after a refresh reads it again.
+                if (namedBefore)
+                {
+                    Report.AddFailureAlreadyReported(key.Identity, key.StoreFieldKey, UnreadableValueReason);
+                    return;
+                }
+
+                Report.AddFailure(key.Identity, key.StoreFieldKey, UnreadableValueReason);
             }
         }
 
@@ -355,6 +374,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Report.Reset();
             _reportedFailures.Clear();
+            _namedUnreadable.Clear();
             foreach (HotReloadWiredValueHostKey key in _undeliveredPlayOnlyFailures)
             {
                 RecordOrRefreshFailure(key, PlayOnlyHostReason);

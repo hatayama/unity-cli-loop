@@ -167,7 +167,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a restored value the field's type rejects is not counted as restored, is named
-        /// once with the unreadable-value reason, and stays that way on the next refresh.
+        /// once with the unreadable-value reason, and the next refresh neither counts it nor hands
+        /// it to apply again.
         /// </summary>
         [Test]
         public void Run_RestoredValueTheFieldRejects_IsNamedOnceAndNotCounted()
@@ -179,11 +180,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(_persistence.RestoredCount, Is.EqualTo(0));
             AssertSingleRow(HotReloadWiredValuePersistence.UnreadableValueReason);
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
 
             _refresh.Run();
 
             Assert.That(_persistence.RestoredCount, Is.EqualTo(0));
             AssertSingleRow(HotReloadWiredValuePersistence.UnreadableValueReason);
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
         }
 
         // Records the value on the host at its place, then names the host as missing after a

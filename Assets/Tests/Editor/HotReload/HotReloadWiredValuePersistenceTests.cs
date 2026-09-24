@@ -230,6 +230,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an unreadable value found again by the next restore is handed to apply only the
+        /// first time, and handed out once more after the value is wired again.
+        /// </summary>
+        [Test]
+        public void NoteRestoredValueUnreadable_SameKeyAgain_IsHandedOutOnceUntilWiredAgain()
+        {
+            HotReloadWiredValueHostKey key = new HotReloadWiredValueHostKey(HostIdentity, FieldKey);
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            RestoreThenNoteUnreadable(key);
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+
+            RestoreThenNoteUnreadable(key);
+
+            Assert.That(_persistence.ReadReport().Failures.Count, Is.EqualTo(1));
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+
+            _persistence.Record(NamedHost(), FieldKey, 8);
+            RestoreThenNoteUnreadable(key);
+
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// What: a new scene reload session hands out a failure that recurs in it again, even though
         /// the same failure was already handed out in the session before.
         /// </summary>
@@ -802,6 +825,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             PersistenceHost host = new PersistenceHost();
             _resolver.HostIdentities[host] = HostIdentity;
             return host;
+        }
+
+        // Stands in for a refresh read whose restore succeeds but whose field type rejects the value.
+        private void RestoreThenNoteUnreadable(HotReloadWiredValueHostKey key)
+        {
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.True);
+            _persistence.NoteRestoredValueUnreadable(key);
         }
 
         private sealed class FakeResolver : IHotReloadWiredValueResolver

@@ -42,6 +42,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Lists a failure that was already handed out before its row was dropped, at the end of
+        /// the handed-out rows, so <see cref="TakeUnreported"/> does not return it again.
+        /// </summary>
+        internal void AddFailureAlreadyReported(string hostIdentity, string storeFieldKey, string reason)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(reason), "reason must not be empty.");
+            _failures.Insert(
+                _reportedFailureCount,
+                new HotReloadWiredValueRestoreFailure(hostIdentity, storeFieldKey, reason));
+            _reportedFailureCount++;
+        }
+
+        /// <summary>
         /// Puts a new reason on the failure of this host and field where it stands, so neither the
         /// row order nor what <see cref="TakeUnreported"/> returns next changes. Does nothing when
         /// no such failure is listed.
