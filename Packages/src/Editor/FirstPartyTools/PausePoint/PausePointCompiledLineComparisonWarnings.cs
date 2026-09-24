@@ -42,7 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (string.Equals(compiledTrimmed, editedTrimmed, StringComparison.Ordinal))
             {
-                return (string.Empty, true);
+                // A brace or terminator matches almost anywhere, so it proves nothing about drift.
+                return (string.Empty, !IsTrivialToken(compiledTrimmed));
             }
 
             return (string.Format(
@@ -130,12 +131,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedMethod,
                 requestedEditedLineReadOk,
                 requestedEditedLineText);
-            (string driftWarning, bool comparedAndMatched) = BuildCompiledLineDriftWarningOrEmpty(
-                compiledResolvedLineText,
-                resolvedEditedLineText,
+            (string driftWarning, bool comparedAndMatched) = BuildResolvedLineDriftWarningOrEmpty(
                 file,
+                requestedLine,
                 resolvedLine,
-                resolvedEditedLineReadOk);
+                resolvedMethod,
+                compiledResolvedLineText,
+                resolvedEditedLineReadOk,
+                resolvedEditedLineText);
             string combined = PausePointEnableWarnings.MergeWarnings(snapWarning, driftWarning);
             string resolvedTrimmed = resolvedEditedLineText == null
                 ? string.Empty
@@ -175,6 +178,58 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return (combined, comparedAndMatched);
+        }
+
+        // Why the patched-span check comes before the text comparison: a requested line outside
+        // every patched body that resolves to a line the edited file places inside a patched
+        // method proves the file drifted, even when the two texts happen to match.
+        // Why the requested line must be outside every patched body: a patched method with no
+        // shim PDB also falls back to the compiled resolve, and then both lines sit in that
+        // method's own span without any drift.
+        private static (string warning, bool comparedAndMatched) BuildResolvedLineDriftWarningOrEmpty(
+            string file,
+            int requestedLine,
+            int resolvedLine,
+            string resolvedMethod,
+            string compiledResolvedLineText,
+            bool resolvedEditedLineReadOk,
+            string resolvedEditedLineText)
+        {
+            string patchedMethod = PausePointPatchedEditedSpanLocator.FindPatchedMethodContainingEditedLineOrNull(
+                file,
+                resolvedLine);
+            bool requestedLineInsidePatchedBody =
+                PausePointPatchedEditedSpanLocator.FindPatchedMethodContainingEditedLineOrNull(file, requestedLine) != null;
+            if (patchedMethod == null || requestedLineInsidePatchedBody)
+            {
+                return BuildCompiledLineDriftWarningOrEmpty(
+                    compiledResolvedLineText,
+                    resolvedEditedLineText,
+                    file,
+                    resolvedLine,
+                    resolvedEditedLineReadOk);
+            }
+
+            return (string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapPatchedSpanDriftWarningFormat,
+                SourcePausePointPathNormalizer.ToForwardSlashes(file),
+                resolvedLine,
+                resolvedMethod ?? string.Empty,
+                patchedMethod), false);
+        }
+
+        private static bool IsTrivialToken(string trimmed)
+        {
+            foreach (char character in trimmed)
+            {
+                if (character != '{' && character != '}' && character != '(' && character != ')'
+                    && character != ';' && !char.IsWhiteSpace(character))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         // Why not ReadLineTextFromSource: that helper returns empty for both a missing line

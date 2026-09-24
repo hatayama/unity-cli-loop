@@ -379,6 +379,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "The marker is armed on the compiled statement. If that is not the statement you meant, "
             + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable.";
 
+        // Format: file, resolved line, resolved method, patched method.
+        // Why no text comparison: the marker sits in an unpatched method's compiled line, so a
+        // line number the edited file places inside a patched method proves the file drifted.
+        public const string HotReloadCompiledLineMapPatchedSpanDriftWarningFormat =
+            "'{0}' line {1} is inside '{2}' in the last compiled source, but in the edited file that line "
+            + "number now falls inside '{3}', which is hot-reload patched. The edited file no longer "
+            + "follows compiled line numbers here, so the marker is armed in '{2}', not where the edited "
+            + "file shows line {1}. To pause inside '{3}', pass a line inside its edited body. To pause "
+            + "inside '{2}', pass --method naming it together with the edited line.";
+
         // Format: file, requested line, requested edited text, resolved line, resolved method.
         public const string HotReloadCompiledLineSnapDisclosureFormat =
             "'{0}' --line {1} is '{2}' in the edited file, but the marker snapped forward to line {3} in '{4}'.";

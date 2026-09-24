@@ -226,6 +226,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: matching lines made only of braces or terminators are not reported as matched,
+        /// because such a line matches almost anywhere and does not show that nothing drifted.
+        /// </summary>
+        [TestCase("{", "  {  ")]
+        [TestCase("});", "});")]
+        public void BuildCompiledLineDriftWarningOrEmpty_WhenTextsMatchButAreOnlyBraces_ReturnsEmptyAndNotMatched(
+            string compiledLineText,
+            string editedLineText)
+        {
+            (string warning, bool comparedAndMatched) =
+                PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
+                    compiledLineText,
+                    editedLineText,
+                    ForwardSlashFile,
+                    17,
+                    true);
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+            Assert.That(comparedAndMatched, Is.False);
+        }
+
+        /// <summary>
+        /// What: the locator names the patched method whose edited-file span holds the line, and
+        /// returns null for a line outside every span or when no hot-reload port is installed.
+        /// </summary>
+        [Test]
+        public void FindPatchedMethodContainingEditedLineOrNull_WhenLineIsInsideAPatchedEditedSpan_ReturnsMethodDisplay()
+        {
+            MethodBase probe = CompiledLineDriftProbeMethod();
+            HotReloadShimFileLookup lookup = new HotReloadShimFileLookup(
+                Array.Empty<byte>(),
+                Array.Empty<byte>(),
+                null,
+                new[] { new HotReloadShimMethodLookup(probe, probe, true, 20, 30) });
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
+            IHotReloadPausePointPort installedBeforeScope = hotReloadSideScope.Port.Inner;
+            try
+            {
+                hotReloadSideScope.Port.ShimLookupForFile = _ => lookup;
+
+                Assert.That(
+                    PausePointPatchedEditedSpanLocator.FindPatchedMethodContainingEditedLineOrNull(ForwardSlashFile, 25),
+                    Is.EqualTo("PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe"));
+                Assert.That(
+                    PausePointPatchedEditedSpanLocator.FindPatchedMethodContainingEditedLineOrNull(ForwardSlashFile, 31),
+                    Is.Null);
+            }
+            finally
+            {
+                hotReloadSideScope.Dispose();
+            }
+
+            HotReloadPausePointCoordination.HotReloadSide = null;
+            try
+            {
+                Assert.That(
+                    PausePointPatchedEditedSpanLocator.FindPatchedMethodContainingEditedLineOrNull(ForwardSlashFile, 25),
+                    Is.Null);
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.HotReloadSide = installedBeforeScope;
+            }
+        }
+
+        /// <summary>
+        /// What: when the requested and resolved lines both sit inside a patched method's edited
+        /// span (a patched method without a shim PDB), compose does not report patched-span drift.
+        /// </summary>
+        [Test]
+        public void ComposeCompiledLineDriftAndSnapWarningOrEmpty_WhenRequestedAndResolvedLinesAreInsideAPatchedSpan_OmitsPatchedSpanDrift()
+        {
+            MethodBase probe = CompiledLineDriftProbeMethod();
+            HotReloadShimFileLookup lookup = new HotReloadShimFileLookup(
+                Array.Empty<byte>(),
+                Array.Empty<byte>(),
+                null,
+                new[] { new HotReloadShimMethodLookup(probe, probe, true, 20, 30) });
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
+            try
+            {
+                hotReloadSideScope.Port.ShimLookupForFile = _ => lookup;
+
+                (string warning, bool comparedAndMatched) =
+                    PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+                        ForwardSlashFile,
+                        25,
+                        25,
+                        ExampleResolvedMethod,
+                        "return 1;",
+                        true,
+                        "return 1;",
+                        true,
+                        "return 1;",
+                        0,
+                        0,
+                        new[] { "return 1;" });
+
+                Assert.That(warning, Does.Not.Contain("which is hot-reload patched"));
+                Assert.That(comparedAndMatched, Is.True);
+            }
+            finally
+            {
+                hotReloadSideScope.Dispose();
+            }
+        }
+
+        /// <summary>
         /// What: a missing compiled line, or a failed edited-line read, skips the comparison.
         /// </summary>
         [Test]
@@ -506,7 +614,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'. "
                     + "In the last compiled source, 'GameDirector.ComputeScoreTarget' spans lines 100-120. "
                     + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source."));
-            Assert.That(comparedAndMatched, Is.True);
+            Assert.That(comparedAndMatched, Is.False);
         }
 
         /// <summary>
@@ -794,6 +902,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         expectedSnap),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
+            }
+            finally
+            {
+                hotReloadSideScope.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// What: when the compiled resolve lands on a line that the edited file now places inside
+        /// a hot-reload patched method, enable warns that the file drifted and names that method
+        /// instead of saying no drift is visible.
+        /// </summary>
+        [Test]
+        public void Enable_WhenResolvedLineFallsInsideAPatchedEditedSpan_WarnsDriftInsteadOfMatched()
+        {
+            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
+            string absolutePath = Path.Combine(
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                ResolveFailureFile);
+            string diskSource = File.ReadAllText(absolutePath);
+            int markerLine = FindLineNumberContaining(
+                diskSource,
+                "compiled-line-drift" + "-probe-unique");
+            Assert.That(markerLine, Is.GreaterThan(0));
+            MethodBase probe = CompiledLineDriftProbeMethod();
+            // The span starts below the requested line, so the shim resolver finds no patched
+            // body for it and the compiled resolve snaps forward into the span.
+            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
+                Array.Empty<byte>(),
+                Array.Empty<byte>(),
+                null,
+                new[] { new HotReloadShimMethodLookup(probe, probe, true, markerLine + 1, markerLine + 2) });
+
+            try
+            {
+                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
+                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => diskSource;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = ResolveFailureFile,
+                    Line = markerLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(
+                    response.Success,
+                    Is.True,
+                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
+                Assert.That(response.ResolvedLine, Is.EqualTo(markerLine + 1));
+                Assert.That(response.Warning, Does.Contain("but the marker snapped forward to line " + (markerLine + 1)));
+                Assert.That(
+                    response.Warning,
+                    Does.Contain("now falls inside 'PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe'"));
+                Assert.That(response.Warning, Does.Contain("which is hot-reload patched"));
+                Assert.That(response.Warning, Does.Not.Contain("No drift is visible"));
                 Assert.That(
                     response.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
