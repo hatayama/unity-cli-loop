@@ -548,6 +548,127 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.ReadReport().Failures, Is.Empty);
         }
 
+
+        /// <summary>
+        /// What: a retry in the same restore generation as the last attempt answers false without
+        /// asking the resolver, so a pending slot read every frame costs no host lookup.
+        /// </summary>
+        [Test]
+        public void TryRestoreAgain_SameGeneration_DoesNotConsultTheResolver()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            PersistenceHost renamed = RenamedHost();
+            int lastAttemptGeneration = 0;
+
+            Assert.That(_persistence.TryRestoreAgain(renamed, FieldKey, ref lastAttemptGeneration, out _), Is.False);
+            int callsAfterFirstRetry = _resolver.DescribeHostCalls;
+            Assert.That(_persistence.TryRestoreAgain(renamed, FieldKey, ref lastAttemptGeneration, out _), Is.False);
+
+            Assert.That(callsAfterFirstRetry, Is.GreaterThan(0), "Precondition: the first retry must ask the resolver.");
+            Assert.That(_resolver.DescribeHostCalls, Is.EqualTo(callsAfterFirstRetry));
+        }
+
+        /// <summary>
+        /// What: wiring a value moves the restore generation, so a pending slot asks again.
+        /// </summary>
+        [Test]
+        public void TryRestoreAgain_AfterRecord_ConsultsTheResolverAgain()
+        {
+            AssertRetryAsksAgainAfter(() => _persistence.Record(NamedHost(), OtherFieldKey, 3));
+        }
+
+        /// <summary>
+        /// What: a note that hosts may have changed moves the restore generation, so a pending
+        /// slot asks again.
+        /// </summary>
+        [Test]
+        public void TryRestoreAgain_AfterNoteHostsMayHaveChanged_ConsultsTheResolverAgain()
+        {
+            AssertRetryAsksAgainAfter(() => _persistence.NoteHostsMayHaveChanged());
+        }
+
+        /// <summary>
+        /// What: the missing-host check after a scene reload moves the restore generation, so a
+        /// pending slot asks again.
+        /// </summary>
+        [Test]
+        public void TryRestoreAgain_AfterReportMissingHosts_ConsultsTheResolverAgain()
+        {
+            AssertRetryAsksAgainAfter(() => _persistence.ReportMissingHosts(false));
+        }
+
+        /// <summary>
+        /// What: a retry off the main thread answers false, keeps the caller's generation so the
+        /// next main-thread read still retries, and names no failure.
+        /// </summary>
+        [Test]
+        public void TryRestoreAgain_OffMainThread_ReturnsFalseKeepsTheGenerationAndAddsNoFailureRow()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            PersistenceHost host = NamedHost();
+            _resolver.IsMainThread = false;
+            int lastAttemptGeneration = 0;
+
+            bool restored = _persistence.TryRestoreAgain(host, FieldKey, ref lastAttemptGeneration, out object value);
+
+            Assert.That(restored, Is.False);
+            Assert.That(value, Is.Null);
+            Assert.That(lastAttemptGeneration, Is.EqualTo(0));
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: once the host is back at its place, the next retry restores the value and removes
+        /// the row that named it as missing.
+        /// </summary>
+        [Test]
+        public void TryRestoreAgain_HostBackAtItsPlace_RestoresAndRemovesTheFailureRow()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            PersistenceHost host = RenamedHost();
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts(false);
+            int lastAttemptGeneration = 0;
+            Assert.That(_persistence.TryRestoreAgain(host, FieldKey, ref lastAttemptGeneration, out _), Is.False);
+            Assert.That(_persistence.Report.Failures.Count, Is.EqualTo(1), "Precondition: the missing host must be named.");
+
+            _resolver.MissingHosts.Remove(HostIdentity);
+            _resolver.HostIdentities[host] = HostIdentity;
+            _persistence.NoteHostsMayHaveChanged();
+            bool restored = _persistence.TryRestoreAgain(host, FieldKey, ref lastAttemptGeneration, out object value);
+
+            Assert.That(restored, Is.True);
+            Assert.That(value, Is.EqualTo(7));
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+        }
+
+
+        // One retry in the current generation, the trigger, then a second retry with the same
+        // generation variable: only a trigger that moved the generation lets it ask the resolver.
+        private void AssertRetryAsksAgainAfter(System.Action trigger)
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            PersistenceHost renamed = RenamedHost();
+            int lastAttemptGeneration = 0;
+            _persistence.TryRestoreAgain(renamed, FieldKey, ref lastAttemptGeneration, out _);
+            int callsAfterFirstRetry = _resolver.DescribeHostCalls;
+
+            trigger();
+            int callsAfterTrigger = _resolver.DescribeHostCalls;
+            _persistence.TryRestoreAgain(renamed, FieldKey, ref lastAttemptGeneration, out _);
+
+            Assert.That(callsAfterFirstRetry, Is.GreaterThan(0), "Precondition: the first retry must ask the resolver.");
+            Assert.That(_resolver.DescribeHostCalls, Is.GreaterThan(callsAfterTrigger));
+        }
+
+        // A host whose identity no longer matches the recorded one, as after a rename.
+        private PersistenceHost RenamedHost()
+        {
+            PersistenceHost host = new PersistenceHost();
+            _resolver.HostIdentities[host] = "scene:Main|path:HostRenamed[0]|component:Ns.Host|index:0";
+            return host;
+        }
+
         private void RecordPlayOnlyHostNamedOnLeavingPlayMode()
         {
             _resolver.IsPlayModeRunning = true;
@@ -593,8 +714,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 MissingHosts.Contains(hostIdentity)
                 || (unloadedSceneCountsAsMissing && UnloadedSceneHosts.Contains(hostIdentity));
 
+            internal int DescribeHostCalls { get; private set; }
+
             public string DescribeHost(object host)
             {
+                DescribeHostCalls++;
                 if (!IsMainThread)
                 {
                     return null;

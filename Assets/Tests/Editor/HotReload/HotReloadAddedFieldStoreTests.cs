@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using NUnit.Framework;
 
@@ -343,6 +344,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(values.GetOrInit(host, FieldKey(), () => 8), Is.EqualTo(8));
         }
 
+
+
+
+
+
+
         private static string FieldKey()
         {
             return HotReloadAddedFieldStore.FormatFieldKey(HostTypeName, FieldName);
@@ -370,6 +377,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Calls++;
                 value = _hasValue ? _value : null;
                 return _hasValue;
+            }
+
+            internal bool RetryHasValue { get; set; }
+
+            internal object RetryValue { get; set; }
+
+            internal int GenerationToStore { get; set; }
+
+            internal int RetryCalls { get; private set; }
+
+            internal List<int> GenerationsSeen { get; } = new List<int>();
+
+            public bool TryRestoreAgain(object host, string storeFieldKey, ref int lastAttemptGeneration, out object value)
+            {
+                RetryCalls++;
+                GenerationsSeen.Add(lastAttemptGeneration);
+                lastAttemptGeneration = GenerationToStore;
+                value = RetryHasValue ? RetryValue : null;
+                return RetryHasValue;
             }
         }
 
