@@ -8,7 +8,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Starts a fresh wired-value restore report each time play mode is entered or left, so the
     /// report describes the scene reload that transition performs, and names the wired values whose
-    /// host that reload did not put back.
+    /// host that reload did not put back. A hierarchy change lets every read whose restore failed ask
+    /// again, since it may have put a host back.
     /// </summary>
     /// <remarks>
     /// Why the reset on the Exiting states: the scene reload, and with it the Awake reads that
@@ -35,6 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 GetPersistence != null, "GetPersistence must be set before the hooks are registered.");
             EditorApplication.playModeStateChanged -= Handle;
             EditorApplication.playModeStateChanged += Handle;
+            EditorApplication.hierarchyChanged -= HandleHierarchyChanged;
+            EditorApplication.hierarchyChanged += HandleHierarchyChanged;
         }
 
         internal static void Handle(PlayModeStateChange state)
@@ -46,6 +49,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             GetPersistence().ReportMissingHosts(state == PlayModeStateChange.EnteredEditMode);
+        }
+
+        // Why every hierarchy change: a renamed or moved host put back at its place during Play
+        // raises no play mode transition, and a slot still waiting for its value must ask again.
+        internal static void HandleHierarchyChanged()
+        {
+            GetPersistence().NoteHostsMayHaveChanged();
         }
     }
 }

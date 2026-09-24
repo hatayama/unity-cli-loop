@@ -647,6 +647,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 value = null;
                 return false;
             }
+
+            public bool TryRestoreAgain(object host, string storeFieldKey, ref int lastAttemptGeneration, out object value)
+            {
+                value = null;
+                return false;
+            }
         }
 
         private sealed class FixedRestorer : IHotReloadWiredValuePersistence
@@ -663,6 +669,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             public bool TryRestore(object host, string storeFieldKey, out object value)
+            {
+                value = _value;
+                return true;
+            }
+
+            public bool TryRestoreAgain(object host, string storeFieldKey, ref int lastAttemptGeneration, out object value)
             {
                 value = _value;
                 return true;

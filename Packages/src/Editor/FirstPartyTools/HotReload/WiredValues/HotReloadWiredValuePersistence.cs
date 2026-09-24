@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 
 using UnityEngine;
 
@@ -45,6 +46,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HashSet<HotReloadWiredValueHostKey> _undeliveredPlayOnlyFailures =
             new HashSet<HotReloadWiredValueHostKey>();
 
+        // Starts at 1 so it never equals the 0 a slot starts with, and a slot's first retry runs.
+        private int _restoreGeneration = 1;
+
         internal HotReloadWiredValuePersistence(IHotReloadWiredValueResolver resolver)
         {
             Debug.Assert(resolver != null, "resolver must not be null.");
@@ -69,10 +73,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             bool wiredWhilePlaying = _resolver.IsPlayModeRunning;
             HotReloadWiredValueDescriptor descriptor = _resolver.DescribeValue(value);
+            HotReloadWiredValueHostKey key = new HotReloadWiredValueHostKey(identity, storeFieldKey);
             lock (_gate)
             {
-                Ledger.Record(new HotReloadWiredValueHostKey(identity, storeFieldKey), descriptor, wiredWhilePlaying);
+                Ledger.Record(key, descriptor, wiredWhilePlaying);
+                // A value wired again into a host that is back at its place is no longer
+                // unrestored; the row would otherwise outlive the wiring it describes. The store
+                // settles the slot before this runs, so no later read would clear the row.
+                ForgetFailuresSettledFor(host, key);
             }
+
+            NoteHostsMayHaveChanged();
         }
 
         public bool TryRestore(object host, string storeFieldKey, out object value)
@@ -100,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (descriptor.Kind == HotReloadWiredValueKind.Plain)
                 {
                     value = descriptor.PlainValue;
-                    ForgetFailure(key);
+                    ForgetFailuresSettledFor(host, key);
                     Report.AddRestored();
                     return true;
                 }
@@ -117,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (resolved)
                 {
-                    ForgetFailure(key);
+                    ForgetFailuresSettledFor(host, key);
                     Report.AddRestored();
                     return true;
                 }
@@ -126,6 +137,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RecordFailureOnce(key, failureReason);
                 return false;
             }
+        }
+
+        public bool TryRestoreAgain(object host, string storeFieldKey, ref int lastAttemptGeneration, out object value)
+        {
+            value = null;
+            // Why not consume the generation off the main thread: the host cannot be named there,
+            // so the attempt proves nothing, and the next main-thread read must still retry.
+            if (!_resolver.IsMainThread)
+            {
+                return false;
+            }
+
+            int generation = Volatile.Read(ref _restoreGeneration);
+            if (generation == lastAttemptGeneration)
+            {
+                return false;
+            }
+
+            lastAttemptGeneration = generation;
+            return TryRestore(host, storeFieldKey, out value);
+        }
+
+        /// <summary>
+        /// Moves the restore generation, so every slot whose restore failed asks once more on its
+        /// next read.
+        /// </summary>
+        internal void NoteHostsMayHaveChanged()
+        {
+            Interlocked.Increment(ref _restoreGeneration);
         }
 
         /// <summary>
@@ -179,6 +219,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </remarks>
         internal void ReportMissingHosts(bool leftPlayMode)
         {
+            // Moved first so the early return below cannot skip it: a finished scene reload may
+            // have put a host back even when none is missing.
+            NoteHostsMayHaveChanged();
+
             List<(HotReloadWiredValueHostKey Key, bool PlayOnly)> entries =
                 new List<(HotReloadWiredValueHostKey Key, bool PlayOnly)>();
             lock (_gate)
@@ -309,6 +353,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Report.AddFailure(key.Identity, key.StoreFieldKey, reason);
+        }
+
+        // Why the off-main-thread row too: a slot first read off the main thread keeps asking, so a
+        // later main-thread restore or wiring settles the value that row said was lost. Callers
+        // hold _gate.
+        private void ForgetFailuresSettledFor(object host, HotReloadWiredValueHostKey key)
+        {
+            ForgetFailure(key);
+            ForgetFailure(new HotReloadWiredValueHostKey(host.GetType().FullName, key.StoreFieldKey));
         }
 
         // Why: a value named as not restored that comes back later in the same session would
