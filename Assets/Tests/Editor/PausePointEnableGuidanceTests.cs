@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 
 using Newtonsoft.Json;
@@ -649,6 +650,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: a line inside a patched method whose source changed on disk after the patch is
+        /// refused with the patched-source-changed code and recovery hint, and no marker is armed.
+        /// </summary>
+        [Test]
+        public void Enable_LineInsidePatchedMethodWhoseSourceChangedOnDisk_RefusesWithPatchedSourceChanged()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 2,
+                    FixtureClosingBraceLine);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureStatementLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodePatchedSourceChanged));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.PatchedSourceChangedOnDiskMessageFormat,
+                            FixtureFilePath,
+                            FixtureStatementLine)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.PatchedSourceChangedOnDiskHint));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
+        /// What: a line outside every patched method of a file whose source changed on disk is left
+        /// to the compiled resolver, so the refusal cannot swallow an unpatched line.
+        /// </summary>
+        [Test]
+        public void Enable_LineOutsidePatchedMethodWhoseSourceChangedOnDisk_FallsThroughToTheCompiledResolver()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    UnresolvableFixtureLine - 1,
+                    UnresolvableFixtureLine);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureStatementLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(1));
+            }
+        }
+
         internal static int PdbUnavailableProbe()
         {
             return 1;
@@ -678,6 +744,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Array.Empty<byte>(),
                 null,
                 null,
+                methods);
+        }
+
+        // The test assembly stands in for a shim assembly: its PDB maps the fixture file, so the
+        // fixture method resolves as a patched method whose shim is itself, delegated so the
+        // resolver arms it directly rather than through a transplant rebuild.
+        private static HotReloadShimFileLookup CreateFixtureShimLookup(int sourceStartLine, int sourceEndLine)
+        {
+            Assembly assembly = typeof(EnableBySourceLocationFixture).Assembly;
+            MethodBase fixtureMethod = typeof(EnableBySourceLocationFixture).GetMethod(
+                nameof(EnableBySourceLocationFixture.Add),
+                BindingFlags.Instance | BindingFlags.Public);
+            HotReloadShimMethodLookup[] methods =
+            {
+                new HotReloadShimMethodLookup(
+                    fixtureMethod,
+                    fixtureMethod,
+                    true,
+                    sourceStartLine,
+                    sourceEndLine)
+            };
+            return new HotReloadShimFileLookup(
+                File.ReadAllBytes(assembly.Location),
+                File.ReadAllBytes(Path.ChangeExtension(assembly.Location, ".pdb")),
+                assembly,
                 methods);
         }
 

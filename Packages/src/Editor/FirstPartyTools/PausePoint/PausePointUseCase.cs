@@ -231,9 +231,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(normalizedFile);
             if (shimLookup != null)
             {
+                bool shimSourceChanged =
+                    HotReloadPausePointCoordination.HotReloadSide.HasShimSourceChangedOnDisk(normalizedFile);
                 SourcePausePointShimResolution shimResolution =
                     SourcePausePointShimResolver.Resolve(
                         shimLookup, normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
+                PausePointResponse staleSourceRefusal =
+                    PausePointPatchedSourceGuard.RefuseWhenChangedOrNull(
+                        shimSourceChanged, shimResolution, normalizedFile, parameters.Line);
+                if (staleSourceRefusal != null)
+                {
+                    return staleSourceRefusal;
+                }
+
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
                     || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
                 {
