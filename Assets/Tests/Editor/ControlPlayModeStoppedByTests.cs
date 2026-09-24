@@ -200,6 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool IsPlaying { get; set; } = true;
             public bool IsPaused { get; set; }
+            public string ActiveScenarioName { get; set; }
 
             public void Step()
             {

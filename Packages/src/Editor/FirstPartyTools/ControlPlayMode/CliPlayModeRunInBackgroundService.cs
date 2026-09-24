@@ -5,9 +5,17 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
+    /// Turns on the CLI runInBackground override for a Play Mode start requested by the CLI.
+    /// </summary>
+    public interface ICliPlayModeRunInBackgroundStarter
+    {
+        void EnableForCliPlayStart();
+    }
+
+    /// <summary>
     /// Applies CLI PlayMode runInBackground overrides through Unity Application/Editor hooks.
     /// </summary>
-    internal sealed class CliPlayModeRunInBackgroundService
+    internal sealed class CliPlayModeRunInBackgroundService : ICliPlayModeRunInBackgroundStarter
     {
         private readonly CliPlayModeRunInBackgroundController _controller;
         private bool _isPlayModeCallbackRegistered;
