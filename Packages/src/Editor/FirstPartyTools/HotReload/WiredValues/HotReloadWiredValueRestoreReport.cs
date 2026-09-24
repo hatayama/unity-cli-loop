@@ -25,6 +25,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RestoredCount++;
         }
 
+        /// <summary>
+        /// Takes back one restored value, for a value the field's type rejected after the restore
+        /// counted it.
+        /// </summary>
+        internal void RemoveRestored()
+        {
+            Debug.Assert(RestoredCount > 0, "RestoredCount must be positive before one is taken back.");
+            RestoredCount--;
+        }
+
         internal void AddFailure(string hostIdentity, string storeFieldKey, string reason)
         {
             Debug.Assert(!string.IsNullOrEmpty(reason), "reason must not be empty.");
@@ -32,13 +42,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Lists a failure that was already handed out before its row was dropped, at the end of
+        /// the handed-out rows, so <see cref="TakeUnreported"/> does not return it again.
+        /// </summary>
+        internal void AddFailureAlreadyReported(string hostIdentity, string storeFieldKey, string reason)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(reason), "reason must not be empty.");
+            _failures.Insert(
+                _reportedFailureCount,
+                new HotReloadWiredValueRestoreFailure(hostIdentity, storeFieldKey, reason));
+            _reportedFailureCount++;
+        }
+
+        /// <summary>
+        /// Puts a new reason on the failure of this host and field where it stands, so neither the
+        /// row order nor what <see cref="TakeUnreported"/> returns next changes. Does nothing when
+        /// no such failure is listed.
+        /// </summary>
+        internal void ReplaceFailureReason(string hostIdentity, string storeFieldKey, string reason)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(reason), "reason must not be empty.");
+            int index = FindFailureIndex(hostIdentity, storeFieldKey);
+            if (index < 0)
+            {
+                return;
+            }
+
+            _failures[index] = new HotReloadWiredValueRestoreFailure(hostIdentity, storeFieldKey, reason);
+        }
+
+        /// <summary>
         /// Drops the failure of this host and field, for a value that came back after all.
         /// </summary>
         internal void RemoveFailure(string hostIdentity, string storeFieldKey)
         {
-            int index = _failures.FindIndex(failure =>
-                string.Equals(failure.HostIdentity, hostIdentity, StringComparison.Ordinal)
-                && string.Equals(failure.StoreFieldKey, storeFieldKey, StringComparison.Ordinal));
+            int index = FindFailureIndex(hostIdentity, storeFieldKey);
             if (index < 0)
             {
                 return;
@@ -62,6 +100,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _reportedFailureCount, _failures.Count - _reportedFailureCount);
             _reportedFailureCount = _failures.Count;
             return unreported;
+        }
+
+        private int FindFailureIndex(string hostIdentity, string storeFieldKey)
+        {
+            return _failures.FindIndex(failure =>
+                string.Equals(failure.HostIdentity, hostIdentity, StringComparison.Ordinal)
+                && string.Equals(failure.StoreFieldKey, storeFieldKey, StringComparison.Ordinal));
         }
 
         internal void Reset()

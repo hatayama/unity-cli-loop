@@ -185,6 +185,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a host and field that fails again for another reason keeps one row, in the same
+        /// place, carrying the later reason, and an apply that already took the row is not handed it
+        /// again.
+        /// </summary>
+        [Test]
+        public void TryRestore_SameKeyFailsForAnotherReason_ReplacesTheReasonInPlace()
+        {
+            _persistence.Record(NamedHost(), FieldKey, new SceneRef(TargetIdentity));
+            _persistence.Record(NamedHost(), OtherFieldKey, new SceneRef(TargetIdentity));
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts(leftPlayMode: false);
+            List<string> orderBefore = FailureFieldKeys();
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(2));
+
+            _resolver.MissingHosts.Clear();
+            _persistence.TryRestore(NamedHost(), FieldKey, out _);
+
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.ReadReport().Failures;
+            Assert.That(FailureFieldKeys(), Is.EqualTo(orderBefore));
+            Assert.That(failures[orderBefore.IndexOf(FieldKey)].Reason, Is.EqualTo(FakeResolver.NotFoundReason));
+            Assert.That(
+                failures[orderBefore.IndexOf(OtherFieldKey)].Reason,
+                Is.EqualTo(HotReloadWiredValuePersistence.HostMissingReason));
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a restore the field's type then rejects is taken back from the restored count and
+        /// named once with the unreadable-value reason.
+        /// </summary>
+        [Test]
+        public void NoteRestoredValueUnreadable_TakesBackTheRestoreAndNamesTheValue()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.True);
+
+            _persistence.NoteRestoredValueUnreadable(new HotReloadWiredValueHostKey(HostIdentity, FieldKey));
+
+            Assert.That(_persistence.RestoredCount, Is.EqualTo(0));
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.ReadReport().Failures;
+            Assert.That(failures.Count, Is.EqualTo(1));
+            Assert.That(failures[0].Reason, Is.EqualTo(HotReloadWiredValuePersistence.UnreadableValueReason));
+        }
+
+        /// <summary>
+        /// What: an unreadable value found again by the next restore is handed to apply only the
+        /// first time, and handed out once more after the value is wired again.
+        /// </summary>
+        [Test]
+        public void NoteRestoredValueUnreadable_SameKeyAgain_IsHandedOutOnceUntilWiredAgain()
+        {
+            HotReloadWiredValueHostKey key = new HotReloadWiredValueHostKey(HostIdentity, FieldKey);
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            RestoreThenNoteUnreadable(key);
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+
+            RestoreThenNoteUnreadable(key);
+
+            Assert.That(_persistence.ReadReport().Failures.Count, Is.EqualTo(1));
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+
+            _persistence.Record(NamedHost(), FieldKey, 8);
+            RestoreThenNoteUnreadable(key);
+
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// What: a new scene reload session hands out a failure that recurs in it again, even though
         /// the same failure was already handed out in the session before.
         /// </summary>
@@ -741,11 +809,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.Ledger.Count, Is.EqualTo(ledgerCount));
         }
 
+        private List<string> FailureFieldKeys()
+        {
+            List<string> keys = new List<string>();
+            foreach (HotReloadWiredValueRestoreFailure failure in _persistence.ReadReport().Failures)
+            {
+                keys.Add(failure.StoreFieldKey);
+            }
+
+            return keys;
+        }
+
         private PersistenceHost NamedHost()
         {
             PersistenceHost host = new PersistenceHost();
             _resolver.HostIdentities[host] = HostIdentity;
             return host;
+        }
+
+        // Stands in for a refresh read whose restore succeeds but whose field type rejects the value.
+        private void RestoreThenNoteUnreadable(HotReloadWiredValueHostKey key)
+        {
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.True);
+            _persistence.NoteRestoredValueUnreadable(key);
         }
 
         private sealed class FakeResolver : IHotReloadWiredValueResolver
@@ -761,6 +847,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             internal HashSet<string> UnloadedSceneHosts { get; } = new HashSet<string>();
 
+            internal Dictionary<string, object> HostsByIdentity { get; } = new Dictionary<string, object>();
+
             public bool IsMainThread { get; set; } = true;
 
             public bool IsPlayModeRunning { get; set; }
@@ -768,6 +856,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             public bool IsHostMissing(string hostIdentity, bool unloadedSceneCountsAsMissing) =>
                 MissingHosts.Contains(hostIdentity)
                 || (unloadedSceneCountsAsMissing && UnloadedSceneHosts.Contains(hostIdentity));
+
+            public bool TryResolveHost(string hostIdentity, out object host) =>
+                HostsByIdentity.TryGetValue(hostIdentity, out host);
 
             internal int DescribeHostCalls { get; private set; }
 

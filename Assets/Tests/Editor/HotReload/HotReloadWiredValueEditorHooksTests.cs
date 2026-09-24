@@ -212,6 +212,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 MissingHosts.Contains(hostIdentity)
                 || (unloadedSceneCountsAsMissing && UnloadedSceneHosts.Contains(hostIdentity));
 
+            public bool TryResolveHost(string hostIdentity, out object host)
+            {
+                host = null;
+                return false;
+            }
+
             public HotReloadWiredValueDescriptor DescribeValue(object value) =>
                 HotReloadWiredValueDescriptor.Plain(value);
 

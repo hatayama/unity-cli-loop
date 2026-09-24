@@ -34,6 +34,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         bool IsHostMissing(string hostIdentity, bool unloadedSceneCountsAsMissing);
 
         /// <summary>
+        /// Resolves the object a host identity names, when it is at its place now. False off the
+        /// main thread, for an asset identity, and when nothing is at that place.
+        /// </summary>
+        bool TryResolveHost(string hostIdentity, out object host);
+
+        /// <summary>
         /// How to remember a value: plain values pass through, scene objects and assets become
         /// identities, anything else becomes unrestorable with a reason.
         /// </summary>

@@ -39,11 +39,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "(a runtime-created object, or one renamed or moved during Play), so the value left with "
             + "Play Mode and is no longer kept; wire it again once the object exists in the next Play session";
 
+        internal const string UnreadableValueReason =
+            "the wired value is not of a type the field can hold now; wire it again or change the field type back";
+
         private readonly object _gate = new object();
         private readonly IHotReloadWiredValueResolver _resolver;
         private readonly HashSet<HotReloadWiredValueHostKey> _reportedFailures =
             new HashSet<HotReloadWiredValueHostKey>();
         private readonly HashSet<HotReloadWiredValueHostKey> _undeliveredPlayOnlyFailures =
+            new HashSet<HotReloadWiredValueHostKey>();
+        private readonly HashSet<HotReloadWiredValueHostKey> _namedUnreadable =
             new HashSet<HotReloadWiredValueHostKey>();
 
         // Starts at 1 so it never equals the 0 a slot starts with, and a slot's first retry runs.
@@ -77,6 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_gate)
             {
                 Ledger.Record(key, descriptor, wiredWhilePlaying);
+                // A value wired again is a new value, so rejecting it is a new failure to hand out.
+                _namedUnreadable.Remove(key);
                 // A value wired again into a host that is back at its place is no longer
                 // unrestored; the row would otherwise outlive the wiring it describes. The store
                 // settles the slot before this runs, so no later read would clear the row.
@@ -118,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (descriptor.Kind == HotReloadWiredValueKind.Unrestorable)
                 {
-                    RecordFailureOnce(key, descriptor.UnrestorableReason);
+                    RecordOrRefreshFailure(key, descriptor.UnrestorableReason);
                     return false;
                 }
             }
@@ -134,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 value = null;
-                RecordFailureOnce(key, failureReason);
+                RecordOrRefreshFailure(key, failureReason);
                 return false;
             }
         }
@@ -166,6 +173,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void NoteHostsMayHaveChanged()
         {
             Interlocked.Increment(ref _restoreGeneration);
+        }
+
+        /// <summary>
+        /// How many values came back in this session, read under the lock.
+        /// </summary>
+        internal int RestoredCount
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return Report.RestoredCount;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Every host and field the ledger holds a wired value for, copied under the lock.
+        /// </summary>
+        internal IReadOnlyList<HotReloadWiredValueHostKey> SnapshotLedgerKeys()
+        {
+            lock (_gate)
+            {
+                return Ledger.SnapshotKeys();
+            }
+        }
+
+        /// <summary>
+        /// Takes back the restore just counted for this host and field and names it as a value the
+        /// field's type rejects, for a read that restored a value it could not use.
+        /// </summary>
+        internal void NoteRestoredValueUnreadable(HotReloadWiredValueHostKey key)
+        {
+            lock (_gate)
+            {
+                Report.RemoveRestored();
+                bool namedBefore = !_namedUnreadable.Add(key);
+                if (!_reportedFailures.Add(key))
+                {
+                    Report.ReplaceFailureReason(key.Identity, key.StoreFieldKey, UnreadableValueReason);
+                    return;
+                }
+
+                // The restore just before this dropped the row, so re-adding it as new would hand
+                // the same rejected value to every apply after a refresh reads it again.
+                if (namedBefore)
+                {
+                    Report.AddFailureAlreadyReported(key.Identity, key.StoreFieldKey, UnreadableValueReason);
+                    return;
+                }
+
+                Report.AddFailure(key.Identity, key.StoreFieldKey, UnreadableValueReason);
+            }
         }
 
         /// <summary>
@@ -271,12 +331,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                     if (!playOnly)
                     {
-                        RecordFailureOnce(key, HostMissingReason);
+                        RecordOrRefreshFailure(key, HostMissingReason);
                         continue;
                     }
 
                     // Named before it is removed: the failure row outlives the ledger entry.
-                    RecordFailureOnce(key, PlayOnlyHostReason);
+                    RecordOrRefreshFailure(key, PlayOnlyHostReason);
                     _undeliveredPlayOnlyFailures.Add(key);
                     Ledger.Remove(key);
                 }
@@ -314,9 +374,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Report.Reset();
             _reportedFailures.Clear();
+            _namedUnreadable.Clear();
             foreach (HotReloadWiredValueHostKey key in _undeliveredPlayOnlyFailures)
             {
-                RecordFailureOnce(key, PlayOnlyHostReason);
+                RecordOrRefreshFailure(key, PlayOnlyHostReason);
             }
         }
 
@@ -337,18 +398,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return;
                 }
 
-                RecordFailureOnce(
+                RecordOrRefreshFailure(
                     new HotReloadWiredValueHostKey(host.GetType().FullName, storeFieldKey), OffMainThreadReason);
             }
         }
 
         // Why once: a failed read through TryReadInstanceField creates no slot, so the same host
         // is asked again on every read; the set keeps the report at one line per host and field.
+        // Why refresh a listed row: a stale reason stayed on it because the first record won, and
+        // replacing it in place keeps the apply drain index and the status row order.
         // Callers hold _gate.
-        private void RecordFailureOnce(HotReloadWiredValueHostKey key, string reason)
+        private void RecordOrRefreshFailure(HotReloadWiredValueHostKey key, string reason)
         {
             if (!_reportedFailures.Add(key))
             {
+                Report.ReplaceFailureReason(key.Identity, key.StoreFieldKey, reason);
                 return;
             }
 
