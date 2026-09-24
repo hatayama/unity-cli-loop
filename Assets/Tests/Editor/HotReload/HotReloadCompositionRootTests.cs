@@ -101,6 +101,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(HotReloadPausePointCoordination.HotReloadSide, Is.Not.SameAs(installedPort));
         }
 
+        /// <summary>
+        /// The copies that swap one stage keep the same wired-value persistence, so a wiring
+        /// recorded before the swap can still be restored after it.
+        /// </summary>
+        [Test]
+        public void WithOrchestratorAndWithChangeDetector_KeepTheWiredValuePersistence()
+        {
+            HotReloadServices installed = HotReloadCompositionRoot.Services;
+
+            Assert.That(
+                installed.WithOrchestrator(installed.Orchestrator).WiredValuePersistence,
+                Is.SameAs(installed.WiredValuePersistence));
+            Assert.That(
+                installed.WithChangeDetector(installed.ChangeDetector).WiredValuePersistence,
+                Is.SameAs(installed.WiredValuePersistence));
+        }
+
+        /// <summary>
+        /// Installing wires the services' persistence in as both the recorder and the restorer,
+        /// and closing a replacement that shares the domain puts the previous persistence back
+        /// with its recorded values.
+        /// </summary>
+        [Test]
+        public void BeginReplacement_SharingTheDomain_PutsThePreviousPersistenceBackWithItsValues()
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                HotReloadServices outer = HotReloadCompositionRoot.Services;
+                outer.WiredValuePersistence.Ledger.Record(
+                    new HotReloadWiredValueHostKey("scene:S|path:Host[0]", "Ns.Host::target"),
+                    HotReloadWiredValueDescriptor.Plain(1));
+                Assert.That(outer.Domain.AddedFieldValues.Restorer, Is.SameAs(outer.WiredValuePersistence));
+                Assert.That(HotReloadAddedFieldCoordination.WiredValues, Is.SameAs(outer.WiredValuePersistence));
+
+                using (HotReloadCompositionRoot.BeginReplacement(CreateServicesSharing(outer.Domain)))
+                {
+                    Assert.That(
+                        outer.Domain.AddedFieldValues.Restorer,
+                        Is.SameAs(HotReloadCompositionRoot.Services.WiredValuePersistence));
+                }
+
+                Assert.That(outer.Domain.AddedFieldValues.Restorer, Is.SameAs(outer.WiredValuePersistence));
+                Assert.That(HotReloadAddedFieldCoordination.WiredValues, Is.SameAs(outer.WiredValuePersistence));
+                Assert.That(outer.WiredValuePersistence.Ledger.Count, Is.EqualTo(1));
+            }
+        }
+
+        /// <summary>
+        /// A revert of every change forgets the wired values too, since the fields they belong to
+        /// are gone.
+        /// </summary>
+        [Test]
+        public void ExecuteRevertAll_ForgetsTheWiredValues()
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                HotReloadServices services = HotReloadCompositionRoot.Services;
+                services.WiredValuePersistence.Ledger.Record(
+                    new HotReloadWiredValueHostKey("scene:S|path:Host[0]", "Ns.Host::target"),
+                    HotReloadWiredValueDescriptor.Plain(1));
+
+                services.StatusExecutor.ExecuteRevertAll();
+
+                Assert.That(services.WiredValuePersistence.Ledger.Count, Is.EqualTo(0));
+            }
+        }
+
         private static HotReloadServices CreateServicesSharing(HotReloadDomain domain)
         {
             HotReloadServices installed = HotReloadCompositionRoot.Services;

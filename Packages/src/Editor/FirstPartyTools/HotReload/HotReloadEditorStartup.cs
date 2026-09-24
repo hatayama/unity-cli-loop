@@ -40,10 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPlayModeEntryDropRecorder.GetServices = () => HotReloadCompositionRoot.Services;
             HotReloadUnityMessageForwardingEditorHooks.GetForwarding =
                 () => HotReloadCompositionRoot.Services.UnityMessageForwarding;
+            HotReloadWiredValueEditorHooks.GetPersistence =
+                () => HotReloadCompositionRoot.Services.WiredValuePersistence;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();
             HotReloadUnityMessageForwardingEditorHooks.Initialize();
+            HotReloadWiredValueEditorHooks.Initialize();
             TransformWorkerHostLifecycle.RegisterForEditorStartup();
         }
     }
