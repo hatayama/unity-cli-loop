@@ -160,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compiledMethodEndLine);
             if (driftWarning.Length > 0)
             {
-                combined = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                combined = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                     combined,
                     resolvedEditedLineText,
                     compiledSourceLines,
@@ -169,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!string.Equals(resolvedTrimmed, requestedTrimmed, StringComparison.Ordinal))
             {
-                combined = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+                combined = PausePointCandidateCompiledLineWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
                     combined,
                     requestedLine,
                     requestedEditedLineText,
