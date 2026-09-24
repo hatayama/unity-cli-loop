@@ -25,6 +25,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int FixtureStatementLine = 12;
         private const int FixtureClosingBraceLine = 13;
 
+        // The blank line between the field and Add. Not the field line itself: its initializer gives
+        // the implicit constructor a sequence point there, so that line resolves to the constructor.
+        private const int FixtureBlankLineAboveMethod = 8;
+
         // A path no compiled assembly lists, so resolving a line in it always fails.
         private const string IntroducedTypeFilePath = "Assets/DoesNotExist/IntroducedOwner.cs";
 
@@ -712,6 +716,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
                 Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(1));
+            }
+        }
+
+        /// <summary>
+        /// What: a line above a patched method whose nearest compiled statement lies inside that
+        /// method is refused with guidance that leads with --method, and no marker is armed.
+        /// </summary>
+        [Test]
+        public void Enable_LineAboveAPatchedMethod_RefusesWithTheMethodFilterGuidance()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 1,
+                    FixtureClosingBraceLine);
+                scope.Port.ActiveShimForMethod = method =>
+                    method.Name == nameof(EnableBySourceLocationFixture.Add) ? method : null;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureBlankLineAboveMethod,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(
+                    response.ErrorCode,
+                    Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+                Assert.That(response.Message, Does.Contain("Line " + FixtureBlankLineAboveMethod));
+                Assert.That(response.Message, Does.Contain("'EnableBySourceLocationFixture.Add'"));
+                Assert.That(response.RecommendedNextAction, Does.Contain("--method"));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
             }
         }
 

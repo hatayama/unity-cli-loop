@@ -793,6 +793,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.ErrorMessage, Is.EqualTo(expectedMessage));
         }
 
+        /// <summary>
+        /// What: a requested line above the patched method's compiled span says the line belongs to
+        /// an unpatched method and leads the next action with --method.
+        /// </summary>
+        [Test]
+        public void Patch_OnHotReloadedMethod_RequestedLineBeforeCompiledSpan_SaysTheLineBelongsToAnUnpatchedMethodAndOffersMethodFilter()
+        {
+            MethodBase method = typeof(PatcherStaticMethodFixture).GetMethod(nameof(PatcherStaticMethodFixture.Add));
+            _hotReloadSideScope.Port.ActiveShimForMethod = _ => method;
+            const int requestedLine = 5;
+            const int compiledStart = 10;
+            const int compiledEnd = 20;
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "patcher-hot-reload-line-before-span",
+                BuildSyntheticResolutionWithMvid(
+                    method,
+                    method.Module.ModuleVersionId.ToString(),
+                    compiledStart,
+                    compiledEnd,
+                    compiledStart),
+                requestedLine: requestedLine);
+
+            string expectedMessage =
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedLineBeforePatchedBodyMessageFormat,
+                    method.DeclaringType.Name,
+                    method.Name,
+                    requestedLine,
+                    compiledStart)
+                + string.Format(
+                    SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
+                    method.DeclaringType.Name,
+                    method.Name,
+                    compiledStart,
+                    compiledEnd);
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.FailureReason,
+                Is.EqualTo(SourcePausePointPatchFailureReason.MethodPatchedByHotReload));
+            Assert.That(result.ErrorMessage, Is.EqualTo(expectedMessage));
+            Assert.That(
+                result.Hint,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedLineBeforePatchedBodyNextAction,
+                        requestedLine)));
+        }
+
         // Builds a resolution good enough to reach SourcePausePointPatcher's patchability gate; the
         // instruction index and locals/parameters are never read because every case here fails before that.
         private static SourcePausePointResolution BuildSyntheticResolution(MethodBase method)
@@ -806,7 +854,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MethodBase method,
             string mvid,
             int compiledMethodStartLine = 0,
-            int compiledMethodEndLine = 0)
+            int compiledMethodEndLine = 0,
+            int resolvedLine = 1)
         {
             return new SourcePausePointResolution(
                 method.Module.Assembly.GetName().Name,
@@ -818,8 +867,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 0,
                 0,
                 SourcePausePointSnapshotTiming.PreLine,
-                1,
-                1,
+                resolvedLine,
+                resolvedLine,
                 compiledMethodStartLine,
                 compiledMethodEndLine,
                 Array.Empty<SourcePausePointLocalVariable>(),
