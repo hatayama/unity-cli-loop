@@ -236,6 +236,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a declaration line exactly as far above the span as the lookback reaches (six
+        /// lines) still remaps to the span's first line.
+        /// </summary>
+        [Test]
+        public void FindUniqueMatchingCompiledLine_WhenDeclarationLineIsAtLookbackLimit_ReturnsSpanStart()
+        {
+            int remapped = RemapIntoSpan(
+                new[]
+                {
+                    "    private bool Target(int value)",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    {",
+                    "        return value > 0;",
+                    "    }"
+                },
+                new SourcePausePointCompiledMethodSpan(7, 9),
+                "private bool Target(int value)");
+
+            Assert.That(remapped, Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// What: a match further above the span than the declaration lookback reaches does not remap.
         /// </summary>
         [Test]
