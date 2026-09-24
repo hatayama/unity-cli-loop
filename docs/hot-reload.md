@@ -431,6 +431,8 @@ Wire details:
   marker on a patched method is rejected with `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` only
   when the line cannot be mapped onto the patched body.
   When the compiled line range of the patched method is known, the failure message also reports it, so you can see how far the edited file's line numbers have shifted from the compiled source.
+  When the line sits above a patched method and snaps into it, the next action leads with
+  `--method <Type.Method> --line N` naming the unpatched method that holds the line.
 
 ## Open Questions Tracked for Implementation
 
