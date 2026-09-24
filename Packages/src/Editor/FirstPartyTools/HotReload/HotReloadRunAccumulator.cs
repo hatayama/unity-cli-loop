@@ -254,7 +254,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why only ActiveChanges: a sibling retried after an earlier Skip or brought in as a
         // companion carries edits that never applied, while one re-applied for its active changes
-        // only re-states patches an earlier run already applied and reported.
+        // only re-states patches an earlier run already applied and reported, so its Skipped rows
+        // leave those patches running. Its Failed rows still count at the compile fallback: a
+        // failed run reverts those patches.
         private string[] CollectActivePatchSiblingPaths()
         {
             List<string> paths = new List<string>(_reappliedSiblingPaths.Count);

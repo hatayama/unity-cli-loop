@@ -277,6 +277,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True);
         }
 
+        /// <summary>
+        /// What: a Failed row of a sibling pulled in for its earlier changes still counts, because
+        /// a failed run reverts the sibling's earlier patches and only a compile clears it.
+        /// </summary>
+        [Test]
+        public void HasUnappliedEdit_ActivePatchSiblingRowFailed_ReturnsTrue()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", RequestedPath),
+                    HotReloadMethodOutcome.Failed("Sibling.N()", "reason", SiblingPath)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { SiblingPath });
+
+            Assert.That(
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result, ActivePatchSiblings(SiblingPath)),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: the sibling set built for a run holds only the siblings re-applied for their
+        /// active patches, not every re-applied sibling, so a retried sibling's rows still count.
+        /// </summary>
+        [Test]
+        public void ForActivePatches_ResultWithRetriedAndActivePatchSiblings_ContainsOnlyTheActivePatchSibling()
+        {
+            const string retriedSiblingPath = "Assets/Retried.cs";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                reappliedSiblingPaths: new[] { SiblingPath, retriedSiblingPath },
+                activePatchSiblingPaths: new[] { SiblingPath });
+
+            HotReloadReappliedSiblingFiles siblings =
+                HotReloadReappliedSiblingFiles.ForActivePatches(result, path => path);
+
+            Assert.That(siblings.Contains(SiblingPath), Is.True);
+            Assert.That(siblings.Contains(retriedSiblingPath), Is.False);
+        }
+
         private static HotReloadReappliedSiblingFiles NoActivePatchSiblings()
         {
             return new HotReloadReappliedSiblingFiles(Array.Empty<string>(), path => path);

@@ -770,7 +770,7 @@
               "on",
               "off"
             ],
-            "description": "When edits in the files you passed stay unapplied (Skipped or Failed methods, Failed type declarations), run uloop compile in this command: auto only in Edit Mode (never stops a Play session), on always unless Unity holds compiles until Play ends, off never. The response's CompileFallback says which; when the compile ran, Compile carries its result and Success is the compile's.",
+            "description": "When edits stay unapplied (Skipped/Failed methods, Failed types; a re-bound sibling's Skipped rows aside), run uloop compile in this command: auto only in Edit Mode (never stops a Play session), on always unless Unity holds compiles until Play ends, off never. The response's CompileFallback says which; when the compile ran, Compile carries its result and Success is the compile's.",
             "default": "auto"
           }
         }

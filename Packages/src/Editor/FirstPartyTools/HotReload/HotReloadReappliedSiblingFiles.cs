@@ -32,6 +32,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _siblingKeys = BuildSiblingKeys(reappliedSiblingPaths, toProjectRelativeScriptPath);
         }
 
+        /// <summary>
+        /// The siblings a run re-applied for their active patches. The one place both the compile
+        /// fallback and the response message build this set, so neither can take every re-applied
+        /// sibling instead.
+        /// </summary>
+        internal static HotReloadReappliedSiblingFiles ForActivePatches(
+            HotReloadOrchestratorResult result,
+            Func<string, string> toProjectRelativeScriptPath)
+        {
+            return new HotReloadReappliedSiblingFiles(result.ActivePatchSiblingPaths, toProjectRelativeScriptPath);
+        }
+
         // Why an empty FilePath is never a sibling: an outcome that belongs to no file, such as a
         // file-level row, cannot have come from a pulled-in file.
         public bool Contains(string filePath)

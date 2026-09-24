@@ -20,14 +20,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// True when the run left at least one requested edit unapplied, whatever the reason: a
         /// method it could not patch and a declaration it refused both leave the edited source
-        /// reachable only through a compile. Rows of a sibling the run pulled in to re-apply
+        /// reachable only through a compile. Skipped rows of a sibling the run pulled in to re-apply
         /// earlier changes do not count: they are not this run's edits, and their earlier patches
-        /// stay active.
+        /// stay active. Its Failed rows do count: a failed run reverts the sibling's earlier
+        /// patches, so only a compile brings them back.
         /// </summary>
         /// <remarks>
         /// A sibling that came back for another reason (a retry after an earlier Skip, or a
         /// companion) is not in activePatchSiblingFiles, so its rows still count: a retried row is
         /// an edit that was never applied.
+        /// A declaration a sibling owns is left out even when refused: an introduced type is never
+        /// unloaded, so a failed run does not take the sibling's earlier declaration away.
         /// </remarks>
         internal static bool HasUnappliedEdit(
             HotReloadOrchestratorResult result,
@@ -35,13 +38,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (HotReloadMethodOutcome method in result.Methods)
             {
-                if (activePatchSiblingFiles.Contains(method.FilePath))
+                if (method.Kind == HotReloadMethodOutcomeKind.Failed)
                 {
-                    continue;
+                    return true;
                 }
 
                 if (method.Kind == HotReloadMethodOutcomeKind.Skipped
-                    || method.Kind == HotReloadMethodOutcomeKind.Failed)
+                    && !activePatchSiblingFiles.Contains(method.FilePath))
                 {
                     return true;
                 }

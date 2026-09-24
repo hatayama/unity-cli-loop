@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool Status { get; set; }
 
         /// <summary>
-        /// When the apply run leaves edits in the files passed unapplied (Skipped or Failed methods, Failed type declarations; rows of a sibling pulled in to re-apply its active patches do not count), whether the CLI runs a compile in the same command: auto (default) does so in Edit Mode only and never stops a Play session, on always unless Unity holds compiles until Play ends, off never. Ignored by --status and --revert-all.
+        /// When the apply run leaves edits unapplied (Skipped or Failed methods, Failed type declarations; Skipped rows of a sibling pulled in to re-apply its active patches do not count, its Failed rows do), whether the CLI runs a compile in the same command: auto (default) does so in Edit Mode only and never stops a Play session, on always unless Unity holds compiles until Play ends, off never. Ignored by --status and --revert-all.
         /// </summary>
         public HotReloadCompileOnSkip CompileOnSkip { get; set; } = HotReloadCompileOnSkip.auto;
     }
@@ -301,8 +301,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 isPlaying,
                 EditorPrefs.GetInt(HotReloadConstants.ScriptCompilationDuringPlayEditorPrefsKey, 0)
                     == HotReloadConstants.ScriptCompilationDuringPlayRecompileAfterFinishedPlaying,
-                new HotReloadReappliedSiblingFiles(
-                    result.ActivePatchSiblingPaths,
+                HotReloadReappliedSiblingFiles.ForActivePatches(
+                    result,
                     path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
                         services.PackageRootCapture,
                         path)));
