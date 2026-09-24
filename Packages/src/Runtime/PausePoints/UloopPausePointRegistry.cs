@@ -151,8 +151,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // manual pause the user set outside the pause-point workflow (control-play-mode
             // --action Pause or the Editor pause button). Manual pauses leave no open window, so
             // they are left untouched. ClearAll still resumes any pause-point-owned pause.
-            // (Client disconnect and expiry still resume unconditionally: those paths must
-            // guarantee release even for a manual pause.)
+            // (Client disconnect still resumes unconditionally to guarantee release. Expiry never
+            // resumes: an expired marker cannot own a pause window, so any pause it finds was set
+            // manually.)
             bool resumedFromPause = ResumeEditorPauseIfOwnedByMarker(id);
             return (entry.ToSnapshot(now, _pauseController), resumedFromPause, clearedCount);
         }
@@ -181,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // Why only when pause-point-owned: like Clear, a bulk clear must not resume a manual
             // pause the user set outside the pause-point workflow. It resumes only while a pause
             // window is open (a pause-point hit is holding the Editor paused). Client disconnect
-            // and expiry still resume unconditionally to guarantee release.
+            // still resumes unconditionally to guarantee release; expiry never resumes.
             bool resumedFromPause = ResumeEditorPauseIfOwnedByPausePoint();
 
             UloopPausePointEditorStateSnapshot editorState = UloopPausePointEditorStateSnapshot.FromController(
@@ -202,10 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             UloopPausePointEntry entry = Entries[id];
-            if (TryExpire(entry, now))
-            {
-                ResumeEditorPause();
-            }
+            TryExpire(entry, now);
 
             return entry.ToSnapshot(now, _pauseController);
         }
@@ -219,8 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 Entries.Values,
                 NowUtc(),
                 _pauseController,
-                TryExpire,
-                ResumeEditorPause);
+                TryExpire);
         }
 
         /// <summary>
@@ -306,7 +303,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             UloopPausePointEntry entry = Entries[id];
             if (TryExpire(entry, now))
             {
-                ResumeEditorPause();
                 return entry.ToSnapshot(now, _pauseController);
             }
 
@@ -548,7 +544,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             UloopPausePointEntry entry = Entries[id];
             if (TryExpire(entry, now))
             {
-                ResumeEditorPause();
                 return entry.ToSnapshot(now, _pauseController);
             }
 
@@ -616,24 +611,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
 
         /// <summary>
-        /// Expires capture windows that have elapsed and resumes the Editor when any expire.
-        /// Used while paused so expiry still runs without a CLI status poll.
+        /// Expires capture windows that have elapsed. Used while paused so a marker turns Expired
+        /// at the right time without a CLI status poll; it never resumes the pause, which an
+        /// expired marker cannot own (see TryExpire).
         /// </summary>
         public static void ApplyCaptureWindowExpirations()
         {
             DateTime now = NowUtc();
-            bool anyExpired = false;
             foreach (UloopPausePointEntry entry in Entries.Values)
             {
-                if (TryExpire(entry, now))
-                {
-                    anyExpired = true;
-                }
-            }
-
-            if (anyExpired)
-            {
-                ResumeEditorPause();
+                TryExpire(entry, now);
             }
         }
 

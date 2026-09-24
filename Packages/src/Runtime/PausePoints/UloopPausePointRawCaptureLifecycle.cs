@@ -35,7 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // Why while paused only: abandoned Hit windows must expire without a CLI poll. This is
             // a no-op while the pause was caused by a hit still holding the freeze window open
             // (see UloopPausePointRegistry.TryExpire); it still matters for a manually-paused
-            // Editor, where an unrelated marker's timeout can still elapse.
+            // Editor, where an unrelated marker's timeout can still elapse and must turn the marker
+            // Expired; it never resumes that manual pause.
             UloopPausePointRegistry.ApplyCaptureWindowExpirations();
         }
 
