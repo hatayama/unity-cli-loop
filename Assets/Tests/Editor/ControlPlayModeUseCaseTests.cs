@@ -522,6 +522,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
         }
 
+        /// <summary>
+        /// What: a Play start that fails synchronously propagates the error without leaving the CLI runInBackground override enabled.
+        /// </summary>
+        [Test]
+        public void ExecuteAsync_WhenPlayStartThrows_DoesNotEnableRunInBackgroundOverride()
+        {
+            RecordingRunInBackgroundStarter runInBackgroundStarter = new();
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                new StubEditorUnsavedChangesQuietSaver(
+                    saveFailures: System.Array.Empty<string>(),
+                    remainingAfterSave: System.Array.Empty<string>()),
+                new ThrowingPlayStartEditorStateService(),
+                new StubDomainReloadDropStateProvider(),
+                runInBackgroundStarter: runInBackgroundStarter);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => useCase.ExecuteAsync(schema, CancellationToken.None));
+
+            Assert.That(exception.Message, Is.EqualTo("configuration cannot start"));
+            Assert.That(runInBackgroundStarter.EnableCallCount, Is.EqualTo(0));
+        }
+
         [Test]
         public async Task ExecuteAsync_WhenPlayResumesFromPause_OnlyClearsPauseAndReportsResumed()
         {
@@ -990,6 +1018,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             finally
             {
                 HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalRuntimeChangeCount;
+            }
+        }
+
+        private sealed class RecordingRunInBackgroundStarter : ICliPlayModeRunInBackgroundStarter
+        {
+            public int EnableCallCount { get; private set; }
+
+            public void EnableForCliPlayStart()
+            {
+                EnableCallCount++;
+            }
+        }
+
+        private sealed class ThrowingPlayStartEditorStateService : IControlPlayModeEditorStateService
+        {
+            public bool IsPlaying
+            {
+                get => false;
+                set
+                {
+                    if (value)
+                    {
+                        throw new InvalidOperationException("configuration cannot start");
+                    }
+                }
+            }
+
+            public bool IsPaused { get; set; }
+            public string ActiveScenarioName => null;
+
+            public void Step()
+            {
             }
         }
 
