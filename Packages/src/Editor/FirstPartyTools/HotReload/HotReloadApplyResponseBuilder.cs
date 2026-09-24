@@ -86,7 +86,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailure,
                 hasMethodFailure,
                 warnings.Count,
-                appendCompileResolution: DecideAppendCompileResolution(result, warnings),
+                appendCompileResolution: DecideAppendCompileResolution(
+                    result,
+                    warnings,
+                    new HotReloadReappliedSiblingFiles(result.ActivePatchSiblingPaths, toProjectRelativeScriptPath)),
                 allRequestedSkipped,
                 reappliedSiblingCount);
             return new HotReloadResponse
@@ -182,10 +185,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // before it exists, which contradicts it.
         // Why an unapplied edit rules it out too: the sentence reads as "keep working", while a
         // Failed or Skipped method or a refused type is an edit that is not running yet and needs
-        // a fix or a compile first.
+        // a fix or a compile first. A Skipped row of a sibling re-applied for its active changes
+        // does not rule it out: its earlier patches keep running, and Warnings already say so.
         private static bool DecideAppendCompileResolution(
             HotReloadOrchestratorResult result,
-            HotReloadResponseWarnings warnings)
+            HotReloadResponseWarnings warnings,
+            HotReloadReappliedSiblingFiles activePatchSiblingFiles)
         {
             if (!warnings.AllowsSingleCompileResolution)
             {
@@ -193,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return result.IntroducedTypeNoticeCount == 0
-                && !HotReloadCompileFallbackDecider.HasUnappliedEdit(result);
+                && !HotReloadCompileFallbackDecider.HasUnappliedEdit(result, activePatchSiblingFiles);
         }
 
         private static bool ReadsInvocationCountFromLedger(HotReloadMethodOutcomeKind kind)

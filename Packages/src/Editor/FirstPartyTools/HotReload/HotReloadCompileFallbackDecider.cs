@@ -20,12 +20,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// True when the run left at least one requested edit unapplied, whatever the reason: a
         /// method it could not patch and a declaration it refused both leave the edited source
-        /// reachable only through a compile.
+        /// reachable only through a compile. Rows of a sibling the run pulled in to re-apply
+        /// earlier changes do not count: they are not this run's edits, and their earlier patches
+        /// stay active.
         /// </summary>
-        internal static bool HasUnappliedEdit(HotReloadOrchestratorResult result)
+        /// <remarks>
+        /// A sibling that came back for another reason (a retry after an earlier Skip, or a
+        /// companion) is not in activePatchSiblingFiles, so its rows still count: a retried row is
+        /// an edit that was never applied.
+        /// </remarks>
+        internal static bool HasUnappliedEdit(
+            HotReloadOrchestratorResult result,
+            HotReloadReappliedSiblingFiles activePatchSiblingFiles)
         {
             foreach (HotReloadMethodOutcome method in result.Methods)
             {
+                if (activePatchSiblingFiles.Contains(method.FilePath))
+                {
+                    continue;
+                }
+
                 if (method.Kind == HotReloadMethodOutcomeKind.Skipped
                     || method.Kind == HotReloadMethodOutcomeKind.Failed)
                 {
@@ -35,6 +49,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (HotReloadIntroducedTypeOutcome introducedType in result.IntroducedTypes)
             {
+                if (activePatchSiblingFiles.Contains(introducedType.OwnerProjectRelativePath))
+                {
+                    continue;
+                }
+
                 if (introducedType.Kind == HotReloadIntroducedTypeOutcomeKind.Failed)
                 {
                     return true;

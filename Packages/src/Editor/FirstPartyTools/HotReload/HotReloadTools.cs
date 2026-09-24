@@ -300,7 +300,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.CompileOnSkip,
                 isPlaying,
                 EditorPrefs.GetInt(HotReloadConstants.ScriptCompilationDuringPlayEditorPrefsKey, 0)
-                    == HotReloadConstants.ScriptCompilationDuringPlayRecompileAfterFinishedPlaying);
+                    == HotReloadConstants.ScriptCompilationDuringPlayRecompileAfterFinishedPlaying,
+                new HotReloadReappliedSiblingFiles(
+                    result.ActivePatchSiblingPaths,
+                    path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                        services.PackageRootCapture,
+                        path)));
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
             {
                 response.Message = selection.SelectionMessage + " " + response.Message;
@@ -360,11 +365,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorResult result,
             HotReloadCompileOnSkip option,
             bool isPlaying,
-            bool compileRefusedDuringPlay)
+            bool compileRefusedDuringPlay,
+            HotReloadReappliedSiblingFiles activePatchSiblingFiles)
         {
             HotReloadCompileFallbackDecision decision = HotReloadCompileFallbackDecider.Decide(
                 option,
-                HotReloadCompileFallbackDecider.HasUnappliedEdit(result),
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result, activePatchSiblingFiles),
                 isPlaying,
                 compileRefusedDuringPlay);
             response.CompileFallback = decision.ToString();

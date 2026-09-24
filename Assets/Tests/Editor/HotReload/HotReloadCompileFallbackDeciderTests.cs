@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using NUnit.Framework;
@@ -12,6 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadCompileFallbackDeciderTests
     {
+        private const string RequestedPath = "Assets/Requested.cs";
+        private const string SiblingPath = "Assets/Sibling.cs";
+
         /// <summary>
         /// What: the decision for each option, with and without an unapplied edit, in and out of
         /// Play Mode, and with the Editor allowing or refusing compiles during play. Expected
@@ -92,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 patchedTotal: 0,
                 activePatchTotal: 0);
 
-            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result), Is.True);
+            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result, NoActivePatchSiblings()), Is.True);
         }
 
         /// <summary>
@@ -110,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 patchedTotal: 0,
                 activePatchTotal: 0);
 
-            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result), Is.True);
+            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result, NoActivePatchSiblings()), Is.True);
         }
 
         /// <summary>
@@ -136,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "reason")
                 });
 
-            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result), Is.True);
+            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result, NoActivePatchSiblings()), Is.True);
         }
 
         /// <summary>
@@ -169,7 +173,118 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         bodyEdited: false)
                 });
 
-            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result), Is.False);
+            Assert.That(HotReloadCompileFallbackDecider.HasUnappliedEdit(result, NoActivePatchSiblings()), Is.False);
+        }
+
+        /// <summary>
+        /// What: a Skipped row of a sibling the run pulled in to re-apply its earlier changes does
+        /// not count, because it is not an edit this run was asked to apply and its earlier patch
+        /// stays active.
+        /// </summary>
+        [Test]
+        public void HasUnappliedEdit_OnlyASiblingRowIsSkipped_ReturnsFalse()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", RequestedPath),
+                    HotReloadMethodOutcome.Skipped("Sibling.N()", "reason", SiblingPath)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { SiblingPath });
+
+            Assert.That(
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result, ActivePatchSiblings(SiblingPath)),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: a Skipped row of a file the run was passed still counts when a sibling row beside
+        /// it applied.
+        /// </summary>
+        [Test]
+        public void HasUnappliedEdit_RequestedRowIsSkippedBesideASiblingRow_ReturnsTrue()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("Requested.M()", "reason", RequestedPath),
+                    HotReloadMethodOutcome.Patched("Sibling.N()", SiblingPath)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { SiblingPath });
+
+            Assert.That(
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result, ActivePatchSiblings(SiblingPath)),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: a refused type declaration owned by a sibling pulled in for its earlier changes
+        /// does not count.
+        /// </summary>
+        [Test]
+        public void HasUnappliedEdit_OnlyASiblingIntroducedTypeFailed_ReturnsFalse()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", RequestedPath)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { SiblingPath },
+                introducedTypes: new[]
+                {
+                    HotReloadIntroducedTypeOutcome.Failed(
+                        "Example.Introduced",
+                        "ExampleAssembly",
+                        SiblingPath,
+                        "reason")
+                });
+
+            Assert.That(
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result, ActivePatchSiblings(SiblingPath)),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: a Skipped row of a sibling that came back for another reason than its active
+        /// changes (a retry after an earlier Skip, or a companion) still counts, because that row
+        /// is an edit that was never applied.
+        /// </summary>
+        [Test]
+        public void HasUnappliedEdit_RetriedSiblingRowIsSkipped_ReturnsTrue()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", RequestedPath),
+                    HotReloadMethodOutcome.Skipped("Sibling.N()", "reason", SiblingPath)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { SiblingPath });
+
+            Assert.That(
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result, NoActivePatchSiblings()),
+                Is.True);
+        }
+
+        private static HotReloadReappliedSiblingFiles NoActivePatchSiblings()
+        {
+            return new HotReloadReappliedSiblingFiles(Array.Empty<string>(), path => path);
+        }
+
+        private static HotReloadReappliedSiblingFiles ActivePatchSiblings(string siblingPath)
+        {
+            return new HotReloadReappliedSiblingFiles(new[] { siblingPath }, path => path);
         }
     }
 }

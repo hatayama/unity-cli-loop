@@ -1225,6 +1225,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath), Is.Null);
         }
 
+        /// <summary>
+        /// What: the result names as active-patch siblings only the siblings that came back for
+        /// their active changes, while every re-applied sibling stays in ReappliedSiblingPaths.
+        /// </summary>
+        [Test]
+        public void BuildResult_ActivePatchSiblingPaths_ContainsOnlySiblingsIncludedForActiveChanges()
+        {
+            const string activeChangesPath = "Assets/ActiveChangesSibling.cs";
+            const string retryAfterSkipPath = "Assets/RetryAfterSkipSibling.cs";
+            const string companionPath = "Assets/CompanionSibling.cs";
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+            run.NoteSiblingInclusion(activeChangesPath, HotReloadSiblingInclusionReason.ActiveChanges);
+            run.NoteSiblingInclusion(retryAfterSkipPath, HotReloadSiblingInclusionReason.RetryAfterSkip);
+            run.NoteSiblingInclusion(companionPath, HotReloadSiblingInclusionReason.Companion);
+
+            run.AddReappliedSibling(activeChangesPath, CreateEmptyResult());
+            run.AddReappliedSibling(retryAfterSkipPath, CreateEmptyResult());
+            run.AddReappliedSibling(companionPath, CreateEmptyResult());
+            HotReloadOrchestratorResult result = run.BuildResult("correlation-active-patch-siblings");
+
+            Assert.That(
+                result.ReappliedSiblingPaths,
+                Is.EquivalentTo(new[] { activeChangesPath, retryAfterSkipPath, companionPath }));
+            Assert.That(result.ActivePatchSiblingPaths, Is.EquivalentTo(new[] { activeChangesPath }));
+        }
+
+        private static HotReloadFileProcessResult CreateEmptyResult()
+        {
+            return new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedCount: 0,
+                sourceContentSha256: null);
+        }
+
         // A fully applied single-method result for the caller path: the shape the run stages an
         // applied-source record from.
         private static HotReloadFileProcessResult CreateAppliedResult(

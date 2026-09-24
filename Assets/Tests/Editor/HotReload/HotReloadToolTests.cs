@@ -2657,7 +2657,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: false,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("Requested"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2680,7 +2681,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
             Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
@@ -2703,7 +2705,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(
                 response.RecommendedNextAction,
@@ -2726,7 +2729,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: true);
+                compileRefusedDuringPlay: true,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
             Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
@@ -2749,7 +2753,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.on,
                 isPlaying: true,
-                compileRefusedDuringPlay: true);
+                compileRefusedDuringPlay: true,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("BlockedByPlayModeSetting"));
             Assert.That(
@@ -2772,7 +2777,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.off,
                 isPlaying: false,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("Disabled"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2799,9 +2805,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("NotNeeded"));
+        }
+
+        /// <summary>
+        /// What: in Edit Mode, a run whose only Skipped rows belong to a sibling pulled in to
+        /// re-apply its earlier changes asks for no compile, because every edit the run was passed
+        /// applied and a compile would drop the patches that are active.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_OnlySiblingRowsSkippedInEditMode_ReportsNotNeeded()
+        {
+            const string siblingPath = "Assets/Sibling.cs";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.N()", "reason", siblingPath)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { siblingPath });
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                result,
+                HotReloadCompileOnSkip.auto,
+                isPlaying: false,
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: new HotReloadReappliedSiblingFiles(new[] { siblingPath }, path => path));
+
+            Assert.That(response.CompileFallback, Is.EqualTo("NotNeeded"));
+        }
+
+        /// <summary>
+        /// What: the single-compile sentence stays in the Message when the only Skipped row
+        /// belongs to a sibling re-applied for its active changes, and is left off when the same
+        /// sibling came back for another reason, whose Skipped row is an edit still waiting.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_OnlyActivePatchSiblingRowSkipped_KeepsTheSingleCompileSentence()
+        {
+            const string siblingPath = "Assets/Sibling.cs";
+
+            HotReloadResponse activePatchSibling = HotReloadTool.BuildApplyResponse(
+                CreateSiblingSkippedResultWithTwoWarnings(siblingPath, new[] { siblingPath }));
+            HotReloadResponse retriedSibling = HotReloadTool.BuildApplyResponse(
+                CreateSiblingSkippedResultWithTwoWarnings(siblingPath, Array.Empty<string>()));
+
+            Assert.That(
+                activePatchSibling.Message,
+                Does.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            Assert.That(
+                retriedSibling.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
 
         /// <summary>
@@ -2843,6 +2905,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // One skipped method: the smallest run that leaves a requested edit unapplied.
+        private static HotReloadReappliedSiblingFiles NoActivePatchSiblings()
+        {
+            return new HotReloadReappliedSiblingFiles(Array.Empty<string>(), path => path);
+        }
+
+        // A run that applied the requested file, pulled in one sibling whose method was Skipped,
+        // and carries two warnings a compile clears, so only the unapplied-edit rule decides the
+        // single-compile sentence.
+        private static HotReloadOrchestratorResult CreateSiblingSkippedResultWithTwoWarnings(
+            string siblingPath,
+            IReadOnlyList<string> activePatchSiblingPaths)
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.N()", "reason", siblingPath)
+                },
+                new List<string> { "warn-a", "warn-b" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { siblingPath },
+                activePatchSiblingPaths: activePatchSiblingPaths);
+        }
+
         private static HotReloadOrchestratorResult CreateSkippedResult()
         {
             return new HotReloadOrchestratorResult(
