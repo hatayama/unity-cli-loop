@@ -30,28 +30,17 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IEnumerable<UloopPausePointEntry> entries,
             DateTime now,
             IUloopPausePointPauseController pauseController,
-            Func<UloopPausePointEntry, DateTime, bool> tryExpire,
-            Action resumeEditorPause)
+            Func<UloopPausePointEntry, DateTime, bool> tryExpire)
         {
             Debug.Assert(entries != null, "entries must not be null");
             Debug.Assert(pauseController != null, "pauseController must not be null");
             Debug.Assert(tryExpire != null, "tryExpire must not be null");
-            Debug.Assert(resumeEditorPause != null, "resumeEditorPause must not be null");
 
-            bool anyExpired = false;
             List<UloopPausePointEntry> entriesToSnapshot = new();
             foreach (UloopPausePointEntry entry in entries)
             {
                 entriesToSnapshot.Add(entry);
-                if (tryExpire(entry, now))
-                {
-                    anyExpired = true;
-                }
-            }
-
-            if (anyExpired)
-            {
-                resumeEditorPause();
+                tryExpire(entry, now);
             }
 
             List<UloopPausePointSnapshot> snapshots = new();

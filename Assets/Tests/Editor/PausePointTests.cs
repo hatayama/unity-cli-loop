@@ -313,10 +313,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies listing applies the same expiration transition and editor-resume side effect as a single status query.
+        /// Verifies listing expires the marker but leaves a manual pause in place.
         /// </summary>
         [Test]
-        public void GetAllStatuses_WhenMarkerHasExpired_ExpiresAndResumesEditor()
+        public void GetAllStatuses_WhenMarkerExpiresDuringManualPause_ExpiresAndLeavesEditorPaused()
         {
             UloopPausePointRegistry.Enable("jump", 1);
             _pauseController.Pause();
@@ -328,15 +328,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshots[0].Status, Is.EqualTo(UloopPausePointStatus.Expired));
             Assert.That(snapshots[0].IsEnabled, Is.False);
             Assert.That(snapshots[0].RemainingMilliseconds, Is.EqualTo(0));
-            Assert.That(snapshots[0].EditorState.IsPaused, Is.False);
-            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+            Assert.That(snapshots[0].EditorState.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
         }
 
         /// <summary>
-        /// Verifies listing expires every elapsed marker before issuing one editor resume.
+        /// Verifies listing expires every elapsed marker during a manual pause without resuming the Editor.
         /// </summary>
         [Test]
-        public void GetAllStatuses_WhenTwoMarkersHaveExpired_ExpiresBothAndResumesEditorOnce()
+        public void GetAllStatuses_WhenTwoMarkersExpireDuringManualPause_ExpiresBothWithoutResuming()
         {
             UloopPausePointRegistry.Enable("alpha", 1);
             UloopPausePointRegistry.Enable("zulu", 1);
@@ -350,7 +350,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UloopPausePointStatus.Expired,
                 UloopPausePointStatus.Expired
             }));
-            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a status query expires a marker during a manual pause without resuming the Editor.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenMarkerExpiresDuringManualPause_LeavesEditorPaused()
+        {
+            UloopPausePointRegistry.Enable("jump", 1);
+            _pauseController.Pause();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies extending an await on a marker that expired during a manual pause keeps it Expired
+        /// and leaves the Editor paused.
+        /// </summary>
+        [Test]
+        public void ExtendExpiryForAwait_WhenMarkerExpiresDuringManualPause_LeavesEditorPaused()
+        {
+            UloopPausePointRegistry.Enable("jump", 1);
+            _pauseController.Pause();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait("jump", 30);
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a hit on a marker that expired during a manual pause is not recorded
+        /// and leaves the Editor paused.
+        /// </summary>
+        [Test]
+        public void Hit_WhenMarkerExpiresDuringManualPause_LeavesEditorPaused()
+        {
+            UloopPausePointRegistry.Enable("jump", 1);
+            _pauseController.Pause();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Hit("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshot.HitCount, Is.EqualTo(0));
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies the paused-tick expiry sweep turns a marker Expired during a manual pause
+        /// without resuming the Editor.
+        /// </summary>
+        [Test]
+        public void ApplyCaptureWindowExpirations_WhenMarkerExpiresDuringManualPause_LeavesEditorPaused()
+        {
+            UloopPausePointRegistry.Enable("jump", 1);
+            _pauseController.Pause();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Expired));
         }
 
         /// <summary>

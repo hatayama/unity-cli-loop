@@ -100,9 +100,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         // Resumes the Editor only when a pause-point hit currently owns the pause (a pause window
         // is open) and reports whether it did. Clear/ClearAll use this so they never resume a
-        // manual pause that no pause-point hit is responsible for. Disconnect and expiry paths
-        // deliberately call ResumeEditorPause directly instead, because they must release the
-        // Editor even when the pause was manual.
+        // manual pause that no pause-point hit is responsible for. The disconnect path deliberately
+        // calls ResumeEditorPause directly instead, because it must release the Editor even when
+        // the pause was manual.
         private static bool ResumeEditorPauseIfOwnedByPausePoint()
         {
             // A manual unpause (Editor pause button / control-play-mode) may not have been observed

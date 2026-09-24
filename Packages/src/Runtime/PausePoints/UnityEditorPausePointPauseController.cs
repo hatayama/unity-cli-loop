@@ -20,7 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             // This is the low-level unpause primitive and is intentionally unconditional; it does
             // not know why the Editor is paused. The registry decides when to call it: clear only
-            // resumes a pause-point-owned pause, while disconnect and expiry resume unconditionally.
+            // resumes a pause-point-owned pause, disconnect resumes unconditionally, and expiry
+            // never resumes.
             EditorApplication.isPaused = false;
         }
     }
