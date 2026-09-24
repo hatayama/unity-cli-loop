@@ -72,6 +72,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return driftWarning;
             }
 
+            // Why: a brace-only line matches almost every method, so its Candidate list points nowhere.
+            if (PausePointCompiledLineComparisonWarnings.IsTrivialToken(editedTrimmed))
+            {
+                return driftWarning;
+            }
+
             (List<int> matches, bool truncated) = CollectCandidateCompiledLineNumbers(
                 editedTrimmed,
                 compiledSourceLines);
@@ -110,6 +116,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string editedTrimmed = requestedLineEditedText.Trim();
             if (editedTrimmed.Length == 0)
+            {
+                return message;
+            }
+
+            // Why: a brace-only line matches almost every method, so its Candidate list points nowhere.
+            if (PausePointCompiledLineComparisonWarnings.IsTrivialToken(editedTrimmed))
             {
                 return message;
             }
@@ -196,10 +208,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (matches.Count == 1 && !truncated)
             {
-                return string.Format(
+                string single = string.Format(
                     SourcePausePointConstants.HotReloadCompiledLineDriftRequestedLineCandidateSingleFormat,
                     requestedLine,
                     FormatCandidateCompiledLine(matches[0], namedCompiledMethodSpans));
+                // Why no retry at the requested line itself: that is the no-drift case, so retrying
+                // with --method resolves the line the same way and the advice would change nothing.
+                if (matches[0] == requestedLine)
+                {
+                    return single;
+                }
+
+                string methodName = FindContainingCompiledMethodDisplayNameOrEmpty(
+                    matches[0],
+                    namedCompiledMethodSpans);
+                if (methodName.Length > 0)
+                {
+                    return single + string.Format(
+                        SourcePausePointConstants.HotReloadCompiledLineDriftCandidateRetryWithMethodSuffixFormat,
+                        methodName,
+                        requestedLine,
+                        matches[0]);
+                }
+
+                return single + FormatGenericRetrySuffix(requestedLine);
             }
 
             string listed = FormatCandidateCompiledLineList(matches, namedCompiledMethodSpans);
@@ -213,7 +245,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return string.Format(
                 SourcePausePointConstants.HotReloadCompiledLineDriftRequestedLineCandidateMultipleFormat,
                 requestedLine,
-                listed);
+                listed) + FormatGenericRetrySuffix(requestedLine);
+        }
+
+        private static string FormatGenericRetrySuffix(int requestedLine)
+        {
+            return string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineDriftCandidateRetryGenericSuffixFormat,
+                requestedLine);
         }
 
         private static string FormatCandidateCompiledLineList(
@@ -233,9 +272,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int line,
             IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans)
         {
+            string methodName = FindContainingCompiledMethodDisplayNameOrEmpty(line, namedCompiledMethodSpans);
+            if (methodName.Length > 0)
+            {
+                return line + string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMethodAnnotationFormat,
+                    methodName);
+            }
+
+            return line.ToString();
+        }
+
+        private static string FindContainingCompiledMethodDisplayNameOrEmpty(
+            int line,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans)
+        {
             if (namedCompiledMethodSpans == null)
             {
-                return line.ToString();
+                return string.Empty;
             }
 
             SourcePausePointNearbyCompiledMethod smallestContainingSpan = null;
@@ -258,14 +312,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 smallestContainingSpan = span;
             }
 
-            if (smallestContainingSpan != null)
-            {
-                return line + string.Format(
-                    SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMethodAnnotationFormat,
-                    smallestContainingSpan.DisplayName);
-            }
-
-            return line.ToString();
+            return smallestContainingSpan == null ? string.Empty : smallestContainingSpan.DisplayName;
         }
     }
 }

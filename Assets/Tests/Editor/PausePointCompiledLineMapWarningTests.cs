@@ -37,16 +37,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "'Assets/Scripts/Example.cs' has active hot-reload patches. --line resolves against "
             + "the last compiled source, not the edited file, so a line number taken from the "
             + "edited file can miss or fail to resolve. Methods currently patched by hot reload "
-            + "resolve against the edited file instead. Recompute the line against the last "
-            + "compiled source, or run 'uloop compile' and re-enable.";
+            + "resolve against the edited file instead. Pass --method naming the intended method "
+            + "together with the edited --line, or run 'uloop compile' and re-enable.";
 
         private const string ExpectedEnableResolveFailureWarning =
             "'Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs' has active "
             + "hot-reload patches. --line resolves against the last compiled source, not the "
             + "edited file, so a line number taken from the edited file can miss or fail to "
             + "resolve. Methods currently patched by hot reload resolve against the edited file "
-            + "instead. Recompute the line against the last compiled source, or run 'uloop compile' "
-            + "and re-enable.";
+            + "instead. Pass --method naming the intended method together with the edited --line, "
+            + "or run 'uloop compile' and re-enable.";
 
         private const string ResolveFailureFile =
             "Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs";
@@ -379,7 +379,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(
                     "'Assets/Scripts/Example.cs' line 109 is '{' in the last compiled source but blank in the edited file. "
                     + "The marker is armed on the compiled statement. If that is not the statement you meant, "
-                    + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable."));
+                    + "pass --method naming the intended method together with the edited --line, or run 'uloop compile' and re-enable."));
             Assert.That(comparedAndMatched, Is.False);
         }
 
@@ -532,7 +532,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "but the marker snapped forward to line 17 in 'Example.Run'. "
                     + "'Assets/Scripts/Example.cs' line 17 is 'return 1;' in the last compiled source but 'return 3;' in the edited file. "
                     + "The marker is armed on the compiled statement. If that is not the statement you meant, "
-                    + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable."));
+                    + "pass --method naming the intended method together with the edited --line, or run 'uloop compile' and re-enable."));
             Assert.That(comparedAndMatched, Is.False);
         }
 
@@ -572,9 +572,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'. "
                     + "'Assets/Scripts/Example.cs' line 109 is '{' in the last compiled source but blank in the edited file. "
                     + "The marker is armed on the compiled statement. If that is not the statement you meant, "
-                    + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable. "
+                    + "pass --method naming the intended method together with the edited --line, or run 'uloop compile' and re-enable. "
                     + "In the last compiled source, 'GameDirector.ComputeScoreTarget' spans lines 100-120. "
-                    + "Candidate: the text at --line 107 in the edited file appears at line 104 in the last compiled source."));
+                    + "Candidate: the text at --line 107 in the edited file appears at line 104 in the last compiled source. Retry with --method naming the intended method and the same --line 107; line numbers from the last compiled source passed as --line are read against the edited file."));
             Assert.That(comparedAndMatched, Is.False);
         }
 
@@ -613,7 +613,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "'Assets/Scripts/Example.cs' --line 107 is 'LastRemainingBlocks = remainingBlocks;' in the edited file, "
                     + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'. "
                     + "In the last compiled source, 'GameDirector.ComputeScoreTarget' spans lines 100-120. "
-                    + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source."));
+                    + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source. Retry with --method naming the intended method and the same --line 107; line numbers from the last compiled source passed as --line are read against the edited file."));
             Assert.That(comparedAndMatched, Is.False);
         }
 
@@ -652,9 +652,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'. "
                     + "'Assets/Scripts/Example.cs' line 109 is '{' in the last compiled source but 'return 3;' in the edited file. "
                     + "The marker is armed on the compiled statement. If that is not the statement you meant, "
-                    + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable. "
+                    + "pass --method naming the intended method together with the edited --line, or run 'uloop compile' and re-enable. "
                     + "Candidate: the edited line's text appears at line 2 in the last compiled source. "
-                    + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source."));
+                    + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source. Retry with --method naming the intended method and the same --line 107; line numbers from the last compiled source passed as --line are read against the edited file."));
             Assert.That(comparedAndMatched, Is.False);
         }
 
@@ -1389,7 +1389,125 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warning,
                 Is.EqualTo(
                     drift
-                    + " Candidate: the text at --line 107 in the edited file appears at line 2 in the last compiled source."));
+                    + " Candidate: the text at --line 107 in the edited file appears at line 2 in the last compiled source. Retry with --method naming the intended method and the same --line 107; line numbers from the last compiled source passed as --line are read against the edited file."));
+        }
+
+        /// <summary>
+        /// What: one requested-line candidate inside a named compiled span tells the caller to retry
+        /// with that method and the same edited --line, not with the compiled line number.
+        /// </summary>
+        [Test]
+        public void AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged_WhenOneCandidateHasNamedSpan_SuggestsRetryWithThatMethod()
+        {
+            string drift =
+                "'Assets/Scripts/Example.cs' --line 107 is 'return 2;' in the edited file, "
+                + "but the marker snapped forward to line 109 in 'Example.Run'.";
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 2;",
+                "            return 1;"
+            };
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[] { new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 2, 3) };
+
+            string warning = PausePointCandidateCompiledLineWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                107,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift
+                    + " Candidate: the text at --line 107 in the edited file appears at line 2 (in 'Enemy.TakeDamage') in the last compiled source."
+                    + " Retry with --method 'Enemy.TakeDamage' and the same --line 107; do not pass line 2 as --line, it is read against the edited file."));
+        }
+
+        /// <summary>
+        /// What: a requested-line candidate at the requested line itself gets no retry sentence,
+        /// because retrying with --method would resolve that line the same way.
+        /// </summary>
+        [Test]
+        public void AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged_WhenCandidateIsRequestedLine_OmitsRetrySentence()
+        {
+            string drift =
+                "'Assets/Scripts/Example.cs' --line 2 is 'return 2;' in the edited file, "
+                + "but the marker snapped forward to line 3 in 'Example.Run'.";
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 2;",
+                "            return 1;"
+            };
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[] { new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 2, 3) };
+
+            string warning = PausePointCandidateCompiledLineWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                2,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift
+                    + " Candidate: the text at --line 2 in the edited file appears at line 2 (in 'Enemy.TakeDamage') in the last compiled source."));
+            Assert.That(warning, Does.Not.Contain("Retry with"));
+        }
+
+        /// <summary>
+        /// What: a brace-only requested line adds no Candidate to a drift warning, because a brace
+        /// matches almost every method.
+        /// </summary>
+        [Test]
+        public void AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged_WhenEditedLineIsBraceOnly_LeavesWarningUnchanged()
+        {
+            string drift =
+                "'Assets/Scripts/Example.cs' --line 107 is '{' in the edited file, "
+                + "but the marker snapped forward to line 109 in 'Example.Run'.";
+            string[] compiledLines =
+            {
+                "class Sample",
+                "        {",
+                "            return 1;"
+            };
+
+            string warning = PausePointCandidateCompiledLineWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                107,
+                "  {  ",
+                compiledLines);
+
+            Assert.That(warning, Is.EqualTo(drift));
+        }
+
+        /// <summary>
+        /// What: a brace-only requested line adds no Candidate to a resolve-failure Message.
+        /// </summary>
+        [Test]
+        public void AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged_WhenEditedLineIsBraceOnly_ReturnsUnchanged()
+        {
+            const string message =
+                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
+            string[] compiledLines =
+            {
+                "class Sample",
+                "        {",
+                "            return 1;"
+            };
+
+            string result = PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+                message,
+                116,
+                "  {  ",
+                compiledLines);
+
+            Assert.That(result, Is.EqualTo(message));
         }
 
         /// <summary>
@@ -1426,7 +1544,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warning,
                 Is.EqualTo(
                     drift
-                    + " Candidate: the text at --line 107 in the edited file appears at lines 2 (in 'Enemy.TakeDamage'), 4 (in 'Enemy.Heal') in the last compiled source."));
+                    + " Candidate: the text at --line 107 in the edited file appears at lines 2 (in 'Enemy.TakeDamage'), 4 (in 'Enemy.Heal') in the last compiled source. Retry with --method naming the intended method and the same --line 107; line numbers from the last compiled source passed as --line are read against the edited file."));
         }
 
         /// <summary>
@@ -1458,7 +1576,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warning,
                 Is.EqualTo(
                     drift
-                    + " Candidate: the text at --line 107 in the edited file appears at lines 1, 3, 4 (first 3 matches) in the last compiled source."));
+                    + " Candidate: the text at --line 107 in the edited file appears at lines 1, 3, 4 (first 3 matches) in the last compiled source. Retry with --method naming the intended method and the same --line 107; line numbers from the last compiled source passed as --line are read against the edited file."));
         }
 
         /// <summary>
@@ -1488,7 +1606,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 result,
                 Is.EqualTo(
                     "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
-                    + " Candidate: the text at --line 116 in the edited file appears at line 110 in the last compiled source."));
+                    + " Candidate: the text at --line 116 in the edited file appears at line 110 in the last compiled source. Retry with --method naming the intended method and the same --line 116; line numbers from the last compiled source passed as --line are read against the edited file."));
         }
 
         /// <summary>
@@ -1517,7 +1635,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 result,
                 Is.EqualTo(
                     "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
-                    + " Candidate: the text at --line 116 in the edited file appears at lines 2, 4 in the last compiled source."));
+                    + " Candidate: the text at --line 116 in the edited file appears at lines 2, 4 in the last compiled source. Retry with --method naming the intended method and the same --line 116; line numbers from the last compiled source passed as --line are read against the edited file."));
         }
 
         /// <summary>
@@ -1548,7 +1666,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 result,
                 Is.EqualTo(
                     "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
-                    + " Candidate: the text at --line 116 in the edited file appears at lines 1, 3, 4 (first 3 matches) in the last compiled source."));
+                    + " Candidate: the text at --line 116 in the edited file appears at lines 1, 3, 4 (first 3 matches) in the last compiled source. Retry with --method naming the intended method and the same --line 116; line numbers from the last compiled source passed as --line are read against the edited file."));
         }
 
         /// <summary>
@@ -1645,7 +1763,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(
                     "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
                     + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."
-                    + " Candidate: the text at --line 116 in the edited file appears at line 1 in the last compiled source."));
+                    + " Candidate: the text at --line 116 in the edited file appears at line 1 in the last compiled source. Retry with --method naming the intended method and the same --line 116; line numbers from the last compiled source passed as --line are read against the edited file."));
         }
 
         /// <summary>
@@ -1922,6 +2040,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(
                     withPatches.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction));
+                Assert.That(withPatches.RecommendedNextAction, Does.Contain("--method"));
 
                 hotReloadSideScope.Port.ShimLookupForFile = _ => null;
                 PausePointResponse withoutPatches = EnableUnresolvableLine();

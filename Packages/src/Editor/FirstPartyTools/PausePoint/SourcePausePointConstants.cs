@@ -359,25 +359,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "'{0}' has active hot-reload patches. --line resolves against the last compiled source, "
             + "not the edited file, so a line number taken from the edited file can miss or fail to "
             + "resolve. Methods currently patched by hot reload resolve against the edited file instead. "
-            + "Recompute the line against the last compiled source, or run 'uloop compile' "
-            + "and re-enable.";
+            + "Pass --method naming the intended method together with the edited --line, "
+            + "or run 'uloop compile' and re-enable.";
 
         public const string HotReloadCompiledLineMapResolveFailureNextAction =
-            "Pass a line number from the last compiled source (the editor shows the edited file, "
-            + "which can drift after hot reload), or run 'uloop compile' and re-enable the pause point.";
+            "Retry with --method <Type.Method> naming the intended method and the same edited --line; "
+            + "the line is then matched by its text inside that method's last compiled source. "
+            + "Do not pass a line number from the last compiled source as --line, it is read against "
+            + "the edited file. Or run 'uloop compile' and re-enable the pause point.";
 
         // Format: file, resolved line, compiled line text, edited line text.
         public const string HotReloadCompiledLineMapLineDriftWarningFormat =
             "'{0}' line {1} is '{2}' in the last compiled source but '{3}' in the edited file. "
             + "The marker is armed on the compiled statement. If that is not the statement you meant, "
-            + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable.";
+            + "pass --method naming the intended method together with the edited --line, or run "
+            + "'uloop compile' and re-enable.";
 
         // Format: file, resolved line, compiled line text.
         // Why a distinct sentence: quoting an empty edited line as '' looks like a missing field.
         public const string HotReloadCompiledLineMapBlankEditedLineDriftWarningFormat =
             "'{0}' line {1} is '{2}' in the last compiled source but blank in the edited file. "
             + "The marker is armed on the compiled statement. If that is not the statement you meant, "
-            + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable.";
+            + "pass --method naming the intended method together with the edited --line, or run "
+            + "'uloop compile' and re-enable.";
 
         // Format: file, resolved line, resolved method, patched method.
         // Why no text comparison: the marker sits in an unpatched method's compiled line, so a
@@ -467,6 +471,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // optionally annotated with their containing compiled method, with an optional truncation note.
         public const string HotReloadCompiledLineDriftRequestedLineCandidateMultipleFormat =
             " Candidate: the text at --line {0} in the edited file appears at lines {1} in the last compiled source.";
+
+        // Format: display name of the method containing the candidate, requested --line,
+        // candidate compiled line.
+        public const string HotReloadCompiledLineDriftCandidateRetryWithMethodSuffixFormat =
+            " Retry with --method '{0}' and the same --line {1}; do not pass line {2} as --line, "
+            + "it is read against the edited file.";
+
+        // Format: requested --line.
+        public const string HotReloadCompiledLineDriftCandidateRetryGenericSuffixFormat =
+            " Retry with --method naming the intended method and the same --line {0}; line numbers "
+            + "from the last compiled source passed as --line are read against the edited file.";
 
         // Why format from CompiledLineDriftCandidateMatchLimit: a hard-coded "3" would lie
         // if the cap changed.
