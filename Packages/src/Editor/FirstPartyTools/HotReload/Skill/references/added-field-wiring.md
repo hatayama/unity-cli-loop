@@ -129,7 +129,7 @@ These values are not restored and are named once, as `Type.field on <host>: <rea
 - a value whose host is no longer at its place after the reload, because it was renamed, moved,
   or removed (or a sibling before it was); the row names the old place, and the rebuilt object
   elsewhere starts at its initializer until the host is back at its place (the value then reaches
-  it on its next read, and the row goes away) or you wire it again. The row goes away only for a
+  it on its next read, or when the next `--status` or apply checks it again, and the row goes away) or you wire it again. The row goes away only for a
   host back at the old place, whether the value reached it or you wired it again there; wiring the
   value into an object at another place leaves the row, because the old wiring is still kept for
   that place. A host that exists only while play mode
@@ -141,7 +141,8 @@ notice it yourself and wire it again:
 
 - a value the hot-reloaded code wrote itself instead of the wiring call.
 
-`RestoredWiredValueCount` on `--status` counts the values that came back. `--revert-all` forgets every wired value, so a field
+`RestoredWiredValueCount` on `--status` counts the values that came back, including the ones
+`--status` itself gave back by reading them for a host that is back at its place. `--revert-all` forgets every wired value, so a field
 added again later starts at its initializer.
 
 When the re-apply adds back fields the domain reload discarded, its `Warnings` names exactly those

@@ -102,20 +102,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// The copies that swap one stage keep the same wired-value persistence, so a wiring
-        /// recorded before the swap can still be restored after it.
+        /// The copies that swap one stage keep the same wired-value persistence and restore
+        /// refresh, so a wiring recorded before the swap can still be restored after it and an
+        /// apply through the copy still re-checks it.
         /// </summary>
         [Test]
-        public void WithOrchestratorAndWithChangeDetector_KeepTheWiredValuePersistence()
+        public void WithOrchestratorAndWithChangeDetector_KeepTheWiredValuePersistenceAndRefresh()
         {
             HotReloadServices installed = HotReloadCompositionRoot.Services;
+            HotReloadServices withOrchestrator = installed.WithOrchestrator(installed.Orchestrator);
+            HotReloadServices withChangeDetector = installed.WithChangeDetector(installed.ChangeDetector);
 
-            Assert.That(
-                installed.WithOrchestrator(installed.Orchestrator).WiredValuePersistence,
-                Is.SameAs(installed.WiredValuePersistence));
-            Assert.That(
-                installed.WithChangeDetector(installed.ChangeDetector).WiredValuePersistence,
-                Is.SameAs(installed.WiredValuePersistence));
+            Assert.That(withOrchestrator.WiredValuePersistence, Is.SameAs(installed.WiredValuePersistence));
+            Assert.That(withChangeDetector.WiredValuePersistence, Is.SameAs(installed.WiredValuePersistence));
+            Assert.That(withOrchestrator.WiredValueRestoreRefresh, Is.SameAs(installed.WiredValueRestoreRefresh));
+            Assert.That(withChangeDetector.WiredValueRestoreRefresh, Is.SameAs(installed.WiredValueRestoreRefresh));
         }
 
         /// <summary>

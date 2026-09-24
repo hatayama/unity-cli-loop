@@ -135,8 +135,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         new HotReloadUnityMessageProxyTypeBuilder()));
             // Built here rather than in Install: a replacement scope installs the same services
             // again, and a new ledger each time would forget every value already wired.
-            HotReloadWiredValuePersistence wiredValuePersistence = new HotReloadWiredValuePersistence(
-                new HotReloadUnityWiredValueResolver(new HotReloadSceneObjectIdentityBuilder()));
+            HotReloadUnityWiredValueResolver wiredValueResolver =
+                new HotReloadUnityWiredValueResolver(new HotReloadSceneObjectIdentityBuilder());
+            HotReloadWiredValuePersistence wiredValuePersistence =
+                new HotReloadWiredValuePersistence(wiredValueResolver);
+            // Its own field port rather than the one Install hands to the store: the port only
+            // wraps the domain, and reading the installed one here would bind a replacement's
+            // refresh to the domain that happened to be installed.
+            HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh =
+                new HotReloadWiredValueRestoreRefresh(
+                    wiredValuePersistence,
+                    wiredValueResolver,
+                    new HotReloadAddedFieldSlotReader(
+                        new HotReloadAddedFieldPort(domain),
+                        domain.AddedFieldValues));
             return new HotReloadServices(
                 domain,
                 harmony,
@@ -159,12 +171,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadSiblingRebindReporter(domain),
                     packageRootCapture,
                     unityMessageForwarding),
-                new HotReloadStatusExecutor(domain, patcher, unityMessageForwarding, wiredValuePersistence),
+                new HotReloadStatusExecutor(
+                    domain,
+                    patcher,
+                    unityMessageForwarding,
+                    wiredValuePersistence,
+                    wiredValueRestoreRefresh),
                 packageRootCapture,
                 editorStateSnapshotCapture,
                 new HotReloadChangeDetector(),
                 unityMessageForwarding,
-                wiredValuePersistence);
+                wiredValuePersistence,
+                wiredValueRestoreRefresh);
         }
 
         /// <summary>
