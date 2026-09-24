@@ -43,6 +43,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return host is Component component ? _sceneObjects.DescribeComponent(component) : null;
         }
 
+        public bool IsHostMissing(string hostIdentity)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(hostIdentity), "hostIdentity must not be empty.");
+
+            // An asset host is not rebuilt by a scene reload, and off the main thread the scene
+            // cannot be read, so neither is known to be missing.
+            if (!IsMainThread || hostIdentity.StartsWith(AssetPrefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return _sceneObjects.IsComponentMissing(hostIdentity);
+        }
+
         public HotReloadWiredValueDescriptor DescribeValue(object value)
         {
             if (!(value is UnityEngine.Object unityObject))

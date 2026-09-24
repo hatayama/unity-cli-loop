@@ -23,6 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string OffMainThreadReason = "read off the main thread before any main-thread read";
 
+        internal const string HostMissingReason =
+            "no object is at the host's place now, so nothing reads this value until one is back there (the host was renamed, moved, or removed, or it exists only while Play Mode runs)";
+
         private readonly object _gate = new object();
         private readonly IHotReloadWiredValueResolver _resolver;
         private readonly HashSet<HotReloadWiredValueHostKey> _reportedFailures =
@@ -129,6 +132,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_gate)
             {
                 ResetReport();
+            }
+        }
+
+        /// <summary>
+        /// Names, once per host and field, every recorded value whose host a finished scene reload
+        /// did not put back at its place. The values stay recorded.
+        /// </summary>
+        /// <remarks>
+        /// Why after the reload, not in TryRestore: the replacement host reads under a different
+        /// identity, so the ledger miss on that read cannot tell a never-wired field from a host
+        /// that moved.
+        /// Why the resolver is asked outside the lock: it reads the scene, and a slot read off the
+        /// main thread would otherwise wait on it. Each identity is asked once, however many fields
+        /// it has.
+        /// </remarks>
+        internal void ReportMissingHosts()
+        {
+            List<HotReloadWiredValueHostKey> keys;
+            lock (_gate)
+            {
+                keys = Ledger.SnapshotKeys();
+            }
+
+            HashSet<string> checkedIdentities = new HashSet<string>();
+            HashSet<string> missingIdentities = new HashSet<string>();
+            foreach (HotReloadWiredValueHostKey key in keys)
+            {
+                if (checkedIdentities.Add(key.Identity) && _resolver.IsHostMissing(key.Identity))
+                {
+                    missingIdentities.Add(key.Identity);
+                }
+            }
+
+            if (missingIdentities.Count == 0)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                foreach (HotReloadWiredValueHostKey key in keys)
+                {
+                    // A revert may have cleared the ledger while the lock was released.
+                    if (missingIdentities.Contains(key.Identity) && Ledger.TryGet(key, out _))
+                    {
+                        RecordFailureOnce(key, HostMissingReason);
+                    }
+                }
             }
         }
 

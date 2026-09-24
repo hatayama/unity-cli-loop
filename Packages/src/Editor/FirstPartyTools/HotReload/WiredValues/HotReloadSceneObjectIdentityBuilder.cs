@@ -79,20 +79,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool TryResolveGameObject(string identity, out GameObject gameObject)
         {
             gameObject = null;
-            if (string.IsNullOrEmpty(identity) || !identity.StartsWith(ScenePrefix, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            int pathStart = identity.IndexOf(PathMarker, StringComparison.Ordinal);
-            if (pathStart < 0)
-            {
-                return false;
-            }
-
-            string sceneId = identity.Substring(ScenePrefix.Length, pathStart - ScenePrefix.Length);
-            string path = identity.Substring(pathStart + PathMarker.Length);
-            if (!TryFindLoadedScene(sceneId, out Scene scene))
+            if (!TrySplitSceneIdentity(identity, out string sceneId, out string path)
+                || !TryFindLoadedScene(sceneId, out Scene scene))
             {
                 return false;
             }
@@ -133,6 +121,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             component = sameType[index];
+            return true;
+        }
+
+        /// <summary>
+        /// Whether a component identity names a place in a readable scene where no component of
+        /// that type sits any more. False when the scene cannot be read: the host is then out of
+        /// sight, not gone, and is found again once that scene is open.
+        /// </summary>
+        internal bool IsComponentMissing(string identity)
+        {
+            if (!TrySplitSceneIdentity(identity, out string sceneId, out _)
+                || !TryFindLoadedScene(sceneId, out _))
+            {
+                return false;
+            }
+
+            return !TryResolveComponent(identity, out _);
+        }
+
+        private static bool TrySplitSceneIdentity(string identity, out string sceneId, out string path)
+        {
+            sceneId = null;
+            path = null;
+            if (string.IsNullOrEmpty(identity) || !identity.StartsWith(ScenePrefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            int pathStart = identity.IndexOf(PathMarker, StringComparison.Ordinal);
+            if (pathStart < 0)
+            {
+                return false;
+            }
+
+            sceneId = identity.Substring(ScenePrefix.Length, pathStart - ScenePrefix.Length);
+            path = identity.Substring(pathStart + PathMarker.Length);
             return true;
         }
 

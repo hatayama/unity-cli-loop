@@ -179,6 +179,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(persistence.Report.Failures, Is.Empty);
         }
 
+        /// <summary>
+        /// What: a host renamed after its identity was taken is missing, because nothing of its
+        /// component type sits at the recorded place in the loaded scene.
+        /// </summary>
+        [Test]
+        public void IsHostMissing_HostRenamed_IsTrue()
+        {
+            GameObject host = CreateRoot("Host");
+            string identity = _resolver.DescribeHost(host.transform);
+
+            host.name = Prefix + "Host2";
+
+            Assert.That(_resolver.IsHostMissing(identity), Is.True);
+        }
+
+        /// <summary>
+        /// What: a host still at its recorded place is not missing.
+        /// </summary>
+        [Test]
+        public void IsHostMissing_HostStillThere_IsFalse()
+        {
+            GameObject host = CreateRoot("Host");
+            string identity = _resolver.DescribeHost(host.transform);
+
+            Assert.That(_resolver.IsHostMissing(identity), Is.False);
+        }
+
+        /// <summary>
+        /// What: a host in a scene that is not loaded is out of sight rather than missing.
+        /// </summary>
+        [Test]
+        public void IsHostMissing_SceneNotLoaded_IsFalse()
+        {
+            const string identity = "scene:NoSuchScene|path:Host[0]|component:UnityEngine.Transform|index:0";
+
+            Assert.That(_resolver.IsHostMissing(identity), Is.False);
+        }
+
         private GameObject CreateRoot(string name)
         {
             GameObject gameObject = new GameObject(Prefix + name);

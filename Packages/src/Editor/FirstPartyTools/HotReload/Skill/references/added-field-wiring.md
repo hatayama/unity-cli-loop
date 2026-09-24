@@ -107,7 +107,7 @@ What play mode costs depends on the project's Enter Play Mode Options.
 | Setting | What survives | What to do |
 |---------|---------------|------------|
 | Domain reload on (Unity's default) | Nothing. `--status` reports `0 change(s) currently active` and says the changes were discarded when play mode was entered | Re-apply the hot reload, then re-run the wiring script — both work from inside play mode |
-| Domain reload disabled | The declarations, and the values written through `SetInstanceField` when the host is a scene object or an asset and the value is a plain value, a scene object, or an asset. `--status` still lists the `Active` and `AddedField` rows. Some values that could not be restored are named by `--status` and by the `Warnings` of the next apply; the rest are not named (see below) | Wire again every value named as not restored, and the two unnamed cases below |
+| Domain reload disabled | The declarations, and the values written through `SetInstanceField` when the host is a scene object or an asset and the value is a plain value, a scene object, or an asset. `--status` still lists the `Active` and `AddedField` rows. Some values that could not be restored are named by `--status` and by the `Warnings` of the next apply; the rest are not named (see below) | Wire again every value named as not restored, and the one unnamed case below |
 
 Play mode builds the scene's objects again either way, and an added field on a new instance starts
 at its initializer unless something gives the value back.
@@ -124,14 +124,17 @@ These values are not restored and are named once, as `Type.field on <host>: <rea
 
 - a value that is an object created at run time, which no scene or asset holds;
 - a value that is a scene object or asset that is gone, or no longer sits in the same place;
-- a field whose first read on the rebuilt object happens off the main thread.
+- a field whose first read on the rebuilt object happens off the main thread;
+- a value whose host is no longer at its place after the reload, because it was renamed, moved,
+  or removed (or a sibling before it was); the row names the old place, and the rebuilt object
+  elsewhere starts at its initializer until you wire it. A host that exists only while play mode
+  runs (an instantiated `(Clone)`, for example) is named the same way after leaving play mode, and
+  its value comes back if the next play session rebuilds it in the same place.
 
-These values are not restored and are not named. The field silently starts at its initializer, so
-notice them yourself and wire them again:
+This value is not restored and is not named. The field silently starts at its initializer, so
+notice it yourself and wire it again:
 
-- a value the hot-reloaded code wrote itself instead of the wiring call;
-- a host that is not rebuilt in the same place, for example after a rename or a reorder, because
-  nothing recorded ties the rebuilt host to the old one.
+- a value the hot-reloaded code wrote itself instead of the wiring call.
 
 `RestoredWiredValueCount` on `--status` counts the values that came back. `--revert-all` forgets every wired value, so a field
 added again later starts at its initializer.

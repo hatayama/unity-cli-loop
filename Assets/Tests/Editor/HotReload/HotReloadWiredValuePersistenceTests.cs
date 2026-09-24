@@ -246,6 +246,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.Ledger.Count, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// What: after a scene reload, a host that is no longer at its place is named once for each
+        /// wired field, with the host-missing reason, and its recorded values are kept.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_HostNotAtItsPlace_NamesEachFieldOnce()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _persistence.Record(NamedHost(), OtherFieldKey, new SceneRef(TargetIdentity));
+            _resolver.MissingHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts();
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.TakeUnreportedFailures();
+
+            Assert.That(failures.Count, Is.EqualTo(2));
+            List<string> fieldKeys = new List<string>();
+            foreach (HotReloadWiredValueRestoreFailure failure in failures)
+            {
+                Assert.That(failure.HostIdentity, Is.EqualTo(HostIdentity));
+                Assert.That(failure.Reason, Is.EqualTo(HotReloadWiredValuePersistence.HostMissingReason));
+                fieldKeys.Add(failure.StoreFieldKey);
+            }
+
+            Assert.That(fieldKeys, Is.EquivalentTo(new[] { FieldKey, OtherFieldKey }));
+            _persistence.ReportMissingHosts();
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: a host still at its place is not named, and its value still comes back on the
+        /// first read afterwards.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_HostStillAtItsPlace_ReportsNothingAndKeepsRestoring()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+
+            _persistence.ReportMissingHosts();
+
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out object value), Is.True);
+            Assert.That(value, Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: a host that is still missing after the next scene reload is named again in that
+        /// new session.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_AfterANewSession_NamesTheHostAgain()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _persistence.Record(NamedHost(), OtherFieldKey, 3);
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts();
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(2));
+
+            _persistence.BeginSceneReloadSession();
+            _persistence.ReportMissingHosts();
+
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(2));
+        }
+
         private PersistenceHost NamedHost()
         {
             PersistenceHost host = new PersistenceHost();
@@ -262,7 +327,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             internal Dictionary<string, object> Resolvable { get; } = new Dictionary<string, object>();
 
+            internal HashSet<string> MissingHosts { get; } = new HashSet<string>();
+
             public bool IsMainThread { get; set; } = true;
+
+            public bool IsHostMissing(string hostIdentity) => MissingHosts.Contains(hostIdentity);
 
             public string DescribeHost(object host)
             {

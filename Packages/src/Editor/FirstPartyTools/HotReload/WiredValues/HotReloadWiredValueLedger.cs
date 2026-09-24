@@ -47,6 +47,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
+        /// <summary>
+        /// A copy of every recorded key, so a caller can inspect hosts after releasing its lock.
+        /// </summary>
+        internal List<HotReloadWiredValueHostKey> SnapshotKeys()
+        {
+            return new List<HotReloadWiredValueHostKey>(_entries.Keys);
+        }
+
         internal void Clear()
         {
             _entries.Clear();
