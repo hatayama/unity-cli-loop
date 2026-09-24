@@ -410,21 +410,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "restore compiled bodies, or run 'uloop compile' to realign line numbers.";
 
         // Format: declaring type name, method name, requested line, resolved compiled line.
-        public const string HotReloadPatchedLineBeforePatchedBodyMessageFormat =
-            "Line {2} has no executable statement in the last compiled source of this file, and the "
-            + "next one, line {3}, is inside '{0}.{1}', which is hot-reload patched, so the marker "
-            + "cannot be placed there reliably. If line {2} belongs to a method above it that this "
-            + "reload did not patch, that method still resolves against the last compiled line "
-            + "numbers, which the edited file no longer follows.";
+        public const string HotReloadPatchedLineMapsIntoPatchedBodyMessageFormat =
+            "Line {2} of the edited file lies outside every hot-reload patched method body, but in "
+            + "the last compiled source of this file it maps to line {3}, inside '{0}.{1}', which is "
+            + "hot-reload patched, so the marker cannot be placed there reliably. Methods this "
+            + "reload did not patch resolve against the last compiled line numbers, which the "
+            + "edited file no longer follows, so a line that belongs to an unpatched method, or a "
+            + "blank or comment line, can map into the patched one.";
 
         // Format: requested line.
-        public const string HotReloadPatchedLineBeforePatchedBodyNextAction =
-            "If line {0} is inside a method above it that this reload did not patch, pass --method "
-            + "<Type.Method> naming that method together with --line {0}: the line is then matched by "
-            + "its text inside that method's compiled span. Otherwise (a blank or comment line above "
-            + "the patched method, for example) pick a line inside the edited method body, run "
-            + "'uloop hot-reload --revert-all' to restore compiled bodies, or run 'uloop compile' to "
-            + "realign line numbers.";
+        public const string HotReloadPatchedLineMapsIntoPatchedBodyNextAction =
+            "If line {0} is inside a method this reload did not patch, pass --method <Type.Method> "
+            + "naming that method together with --line {0}: the line is then matched by its text "
+            + "inside that method's compiled span or on its declaration lines. If line {0} is blank "
+            + "or a comment, pick a statement line instead. To pause inside the patched method "
+            + "itself, pick a line inside its edited body. 'uloop compile' realigns line numbers but "
+            + "ends the active patches; 'uloop hot-reload --revert-all' also ends them.";
 
         public const string HotReloadPatchedCompiledMethodSpanFormat =
             " In the last compiled source, '{0}.{1}' spans lines {2}-{3}.";

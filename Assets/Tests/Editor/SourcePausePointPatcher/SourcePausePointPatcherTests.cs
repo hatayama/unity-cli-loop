@@ -774,12 +774,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compiledEnd),
                 requestedLine: requestedLine);
 
+            // The synthetic resolution resolves to line 1.
             string expectedMessage =
                 string.Format(
-                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
+                    SourcePausePointConstants.HotReloadPatchedLineMapsIntoPatchedBodyMessageFormat,
                     method.DeclaringType.Name,
                     method.Name,
-                    requestedLine)
+                    requestedLine,
+                    1)
                 + string.Format(
                     SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
                     method.DeclaringType.Name,
@@ -817,7 +819,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             string expectedMessage =
                 string.Format(
-                    SourcePausePointConstants.HotReloadPatchedLineBeforePatchedBodyMessageFormat,
+                    SourcePausePointConstants.HotReloadPatchedLineMapsIntoPatchedBodyMessageFormat,
                     method.DeclaringType.Name,
                     method.Name,
                     requestedLine,
@@ -837,7 +839,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 result.Hint,
                 Is.EqualTo(
                     string.Format(
-                        SourcePausePointConstants.HotReloadPatchedLineBeforePatchedBodyNextAction,
+                        SourcePausePointConstants.HotReloadPatchedLineMapsIntoPatchedBodyNextAction,
                         requestedLine)));
         }
 
