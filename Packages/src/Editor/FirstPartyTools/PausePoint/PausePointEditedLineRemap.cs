@@ -6,10 +6,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Remaps a failed --method/--line resolve onto the unique matching line inside that
-    /// method's compiled span, or leaves the original failure unchanged.
+    /// method's compiled span or on its declaration lines, or leaves the original failure
+    /// unchanged.
     /// </summary>
     internal static class PausePointEditedLineRemap
     {
+        private const int DeclarationLineLookbackLimit = 6;
+
         internal static (SourcePausePointResolveResult resolveResult, string remapWarning)
             ResolveWithEditedLineRemap(
                 string file,
@@ -145,6 +148,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     matchCount++;
                     matchingLine = compiledLine;
                 }
+
+                // The compiled span starts at the first sequence point, so the declaration line an
+                // agent copies from the edited file never lies inside it.
+                matchCount += CountDeclarationLineMatchesAboveSpan(
+                    editedTrimmed, compiledSourceLines, span, ref matchingLine);
             }
 
             if (matchCount != 1)
@@ -153,6 +161,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return matchingLine;
+        }
+
+        private static int CountDeclarationLineMatchesAboveSpan(
+            string editedTrimmed,
+            IReadOnlyList<string> compiledSourceLines,
+            SourcePausePointCompiledMethodSpan span,
+            ref int matchingLine)
+        {
+            int matches = 0;
+            for (int line = span.StartLine - 1;
+                 line >= 1 && line >= span.StartLine - DeclarationLineLookbackLimit;
+                 line--)
+            {
+                if (line > compiledSourceLines.Count)
+                {
+                    continue;
+                }
+
+                string text = compiledSourceLines[line - 1];
+                string trimmed = text == null ? string.Empty : text.Trim();
+                // A blank line or a line ending a block or a statement is not part of this
+                // method's declaration, and going past it would match the previous member.
+                if (trimmed.Length == 0 || EndsDeclarationRegion(trimmed))
+                {
+                    break;
+                }
+
+                if (!string.Equals(trimmed, editedTrimmed, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                matches++;
+                // The span start rather than the declaration line: the retry requires
+                // ResolvedLine == remappedLine, and a declaration line has no sequence point.
+                matchingLine = span.StartLine;
+            }
+
+            return matches;
+        }
+
+        private static bool EndsDeclarationRegion(string trimmed)
+        {
+            return trimmed.EndsWith("}", StringComparison.Ordinal)
+                || trimmed.EndsWith("{", StringComparison.Ordinal)
+                || trimmed.EndsWith(";", StringComparison.Ordinal);
         }
     }
 }

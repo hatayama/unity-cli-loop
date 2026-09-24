@@ -177,6 +177,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a match on the declaration line just above the span remaps to the span's first
+        /// line, which the retry can pin because it holds a sequence point.
+        /// </summary>
+        [Test]
+        public void FindUniqueMatchingCompiledLine_WhenMatchIsOnDeclarationLineAboveSpan_ReturnsSpanStart()
+        {
+            int remapped = RemapIntoSpan(
+                new[] { "", "    private bool Target(int value)", "    {", "        return value > 0;", "    }" },
+                new SourcePausePointCompiledMethodSpan(3, 5),
+                "private bool Target(int value)");
+
+            Assert.That(remapped, Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a blank line ends the declaration lines, so a match above it does not remap.
+        /// </summary>
+        [Test]
+        public void FindUniqueMatchingCompiledLine_WhenDeclarationLineMatchIsSeparatedByBlankLine_ReturnsZero()
+        {
+            int remapped = RemapIntoSpan(
+                new[] { "    private bool Target(int value)", "", "    {", "        return value > 0;", "    }" },
+                new SourcePausePointCompiledMethodSpan(3, 5),
+                "private bool Target(int value)");
+
+            Assert.That(remapped, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a previous method's closing brace ends the declaration lines, so a match above it
+        /// does not remap.
+        /// </summary>
+        [Test]
+        public void FindUniqueMatchingCompiledLine_WhenDeclarationLineMatchIsBeyondPreviousMethodEnd_ReturnsZero()
+        {
+            int remapped = RemapIntoSpan(
+                new[] { "    private bool Target(int value)", "    }", "    {", "        return value > 0;", "    }" },
+                new SourcePausePointCompiledMethodSpan(3, 5),
+                "private bool Target(int value)");
+
+            Assert.That(remapped, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a declaration-line match and a span-line match of the same text count as two hits
+        /// and do not remap.
+        /// </summary>
+        [Test]
+        public void FindUniqueMatchingCompiledLine_WhenDeclarationLineAndSpanLineBothMatch_ReturnsZero()
+        {
+            int remapped = RemapIntoSpan(
+                new[] { "    void Target(int value)", "    {", "        void Target(int value)", "    }" },
+                new SourcePausePointCompiledMethodSpan(2, 4),
+                "void Target(int value)");
+
+            Assert.That(remapped, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a match further above the span than the declaration lookback reaches does not remap.
+        /// </summary>
+        [Test]
+        public void FindUniqueMatchingCompiledLine_WhenDeclarationLineIsBeyondLookbackLimit_ReturnsZero()
+        {
+            int remapped = RemapIntoSpan(
+                new[]
+                {
+                    "    private bool Target(int value)",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    [SerializeField]",
+                    "    {",
+                    "        return value > 0;",
+                    "    }"
+                },
+                new SourcePausePointCompiledMethodSpan(8, 10),
+                "private bool Target(int value)");
+
+            Assert.That(remapped, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: remap is skipped when --method is omitted even if the span has one match.
         /// </summary>
         [Test]
@@ -198,6 +283,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 spans);
 
             Assert.That(remapped, Is.EqualTo(0));
+        }
+
+        private static int RemapIntoSpan(
+            IReadOnlyList<string> compiledSourceLines,
+            SourcePausePointCompiledMethodSpan span,
+            string editedLineText)
+        {
+            return PausePointEditedLineRemap.FindUniqueMatchingCompiledLineOrZero(
+                "Target",
+                editedLineText,
+                compiledSourceLines,
+                new[] { span });
         }
 
         /// <summary>
