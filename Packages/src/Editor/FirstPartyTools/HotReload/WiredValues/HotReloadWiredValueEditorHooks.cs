@@ -7,12 +7,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Starts a fresh wired-value restore report each time play mode is entered or left, so the
-    /// report describes the scene reload that transition performs.
+    /// report describes the scene reload that transition performs, and names the wired values whose
+    /// host that reload did not put back.
     /// </summary>
     /// <remarks>
-    /// Why on the Exiting states: the scene reload, and with it the Awake reads that restore
-    /// values, runs before the Entered state is raised, so a reset there would erase the restores
-    /// it was meant to count.
+    /// Why the reset on the Exiting states: the scene reload, and with it the Awake reads that
+    /// restore values, runs before the Entered state is raised, so a reset there would erase the
+    /// restores it was meant to count.
+    /// Why the missing-host check on the Entered states: the scene reload has finished there, so a
+    /// host that the rebuilt scene does not put back is known to be gone.
     /// Why a named static handler: registering unsubscribes first, and a lambda would be a new
     /// delegate each time.
     /// </remarks>
@@ -34,12 +37,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static void Handle(PlayModeStateChange state)
         {
-            if (state != PlayModeStateChange.ExitingEditMode && state != PlayModeStateChange.ExitingPlayMode)
+            if (state == PlayModeStateChange.ExitingEditMode || state == PlayModeStateChange.ExitingPlayMode)
             {
+                GetPersistence().BeginSceneReloadSession();
                 return;
             }
 
-            GetPersistence().BeginSceneReloadSession();
+            GetPersistence().ReportMissingHosts();
         }
     }
 }

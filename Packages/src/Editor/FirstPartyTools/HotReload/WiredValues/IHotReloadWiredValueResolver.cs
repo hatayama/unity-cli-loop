@@ -19,6 +19,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         string DescribeHost(object host);
 
         /// <summary>
+        /// Whether the host recorded under this identity is no longer at its place: its scene can
+        /// be read but nothing of that component type sits there. False for an asset host, a scene
+        /// that is not loaded, or a call off the main thread.
+        /// </summary>
+        bool IsHostMissing(string hostIdentity);
+
+        /// <summary>
         /// How to remember a value: plain values pass through, scene objects and assets become
         /// identities, anything else becomes unrestorable with a reason.
         /// </summary>
