@@ -13,6 +13,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         bool IsMainThread { get; }
 
         /// <summary>
+        /// Whether Play Mode is running, so a value recorded now may belong to a host the Edit-time
+        /// scene does not have.
+        /// </summary>
+        bool IsPlayModeRunning { get; }
+
+        /// <summary>
         /// Identity of a host the ledger can find again after a scene reload; null when the host
         /// is not a scene object or asset, or the call is off the main thread.
         /// </summary>
@@ -20,10 +26,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Whether the host recorded under this identity is no longer at its place: its scene can
-        /// be read but nothing of that component type sits there. False for an asset host, a scene
-        /// that is not loaded, or a call off the main thread.
+        /// be read but nothing of that component type sits there. False for an asset host or a
+        /// call off the main thread. False when the identity's scene cannot be read unless
+        /// <paramref name="unloadedSceneCountsAsMissing"/> says an unreadable scene counts as
+        /// missing (a host wired while Play Mode ran cannot be in a scene Edit Mode does not have).
         /// </summary>
-        bool IsHostMissing(string hostIdentity);
+        bool IsHostMissing(string hostIdentity, bool unloadedSceneCountsAsMissing);
 
         /// <summary>
         /// How to remember a value: plain values pass through, scene objects and assets become

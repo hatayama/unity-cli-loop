@@ -101,6 +101,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertOneHostMissingFailure();
         }
 
+        /// <summary>
+        /// What: entering Edit Mode names a host wired during Play that is not at its place once,
+        /// with the Play-only reason, and forgets its value.
+        /// </summary>
+        [Test]
+        public void Handle_EnteredEditMode_ForgetsAPlayOnlyHostAfterNamingItOnce()
+        {
+            _resolver.IsPlayModeRunning = true;
+            ArrangeMissingHost();
+            _resolver.IsPlayModeRunning = false;
+
+            HotReloadWiredValueEditorHooks.Handle(PlayModeStateChange.EnteredEditMode);
+
+            AssertOneFailure(HotReloadWiredValuePersistence.PlayOnlyHostReason);
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a Play-only host named on entering Edit Mode that nobody read is still handed out
+        /// after the next Play starts its session.
+        /// </summary>
+        [Test]
+        public void Handle_ExitingEditModeBeforeThePlayOnlyNameWasRead_KeepsItForTheNextRead()
+        {
+            _resolver.IsPlayModeRunning = true;
+            ArrangeMissingHost();
+            _resolver.IsPlayModeRunning = false;
+            HotReloadWiredValueEditorHooks.Handle(PlayModeStateChange.EnteredEditMode);
+
+            HotReloadWiredValueEditorHooks.Handle(PlayModeStateChange.ExitingEditMode);
+
+            AssertOneFailure(HotReloadWiredValuePersistence.PlayOnlyHostReason);
+        }
+
+        /// <summary>
+        /// What: entering Play Mode names a host wired during an earlier Play that is not at its
+        /// place with the host-missing reason, and keeps its value.
+        /// </summary>
+        [Test]
+        public void Handle_EnteredPlayMode_KeepsAPlayWiredHostWithTheHostMissingReason()
+        {
+            _resolver.IsPlayModeRunning = true;
+            ArrangeMissingHost();
+
+            HotReloadWiredValueEditorHooks.Handle(PlayModeStateChange.EnteredPlayMode);
+
+            AssertOneHostMissingFailure();
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(1));
+        }
+
         private void ArrangeMissingHost()
         {
             _persistence.Record(new object(), FieldKey, 7);
@@ -109,22 +159,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private void AssertOneHostMissingFailure()
         {
+            AssertOneFailure(HotReloadWiredValuePersistence.HostMissingReason);
+        }
+
+        private void AssertOneFailure(string reason)
+        {
             IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.TakeUnreportedFailures();
 
             Assert.That(failures.Count, Is.EqualTo(1));
             Assert.That(failures[0].HostIdentity, Is.EqualTo(HostIdentity));
-            Assert.That(failures[0].Reason, Is.EqualTo(HotReloadWiredValuePersistence.HostMissingReason));
+            Assert.That(failures[0].Reason, Is.EqualTo(reason));
         }
 
         private sealed class MissingHostResolver : IHotReloadWiredValueResolver
         {
             internal HashSet<string> MissingHosts { get; } = new HashSet<string>();
 
+            internal HashSet<string> UnloadedSceneHosts { get; } = new HashSet<string>();
+
             public bool IsMainThread => true;
+
+            public bool IsPlayModeRunning { get; set; }
 
             public string DescribeHost(object host) => HostIdentity;
 
-            public bool IsHostMissing(string hostIdentity) => MissingHosts.Contains(hostIdentity);
+            public bool IsHostMissing(string hostIdentity, bool unloadedSceneCountsAsMissing) =>
+                MissingHosts.Contains(hostIdentity)
+                || (unloadedSceneCountsAsMissing && UnloadedSceneHosts.Contains(hostIdentity));
 
             public HotReloadWiredValueDescriptor DescribeValue(object value) =>
                 HotReloadWiredValueDescriptor.Plain(value);

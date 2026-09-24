@@ -128,8 +128,8 @@ These values are not restored and are named once, as `Type.field on <host>: <rea
 - a value whose host is no longer at its place after the reload, because it was renamed, moved,
   or removed (or a sibling before it was); the row names the old place, and the rebuilt object
   elsewhere starts at its initializer until you wire it. A host that exists only while play mode
-  runs (an instantiated `(Clone)`, for example) is named the same way after leaving play mode, and
-  its value comes back if the next play session rebuilds it in the same place.
+  runs (an instantiated `(Clone)`, for example) is named once when play mode stops, with a reason
+  saying so, and its value is then forgotten: wire it again in the next play session.
 
 This value is not restored and is not named. The field silently starts at its initializer, so
 notice it yourself and wire it again:

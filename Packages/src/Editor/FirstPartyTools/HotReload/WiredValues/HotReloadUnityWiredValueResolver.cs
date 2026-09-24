@@ -28,6 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Scenes, transforms and the asset database answer on the main thread only.
         public bool IsMainThread => MainThreadSwitcher.IsMainThread;
 
+        public bool IsPlayModeRunning => EditorApplication.isPlaying;
+
         public string DescribeHost(object host)
         {
             if (!IsMainThread || !(host is UnityEngine.Object unityObject) || unityObject == null)
@@ -43,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return host is Component component ? _sceneObjects.DescribeComponent(component) : null;
         }
 
-        public bool IsHostMissing(string hostIdentity)
+        public bool IsHostMissing(string hostIdentity, bool unloadedSceneCountsAsMissing)
         {
             Debug.Assert(!string.IsNullOrEmpty(hostIdentity), "hostIdentity must not be empty.");
 
@@ -54,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            return _sceneObjects.IsComponentMissing(hostIdentity);
+            return _sceneObjects.IsComponentMissing(hostIdentity, unloadedSceneCountsAsMissing);
         }
 
         public HotReloadWiredValueDescriptor DescribeValue(object value)
@@ -76,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return TryDescribeAsset(unityObject, out string assetIdentity)
                     ? HotReloadWiredValueDescriptor.Asset(assetIdentity, typeName)
-                    : HotReloadWiredValueDescriptor.Unrestorable(typeName, "the asset has no GUID in the asset database");
+                    : HotReloadWiredValueDescriptor.Unrestorable(typeName, "the asset has no GUID in the asset database; wire the field again");
             }
 
             string sceneIdentity = DescribeSceneObject(unityObject);
@@ -86,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return HotReloadWiredValueDescriptor.Unrestorable(
-                typeName, "the value is a runtime-created object that no scene or asset holds");
+                typeName, "the value is a runtime-created object that no scene or asset holds; wire the field again "
+                + "after each scene reload");
         }
 
         public bool TryResolve(HotReloadWiredValueDescriptor descriptor, out object value, out string failureReason)
@@ -97,7 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             failureReason = null;
             if (!IsMainThread)
             {
-                failureReason = "it was read off the main thread, where scenes and assets cannot be searched";
+                failureReason = "it was read off the main thread, where scenes and assets cannot be searched; "
+                    + "wire the field again from the main thread";
                 return false;
             }
 
@@ -106,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : FindSceneObject(descriptor.Identity);
             if (found == null)
             {
-                failureReason = "no object is at " + descriptor.Identity + " any more";
+                failureReason = "no object is at " + descriptor.Identity + " any more; wire the field again with a live object";
                 return false;
             }
 

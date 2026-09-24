@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -28,6 +29,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(reason), "reason must not be empty.");
             _failures.Add(new HotReloadWiredValueRestoreFailure(hostIdentity, storeFieldKey, reason));
+        }
+
+        /// <summary>
+        /// Drops the failure of this host and field, for a value that came back after all.
+        /// </summary>
+        internal void RemoveFailure(string hostIdentity, string storeFieldKey)
+        {
+            int index = _failures.FindIndex(failure =>
+                string.Equals(failure.HostIdentity, hostIdentity, StringComparison.Ordinal)
+                && string.Equals(failure.StoreFieldKey, storeFieldKey, StringComparison.Ordinal));
+            if (index < 0)
+            {
+                return;
+            }
+
+            _failures.RemoveAt(index);
+            // Keeps TakeUnreported's drain index pointing at the same next failure.
+            if (index < _reportedFailureCount)
+            {
+                _reportedFailureCount--;
+            }
         }
 
         /// <summary>

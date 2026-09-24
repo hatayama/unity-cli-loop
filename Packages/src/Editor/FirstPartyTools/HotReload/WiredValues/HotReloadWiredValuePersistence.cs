@@ -18,17 +18,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// the main thread records, restores or drains, and the dictionary, the dedup set and the
     /// report's drain index are not safe to change concurrently. The resolver is called outside the
     /// lock because it only answers on the main thread and touches none of this state.
+    /// Why a Play-only failure outlives the session reset until it is read: its value is already
+    /// forgotten, so that row is the only place it is ever named. The report is read only by an
+    /// apply and by a status call, and an agent may do neither between stopping Play and starting
+    /// it again, which resets the report.
     /// </remarks>
     internal sealed class HotReloadWiredValuePersistence : IHotReloadWiredValuePersistence
     {
-        private const string OffMainThreadReason = "read off the main thread before any main-thread read";
+        private const string OffMainThreadReason =
+            "read off the main thread before any main-thread read; wire it again from the main thread";
 
         internal const string HostMissingReason =
-            "no object is at the host's place now, so nothing reads this value until one is back there (the host was renamed, moved, or removed, or it exists only while Play Mode runs)";
+            "no object is at the host's place now, so nothing reads this value until one is back there; "
+            + "put the host back (it was renamed, moved, or removed, or a sibling before it was), or wire "
+            + "the value into the object that replaced it";
+
+        internal const string PlayOnlyHostReason =
+            "the host was wired while Play Mode ran and the Edit-time scene has nothing at its place "
+            + "(a runtime-created object, or one renamed or moved during Play), so the value left with "
+            + "Play Mode and is no longer kept; wire it again once the object exists in the next Play session";
 
         private readonly object _gate = new object();
         private readonly IHotReloadWiredValueResolver _resolver;
         private readonly HashSet<HotReloadWiredValueHostKey> _reportedFailures =
+            new HashSet<HotReloadWiredValueHostKey>();
+        private readonly HashSet<HotReloadWiredValueHostKey> _undeliveredPlayOnlyFailures =
             new HashSet<HotReloadWiredValueHostKey>();
 
         internal HotReloadWiredValuePersistence(IHotReloadWiredValueResolver resolver)
@@ -53,10 +67,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            bool wiredWhilePlaying = _resolver.IsPlayModeRunning;
             HotReloadWiredValueDescriptor descriptor = _resolver.DescribeValue(value);
             lock (_gate)
             {
-                Ledger.Record(new HotReloadWiredValueHostKey(identity, storeFieldKey), descriptor);
+                Ledger.Record(new HotReloadWiredValueHostKey(identity, storeFieldKey), descriptor, wiredWhilePlaying);
             }
         }
 
@@ -85,6 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (descriptor.Kind == HotReloadWiredValueKind.Plain)
                 {
                     value = descriptor.PlainValue;
+                    ForgetFailure(key);
                     Report.AddRestored();
                     return true;
                 }
@@ -101,6 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (resolved)
                 {
+                    ForgetFailure(key);
                     Report.AddRestored();
                     return true;
                 }
@@ -119,6 +136,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_gate)
             {
                 Ledger.Clear();
+                // A revert removes the fields themselves, so no Play-only row is worth carrying.
+                _undeliveredPlayOnlyFailures.Clear();
                 ResetReport();
             }
         }
@@ -137,48 +156,85 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Names, once per host and field, every recorded value whose host a finished scene reload
-        /// did not put back at its place. The values stay recorded.
+        /// did not put back at its place. The values stay recorded, except that on leaving Play
+        /// Mode a value wired during Play whose host the Edit-time scene lacks is named with its
+        /// own reason and forgotten.
         /// </summary>
         /// <remarks>
         /// Why after the reload, not in TryRestore: the replacement host reads under a different
         /// identity, so the ledger miss on that read cannot tell a never-wired field from a host
         /// that moved.
         /// Why the resolver is asked outside the lock: it reads the scene, and a slot read off the
-        /// main thread would otherwise wait on it. Each identity is asked once, however many fields
-        /// it has.
+        /// main thread would otherwise wait on it. Each identity is asked once per way of asking,
+        /// however many fields it has.
+        /// Why forget a Play-only host: no later reload can put it back, and a host is matched by
+        /// its place alone, so keeping it would restore the value onto whatever object the next
+        /// Play session creates at that place, and name it again on every transition until then.
+        /// Why a Play-wired host found at its place on leaving Play loses its mark: the Edit-time
+        /// scene has that place, so the host is not Play-only, and a later rename must keep the
+        /// value until the host is put back rather than forget it.
+        /// Why an unreadable scene counts as missing only for those: a host wired during Play may
+        /// live in a scene only Play loads (an additive scene, DontDestroyOnLoad), while a host
+        /// wired in Edit Mode is merely out of sight until its scene is opened again.
         /// </remarks>
-        internal void ReportMissingHosts()
+        internal void ReportMissingHosts(bool leftPlayMode)
         {
-            List<HotReloadWiredValueHostKey> keys;
+            List<(HotReloadWiredValueHostKey Key, bool PlayOnly)> entries =
+                new List<(HotReloadWiredValueHostKey Key, bool PlayOnly)>();
             lock (_gate)
             {
-                keys = Ledger.SnapshotKeys();
-            }
-
-            HashSet<string> checkedIdentities = new HashSet<string>();
-            HashSet<string> missingIdentities = new HashSet<string>();
-            foreach (HotReloadWiredValueHostKey key in keys)
-            {
-                if (checkedIdentities.Add(key.Identity) && _resolver.IsHostMissing(key.Identity))
+                foreach (HotReloadWiredValueHostKey key in Ledger.SnapshotKeys())
                 {
-                    missingIdentities.Add(key.Identity);
+                    entries.Add((key, leftPlayMode && Ledger.WasWiredWhilePlaying(key)));
                 }
             }
 
-            if (missingIdentities.Count == 0)
+            Dictionary<(string Identity, bool PlayOnly), bool> missingByProbe =
+                new Dictionary<(string Identity, bool PlayOnly), bool>();
+            foreach ((HotReloadWiredValueHostKey key, bool playOnly) in entries)
+            {
+                (string Identity, bool PlayOnly) probe = (key.Identity, playOnly);
+                if (!missingByProbe.ContainsKey(probe))
+                {
+                    missingByProbe[probe] = _resolver.IsHostMissing(key.Identity, playOnly);
+                }
+            }
+
+            if (!leftPlayMode && !missingByProbe.ContainsValue(true))
             {
                 return;
             }
 
             lock (_gate)
             {
-                foreach (HotReloadWiredValueHostKey key in keys)
+                foreach ((HotReloadWiredValueHostKey key, bool playOnly) in entries)
                 {
                     // A revert may have cleared the ledger while the lock was released.
-                    if (missingIdentities.Contains(key.Identity) && Ledger.TryGet(key, out _))
+                    if (!Ledger.TryGet(key, out _))
+                    {
+                        continue;
+                    }
+
+                    if (!missingByProbe[(key.Identity, playOnly)])
+                    {
+                        if (playOnly)
+                        {
+                            Ledger.ClearPlayMark(key);
+                        }
+
+                        continue;
+                    }
+
+                    if (!playOnly)
                     {
                         RecordFailureOnce(key, HostMissingReason);
+                        continue;
                     }
+
+                    // Named before it is removed: the failure row outlives the ledger entry.
+                    RecordFailureOnce(key, PlayOnlyHostReason);
+                    _undeliveredPlayOnlyFailures.Add(key);
+                    Ledger.Remove(key);
                 }
             }
         }
@@ -191,6 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             lock (_gate)
             {
+                _undeliveredPlayOnlyFailures.Clear();
                 return Report.TakeUnreported();
             }
         }
@@ -203,14 +260,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             lock (_gate)
             {
+                _undeliveredPlayOnlyFailures.Clear();
                 return (Report.RestoredCount, new List<HotReloadWiredValueRestoreFailure>(Report.Failures));
             }
         }
 
+        // Callers hold _gate.
         private void ResetReport()
         {
             Report.Reset();
             _reportedFailures.Clear();
+            foreach (HotReloadWiredValueHostKey key in _undeliveredPlayOnlyFailures)
+            {
+                RecordFailureOnce(key, PlayOnlyHostReason);
+            }
         }
 
         // Why off the main thread only: on it, a null identity means a plain C# host, which was
@@ -246,6 +309,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Report.AddFailure(key.Identity, key.StoreFieldKey, reason);
+        }
+
+        // Why: a value named as not restored that comes back later in the same session would
+        // otherwise be listed as restored and unrestored at once. Callers hold _gate.
+        private void ForgetFailure(HotReloadWiredValueHostKey key)
+        {
+            _undeliveredPlayOnlyFailures.Remove(key);
+            if (_reportedFailures.Remove(key))
+            {
+                Report.RemoveFailure(key.Identity, key.StoreFieldKey);
+            }
         }
     }
 }

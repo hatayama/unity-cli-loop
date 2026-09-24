@@ -191,7 +191,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             host.name = Prefix + "Host2";
 
-            Assert.That(_resolver.IsHostMissing(identity), Is.True);
+            Assert.That(_resolver.IsHostMissing(identity, false), Is.True);
         }
 
         /// <summary>
@@ -203,18 +203,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             GameObject host = CreateRoot("Host");
             string identity = _resolver.DescribeHost(host.transform);
 
-            Assert.That(_resolver.IsHostMissing(identity), Is.False);
+            Assert.That(_resolver.IsHostMissing(identity, false), Is.False);
         }
 
         /// <summary>
-        /// What: a host in a scene that is not loaded is out of sight rather than missing.
+        /// What: a host in a scene that is not loaded is out of sight rather than missing, unless
+        /// the caller counts an unreadable scene as missing.
         /// </summary>
         [Test]
         public void IsHostMissing_SceneNotLoaded_IsFalse()
         {
             const string identity = "scene:NoSuchScene|path:Host[0]|component:UnityEngine.Transform|index:0";
 
-            Assert.That(_resolver.IsHostMissing(identity), Is.False);
+            Assert.That(_resolver.IsHostMissing(identity, false), Is.False);
+        }
+
+        /// <summary>
+        /// What: a host in a scene that is not loaded is missing when the caller counts an
+        /// unreadable scene as missing, as it does for a host wired while Play Mode ran.
+        /// </summary>
+        [Test]
+        public void IsHostMissing_SceneNotLoadedCountedAsMissing_IsTrue()
+        {
+            const string identity = "scene:NoSuchScene|path:Host[0]|component:UnityEngine.Transform|index:0";
+
+            Assert.That(_resolver.IsHostMissing(identity, true), Is.True);
+        }
+
+        /// <summary>
+        /// What: counting an unreadable scene as missing does not turn a host still at its place
+        /// in a loaded scene into a missing one.
+        /// </summary>
+        [Test]
+        public void IsHostMissing_HostStillThereCountingUnreadableScenes_IsFalse()
+        {
+            GameObject host = CreateRoot("Host");
+            string identity = _resolver.DescribeHost(host.transform);
+
+            Assert.That(_resolver.IsHostMissing(identity, true), Is.False);
         }
 
         private GameObject CreateRoot(string name)
