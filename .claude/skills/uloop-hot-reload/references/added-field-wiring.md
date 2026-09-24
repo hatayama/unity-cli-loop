@@ -142,8 +142,8 @@ notice it yourself and wire it again:
 - a value the hot-reloaded code wrote itself instead of the wiring call.
 
 `RestoredWiredValueCount` on `--status` counts the values that came back, including the ones
-`--status` itself gave back by reading them for a host that is back at its place. `--revert-all` forgets every wired value, so a field
-added again later starts at its initializer.
+`--status` itself gave back by reading them for a host that is back at its place.
+`--revert-all` forgets every wired value, so a field added again later starts at its initializer.
 
 When the re-apply adds back fields the domain reload discarded, its `Warnings` names exactly those
 fields: any value wired into them before the domain reload is gone, so wire them again before code

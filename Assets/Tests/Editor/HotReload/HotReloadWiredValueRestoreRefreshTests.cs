@@ -189,6 +189,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
         }
 
+        /// <summary>
+        /// What: --status runs the refresh before it reads the report, so a host back at its place
+        /// is reported as restored instead of with its host-missing row.
+        /// </summary>
+        [Test]
+        public void ExecuteStatus_HostBackAtItsPlace_ReportsTheRestoreInsteadOfTheRow()
+        {
+            RecordThenLoseHost(7);
+            PlaceHost();
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                HotReloadServices services = HotReloadCompositionRoot.Services;
+                HotReloadStatusExecutor executor = new HotReloadStatusExecutor(
+                    services.Domain,
+                    services.Patcher,
+                    services.UnityMessageForwarding,
+                    _persistence,
+                    _refresh);
+
+                HotReloadResponse response = executor.ExecuteStatus();
+
+                Assert.That(response.RestoredWiredValueCount, Is.EqualTo(1));
+                Assert.That(response.UnrestoredWiredValues, Is.Empty);
+            }
+        }
+
         // Records the value on the host at its place, then names the host as missing after a
         // scene reload, which leaves one host-missing row.
         private void RecordThenLoseHost(object value)

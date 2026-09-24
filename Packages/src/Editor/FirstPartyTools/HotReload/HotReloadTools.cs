@@ -277,11 +277,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.IntroducedTypes,
                 result.AddedFields);
             HotReloadCompanionSourceSessionStore.Save(services.Domain.CompanionSources);
-            // Why taken here and handed to Build: taking empties the unreported list, so only the
-            // apply a caller runs may take it, not every path that builds an apply response.
             // Refreshed for the same reason --status refreshes, and only after the switch above:
             // resolving a host reads the loaded scenes, which only the main thread may do.
             services.WiredValueRestoreRefresh.Run();
+            // Why taken here and handed to Build: taking empties the unreported list, so only the
+            // apply a caller runs may take it, not every path that builds an apply response.
             IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues =
                 services.WiredValuePersistence.TakeUnreportedFailures();
 
