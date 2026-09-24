@@ -16,5 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// uninstalls one. Never points at a domain that is no longer installed.
         /// </summary>
         public static IHotReloadAddedFieldPort ActiveFields { get; set; }
+
+        /// <summary>
+        /// Where the wiring entry point records what it wrote, so the value can follow the host
+        /// across a scene reload. Set and cleared by the composition root together with
+        /// <see cref="ActiveFields"/>.
+        /// </summary>
+        public static IHotReloadWiredValuePersistence WiredValues { get; set; }
     }
 }

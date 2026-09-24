@@ -251,6 +251,111 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo("Ns.Host" + HotReloadAddedFieldStore.FieldKeySeparator + "count"));
         }
 
+        /// <summary>
+        /// What: a slot the host never had is filled from the restorer without running the
+        /// initializer, which is how a wired value reaches the instance a scene reload made.
+        /// </summary>
+        [Test]
+        public void GetOrInit_RestorerHasValue_ReturnsItWithoutRunningInitializer()
+        {
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = new CountingRestorer(true, 5) };
+            int initializerCalls = 0;
+
+            int value = values.GetOrInit(new StoreHost(), FieldKey(), () =>
+            {
+                initializerCalls++;
+                return 1;
+            });
+
+            Assert.That(value, Is.EqualTo(5));
+            Assert.That(initializerCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a restored value of another type is replaced by the initializer's value rather
+        /// than left in the slot for the next read.
+        /// </summary>
+        [Test]
+        public void GetOrInit_RestoredValueOfAnotherType_IsOverwrittenByTheInitializer()
+        {
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = new CountingRestorer(true, "text") };
+            StoreHost host = new StoreHost();
+
+            int value = values.GetOrInit(host, FieldKey(), () => 3);
+
+            Assert.That(value, Is.EqualTo(3));
+            Assert.That(values.TryGet(host, FieldKey(), out object stored), Is.True);
+            Assert.That(stored, Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: when the restorer has nothing, the initializer fills the slot and the restorer is
+        /// not asked again for that field of that host.
+        /// </summary>
+        [Test]
+        public void GetOrInit_RestorerHasNothing_RunsInitializerAndDoesNotAskAgain()
+        {
+            CountingRestorer restorer = new CountingRestorer(false, null);
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
+
+            int first = values.GetOrInit(host, FieldKey(), () => 4);
+            int second = values.GetOrInit(host, FieldKey(), () => 9);
+
+            Assert.That(first, Is.EqualTo(4));
+            Assert.That(second, Is.EqualTo(4));
+            Assert.That(restorer.Calls, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a read that creates no slot still takes a restorable value, and keeps it, so the
+        /// wiring read-back sees what the scene reload brought back.
+        /// </summary>
+        [Test]
+        public void TryGet_NoSlotAndRestorerHasValue_ReturnsAndKeepsTheRestoredValue()
+        {
+            CountingRestorer restorer = new CountingRestorer(true, 6);
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
+            StoreHost host = new StoreHost();
+
+            Assert.That(values.TryGet(host, FieldKey(), out object first), Is.True);
+            Assert.That(values.TryGet(host, FieldKey(), out object second), Is.True);
+
+            Assert.That(first, Is.EqualTo(6));
+            Assert.That(second, Is.EqualTo(6));
+            Assert.That(restorer.Calls, Is.EqualTo(1));
+        }
+
+        private static string FieldKey()
+        {
+            return HotReloadAddedFieldStore.FormatFieldKey(HostTypeName, FieldName);
+        }
+
+        private sealed class CountingRestorer : IHotReloadWiredValuePersistence
+        {
+            private readonly bool _hasValue;
+            private readonly object _value;
+
+            internal CountingRestorer(bool hasValue, object value)
+            {
+                _hasValue = hasValue;
+                _value = value;
+            }
+
+            internal int Calls { get; private set; }
+
+            public void Record(object host, string storeFieldKey, object value)
+            {
+            }
+
+            public bool TryRestore(object host, string storeFieldKey, out object value)
+            {
+                Calls++;
+                value = _hasValue ? _value : null;
+                return _hasValue;
+            }
+        }
+
         private sealed class StoreHost
         {
         }

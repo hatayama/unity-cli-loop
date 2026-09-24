@@ -24,14 +24,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private FakeAddedFieldPort _port;
         private IHotReloadAddedFieldPort _previousPort;
         private HotReloadAddedFieldValues _previousValues;
+        private IHotReloadWiredValuePersistence _previousWiredValues;
+        private RecordingWiredValues _wiredValues;
 
         [SetUp]
         public void SetUp()
         {
             _previousPort = HotReloadAddedFieldCoordination.ActiveFields;
             _previousValues = HotReloadAddedFieldStore.Current;
+            _previousWiredValues = HotReloadAddedFieldCoordination.WiredValues;
             _port = new FakeAddedFieldPort();
+            _wiredValues = new RecordingWiredValues();
             HotReloadAddedFieldCoordination.ActiveFields = _port;
+            HotReloadAddedFieldCoordination.WiredValues = _wiredValues;
             HotReloadAddedFieldStore.Current = new HotReloadAddedFieldValues();
         }
 
@@ -40,6 +45,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadAddedFieldCoordination.ActiveFields = _previousPort;
             HotReloadAddedFieldStore.Current = _previousValues;
+            // Why restore rather than null: the installed domain's recorder must keep recording
+            // wirings made in this editor session after the tests finish.
+            HotReloadAddedFieldCoordination.WiredValues = _previousWiredValues;
+        }
+
+        /// <summary>
+        /// What: a successful instance wiring is recorded once, with the host, the store key the
+        /// shim reads, and the value, so the value can follow the host across a scene reload.
+        /// </summary>
+        [Test]
+        public void SetInstanceField_AssignableValue_RecordsTheWiringOnce()
+        {
+            _port.AddInstanceField(typeof(WiringHost), FieldName, typeof(int));
+            WiringHost host = new WiringHost();
+
+            HotReloadAddedFieldWiring.SetInstanceField(host, FieldName, 7);
+
+            Assert.That(_wiredValues.Records.Count, Is.EqualTo(1));
+            Assert.That(_wiredValues.Records[0].Host, Is.SameAs(host));
+            Assert.That(_wiredValues.Records[0].StoreFieldKey, Is.EqualTo(FakeAddedFieldPort.KeyOf(typeof(WiringHost), FieldName)));
+            Assert.That(_wiredValues.Records[0].Value, Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: a wiring refused because the value does not fit the field records nothing, so a
+        /// scene reload cannot bring back a value that was never stored.
+        /// </summary>
+        [Test]
+        public void SetInstanceField_UnassignableValue_RecordsNothing()
+        {
+            _port.AddInstanceField(typeof(WiringHost), FieldName, typeof(int));
+            WiringHost host = new WiringHost();
+
+            Assert.Catch<Exception>(() => HotReloadAddedFieldWiring.SetInstanceField(host, FieldName, "text"));
+
+            Assert.That(_wiredValues.Records, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a static wiring is not recorded; static slots already outlive a scene reload.
+        /// </summary>
+        [Test]
+        public void SetStaticField_AssignableValue_RecordsNothing()
+        {
+            _port.AddStaticField(typeof(WiringHost), FieldName, typeof(int));
+
+            HotReloadAddedFieldWiring.SetStaticField(typeof(WiringHost), FieldName, 7);
+
+            Assert.That(_wiredValues.Records, Is.Empty);
         }
 
         /// <summary>
@@ -558,6 +612,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             private static string MetadataNameOf(Type declaringType)
             {
                 return declaringType.FullName.Replace('+', '/');
+            }
+        }
+
+        private sealed class RecordingWiredValues : IHotReloadWiredValuePersistence
+        {
+            internal List<(object Host, string StoreFieldKey, object Value)> Records { get; } =
+                new List<(object Host, string StoreFieldKey, object Value)>();
+
+            public void Record(object host, string storeFieldKey, object value)
+            {
+                Records.Add((host, storeFieldKey, value));
+            }
+
+            public bool TryRestore(object host, string storeFieldKey, out object value)
+            {
+                value = null;
+                return false;
             }
         }
 
