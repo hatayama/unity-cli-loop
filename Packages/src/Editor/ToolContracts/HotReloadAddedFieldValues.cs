@@ -22,6 +22,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             new Dictionary<string, object>(StringComparer.Ordinal);
 
         /// <summary>
+        /// Hands a wired value back to a host that has no slot yet, so a value wired into the
+        /// instance a scene reload destroyed reaches its replacement. Null when nothing restores.
+        /// Survives <see cref="Clear"/>: forgetting what was wired is the restorer's own job.
+        /// </summary>
+        public IHotReloadWiredValuePersistence Restorer { get; set; }
+
+        /// <summary>
         /// Returns the stored instance field, running <paramref name="initializer"/> (or
         /// default(T) when it is null) on first access or after a stored type mismatch.
         /// Reference-type instances only. Struct hosts box on every access and would always
@@ -41,6 +48,16 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     return existing;
                 }
             }
+            else if (TryRestoreInto(instance, fieldKey, fields, out object restored))
+            {
+                (bool readable, T restoredAs) = TryReadAs<T>(restored);
+                if (readable)
+                {
+                    return restoredAs;
+                }
+
+                // A restored value of another type is not kept: the initializer below overwrites it.
+            }
 
             T created = CreateValue(initializer);
             fields[fieldKey] = created;
@@ -59,20 +76,37 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// <summary>
         /// Reports whether an instance field holds a stored value, and what it is, without
         /// creating the slot. A field nothing has written yet stays unwritten, so the reading shim
-        /// still runs its initializer.
+        /// still runs its initializer. The one slot it does create is a value <see cref="Restorer"/>
+        /// hands back that <paramref name="fieldType"/> can hold, which then reads as stored.
         /// </summary>
-        public bool TryGet(object instance, string fieldKey, out object value)
+        public bool TryGet(object instance, string fieldKey, Type fieldType, out object value)
         {
             Debug.Assert(instance != null, "instance must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
+            Debug.Assert(fieldType != null, "fieldType must not be null.");
+
+            if (_instanceTables.TryGetValue(instance, out Dictionary<string, object> fields)
+                && fields.TryGetValue(fieldKey, out value))
+            {
+                return true;
+            }
 
             value = null;
-            if (!_instanceTables.TryGetValue(instance, out Dictionary<string, object> fields))
+            if (Restorer == null || !Restorer.TryRestore(instance, fieldKey, out object restored))
             {
                 return false;
             }
 
-            return fields.TryGetValue(fieldKey, out value);
+            // Why the reader's rule: GetOrInit replaces a value the field's type cannot hold with
+            // the initializer's, so reporting it here would name a value the shim never uses.
+            if (!IsReadableAs(restored, fieldType))
+            {
+                return false;
+            }
+
+            GetOrCreateInstanceTable(instance)[fieldKey] = restored;
+            value = restored;
+            return true;
         }
 
         /// <summary>
@@ -125,6 +159,22 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             _staticValues.Clear();
         }
 
+        private bool TryRestoreInto(
+            object instance,
+            string fieldKey,
+            Dictionary<string, object> fields,
+            out object restored)
+        {
+            restored = null;
+            if (Restorer == null || !Restorer.TryRestore(instance, fieldKey, out restored))
+            {
+                return false;
+            }
+
+            fields[fieldKey] = restored;
+            return true;
+        }
+
         private Dictionary<string, object> GetOrCreateInstanceTable(object instance)
         {
             return _instanceTables.GetValue(
@@ -159,6 +209,17 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
 
             return (false, default);
+        }
+
+        // The rule of TryReadAs<T>, for a type known only at run time.
+        private static bool IsReadableAs(object stored, Type fieldType)
+        {
+            if (stored == null)
+            {
+                return !fieldType.IsValueType || Nullable.GetUnderlyingType(fieldType) != null;
+            }
+
+            return fieldType.IsInstanceOfType(stored);
         }
     }
 }

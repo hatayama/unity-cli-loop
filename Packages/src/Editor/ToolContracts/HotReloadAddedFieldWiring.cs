@@ -35,6 +35,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             HotReloadAddedFieldDeclaration declaration = ResolveDeclaration(instance.GetType(), fieldName, false);
             RequireAssignable(declaration, value);
             RequireInstalledValues().Set(instance, declaration.StoreFieldKey, value);
+            // Why only here and not in the store's Set: shim bodies write through the store on
+            // every frame, and only a value the developer wired explicitly should outlive the host.
+            HotReloadAddedFieldCoordination.WiredValues?.Record(instance, declaration.StoreFieldKey, value);
         }
 
         /// <summary>
@@ -70,7 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             RequireLiveInstance(instance);
             HotReloadAddedFieldDeclaration declaration = ResolveDeclaration(instance.GetType(), fieldName, false);
-            return RequireInstalledValues().TryGet(instance, declaration.StoreFieldKey, out value);
+            return RequireInstalledValues().TryGet(
+                instance, declaration.StoreFieldKey, ResolveDeclaredType(declaration), out value);
         }
 
         /// <summary>
