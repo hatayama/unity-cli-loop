@@ -409,6 +409,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Pick a line inside the edited method body, run 'uloop hot-reload --revert-all' to "
             + "restore compiled bodies, or run 'uloop compile' to realign line numbers.";
 
+        // Format: declaring type name, method name, requested line, resolved compiled line.
+        public const string HotReloadPatchedLineBeforePatchedBodyMessageFormat =
+            "Line {2} has no executable statement in the last compiled source of this file, and the "
+            + "next one, line {3}, is inside '{0}.{1}', which is hot-reload patched, so the marker "
+            + "cannot be placed there reliably. Line {2} belongs to a method above it that this "
+            + "reload did not patch; such methods still resolve against the last compiled line "
+            + "numbers, which the edited file no longer follows.";
+
+        // Format: requested line.
+        public const string HotReloadPatchedLineBeforePatchedBodyNextAction =
+            "Pass --method <Type.Method> naming the unpatched method that holds line {0} in the file "
+            + "on disk, together with --line {0}: the line is then matched by its text inside that "
+            + "method's compiled span. Otherwise pick a line inside the edited method body, run "
+            + "'uloop hot-reload --revert-all' to restore compiled bodies, or run 'uloop compile' to "
+            + "realign line numbers.";
+
         public const string HotReloadPatchedCompiledMethodSpanFormat =
             " In the last compiled source, '{0}.{1}' spans lines {2}-{3}.";
 
