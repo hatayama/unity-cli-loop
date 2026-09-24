@@ -142,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void EditorStateService_WhenIsPlayingSetFalse_SetsPendingCliControlPlayMode()
         {
-            ControlPlayModeEditorStateService service = new ControlPlayModeEditorStateService();
+            ControlPlayModeEditorStateService service = new ControlPlayModeEditorStateService(new PlayModeManagerReflectionBridge());
 
             service.IsPlaying = false;
 

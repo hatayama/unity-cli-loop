@@ -7,7 +7,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal ControlPlayModeCompilationFailureService CompilationFailureService { get; } = new();
         internal ControlPlayModeCompilationFailureGate CompilationFailureGate { get; } = new();
-        internal ControlPlayModeEditorStateService EditorStateService { get; } = new();
+        internal ControlPlayModeEditorStateService EditorStateService { get; } =
+            new(new PlayModeManagerReflectionBridge());
         internal ControlPlayModeDomainReloadDropStateService DomainReloadDropStateService { get; } = new();
 
         internal CliPlayModeRunInBackgroundService RunInBackgroundService { get; } =

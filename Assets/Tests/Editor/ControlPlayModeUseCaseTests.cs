@@ -880,6 +880,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _isPaused = isPaused;
             }
 
+            public string ActiveScenarioName { get; set; }
+
             public bool IsPlaying
             {
                 get => _isPlaying;
