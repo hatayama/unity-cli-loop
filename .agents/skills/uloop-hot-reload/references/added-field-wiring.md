@@ -125,11 +125,14 @@ These values are not restored and are named once, as `Type.field on <host>: <rea
 - a value that is an object created at run time, which no scene or asset holds;
 - a value that is a scene object or asset that is gone, or no longer sits in the same place;
 - a field whose first read on the rebuilt object happens off the main thread; a later read on
-  the main thread restores it and clears the row;
+  the main thread, or wiring it again from the main thread, clears the row;
 - a value whose host is no longer at its place after the reload, because it was renamed, moved,
   or removed (or a sibling before it was); the row names the old place, and the rebuilt object
   elsewhere starts at its initializer until the host is back at its place (the value then reaches
-  it on its next read, and the row goes away) or you wire it again (which also clears the row). A host that exists only while play mode
+  it on its next read, and the row goes away) or you wire it again. The row goes away only for a
+  host back at the old place, whether the value reached it or you wired it again there; wiring the
+  value into an object at another place leaves the row, because the old wiring is still kept for
+  that place. A host that exists only while play mode
   runs (an instantiated `(Clone)`, for example) is named once when play mode stops, with a reason
   saying so, and its value is then forgotten: wire it again in the next play session.
 
