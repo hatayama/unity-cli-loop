@@ -502,9 +502,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     editedMethodStartLine,
                     editedMethodEndLine));
+            // Why skip after a text-match remap: the remap warning already names the armed line, and a
+            // "snapped forward" sentence for a line chosen by text would contradict it.
             (string comparisonWarning, bool comparedAndMatched) =
                 PausePointCompiledLineComparisonWarnings.BuildEnableComparisonWarningOrEmpty(
-                    compareCompiledLineDrift,
+                    compareCompiledLineDrift && string.IsNullOrEmpty(editedLineRemapWarning),
                     parameters.File,
                     parameters.Line,
                     resolvedLine,

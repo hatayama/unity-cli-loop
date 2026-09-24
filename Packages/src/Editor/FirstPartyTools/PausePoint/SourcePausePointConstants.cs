@@ -531,6 +531,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Format: original --line, --method name, remapped compiled line.
         public const string EditedLineRemapWarningFormat =
-            "--line {0} did not resolve in method '{1}' against the last compiled source; the edited line's text was found at line {2} inside that method's compiled span, so the marker was placed there. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers.";
+            "--line {0} in method '{1}' was matched by its text to line {2} in the last compiled source, so the marker was placed at line {2}, not at line {0}. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers.";
     }
 }
