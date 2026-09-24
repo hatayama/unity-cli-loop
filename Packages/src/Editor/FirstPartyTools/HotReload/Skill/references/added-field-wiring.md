@@ -107,7 +107,7 @@ What play mode costs depends on the project's Enter Play Mode Options.
 | Setting | What survives | What to do |
 |---------|---------------|------------|
 | Domain reload on (Unity's default) | Nothing. `--status` reports `0 change(s) currently active` and says the changes were discarded when play mode was entered | Re-apply the hot reload, then re-run the wiring script — both work from inside play mode |
-| Domain reload disabled | The declarations, and the values written through `SetInstanceField` when the host is a scene object or an asset and the value is a plain value, a scene object, or an asset. `--status` still lists the `Active` and `AddedField` rows. A value that could not be restored is named by `--status` and by the `Warnings` of the next apply | Nothing, unless a value is named as not restored: wire that one again |
+| Domain reload disabled | The declarations, and the values written through `SetInstanceField` when the host is a scene object or an asset and the value is a plain value, a scene object, or an asset. `--status` still lists the `Active` and `AddedField` rows. Some values that could not be restored are named by `--status` and by the `Warnings` of the next apply; the rest are not named (see below) | Wire again every value named as not restored, and the two unnamed cases below |
 
 Play mode builds the scene's objects again either way, and an added field on a new instance starts
 at its initializer unless something gives the value back.
@@ -117,17 +117,23 @@ With domain reload on, nothing does. Wire the instance you are actually looking 
 With domain reload disabled, the first read of the field on the rebuilt object returns the value
 wired into the object that sat in the same place: same scene, same names and sibling positions,
 same component type and position, or the same asset. This works in both directions, entering and
-leaving play mode, and it covers the reads Awake and OnEnable make while the scene loads. It does
-not cover:
+leaving play mode, and it covers the reads Awake and OnEnable make while the scene loads.
+
+These values are not restored and are named once, as `Type.field on <host>: <reason>`, in
+`UnrestoredWiredValues` and `Warnings` of `--status` and in the `Warnings` of the next apply:
 
 - a value that is an object created at run time, which no scene or asset holds;
-- a field whose first read on the rebuilt object happens off the main thread;
-- a value the hot-reloaded code wrote itself instead of the wiring call;
-- an object that is not rebuilt in the same place, for example after a rename or a reorder.
+- a value that is a scene object or asset that is gone, or no longer sits in the same place;
+- a field whose first read on the rebuilt object happens off the main thread.
 
-Each of these is named once, as `Type.field on <host>: <reason>`, in `UnrestoredWiredValues` and
-`Warnings` of `--status` and in the `Warnings` of the next apply. `RestoredWiredValueCount` on
-`--status` counts the values that came back. `--revert-all` forgets every wired value, so a field
+These values are not restored and are not named. The field silently starts at its initializer, so
+notice them yourself and wire them again:
+
+- a value the hot-reloaded code wrote itself instead of the wiring call;
+- a host that is not rebuilt in the same place, for example after a rename or a reorder, because
+  nothing recorded ties the rebuilt host to the old one.
+
+`RestoredWiredValueCount` on `--status` counts the values that came back. `--revert-all` forgets every wired value, so a field
 added again later starts at its initializer.
 
 When the re-apply adds back fields the domain reload discarded, its `Warnings` names exactly those
