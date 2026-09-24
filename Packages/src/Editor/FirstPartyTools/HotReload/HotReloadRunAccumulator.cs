@@ -248,7 +248,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 introducedTypes: _introducedTypes,
                 autoRefreshHoldNewlyArmed: newlyArmed,
                 introducedTypeNoticeCount: _introducedTypeNoticeCount,
-                serializedAddedFieldsReported: _serializedAddedFieldsReported);
+                serializedAddedFieldsReported: _serializedAddedFieldsReported,
+                activePatchSiblingPaths: CollectActivePatchSiblingPaths());
+        }
+
+        // Why only ActiveChanges: a sibling retried after an earlier Skip or brought in as a
+        // companion carries edits that never applied, while one re-applied for its active changes
+        // only re-states patches an earlier run already applied and reported, so its Skipped rows
+        // leave those patches running. Its Failed rows still count at the compile fallback: a
+        // failed run reverts those patches.
+        private string[] CollectActivePatchSiblingPaths()
+        {
+            List<string> paths = new List<string>(_reappliedSiblingPaths.Count);
+            foreach (string path in _reappliedSiblingPaths)
+            {
+                if (_siblingLedgerUpdates.ReasonOf(path) == HotReloadSiblingInclusionReason.ActiveChanges)
+                {
+                    paths.Add(path);
+                }
+            }
+
+            return paths.ToArray();
         }
 
         private void ResolveSkippedNextSteps()

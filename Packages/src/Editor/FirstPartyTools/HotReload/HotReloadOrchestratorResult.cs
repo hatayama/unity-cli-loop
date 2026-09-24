@@ -23,6 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool AutoRefreshHoldReleaseDeferred { get; }
         public string AutoRefreshHoldSceneRefreshWarning { get; }
         public IReadOnlyList<string> ReappliedSiblingPaths { get; }
+
+        // The part of ReappliedSiblingPaths that came back to re-apply their active changes, as
+        // opposed to a retry after an earlier Skip or a companion.
+        public IReadOnlyList<string> ActivePatchSiblingPaths { get; }
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
         // How many of Warnings are type notices, each saying its type needs a compile.
@@ -47,7 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
             bool autoRefreshHoldNewlyArmed = false,
             int introducedTypeNoticeCount = 0,
-            IReadOnlyList<string> serializedAddedFieldsReported = null)
+            IReadOnlyList<string> serializedAddedFieldsReported = null,
+            IReadOnlyList<string> activePatchSiblingPaths = null)
         {
             Methods = methods;
             Warnings = warnings;
@@ -71,6 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             IntroducedTypeNoticeCount = introducedTypeNoticeCount;
             SerializedAddedFieldsReported = serializedAddedFieldsReported ?? Array.Empty<string>();
+            ActivePatchSiblingPaths = activePatchSiblingPaths ?? Array.Empty<string>();
         }
     }
 }
