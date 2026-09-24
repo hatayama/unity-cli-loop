@@ -44,6 +44,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _wiredWhilePlaying.Contains(key);
         }
 
+        /// <summary>
+        /// Stops treating a key as wired while Play Mode ran, keeping its value.
+        /// </summary>
+        internal void ClearPlayMark(HotReloadWiredValueHostKey key)
+        {
+            _wiredWhilePlaying.Remove(key);
+        }
+
         internal void Remove(HotReloadWiredValueHostKey key)
         {
             _entries.Remove(key);

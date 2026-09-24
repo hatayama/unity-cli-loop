@@ -65,6 +65,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: clearing the Play mark of one key keeps its value and leaves other keys marked.
+        /// </summary>
+        [Test]
+        public void ClearPlayMark_KeepsTheValueAndOtherMarks()
+        {
+            HotReloadWiredValueLedger ledger = new HotReloadWiredValueLedger();
+            HotReloadWiredValueHostKey key = new HotReloadWiredValueHostKey(HostIdentity, FieldKey);
+            HotReloadWiredValueHostKey otherKey = new HotReloadWiredValueHostKey(HostIdentity, OtherFieldKey);
+            ledger.Record(key, HotReloadWiredValueDescriptor.Plain(1), true);
+            ledger.Record(otherKey, HotReloadWiredValueDescriptor.Plain(2), true);
+
+            ledger.ClearPlayMark(key);
+
+            Assert.That(ledger.WasWiredWhilePlaying(key), Is.False);
+            Assert.That(ledger.WasWiredWhilePlaying(otherKey), Is.True);
+            Assert.That(ledger.TryGet(key, out HotReloadWiredValueDescriptor descriptor), Is.True);
+            Assert.That(descriptor.PlainValue, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// What: wiring a key again outside Play Mode drops the mark that it was wired during Play.
         /// </summary>
         [Test]

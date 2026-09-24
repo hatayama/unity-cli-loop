@@ -170,6 +170,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Why forget a Play-only host: no later reload can put it back, and a host is matched by
         /// its place alone, so keeping it would restore the value onto whatever object the next
         /// Play session creates at that place, and name it again on every transition until then.
+        /// Why a Play-wired host found at its place on leaving Play loses its mark: the Edit-time
+        /// scene has that place, so the host is not Play-only, and a later rename must keep the
+        /// value until the host is put back rather than forget it.
         /// Why an unreadable scene counts as missing only for those: a host wired during Play may
         /// live in a scene only Play loads (an additive scene, DontDestroyOnLoad), while a host
         /// wired in Edit Mode is merely out of sight until its scene is opened again.
@@ -197,7 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            if (!missingByProbe.ContainsValue(true))
+            if (!leftPlayMode && !missingByProbe.ContainsValue(true))
             {
                 return;
             }
@@ -207,8 +210,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 foreach ((HotReloadWiredValueHostKey key, bool playOnly) in entries)
                 {
                     // A revert may have cleared the ledger while the lock was released.
-                    if (!missingByProbe[(key.Identity, playOnly)] || !Ledger.TryGet(key, out _))
+                    if (!Ledger.TryGet(key, out _))
                     {
+                        continue;
+                    }
+
+                    if (!missingByProbe[(key.Identity, playOnly)])
+                    {
+                        if (playOnly)
+                        {
+                            Ledger.ClearPlayMark(key);
+                        }
+
                         continue;
                     }
 

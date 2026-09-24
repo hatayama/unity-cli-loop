@@ -440,6 +440,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a host wired during Play that the Edit-time scene still had at its place when Play
+        /// Mode was left is no longer treated as Play-only, so a later leave that finds it missing
+        /// names it with the host-missing reason and keeps its value.
+        /// </summary>
+        [Test]
+        public void ReportMissingHosts_PlayWiredHostPresentOnAnEarlierLeave_IsKeptWhenLaterMissing()
+        {
+            _resolver.IsPlayModeRunning = true;
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.IsPlayModeRunning = false;
+            _persistence.ReportMissingHosts(true);
+            _resolver.MissingHosts.Add(HostIdentity);
+
+            _persistence.ReportMissingHosts(true);
+
+            AssertOneFailureWithReasonAndLedgerCount(HotReloadWiredValuePersistence.HostMissingReason, 1);
+        }
+
+        /// <summary>
         /// What: a value that comes back after its host was named missing drops that failure, so
         /// the report no longer lists it and a later drain hands nothing out.
         /// </summary>
