@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -31,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 // PlayModeState is an internal enum, so it can only be compared by name.
-                object state = Members.Value.CurrentStateProperty.GetValue(manager);
+                object state = InvokeUnwrapped(() => Members.Value.CurrentStateProperty.GetValue(manager));
                 return state != null && state.ToString() == RunningStateName;
             }
         }
@@ -61,7 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Unity's Start() only logs and returns when the configuration is invalid; surface it
             // instead so the CLI does not wait for a Play Mode that never comes.
             ThrowIfConfigurationInvalid(configuration);
-            Members.Value.StartMethod.Invoke(GetManager(), null);
+            object manager = GetManager();
+            InvokeUnwrapped(() => Members.Value.StartMethod.Invoke(manager, null));
         }
 
         public void Stop()
@@ -71,7 +73,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new InvalidOperationException(NoActiveConfigurationMessage);
             }
 
-            Members.Value.StopMethod.Invoke(GetManager(), null);
+            object manager = GetManager();
+            InvokeUnwrapped(() => Members.Value.StopMethod.Invoke(manager, null));
+        }
+
+        // Reflection wraps every exception thrown by the target (a method body or a property getter)
+        // in TargetInvocationException, whose message says nothing; rethrow Unity's own exception
+        // so the tool error carries its reason.
+        internal static object InvokeUnwrapped(Func<object> invocation)
+        {
+            try
+            {
+                return invocation();
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException != null)
+            {
+                ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+                throw;
+            }
         }
 
         private static void ThrowIfConfigurationInvalid(object configuration)
@@ -85,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             object[] arguments = { null };
-            bool isValid = (bool)isValidMethod.Invoke(configuration, arguments);
+            bool isValid = (bool)InvokeUnwrapped(() => isValidMethod.Invoke(configuration, arguments));
             if (isValid)
             {
                 return;
@@ -105,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            return members.InstanceProperty.GetValue(null);
+            return InvokeUnwrapped(() => members.InstanceProperty.GetValue(null));
         }
 
         // Returns the active configuration object, or null when unavailable or default.
@@ -117,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            object configuration = Members.Value.ActiveConfigProperty.GetValue(manager);
+            object configuration = InvokeUnwrapped(() => Members.Value.ActiveConfigProperty.GetValue(manager));
             if (configuration == null)
             {
                 return null;

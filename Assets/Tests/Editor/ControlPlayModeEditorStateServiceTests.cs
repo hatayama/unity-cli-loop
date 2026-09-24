@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 
@@ -94,6 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: the reflection bridge reports no scenario in a project without an active non-default configuration.
+        /// This development project is expected to keep the default Play Mode configuration selected.
         /// </summary>
         [Test]
         public void ReflectionBridge_InProjectWithoutActiveScenario_ReportsNoScenario()
@@ -111,10 +113,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ReflectionBridge_Start_WhenNoScenarioActive_ThrowsInvalidOperation()
         {
             PlayModeManagerReflectionBridge bridge = new PlayModeManagerReflectionBridge();
+            // With a scenario selected, Start() would launch Virtual Players and enter Play Mode,
+            // so the test must not run at all rather than merely fail.
+            Assume.That(bridge.IsNonDefaultScenarioActive, Is.False);
 
             Assert.Throws<InvalidOperationException>(() => bridge.Start());
             Assert.Throws<InvalidOperationException>(() => bridge.Stop());
             Assert.That(bridge.IsScenarioRunning, Is.False);
+        }
+
+        /// <summary>
+        /// What: reflection calls surface the target's own exception instead of TargetInvocationException.
+        /// </summary>
+        [Test]
+        public void InvokeUnwrapped_WhenTargetThrows_RethrowsInnerException()
+        {
+            MethodInfo throwingMethod = typeof(ControlPlayModeEditorStateServiceTests).GetMethod(
+                nameof(ThrowInvalidOperation),
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => PlayModeManagerReflectionBridge.InvokeUnwrapped(() => throwingMethod.Invoke(null, null)));
+
+            Assert.That(exception.Message, Is.EqualTo("transition in progress"));
+        }
+
+        private static void ThrowInvalidOperation()
+        {
+            throw new InvalidOperationException("transition in progress");
         }
 
         private sealed class FakePlayModeScenarioBridge : IPlayModeScenarioBridge
