@@ -508,6 +508,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a restored value the declared field type cannot hold is not reported as the
+        /// field's value, since the shim would replace it with the initializer's.
+        /// </summary>
+        [Test]
+        public void TryReadInstanceField_RestoredValueOfAnotherType_ReportsNoValue()
+        {
+            _port.AddInstanceField(typeof(WiringHost), FieldName, typeof(int));
+            HotReloadAddedFieldStore.Current = new HotReloadAddedFieldValues { Restorer = new FixedRestorer("text") };
+            WiringHost host = new WiringHost();
+
+            bool read = HotReloadAddedFieldWiring.TryReadInstanceField(host, FieldName, out object stored);
+
+            Assert.That(read, Is.False);
+            Assert.That(stored, Is.Null);
+        }
+
+        /// <summary>
         /// What: a destroyed UnityEngine.Object is refused, even though it is not null to the
         /// plain reference check, because nothing would ever read the value.
         /// </summary>
@@ -629,6 +646,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 value = null;
                 return false;
+            }
+        }
+
+        private sealed class FixedRestorer : IHotReloadWiredValuePersistence
+        {
+            private readonly object _value;
+
+            internal FixedRestorer(object value)
+            {
+                _value = value;
+            }
+
+            public void Record(object host, string storeFieldKey, object value)
+            {
+            }
+
+            public bool TryRestore(object host, string storeFieldKey, out object value)
+            {
+                value = _value;
+                return true;
             }
         }
 

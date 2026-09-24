@@ -284,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int value = values.GetOrInit(host, FieldKey(), () => 3);
 
             Assert.That(value, Is.EqualTo(3));
-            Assert.That(values.TryGet(host, FieldKey(), out object stored), Is.True);
+            Assert.That(values.TryGet(host, FieldKey(), typeof(int), out object stored), Is.True);
             Assert.That(stored, Is.EqualTo(3));
         }
 
@@ -318,12 +318,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = restorer };
             StoreHost host = new StoreHost();
 
-            Assert.That(values.TryGet(host, FieldKey(), out object first), Is.True);
-            Assert.That(values.TryGet(host, FieldKey(), out object second), Is.True);
+            Assert.That(values.TryGet(host, FieldKey(), typeof(int), out object first), Is.True);
+            Assert.That(values.TryGet(host, FieldKey(), typeof(int), out object second), Is.True);
 
             Assert.That(first, Is.EqualTo(6));
             Assert.That(second, Is.EqualTo(6));
             Assert.That(restorer.Calls, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a restored value the field's type cannot hold is not reported and leaves no slot,
+        /// so the next GetOrInit runs the initializer instead of disagreeing with the read.
+        /// </summary>
+        [Test]
+        public void TryGet_RestoredValueOfAnotherType_ReturnsFalseAndCreatesNoSlot()
+        {
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = new CountingRestorer(true, "text") };
+            StoreHost host = new StoreHost();
+
+            bool read = values.TryGet(host, FieldKey(), typeof(int), out object stored);
+
+            Assert.That(read, Is.False);
+            Assert.That(stored, Is.Null);
+            Assert.That(values.GetOrInit(host, FieldKey(), () => 8), Is.EqualTo(8));
         }
 
         private static string FieldKey()

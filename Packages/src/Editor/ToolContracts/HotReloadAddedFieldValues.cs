@@ -77,12 +77,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// Reports whether an instance field holds a stored value, and what it is, without
         /// creating the slot. A field nothing has written yet stays unwritten, so the reading shim
         /// still runs its initializer. The one slot it does create is a value <see cref="Restorer"/>
-        /// hands back, which then reads as stored.
+        /// hands back that <paramref name="fieldType"/> can hold, which then reads as stored.
         /// </summary>
-        public bool TryGet(object instance, string fieldKey, out object value)
+        public bool TryGet(object instance, string fieldKey, Type fieldType, out object value)
         {
             Debug.Assert(instance != null, "instance must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be empty.");
+            Debug.Assert(fieldType != null, "fieldType must not be null.");
 
             if (_instanceTables.TryGetValue(instance, out Dictionary<string, object> fields)
                 && fields.TryGetValue(fieldKey, out value))
@@ -92,6 +93,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             value = null;
             if (Restorer == null || !Restorer.TryRestore(instance, fieldKey, out object restored))
+            {
+                return false;
+            }
+
+            // Why the reader's rule: GetOrInit replaces a value the field's type cannot hold with
+            // the initializer's, so reporting it here would name a value the shim never uses.
+            if (!IsReadableAs(restored, fieldType))
             {
                 return false;
             }
@@ -201,6 +209,17 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
 
             return (false, default);
+        }
+
+        // The rule of TryReadAs<T>, for a type known only at run time.
+        private static bool IsReadableAs(object stored, Type fieldType)
+        {
+            if (stored == null)
+            {
+                return !fieldType.IsValueType || Nullable.GetUnderlyingType(fieldType) != null;
+            }
+
+            return fieldType.IsInstanceOfType(stored);
         }
     }
 }

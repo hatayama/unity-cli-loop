@@ -73,7 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             RequireLiveInstance(instance);
             HotReloadAddedFieldDeclaration declaration = ResolveDeclaration(instance.GetType(), fieldName, false);
-            return RequireInstalledValues().TryGet(instance, declaration.StoreFieldKey, out value);
+            return RequireInstalledValues().TryGet(
+                instance, declaration.StoreFieldKey, ResolveDeclaredType(declaration), out value);
         }
 
         /// <summary>
