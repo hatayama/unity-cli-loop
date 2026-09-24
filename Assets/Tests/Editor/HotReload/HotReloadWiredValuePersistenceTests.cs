@@ -477,6 +477,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
         }
 
+        /// <summary>
+        /// What: a scene object value that failed to resolve while its host was missing and then
+        /// resolves drops that failure, so the report lists only the restore.
+        /// </summary>
+        [Test]
+        public void TryRestore_SceneObjectResolvedAfterAReportedFailure_ClearsThatFailure()
+        {
+            _persistence.Record(NamedHost(), FieldKey, new SceneRef(TargetIdentity));
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts(false);
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+            _resolver.MissingHosts.Remove(HostIdentity);
+            _resolver.Resolvable[TargetIdentity] = new object();
+
+            Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.True);
+
+            (int restoredCount, IReadOnlyList<HotReloadWiredValueRestoreFailure> failures) = _persistence.ReadReport();
+            Assert.That(failures, Is.Empty);
+            Assert.That(restoredCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a Play-only host named on leaving Play Mode but not yet drained is still handed
+        /// out after the next session starts, and only once.
+        /// </summary>
+        [Test]
+        public void BeginSceneReloadSession_PlayOnlyFailureNotYetTaken_CarriesItIntoTheNextSessionOnce()
+        {
+            RecordPlayOnlyHostNamedOnLeavingPlayMode();
+
+            _persistence.BeginSceneReloadSession();
+
+            AssertOneFailureWithReasonAndLedgerCount(HotReloadWiredValuePersistence.PlayOnlyHostReason, 0);
+            _persistence.BeginSceneReloadSession();
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a Play-only host named on leaving Play Mode that a status read already showed is
+        /// not carried into the next session.
+        /// </summary>
+        [Test]
+        public void BeginSceneReloadSession_PlayOnlyFailureAlreadyRead_DoesNotCarryIt()
+        {
+            RecordPlayOnlyHostNamedOnLeavingPlayMode();
+            Assert.That(_persistence.ReadReport().Failures.Count, Is.EqualTo(1));
+
+            _persistence.BeginSceneReloadSession();
+
+            Assert.That(_persistence.ReadReport().Failures, Is.Empty);
+        }
+
+        private void RecordPlayOnlyHostNamedOnLeavingPlayMode()
+        {
+            _resolver.IsPlayModeRunning = true;
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.IsPlayModeRunning = false;
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts(true);
+        }
+
         private void AssertOneFailureWithReasonAndLedgerCount(string reason, int ledgerCount)
         {
             IReadOnlyList<HotReloadWiredValueRestoreFailure> failures = _persistence.TakeUnreportedFailures();

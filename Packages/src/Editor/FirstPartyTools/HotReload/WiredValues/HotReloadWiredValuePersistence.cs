@@ -18,6 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// the main thread records, restores or drains, and the dictionary, the dedup set and the
     /// report's drain index are not safe to change concurrently. The resolver is called outside the
     /// lock because it only answers on the main thread and touches none of this state.
+    /// Why a Play-only failure outlives the session reset until it is read: its value is already
+    /// forgotten, so that row is the only place it is ever named. The report is read only by an
+    /// apply and by a status call, and an agent may do neither between stopping Play and starting
+    /// it again, which resets the report.
     /// </remarks>
     internal sealed class HotReloadWiredValuePersistence : IHotReloadWiredValuePersistence
     {
@@ -37,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly object _gate = new object();
         private readonly IHotReloadWiredValueResolver _resolver;
         private readonly HashSet<HotReloadWiredValueHostKey> _reportedFailures =
+            new HashSet<HotReloadWiredValueHostKey>();
+        private readonly HashSet<HotReloadWiredValueHostKey> _undeliveredPlayOnlyFailures =
             new HashSet<HotReloadWiredValueHostKey>();
 
         internal HotReloadWiredValuePersistence(IHotReloadWiredValueResolver resolver)
@@ -130,6 +136,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_gate)
             {
                 Ledger.Clear();
+                // A revert removes the fields themselves, so no Play-only row is worth carrying.
+                _undeliveredPlayOnlyFailures.Clear();
                 ResetReport();
             }
         }
@@ -212,6 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                     // Named before it is removed: the failure row outlives the ledger entry.
                     RecordFailureOnce(key, PlayOnlyHostReason);
+                    _undeliveredPlayOnlyFailures.Add(key);
                     Ledger.Remove(key);
                 }
             }
@@ -225,6 +234,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             lock (_gate)
             {
+                _undeliveredPlayOnlyFailures.Clear();
                 return Report.TakeUnreported();
             }
         }
@@ -237,14 +247,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             lock (_gate)
             {
+                _undeliveredPlayOnlyFailures.Clear();
                 return (Report.RestoredCount, new List<HotReloadWiredValueRestoreFailure>(Report.Failures));
             }
         }
 
+        // Callers hold _gate.
         private void ResetReport()
         {
             Report.Reset();
             _reportedFailures.Clear();
+            foreach (HotReloadWiredValueHostKey key in _undeliveredPlayOnlyFailures)
+            {
+                RecordFailureOnce(key, PlayOnlyHostReason);
+            }
         }
 
         // Why off the main thread only: on it, a null identity means a plain C# host, which was
@@ -286,6 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // otherwise be listed as restored and unrestored at once. Callers hold _gate.
         private void ForgetFailure(HotReloadWiredValueHostKey key)
         {
+            _undeliveredPlayOnlyFailures.Remove(key);
             if (_reportedFailures.Remove(key))
             {
                 Report.RemoveFailure(key.Identity, key.StoreFieldKey);

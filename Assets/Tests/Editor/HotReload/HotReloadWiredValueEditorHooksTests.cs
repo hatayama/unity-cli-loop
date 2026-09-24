@@ -119,6 +119,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a Play-only host named on entering Edit Mode that nobody read is still handed out
+        /// after the next Play starts its session.
+        /// </summary>
+        [Test]
+        public void Handle_ExitingEditModeBeforeThePlayOnlyNameWasRead_KeepsItForTheNextRead()
+        {
+            _resolver.IsPlayModeRunning = true;
+            ArrangeMissingHost();
+            _resolver.IsPlayModeRunning = false;
+            HotReloadWiredValueEditorHooks.Handle(PlayModeStateChange.EnteredEditMode);
+
+            HotReloadWiredValueEditorHooks.Handle(PlayModeStateChange.ExitingEditMode);
+
+            AssertOneFailure(HotReloadWiredValuePersistence.PlayOnlyHostReason);
+        }
+
+        /// <summary>
         /// What: entering Play Mode names a host wired during an earlier Play that is not at its
         /// place with the host-missing reason, and keeps its value.
         /// </summary>
