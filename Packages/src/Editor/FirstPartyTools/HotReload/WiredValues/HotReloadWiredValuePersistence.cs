@@ -73,9 +73,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             bool wiredWhilePlaying = _resolver.IsPlayModeRunning;
             HotReloadWiredValueDescriptor descriptor = _resolver.DescribeValue(value);
+            HotReloadWiredValueHostKey key = new HotReloadWiredValueHostKey(identity, storeFieldKey);
             lock (_gate)
             {
-                Ledger.Record(new HotReloadWiredValueHostKey(identity, storeFieldKey), descriptor, wiredWhilePlaying);
+                Ledger.Record(key, descriptor, wiredWhilePlaying);
+                // A value wired again into a host that is back at its place is no longer
+                // unrestored; the row would otherwise outlive the wiring it describes.
+                ForgetFailure(key);
             }
 
             NoteHostsMayHaveChanged();
@@ -106,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (descriptor.Kind == HotReloadWiredValueKind.Plain)
                 {
                     value = descriptor.PlainValue;
-                    ForgetFailure(key);
+                    ForgetRestoredFailures(host, key);
                     Report.AddRestored();
                     return true;
                 }
@@ -123,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (resolved)
                 {
-                    ForgetFailure(key);
+                    ForgetRestoredFailures(host, key);
                     Report.AddRestored();
                     return true;
                 }
@@ -348,6 +352,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Report.AddFailure(key.Identity, key.StoreFieldKey, reason);
+        }
+
+        // Why the off-main-thread row too: a slot first read off the main thread keeps asking, so a
+        // later main-thread read restores the value that row said was lost. Callers hold _gate.
+        private void ForgetRestoredFailures(object host, HotReloadWiredValueHostKey key)
+        {
+            ForgetFailure(key);
+            ForgetFailure(new HotReloadWiredValueHostKey(host.GetType().FullName, key.StoreFieldKey));
         }
 
         // Why: a value named as not restored that comes back later in the same session would

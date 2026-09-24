@@ -151,6 +151,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.Ledger.Count, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: a hierarchy change moves the restore generation, so a restore retried in the
+        /// generation before it asks the resolver again.
+        /// </summary>
+        [Test]
+        public void HandleHierarchyChanged_MovesTheRestoreGeneration()
+        {
+            object host = new object();
+            int lastAttemptGeneration = 0;
+            _persistence.TryRestoreAgain(host, FieldKey, ref lastAttemptGeneration, out _);
+            int callsBeforeTheChange = _resolver.DescribeHostCalls;
+
+            HotReloadWiredValueEditorHooks.HandleHierarchyChanged();
+            _persistence.TryRestoreAgain(host, FieldKey, ref lastAttemptGeneration, out _);
+
+            Assert.That(callsBeforeTheChange, Is.EqualTo(1), "Precondition: the first retry must ask the resolver.");
+            Assert.That(_resolver.DescribeHostCalls, Is.EqualTo(2));
+        }
+
         private void ArrangeMissingHost()
         {
             _persistence.Record(new object(), FieldKey, 7);
@@ -181,7 +200,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             public bool IsPlayModeRunning { get; set; }
 
-            public string DescribeHost(object host) => HostIdentity;
+            internal int DescribeHostCalls { get; private set; }
+
+            public string DescribeHost(object host)
+            {
+                DescribeHostCalls++;
+                return HostIdentity;
+            }
 
             public bool IsHostMissing(string hostIdentity, bool unloadedSceneCountsAsMissing) =>
                 MissingHosts.Contains(hostIdentity)

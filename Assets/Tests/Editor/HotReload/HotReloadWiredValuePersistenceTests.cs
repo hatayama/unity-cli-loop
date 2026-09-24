@@ -548,6 +548,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.ReadReport().Failures, Is.Empty);
         }
 
+        /// <summary>
+        /// What: wiring the same host and field again removes the row that named the value as not
+        /// restored, because the row would otherwise outlive the wiring it describes.
+        /// </summary>
+        [Test]
+        public void Record_SameKeyAfterAFailure_RemovesTheFailureRow()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            _resolver.MissingHosts.Add(HostIdentity);
+            _persistence.ReportMissingHosts(false);
+            Assert.That(_persistence.Report.Failures.Count, Is.EqualTo(1), "Precondition: the missing host must be named.");
+
+            _persistence.Record(NamedHost(), FieldKey, 9);
+
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+        }
 
         /// <summary>
         /// What: a retry in the same restore generation as the last attempt answers false without
@@ -642,6 +658,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_persistence.Report.Failures, Is.Empty);
         }
 
+        /// <summary>
+        /// What: a restore on the main thread removes the row an earlier off-main-thread read of
+        /// the same field added, since the value did reach the host after all.
+        /// </summary>
+        [Test]
+        public void TryRestore_SucceedsAfterAnOffMainThreadRow_RemovesThatRow()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+            PersistenceHost host = NamedHost();
+            _resolver.IsMainThread = false;
+            _persistence.TryRestore(host, FieldKey, out _);
+            Assert.That(_persistence.Report.Failures.Count, Is.EqualTo(1), "Precondition: the off-main read must be named.");
+
+            _resolver.IsMainThread = true;
+            bool restored = _persistence.TryRestore(host, FieldKey, out object value);
+
+            Assert.That(restored, Is.True);
+            Assert.That(value, Is.EqualTo(7));
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+        }
 
         // One retry in the current generation, the trigger, then a second retry with the same
         // generation variable: only a trigger that moved the generation lets it ask the resolver.
