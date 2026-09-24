@@ -18,11 +18,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings,
             IReadOnlyList<string> rewireFields,
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues,
             bool isPlaying,
             bool isPaused)
         {
             Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
+            Debug.Assert(unrestoredWiredValues != null, "unrestoredWiredValues must not be null.");
 
             Func<string, string> toProjectRelativeScriptPath =
                 path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
@@ -70,6 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result,
                 additionalWarnings,
                 rewireFields,
+                unrestoredWiredValues,
                 toProjectRelativeScriptPath,
                 isPlaying,
                 isPaused);

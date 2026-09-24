@@ -263,13 +263,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "serialize until 'uloop compile': {0}. To put a value in one now, follow "
             + "references/added-field-wiring.md in the uloop-hot-reload skill.";
 
-        // Why name the fields: the domain reload or revert dropped the values an earlier run wired
-        // into them, and nothing else in the response says the wiring has to be done again. Why
-        // conditional: a field was active before the reload or revert, but nothing records whether
-        // a value was ever wired into it.
+        // Why name the fields: a domain reload (a compile, or entering Play Mode with Domain
+        // Reload enabled) or a revert dropped the values an earlier run wired into them, and
+        // nothing else in the response says the wiring has to be done again. Why conditional: the
+        // wired-value ledger lives in the domain that reload replaced, so nothing is left that
+        // records whether a value was ever wired. A scene reload without a domain reload keeps
+        // the ledger and restores the values; WiredValueNotRestoredWarningFormat names the ones
+        // it could not.
         public const string RewireAfterDomainReloadWarningFormat =
             "If values were wired into these added fields before the last domain reload or revert, "
             + "they are gone; wire them again before code that reads them runs: {0}.";
+
+        // Why name each one: the ledger brings wired values back after a scene reload without a
+        // domain reload, so a value that did not come back is the exception the caller has to
+        // wire by hand. Each item reads "{Type.field} on {host}: {reason}".
+        public const string WiredValueNotRestoredWarningFormat =
+            "Wired added-field value(s) could not be restored after the scene reload; wire them "
+            + "again: {0}.";
 
         // Why a pause and not only "wire them": while Play Mode runs, a frame can read an added
         // field before the caller wires it, and the reader then fails every frame until it is

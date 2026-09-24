@@ -583,6 +583,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: through the tool entry, the first apply after a scene reload names a wired value
+        /// that could not be restored, the next apply does not name it again, and --status still
+        /// reports it.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ApplyAfterAFailedWiredValueRestore_NamesItOnceAndStatusKeepsIt()
+        {
+            const string host = "scene:Harness|path:Host[0]|component:Ns.Host|index:0";
+            const string expectedRow = "Ns.Host.target on " + host + ": the object is gone";
+            string hostPath = FixturePath(HostFileName);
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "WiredValueRestoreWarningHost.cs",
+                InsertAddedField(File.ReadAllText(hostPath)));
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                try
+                {
+                    IHotReloadOrchestrator productionOrchestrator = HotReloadCompositionRoot.Services.Orchestrator;
+                    using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                        new HotReloadStubOrchestrator(
+                            (files, ct) => productionOrchestrator.RunAsync(files, editedPath, ct)));
+                    HotReloadCompositionRoot.Services.WiredValuePersistence.Report.AddFailure(
+                        host, "Ns.Host::target", "the object is gone");
+
+                    HotReloadResponse first = await ExecuteApplyAsync(hostPath);
+                    HotReloadResponse second = await ExecuteApplyAsync(hostPath);
+                    HotReloadResponse status = await ExecuteStatusAsync();
+
+                    string warning = first.Warnings.FirstOrDefault(
+                        entry => entry.Contains("Wired added-field value(s)"));
+                    Assert.That(warning, Is.Not.Null, string.Join(" | ", first.Warnings));
+                    Assert.That(warning, Does.Contain(expectedRow));
+                    Assert.That(
+                        second.Warnings.Any(entry => entry.Contains("Wired added-field value(s)")),
+                        Is.False,
+                        string.Join(" | ", second.Warnings));
+                    Assert.That(status.Warnings, Has.Some.Contains(expectedRow));
+                }
+                finally
+                {
+                    // The patch belongs to the replacement domain, which the outer TearDown revert
+                    // no longer sees.
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
+            }
+        }
+
+        /// <summary>
         /// What: an apply removes the types it introduced or found already active from the
         /// leftover set and keeps the one it failed to introduce.
         /// </summary>
@@ -830,6 +878,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadTool tool = new HotReloadTool();
             UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
                 new JObject { ["Files"] = new JArray(hostPath) },
+                CancellationToken.None);
+            HotReloadResponse response = baseResponse as HotReloadResponse;
+            Assert.That(response, Is.Not.Null);
+            return response;
+        }
+
+        private static async Task<HotReloadResponse> ExecuteStatusAsync()
+        {
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
                 CancellationToken.None);
             HotReloadResponse response = baseResponse as HotReloadResponse;
             Assert.That(response, Is.Not.Null);

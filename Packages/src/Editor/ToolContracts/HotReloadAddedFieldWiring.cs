@@ -14,8 +14,10 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// misspelled field name, a value of the wrong type, or a static/instance mix-up is accepted
     /// in silence and the reading shim simply overwrites it with the field's initializer on the
     /// next read. Every refusal here happens before anything is written.
-    /// Values live in the current domain only: a compile or a domain reload - entering play mode
-    /// included - drops them, and the wiring has to run again.
+    /// A compile or a domain reload - entering play mode with domain reload on included - drops
+    /// the values, and the wiring has to run again. With domain reload off, entering or leaving
+    /// play mode only rebuilds the scene, and a value written here is handed to the object rebuilt
+    /// in its host's place; a value the reading shim wrote itself is not.
     /// </remarks>
     public static class HotReloadAddedFieldWiring
     {

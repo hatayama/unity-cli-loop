@@ -144,6 +144,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// How many values came back and every failure so far in this session, copied under the
+        /// lock so a status read sees one consistent state.
+        /// </summary>
+        internal (int RestoredCount, IReadOnlyList<HotReloadWiredValueRestoreFailure> Failures) ReadReport()
+        {
+            lock (_gate)
+            {
+                return (Report.RestoredCount, new List<HotReloadWiredValueRestoreFailure>(Report.Failures));
+            }
+        }
+
         private void ResetReport()
         {
             Report.Reset();
