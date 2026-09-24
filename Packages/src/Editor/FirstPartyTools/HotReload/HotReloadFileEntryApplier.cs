@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 
 using UnityEngine;
@@ -50,7 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.ProjectRelativePath,
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
-                compileResult.Assembly);
+                compileResult.Assembly,
+                Path.GetFullPath(file.WorkerSourcePath),
+                file.FileOutput.sourceContentSha256);
             CommitAddedFieldsForFile(
                 file.ProjectRelativePath,
                 file.AddedFieldNames,

@@ -123,10 +123,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             byte[] assemblyBytes,
             byte[] pdbBytes,
-            Assembly loadedAssembly)
+            Assembly loadedAssembly,
+            string shimSourcePath,
+            string shimSourceContentSha256)
         {
             HotReloadFileGeneration generation = GetOrCreateGeneration(projectRelativePath);
-            generation.BeginShimGeneration(assemblyBytes, pdbBytes, loadedAssembly);
+            generation.BeginShimGeneration(
+                assemblyBytes, pdbBytes, loadedAssembly, shimSourcePath, shimSourceContentSha256);
             generation.BeginAddedMemberGeneration();
             return generation;
         }
@@ -515,6 +518,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadAddedMethodAtLine FindAddedMethodContainingLine(string requestedPath, int line)
         {
             return FindGenerationForRequestedPath(requestedPath)?.FindAddedMethodContainingLine(line);
+        }
+
+        /// <summary>
+        /// Whether the source the file's shim generation was compiled from now hashes differently,
+        /// read through <paramref name="readContentHashOrNull"/> so the check needs no real file.
+        /// False when there is no shim generation or the source cannot be read.
+        /// </summary>
+        internal bool HasShimSourceChangedOnDisk(string requestedPath, Func<string, string> readContentHashOrNull)
+        {
+            Debug.Assert(readContentHashOrNull != null, "readContentHashOrNull must not be null.");
+
+            HotReloadFileGeneration generation = FindGenerationForRequestedPath(requestedPath);
+            if (generation == null || !generation.HasShimGeneration)
+            {
+                return false;
+            }
+
+            string currentHash = readContentHashOrNull(generation.ShimSourcePath);
+            return currentHash != null && generation.HasShimSourceChangedFrom(currentHash);
         }
 
         internal bool HasActiveHotReloadChangesInFile(string requestedPath)

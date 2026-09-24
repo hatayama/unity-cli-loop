@@ -28,6 +28,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Any non-empty byte array satisfies a shim generation no test loads bytes from.
         private static readonly byte[] PlaceholderAssemblyBytes = { 0x4D, 0x5A };
 
+        // A source path and hash no test reads back.
+        private const string PlaceholderShimSourcePath = "/placeholder/Source.cs";
+        private const string PlaceholderShimSourceContentSha256 = "placeholder-sha256";
+
         /// <summary>
         /// What: a fresh generation reports neither a shim nor an added-member generation, so a
         /// preflight skip cannot be mistaken for an applied-then-empty generation.
@@ -691,7 +695,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.BeginShimGeneration(
                 PlaceholderAssemblyBytes,
                 null,
-                typeof(HotReloadFileGenerationTests).Assembly);
+                typeof(HotReloadFileGenerationTests).Assembly,
+                PlaceholderShimSourcePath,
+                PlaceholderShimSourceContentSha256);
         }
 
         private static void RegisterShim(HotReloadFileGeneration generation)

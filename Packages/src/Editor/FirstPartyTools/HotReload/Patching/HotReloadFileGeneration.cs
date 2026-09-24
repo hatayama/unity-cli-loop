@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private byte[] _assemblyBytes;
         private byte[] _pdbBytes;
         private Assembly _loadedAssembly;
+        private string _shimSourceContentSha256;
 
         internal HotReloadFileGeneration(string projectRelativePath)
         {
@@ -64,20 +65,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool HasAddedMemberGeneration { get; private set; }
 
         /// <summary>
+        /// The absolute path the shim generation's source was read from, or null without one. It
+        /// is the path the transform worker hashed, not necessarily the file's own path.
+        /// </summary>
+        internal string ShimSourcePath { get; private set; }
+
+        /// <summary>
         /// Replaces any prior shim generation with an empty method map backed by the compiled
         /// shim bytes. Live patches and superseded signatures survive: the re-apply that follows
         /// re-registers each shim and its own re-apply path retires the patches it replaces.
         /// </summary>
-        internal void BeginShimGeneration(byte[] assemblyBytes, byte[] pdbBytes, Assembly loadedAssembly)
+        internal void BeginShimGeneration(
+            byte[] assemblyBytes,
+            byte[] pdbBytes,
+            Assembly loadedAssembly,
+            string shimSourcePath,
+            string shimSourceContentSha256)
         {
             Debug.Assert(assemblyBytes != null && assemblyBytes.Length > 0, "assemblyBytes must not be empty.");
             Debug.Assert(loadedAssembly != null, "loadedAssembly must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(shimSourcePath), "shimSourcePath must not be empty.");
+            Debug.Assert(
+                !string.IsNullOrEmpty(shimSourceContentSha256),
+                "shimSourceContentSha256 must not be empty.");
 
+            ShimSourcePath = shimSourcePath;
+            _shimSourceContentSha256 = shimSourceContentSha256;
             _assemblyBytes = assemblyBytes;
             _pdbBytes = pdbBytes;
             _loadedAssembly = loadedAssembly;
             _shimMethodsByMethod.Clear();
             HasShimGeneration = true;
+        }
+
+        /// <summary>
+        /// Whether the source this shim generation was compiled from hashed differently from
+        /// <paramref name="currentSourceContentSha256"/>. False without a shim generation.
+        /// </summary>
+        internal bool HasShimSourceChangedFrom(string currentSourceContentSha256)
+        {
+            return HasShimGeneration
+                && !string.Equals(_shimSourceContentSha256, currentSourceContentSha256, StringComparison.Ordinal);
         }
 
         /// <summary>

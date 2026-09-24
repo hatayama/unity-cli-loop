@@ -212,7 +212,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => DescribeActiveArtifactReferencePaths(domain);
             HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames =
                 () => DescribeActiveAddedMemberNames(domain);
-            HotReloadPausePointCoordination.HotReloadSide = new HotReloadPausePointPort(domain);
+            HotReloadPausePointCoordination.HotReloadSide =
+                new HotReloadPausePointPort(domain, ReadSourceContentHashOrNull);
             // Attaching last keeps the invariant across the gap: the resolver only starts
             // answering binds once every gateway already points at the domain behind it.
             domain.IntroducedTypeResolver.Resume();
@@ -256,6 +257,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // resolver, and a bind arriving through a still-installed gateway would otherwise
             // reach a domain that can no longer answer.
             services?.Domain.Dispose();
+        }
+
+        // Null for a file that is gone or unreadable, so the pause point check treats it as
+        // unknown rather than changed.
+        private static string ReadSourceContentHashOrNull(string sourcePath)
+        {
+            if (!File.Exists(sourcePath))
+            {
+                return null;
+            }
+
+            try
+            {
+                return new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(sourcePath));
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
         }
 
         private static IReadOnlyList<string> DescribeActiveTypeNames(HotReloadDomain domain)

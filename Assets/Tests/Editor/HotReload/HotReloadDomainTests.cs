@@ -36,6 +36,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string IntroducedOwnerPath = "Assets/DomainIntroduced.cs";
 
+        // A path other than FileOne, the way an override copy differs from the requested file.
+        private const string ShimSourcePath = "/override/DomainFileOne.cs";
+        private const string ShimSourceHash = "generation-sha256";
+
         private HotReloadDomainTestAccess _access;
 
         private HotReloadDomainTestScope _scope;
@@ -92,6 +96,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Not.Null,
                 "The registered shim method must survive an added-member-only start.");
             Assert.That(_access.Domain.ListActiveAddedMethodKeys(FileOne), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a file whose source still hashes the same as the source its shim generation was
+        /// compiled from is not reported as changed on disk.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_SameHashAsTheGenerationSource_ReturnsFalse()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(FileOne, _ => ShimSourceHash);
+
+            Assert.That(changed, Is.False);
+        }
+
+        /// <summary>
+        /// What: a file whose source now hashes differently from the source its shim generation was
+        /// compiled from is reported as changed on disk.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_DifferentHash_ReturnsTrue()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(FileOne, _ => "edited-sha256");
+
+            Assert.That(changed, Is.True);
+        }
+
+        /// <summary>
+        /// What: the check reads the path the generation's source came from, not the requested
+        /// path, so a reload from an edited copy compares against that copy.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_ReadsTheShimSourcePathNotTheRequestedPath()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+            List<string> readPaths = new List<string>();
+
+            _access.Domain.HasShimSourceChangedOnDisk(
+                FileOne,
+                path =>
+                {
+                    readPaths.Add(path);
+                    return ShimSourceHash;
+                });
+
+            Assert.That(readPaths, Is.EqualTo(new[] { ShimSourcePath }));
+        }
+
+        /// <summary>
+        /// What: a file with no shim generation is never reported as changed, and its source is
+        /// not read.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_FileWithoutShimGeneration_ReturnsFalse()
+        {
+            _access.Domain.BeginAddedMemberOnlyGeneration(FileOne);
+            bool read = false;
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(
+                FileOne,
+                _ =>
+                {
+                    read = true;
+                    return "edited-sha256";
+                });
+
+            Assert.That(changed, Is.False);
+            Assert.That(read, Is.False);
+        }
+
+        /// <summary>
+        /// What: a generation source that cannot be read is not reported as changed.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_UnreadableSource_ReturnsFalse()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(FileOne, _ => null);
+
+            Assert.That(changed, Is.False);
         }
 
         /// <summary>
