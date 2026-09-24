@@ -73,8 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     methodEntry.OriginalMethod,
                     "No executable statement at or after line " + line
                     + " inside the hot-reload patched method '" + displayName
-                    + "'. The patched body was compiled from the current source, so line numbers "
-                    + "match the file on disk.");
+                    + "'. Line numbers follow the source the patch was compiled from.");
             }
 
             if (!SourcePausePointInjectionSiteLocator.TryLocate(

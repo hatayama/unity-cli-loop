@@ -199,48 +199,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        private static HotReloadAddedMethodAtLine FindAddedMethodContainingLineOrNull(string normalizedFile, int line)
-        {
-            return HotReloadPausePointCoordination.HotReloadSide?.FindAddedMethodContainingLine(
-                normalizedFile,
-                line);
-        }
-
-        // Returns the compiled span a line inside an added method may still arm against, or the
-        // refusal when none may.
-        private static (SourcePausePointCompiledMethodSpan Span, PausePointResponse Refusal)
-            ScopeAddedMethodLineToCompiledSpan(
-                EnablePausePointSchema parameters,
-                HotReloadAddedMethodAtLine addedMethod)
-        {
-            // Why a compiled span and not just --method: the filter matches short names across
-            // types and rounds forward, so only a span holding the line proves the caller passed a
-            // last-compiled-source line of that compiled method.
-            SourcePausePointCompiledMethodSpan span = PausePointAddedMethodScope.FindSpanContainingLineOrNull(
-                SourcePausePointResolver.FindCompiledMethodSpans(parameters.File, parameters.Method),
-                parameters.Line);
-            if (span == null)
-            {
-                return (null, PausePointResolveFailureResponse.CreateAddedMethodRefusal(
-                    parameters,
-                    addedMethod.Label,
-                    methodFilterIsAmbiguous: false));
-            }
-
-            // Why also refuse when the filter names the added method: an edited line of that added
-            // method can fall inside a same-named compiled method's span by number alone, and then
-            // nothing tells which of the two the caller meant.
-            if (PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod(parameters.Method, addedMethod))
-            {
-                return (null, PausePointResolveFailureResponse.CreateAddedMethodRefusal(
-                    parameters,
-                    addedMethod.Label,
-                    methodFilterIsAmbiguous: true));
-            }
-
-            return (span, null);
-        }
-
         // Why the port as well as the shim lookup: the lookup lists patched methods only, and
         // a reload that only added methods moves edited lines off the compiled map just the same.
         private static bool HasActiveHotReloadChanges(HotReloadShimFileLookup shimLookup, string normalizedFile)
@@ -273,9 +231,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(normalizedFile);
             if (shimLookup != null)
             {
+                bool shimSourceChanged =
+                    HotReloadPausePointCoordination.HotReloadSide.HasShimSourceChangedOnDisk(normalizedFile);
                 SourcePausePointShimResolution shimResolution =
                     SourcePausePointShimResolver.Resolve(
                         shimLookup, normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
+                PausePointResponse staleSourceRefusal =
+                    PausePointPatchedSourceGuard.RefuseWhenChangedOrNull(
+                        shimSourceChanged, shimResolution, normalizedFile, parameters.Line);
+                if (staleSourceRefusal != null)
+                {
+                    return staleSourceRefusal;
+                }
+
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
                     || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
                 {
@@ -337,12 +305,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // "on or after line N" would land on the next compiled method and arm the wrong code.
             // Asked separately from the shim lookup, which is null when the file has only added
             // methods and no patched ones.
-            HotReloadAddedMethodAtLine addedMethod = FindAddedMethodContainingLineOrNull(normalizedFile, parameters.Line);
+            HotReloadAddedMethodAtLine addedMethod =
+                PausePointAddedMethodScope.FindAddedMethodContainingLineOrNull(normalizedFile, parameters.Line);
             SourcePausePointCompiledMethodSpan addedLineCompiledSpan = null;
             if (addedMethod != null)
             {
                 (SourcePausePointCompiledMethodSpan Span, PausePointResponse Refusal) addedMethodScope =
-                    ScopeAddedMethodLineToCompiledSpan(parameters, addedMethod);
+                    PausePointAddedMethodScope.ScopeAddedMethodLineToCompiledSpan(parameters, addedMethod);
                 if (addedMethodScope.Refusal != null)
                 {
                     return addedMethodScope.Refusal;

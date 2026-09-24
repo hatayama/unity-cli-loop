@@ -212,7 +212,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => DescribeActiveArtifactReferencePaths(domain);
             HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames =
                 () => DescribeActiveAddedMemberNames(domain);
-            HotReloadPausePointCoordination.HotReloadSide = new HotReloadPausePointPort(domain);
+            HotReloadPausePointCoordination.HotReloadSide =
+                new HotReloadPausePointPort(
+                    domain,
+                    path => new HotReloadSourceContentHasher().TryComputeContentHashOfFileOrNull(path));
             // Attaching last keeps the invariant across the gap: the resolver only starts
             // answering binds once every gateway already points at the domain behind it.
             domain.IntroducedTypeResolver.Resume();

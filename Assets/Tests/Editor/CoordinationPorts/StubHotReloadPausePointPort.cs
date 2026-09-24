@@ -34,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public System.Func<string, IReadOnlyList<string>> AddedFieldsForType { get; set; }
 
+        public System.Func<string, bool> ShimSourceChangedOnDisk { get; set; }
+
         /// <summary>Files answered as introduced-type declarations. Null falls through to <see cref="Inner"/>.</summary>
         public HashSet<string> IntroducedTypeSourceFiles { get; set; }
 
@@ -66,6 +68,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return Inner != null && Inner.HasActiveHotReloadChangesInFile(file);
+        }
+
+        public bool HasShimSourceChangedOnDisk(string file)
+        {
+            if (ShimSourceChangedOnDisk != null)
+            {
+                return ShimSourceChangedOnDisk(file);
+            }
+
+            return Inner != null && Inner.HasShimSourceChangedOnDisk(file);
         }
 
         public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)

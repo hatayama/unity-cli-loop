@@ -240,6 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ErrorCodeResolveFailed = "PAUSE_POINT_RESOLVE_FAILED";
         public const string ErrorCodePatchFailed = "PAUSE_POINT_PATCH_FAILED";
         public const string ErrorCodePausePointPatchedByHotReload = "PAUSE_POINT_PATCHED_BY_HOT_RELOAD";
+        public const string ErrorCodePatchedSourceChanged = "PAUSE_POINT_PATCHED_SOURCE_CHANGED";
 
         // Why: Debug mode is lost on every Editor restart (including uloop launch -r), so the
         // recovery steps must remind callers to re-switch after restart rather than only once.
@@ -294,6 +295,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AddedMethodResolveFailureMessageFormat =
             "Line {0} is inside '{1}', which hot reload added; pause points cannot be armed inside "
             + "added methods until 'uloop compile', so it was refused instead of arming another method.";
+
+        // Why refuse rather than remap: the running patch maps lines of the source it was compiled
+        // from, which is not kept, so a marker placed now would stop at another statement than the
+        // one the response shows from the file on disk.
+        public const string PatchedSourceChangedOnDiskMessageFormat =
+            "'{0}' changed on disk after hot reload patched it (the last reload of this file did not "
+            + "apply, or the file was edited since), so --line {1} cannot be matched: the running patch "
+            + "still follows the source it was compiled from, and a marker placed now would stop at a "
+            + "different statement than the one shown.";
+
+        public const string PatchedSourceChangedOnDiskHint =
+            "Run 'uloop hot-reload' on the file again (fix any compile error first) or revert the edit, "
+            + "then enable the pause point.";
 
         public const string AddedMethodResolveFailureNextAction =
             "Run 'uloop compile', then enable the pause point on this line again.";

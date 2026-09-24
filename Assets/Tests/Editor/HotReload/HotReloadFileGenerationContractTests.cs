@@ -20,6 +20,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Any non-empty byte array satisfies a shim generation no test loads bytes from.
         private static readonly byte[] PlaceholderAssemblyBytes = { 0x4D, 0x5A };
 
+        // A source path and hash no test reads back.
+        private const string PlaceholderShimSourcePath = "/placeholder/Source.cs";
+        private const string PlaceholderShimSourceContentSha256 = "placeholder-sha256";
+
         /// <summary>
         /// What: a patch of a method whose shim this generation never registered is refused, which
         /// is the invariant that every patch is a patch of a method the edited source declares.
@@ -137,7 +141,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.BeginShimGeneration(
                 PlaceholderAssemblyBytes,
                 null,
-                typeof(HotReloadFileGenerationContractTests).Assembly);
+                typeof(HotReloadFileGenerationContractTests).Assembly,
+                PlaceholderShimSourcePath,
+                PlaceholderShimSourceContentSha256);
             return generation;
         }
 

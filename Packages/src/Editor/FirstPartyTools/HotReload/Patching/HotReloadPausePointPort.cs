@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -14,10 +15,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class HotReloadPausePointPort : IHotReloadPausePointPort
     {
         private readonly HotReloadDomain _domain;
+        private readonly Func<string, string> _readSourceContentHashOrNull;
 
-        public HotReloadPausePointPort(HotReloadDomain domain)
+        // Why the hash reader is passed in: the hasher lives in the apply pipeline's assembly,
+        // which this one may not reference, and the check must hash the way the worker did.
+        public HotReloadPausePointPort(HotReloadDomain domain, Func<string, string> readSourceContentHashOrNull)
         {
             _domain = domain;
+            _readSourceContentHashOrNull = readSourceContentHashOrNull;
         }
 
         public MethodBase GetActiveShimForMethod(MethodBase method)
@@ -38,6 +43,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool HasActiveHotReloadChangesInFile(string file)
         {
             return _domain.HasActiveHotReloadChangesInFile(file);
+        }
+
+        // Why the domain picks the path to read: it is the path the transform worker hashed, which
+        // differs from the argument when a reload was run from an edited copy.
+        public bool HasShimSourceChangedOnDisk(string file)
+        {
+            return _domain.HasShimSourceChangedOnDisk(file, _readSourceContentHashOrNull);
         }
 
         public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)

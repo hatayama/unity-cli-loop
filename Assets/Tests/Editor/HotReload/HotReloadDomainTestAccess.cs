@@ -20,6 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Any non-empty byte array satisfies a shim generation that no test loads bytes from.
         private static readonly byte[] PlaceholderAssemblyBytes = { 0x4D, 0x5A };
 
+        // Any non-empty hash satisfies a generation whose source no test reads back.
+        private const string PlaceholderSourceContentSha256 = "placeholder-sha256";
+
         internal HotReloadDomain Domain => HotReloadCompositionRoot.Services.Domain;
 
         /// <summary>Applies a patch after registering its shim, as the file entry applier does.</summary>
@@ -52,11 +55,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 return generation;
             }
 
+            return BeginShimGenerationFromSource(
+                projectRelativePath,
+                System.IO.Path.GetFullPath(projectRelativePath),
+                PlaceholderSourceContentSha256);
+        }
+
+        /// <summary>
+        /// Starts a shim generation that remembers the given source path and content hash, as an
+        /// apply does with the path the transform worker read.
+        /// </summary>
+        internal HotReloadFileGeneration BeginShimGenerationFromSource(
+            string projectRelativePath,
+            string shimSourcePath,
+            string shimSourceContentSha256)
+        {
             return Domain.BeginGeneration(
                 projectRelativePath,
                 PlaceholderAssemblyBytes,
                 pdbBytes: null,
-                loadedAssembly: typeof(HotReloadDomainTestAccess).Assembly);
+                loadedAssembly: typeof(HotReloadDomainTestAccess).Assembly,
+                shimSourcePath: shimSourcePath,
+                shimSourceContentSha256: shimSourceContentSha256);
         }
 
         internal HotReloadFileGeneration GetOrBeginAddedMemberGeneration(string projectRelativePath)

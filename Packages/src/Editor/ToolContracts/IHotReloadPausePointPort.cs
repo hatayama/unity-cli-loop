@@ -42,6 +42,15 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         bool HasActiveHotReloadChangesInFile(string file);
 
         /// <summary>
+        /// Argument is a forward-slash path (absolute or project-relative); returns true when the
+        /// file has an active shim generation and the file's current bytes on disk hash
+        /// differently from the source that generation was compiled from, so the patch's line
+        /// numbers no longer follow the file. False when the file has no shim generation or cannot
+        /// be read.
+        /// </summary>
+        bool HasShimSourceChangedOnDisk(string file);
+
+        /// <summary>
         /// Returns the PDB-checksum-verified compiled snapshot text for a project-relative source
         /// file, or null when no snapshot is available.
         /// </summary>
