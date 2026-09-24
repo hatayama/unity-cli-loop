@@ -14,19 +14,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadDomain _domain;
         private readonly HotReloadPatcher _patcher;
         private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
+        private readonly HotReloadWiredValuePersistence _wiredValuePersistence;
 
         internal HotReloadStatusExecutor(
             HotReloadDomain domain,
             HotReloadPatcher patcher,
-            HotReloadUnityMessageForwarding unityMessageForwarding)
+            HotReloadUnityMessageForwarding unityMessageForwarding,
+            HotReloadWiredValuePersistence wiredValuePersistence)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
             Debug.Assert(
                 unityMessageForwarding != null, "unityMessageForwarding must not be null.");
+            Debug.Assert(wiredValuePersistence != null, "wiredValuePersistence must not be null.");
             _domain = domain;
             _patcher = patcher;
             _unityMessageForwarding = unityMessageForwarding;
+            _wiredValuePersistence = wiredValuePersistence;
         }
 
         public HotReloadResponse ExecuteRevertAll()
@@ -36,6 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> droppedAddedFields =
                 HotReloadPlayModeEntryDropRecorder.CollectActiveAddedFields(_domain);
             _patcher.RevertAll();
+            // The fields the wired values belong to are gone, so a later reload that adds them
+            // again starts from their initializers rather than from a value wired before.
+            _wiredValuePersistence.Clear();
             // The added methods are gone with the revert, so the proxies that forward Unity
             // messages into them come off in the same step rather than at the next update tick.
             _unityMessageForwarding.Clear();
