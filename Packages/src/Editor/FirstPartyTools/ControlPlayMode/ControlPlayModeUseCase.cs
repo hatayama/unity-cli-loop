@@ -307,6 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 IsPlaying = _editorStateService.IsPlaying,
                 IsPaused = _editorStateService.IsPaused,
+                ActiveScenario = _editorStateService.ActiveScenarioName,
                 Changed = changed,
                 WasAlreadyStopped = wasAlreadyStopped,
                 ResumedFromPause = resumedFromPause,

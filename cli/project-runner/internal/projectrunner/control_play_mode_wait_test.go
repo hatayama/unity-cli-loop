@@ -787,3 +787,38 @@ func readControlPlayModeRequest(t *testing.T, requests <-chan map[string]any) ma
 		return nil
 	}
 }
+
+// Verifies that the re-marshaled control-play-mode response keeps ActiveScenario and omits it when Unity sent none.
+func TestDecodeControlPlayModeResponsePreservesActiveScenario(t *testing.T) {
+	withScenario, err := decodeControlPlayModeResponse([]byte(`{"IsPlaying":true,"IsPaused":false,"Message":"Play mode status","Warning":"","ActiveScenario":"SampleScenario"}`))
+	if err != nil {
+		t.Fatalf("decode with scenario failed: %v", err)
+	}
+	withScenarioJSON, err := json.Marshal(withScenario)
+	if err != nil {
+		t.Fatalf("marshal with scenario failed: %v", err)
+	}
+	withScenarioFields := map[string]any{}
+	if err := json.Unmarshal(withScenarioJSON, &withScenarioFields); err != nil {
+		t.Fatalf("unmarshal with scenario failed: %v", err)
+	}
+	if withScenarioFields["ActiveScenario"] != "SampleScenario" {
+		t.Fatalf("ActiveScenario mismatch: %s", withScenarioJSON)
+	}
+
+	withoutScenario, err := decodeControlPlayModeResponse([]byte(`{"IsPlaying":true,"IsPaused":false,"Message":"Play mode status","Warning":""}`))
+	if err != nil {
+		t.Fatalf("decode without scenario failed: %v", err)
+	}
+	withoutScenarioJSON, err := json.Marshal(withoutScenario)
+	if err != nil {
+		t.Fatalf("marshal without scenario failed: %v", err)
+	}
+	withoutScenarioFields := map[string]any{}
+	if err := json.Unmarshal(withoutScenarioJSON, &withoutScenarioFields); err != nil {
+		t.Fatalf("unmarshal without scenario failed: %v", err)
+	}
+	if _, exists := withoutScenarioFields["ActiveScenario"]; exists {
+		t.Fatalf("ActiveScenario should be omitted: %s", withoutScenarioJSON)
+	}
+}

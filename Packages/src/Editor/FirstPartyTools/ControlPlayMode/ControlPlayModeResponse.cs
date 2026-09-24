@@ -37,5 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string StoppedAt { get; set; }
+
+        /// <summary>
+        /// Name of the active non-default Play Mode configuration (for example a Multiplayer Play Mode
+        /// scenario). Omitted when the default configuration is active or the Editor has no configurations.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ActiveScenario { get; set; }
     }
 }
