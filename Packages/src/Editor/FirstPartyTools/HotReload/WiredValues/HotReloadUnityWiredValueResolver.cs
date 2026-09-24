@@ -59,6 +59,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _sceneObjects.IsComponentMissing(hostIdentity, unloadedSceneCountsAsMissing);
         }
 
+        public bool TryResolveHost(string hostIdentity, out object host)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(hostIdentity), "hostIdentity must not be empty.");
+
+            host = null;
+            // An asset host is not rebuilt by a scene reload, so there is nothing to find again.
+            if (!IsMainThread || hostIdentity.StartsWith(AssetPrefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (!_sceneObjects.TryResolveComponent(hostIdentity, out Component component) || component == null)
+            {
+                return false;
+            }
+
+            host = component;
+            return true;
+        }
+
         public HotReloadWiredValueDescriptor DescribeValue(object value)
         {
             if (!(value is UnityEngine.Object unityObject))
