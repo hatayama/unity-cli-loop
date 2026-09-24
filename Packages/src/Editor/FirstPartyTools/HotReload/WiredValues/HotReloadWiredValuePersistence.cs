@@ -14,11 +14,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Why restore lazily, on the first read of a slot, rather than when play mode is entered: a
     /// scene reload runs Awake and OnEnable before the play mode state change is raised, so a
     /// restore driven by that event would miss the values those callbacks read.
+    /// Why one lock around the ledger and the report: a slot can be read off the main thread while
+    /// the main thread records, restores or drains, and the dictionary, the dedup set and the
+    /// report's drain index are not safe to change concurrently. The resolver is called outside the
+    /// lock because it only answers on the main thread and touches none of this state.
     /// </remarks>
     internal sealed class HotReloadWiredValuePersistence : IHotReloadWiredValuePersistence
     {
         private const string OffMainThreadReason = "read off the main thread before any main-thread read";
 
+        private readonly object _gate = new object();
         private readonly IHotReloadWiredValueResolver _resolver;
         private readonly HashSet<HotReloadWiredValueHostKey> _reportedFailures =
             new HashSet<HotReloadWiredValueHostKey>();
@@ -45,7 +50,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            Ledger.Record(new HotReloadWiredValueHostKey(identity, storeFieldKey), _resolver.DescribeValue(value));
+            HotReloadWiredValueDescriptor descriptor = _resolver.DescribeValue(value);
+            lock (_gate)
+            {
+                Ledger.Record(new HotReloadWiredValueHostKey(identity, storeFieldKey), descriptor);
+            }
         }
 
         public bool TryRestore(object host, string storeFieldKey, out object value)
@@ -62,33 +71,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadWiredValueHostKey key = new HotReloadWiredValueHostKey(identity, storeFieldKey);
-            if (!Ledger.TryGet(key, out HotReloadWiredValueDescriptor descriptor))
+            HotReloadWiredValueDescriptor descriptor;
+            lock (_gate)
             {
+                if (!Ledger.TryGet(key, out descriptor))
+                {
+                    return false;
+                }
+
+                if (descriptor.Kind == HotReloadWiredValueKind.Plain)
+                {
+                    value = descriptor.PlainValue;
+                    Report.AddRestored();
+                    return true;
+                }
+
+                if (descriptor.Kind == HotReloadWiredValueKind.Unrestorable)
+                {
+                    RecordFailureOnce(key, descriptor.UnrestorableReason);
+                    return false;
+                }
+            }
+
+            bool resolved = _resolver.TryResolve(descriptor, out value, out string failureReason);
+            lock (_gate)
+            {
+                if (resolved)
+                {
+                    Report.AddRestored();
+                    return true;
+                }
+
+                value = null;
+                RecordFailureOnce(key, failureReason);
                 return false;
             }
-
-            if (descriptor.Kind == HotReloadWiredValueKind.Plain)
-            {
-                value = descriptor.PlainValue;
-                Report.AddRestored();
-                return true;
-            }
-
-            if (descriptor.Kind == HotReloadWiredValueKind.Unrestorable)
-            {
-                RecordFailureOnce(key, descriptor.UnrestorableReason);
-                return false;
-            }
-
-            if (_resolver.TryResolve(descriptor, out value, out string failureReason))
-            {
-                Report.AddRestored();
-                return true;
-            }
-
-            value = null;
-            RecordFailureOnce(key, failureReason);
-            return false;
         }
 
         /// <summary>
@@ -96,8 +113,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal void Clear()
         {
-            Ledger.Clear();
-            BeginSceneReloadSession();
+            lock (_gate)
+            {
+                Ledger.Clear();
+                ResetReport();
+            }
         }
 
         /// <summary>
@@ -105,6 +125,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// instances can still be restored.
         /// </summary>
         internal void BeginSceneReloadSession()
+        {
+            lock (_gate)
+            {
+                ResetReport();
+            }
+        }
+
+        /// <summary>
+        /// The failures no earlier call returned, taken under the same lock that adds them, so a
+        /// failure added during the drain is neither lost nor returned twice.
+        /// </summary>
+        internal IReadOnlyList<HotReloadWiredValueRestoreFailure> TakeUnreportedFailures()
+        {
+            lock (_gate)
+            {
+                return Report.TakeUnreported();
+            }
+        }
+
+        private void ResetReport()
         {
             Report.Reset();
             _reportedFailures.Clear();
@@ -115,17 +155,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // once this read fills the slot with the initializer; say so rather than lose it silently.
         private void ReportOffMainThreadReadOfWiredField(object host, string storeFieldKey)
         {
-            if (_resolver.IsMainThread || !Ledger.HasAnyForField(storeFieldKey))
+            if (_resolver.IsMainThread)
             {
                 return;
             }
 
-            RecordFailureOnce(
-                new HotReloadWiredValueHostKey(host.GetType().FullName, storeFieldKey), OffMainThreadReason);
+            lock (_gate)
+            {
+                if (!Ledger.HasAnyForField(storeFieldKey))
+                {
+                    return;
+                }
+
+                RecordFailureOnce(
+                    new HotReloadWiredValueHostKey(host.GetType().FullName, storeFieldKey), OffMainThreadReason);
+            }
         }
 
         // Why once: a failed read through TryReadInstanceField creates no slot, so the same host
         // is asked again on every read; the set keeps the report at one line per host and field.
+        // Callers hold _gate.
         private void RecordFailureOnce(HotReloadWiredValueHostKey key, string reason)
         {
             if (!_reportedFailures.Add(key))

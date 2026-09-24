@@ -157,49 +157,93 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: on the main thread, a host without an identity is a plain C# object that was never
+        /// recorded, so reading a field another host has wired reports nothing.
+        /// </summary>
+        [Test]
+        public void TryRestore_OnMainThreadForAHostWithoutIdentity_ReportsNothing()
+        {
+            _persistence.Record(NamedHost(), FieldKey, 7);
+
+            Assert.That(_persistence.TryRestore(new PersistenceHost(), FieldKey, out _), Is.False);
+
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+        }
+
+        /// <summary>
         /// What: a failure is handed out once for an apply, while the full list stays for a status read.
         /// </summary>
         [Test]
-        public void TakeUnreported_SecondCall_IsEmpty()
+        public void TakeUnreportedFailures_SecondCall_IsEmpty()
         {
             _persistence.Record(NamedHost(), FieldKey, new SceneRef(TargetIdentity));
             _persistence.TryRestore(NamedHost(), FieldKey, out _);
 
-            Assert.That(_persistence.Report.TakeUnreported().Count, Is.EqualTo(1));
-            Assert.That(_persistence.Report.TakeUnreported(), Is.Empty);
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+            Assert.That(_persistence.TakeUnreportedFailures(), Is.Empty);
             Assert.That(_persistence.Report.Failures.Count, Is.EqualTo(1));
         }
 
         /// <summary>
-        /// What: after Clear nothing is restored.
+        /// What: a new scene reload session hands out a failure that recurs in it again, even though
+        /// the same failure was already handed out in the session before.
+        /// </summary>
+        [Test]
+        public void TakeUnreportedFailures_AfterANewSession_ReturnsTheRecurringFailureAgain()
+        {
+            _persistence.Record(NamedHost(), FieldKey, new SceneRef(TargetIdentity));
+            _persistence.TryRestore(NamedHost(), FieldKey, out _);
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+
+            _persistence.BeginSceneReloadSession();
+            _persistence.TryRestore(NamedHost(), FieldKey, out _);
+
+            Assert.That(_persistence.TakeUnreportedFailures().Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: Clear forgets the recorded values and empties the report, so nothing is restored
+        /// and no earlier failure or restore is still listed.
         /// </summary>
         [Test]
         public void Clear_ThenTryRestore_ReturnsFalse()
         {
             _persistence.Record(NamedHost(), FieldKey, 7);
+            _persistence.Record(NamedHost(), OtherFieldKey, new SceneRef(TargetIdentity));
+            _persistence.TryRestore(NamedHost(), FieldKey, out _);
+            _persistence.TryRestore(NamedHost(), OtherFieldKey, out _);
+            Assert.That(_persistence.Report.RestoredCount, Is.EqualTo(1));
+            Assert.That(_persistence.Report.Failures.Count, Is.EqualTo(1));
 
             _persistence.Clear();
 
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+            Assert.That(_persistence.Report.RestoredCount, Is.EqualTo(0));
             Assert.That(_persistence.TryRestore(NamedHost(), FieldKey, out _), Is.False);
             Assert.That(_persistence.Report.RestoredCount, Is.EqualTo(0));
         }
 
         /// <summary>
-        /// What: a new scene reload session reports a failure that recurs in it once more, and
-        /// keeps the recorded value.
+        /// What: a new scene reload session starts with an empty report, reports a failure that
+        /// recurs in it once more, and keeps the recorded value.
         /// </summary>
         [Test]
         public void BeginSceneReloadSession_SameFailureAgain_IsReportedOnceMore()
         {
             _persistence.Record(NamedHost(), FieldKey, new SceneRef(TargetIdentity));
+            _persistence.Record(NamedHost(), OtherFieldKey, 7);
             _persistence.TryRestore(NamedHost(), FieldKey, out _);
+            _persistence.TryRestore(NamedHost(), OtherFieldKey, out _);
 
             _persistence.BeginSceneReloadSession();
+            Assert.That(_persistence.Report.Failures, Is.Empty);
+            Assert.That(_persistence.Report.RestoredCount, Is.EqualTo(0));
+
             _persistence.TryRestore(NamedHost(), FieldKey, out _);
             _persistence.TryRestore(NamedHost(), FieldKey, out _);
 
             Assert.That(_persistence.Report.Failures.Count, Is.EqualTo(1));
-            Assert.That(_persistence.Ledger.Count, Is.EqualTo(1));
+            Assert.That(_persistence.Ledger.Count, Is.EqualTo(2));
         }
 
         private PersistenceHost NamedHost()
