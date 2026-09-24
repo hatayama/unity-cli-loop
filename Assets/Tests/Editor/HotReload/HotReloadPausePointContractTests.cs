@@ -788,12 +788,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 normalizedFile: "Assets/Tests/Editor/HotReload/HotReloadPausePointContractFixture.cs",
                 requestedLine: requestedLine);
 
+            // The synthetic resolution resolves to line 1.
             string expectedMessage =
                 string.Format(
-                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
+                    SourcePausePointConstants.HotReloadPatchedLineMapsIntoPatchedBodyMessageFormat,
                     nameof(HotReloadPausePointContractFixture),
                     nameof(HotReloadPausePointContractFixture.ReplaceableCompute),
-                    requestedLine)
+                    requestedLine,
+                    1)
                 + string.Format(
                     SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
                     nameof(HotReloadPausePointContractFixture),
@@ -807,7 +809,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.ErrorMessage, Is.EqualTo(expectedMessage));
             Assert.That(
                 result.Hint,
-                Is.EqualTo(SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction));
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedLineMapsIntoPatchedBodyNextAction,
+                        requestedLine)));
         }
 
         /// <summary>

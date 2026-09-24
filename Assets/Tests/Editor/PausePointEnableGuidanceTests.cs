@@ -753,6 +753,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: a line below a patched method's edited body that maps into its compiled span is
+        /// refused with the same --method guidance as a line above it, not with guidance that
+        /// blames a stale line map, and no marker is armed.
+        /// </summary>
+        [Test]
+        public void Enable_LineBelowAPatchedMethodThatMapsIntoIt_RefusesWithTheMethodFilterGuidance()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 1,
+                    FixtureStatementLine - 1);
+                scope.Port.ActiveShimForMethod = method =>
+                    method.Name == nameof(EnableBySourceLocationFixture.Add) ? method : null;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureClosingBraceLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(
+                    response.ErrorCode,
+                    Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+                Assert.That(response.Message, Does.Contain("Line " + FixtureClosingBraceLine));
+                Assert.That(response.Message, Does.Contain("'EnableBySourceLocationFixture.Add'"));
+                Assert.That(response.Message, Does.Not.Contain("superseded"));
+                Assert.That(response.RecommendedNextAction, Does.Contain("--method"));
+                Assert.That(response.RecommendedNextAction, Does.Contain("declaration lines"));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
         internal static int PdbUnavailableProbe()
         {
             return 1;
