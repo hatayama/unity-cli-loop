@@ -1,12 +1,12 @@
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Timing constants for the always-on SignalTick pump that keeps the editor alive while unfocused.
+    /// Timing constants for the always-on SignalTick pump kept against macOS parking an unfocused editor.
     /// </summary>
     internal static class AutoTickPumpConstants
     {
-        // Why: ~60Hz matches a focused editor and com.unity.pipeline's AutoTickCommand default.
-        // Smaller intervals waste CPU; larger ones slow frame-dependent compile/test progress.
+        // Why: matches com.unity.pipeline's AutoTickCommand default. It only throttles how often the
+        // pump signals; an unfocused editor still updates about every 100ms whatever this value is.
         internal const int PUMP_INTERVAL_MS = 16;
     }
 }
