@@ -64,6 +64,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a game object whose name contains the component marker is still described and
+        /// resolved as a game object, not taken for a component.
+        /// </summary>
+        [Test]
+        public void TryResolve_GameObjectNamedLikeAComponent_ResolvesToTheGameObject()
+        {
+            const string name = "Target|component:UnityEngine.BoxCollider|index:0";
+            GameObject target = CreateRoot(name);
+            HotReloadWiredValueDescriptor descriptor = _resolver.DescribeValue(target);
+
+            Object.DestroyImmediate(target);
+            GameObject replacement = CreateRoot(name);
+
+            Assert.That(_resolver.TryResolve(descriptor, out object resolved, out string reason), Is.True, reason);
+            Assert.That(resolved, Is.SameAs(replacement));
+        }
+
+        /// <summary>
         /// What: null and non-Unity values are kept as they are.
         /// </summary>
         [Test]

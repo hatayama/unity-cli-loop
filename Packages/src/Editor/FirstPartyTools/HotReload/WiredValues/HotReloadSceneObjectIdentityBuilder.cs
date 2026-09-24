@@ -15,9 +15,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <remarks>
     /// Why not GlobalObjectId or an instance id: the instance id changes with every scene reload,
     /// and GlobalObjectId does not work for scene objects in play mode.
-    /// Names are not escaped. Resolution compares each level's whole "Name[index]" token against
-    /// the live hierarchy instead of splitting the string, so a name that contains a separator
-    /// still resolves, and a name or index that differs never matches.
+    /// Scene ids and object names are percent-encoded ('%', '|', '/', '[' become %25, %7C, %2F,
+    /// %5B), so the markers and separators in an identity only ever come from this builder: a
+    /// name that contains "|component:" cannot pass for a component, and the root "X[0]/Y" cannot
+    /// pass for Y under X. Why not backslash escapes: "\|component:" still contains the marker,
+    /// and every reader that searches for it would need to skip escaped occurrences.
+    /// Resolution compares each level's whole encoded "Name[index]" token against the live
+    /// hierarchy, so a name or index that differs never matches.
     /// </remarks>
     internal sealed class HotReloadSceneObjectIdentityBuilder
     {
@@ -134,14 +138,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string Token(Transform transform)
         {
-            return transform.name + "[" + transform.GetSiblingIndex() + "]";
+            return Encode(transform.name) + "[" + transform.GetSiblingIndex() + "]";
+        }
+
+        // '%' goes first so an encoded character is never encoded again.
+        private static string Encode(string name)
+        {
+            return name
+                .Replace("%", "%25")
+                .Replace("|", "%7C")
+                .Replace("/", "%2F")
+                .Replace("[", "%5B");
         }
 
         // Why path before name: two open scenes can share a name, but not a path. An unsaved scene
         // has no path, so its name is all there is.
         private static string SceneId(Scene scene)
         {
-            return string.IsNullOrEmpty(scene.path) ? scene.name : scene.path;
+            return Encode(string.IsNullOrEmpty(scene.path) ? scene.name : scene.path);
         }
 
         private static bool TryFindLoadedScene(string sceneId, out Scene found)
@@ -149,7 +163,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int i = 0; i < SceneManager.sceneCount; i++)
             {
                 Scene scene = SceneManager.GetSceneAt(i);
-                if (scene.IsValid() && string.Equals(SceneId(scene), sceneId, StringComparison.Ordinal))
+                // Why not IsValid() alone: outside Play mode a scene that is still loading is valid
+                // but GetRootGameObjects throws on it, and the read that asks for the restore is a
+                // user callback (OnValidate, an ExecuteAlways Awake) that must not see that
+                // exception. Such a scene counts as not there, so the restore is recorded as failed.
+                bool readable = scene.IsValid() && (Application.isPlaying || scene.isLoaded);
+                if (readable && string.Equals(SceneId(scene), sceneId, StringComparison.Ordinal))
                 {
                     found = scene;
                     return true;

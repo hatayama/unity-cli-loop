@@ -101,6 +101,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a child whose name spells out a deeper path ("X[0]/Y") is told apart from the
+        /// object at that path, and each identity resolves to its own object.
+        /// </summary>
+        [Test]
+        public void Describe_NameThatSpellsAPath_DoesNotCollideWithThatPath()
+        {
+            GameObject parent = CreateRoot("Parent");
+            GameObject x = CreateChild(parent, "X");
+            CreateChild(x, "Z");
+            GameObject y = CreateChild(x, "Y");
+            GameObject spelled = new GameObject(Prefix + "X[0]/" + Prefix + "Y");
+            spelled.transform.SetParent(parent.transform, false);
+
+            string yIdentity = _builder.DescribeGameObject(y);
+            string spelledIdentity = _builder.DescribeGameObject(spelled);
+
+            Assert.That(spelledIdentity, Is.Not.EqualTo(yIdentity));
+            Assert.That(_builder.TryResolveGameObject(yIdentity, out GameObject yFound), Is.True);
+            Assert.That(_builder.TryResolveGameObject(spelledIdentity, out GameObject spelledFound), Is.True);
+            Assert.That(yFound, Is.SameAs(y));
+            Assert.That(spelledFound, Is.SameAs(spelled));
+        }
+
+        /// <summary>
         /// What: identities that name nothing loaded, or are not identities at all, do not resolve.
         /// </summary>
         [Test]
