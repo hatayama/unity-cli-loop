@@ -137,7 +137,7 @@ func TestRunSkillsDirInstallPreservesForeignFiles(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 
 	if code != 0 {
 		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
@@ -171,7 +171,7 @@ func TestGetDirSkillStatusIgnoresForeignFiles(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -209,7 +209,7 @@ func TestRunSkillsDirUninstallRemovesOnlyOwnedFiles(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	skills := []skillDefinition{skillClean, skillWithForeign}
-	if code := runSkillsDirInstall(destinationDir, skills, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, skills, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	foreignPath := filepath.Join(destinationDir, "uloop-with-foreign", "apm.yml")
@@ -246,7 +246,7 @@ func TestGetDirSkillStatusReportsOrphanedOwnedFilesAsOutdated(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -263,7 +263,7 @@ func TestGetDirSkillStatusReportsOrphanedOwnedFilesAsOutdated(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("repair install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "Updated: 1") {
@@ -291,7 +291,7 @@ func TestRunSkillsDirInstallRejectsFileOccupyingSkillName(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 
 	if code != 1 {
 		t.Fatalf("install onto an occupying file should fail: code=%d", code)
@@ -347,7 +347,7 @@ func TestRunSkillsDirDoesNotFollowSymlinkAtSkillName(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 1 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 1 {
 		t.Fatalf("install through a symlink should fail: code=%d", code)
 	}
 
@@ -381,7 +381,7 @@ func TestRunSkillsDirSubcommandRejectsFileDestination(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, destinationPath, stdout, stderr)
+	code := runSkillsDirSubcommand("install", t.TempDir(), []skillDefinition{skill}, destinationPath, stdout, stderr)
 
 	if code != 1 {
 		t.Fatalf("file destination should fail: code=%d", code)
@@ -425,7 +425,7 @@ func TestRunSkillsDirCleansStaleSyncArtifacts(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -439,7 +439,7 @@ func TestRunSkillsDirCleansStaleSyncArtifacts(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if _, err := os.Stat(staleTemp); !os.IsNotExist(err) {
@@ -470,7 +470,7 @@ func TestRunSkillsDirCleansArtifactsOfFormerlyOwnedEntries(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -480,7 +480,7 @@ func TestRunSkillsDirCleansArtifactsOfFormerlyOwnedEntries(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if _, err := os.Stat(formerBackup); !os.IsNotExist(err) {
@@ -497,7 +497,7 @@ func TestRunSkillsDirUninstallRemovesIgnorableDebrisWithSkillDir(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -514,7 +514,7 @@ func TestRunSkillsDirUninstallRemovesIgnorableDebrisWithSkillDir(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("reinstall failed: code=%d stderr=%s", code, stderr.String())
 	}
 	foreignFile := filepath.Join(installedDir, "apm.yml")
@@ -543,7 +543,7 @@ func TestRunSkillsDirPreservesHumanNamedArtifactLookalikes(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -567,7 +567,7 @@ func TestRunSkillsDirPreservesHumanNamedArtifactLookalikes(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if _, err := os.Stat(manualBackup); err != nil {
@@ -608,7 +608,7 @@ func TestRunSkillsDirInstallReplacesWrongTypeEntryAtOwnedName(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedReferences := filepath.Join(destinationDir, "uloop-sample", "references")
@@ -620,7 +620,7 @@ func TestRunSkillsDirInstallReplacesWrongTypeEntryAtOwnedName(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("install over an occupying file failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "Updated: 1") {
@@ -643,7 +643,7 @@ func TestRunSkillsDirInstallReplacesSymlinkAtOwnedNameWithoutFollowing(t *testin
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedReferences := filepath.Join(destinationDir, "uloop-sample", "references")
@@ -663,7 +663,7 @@ func TestRunSkillsDirInstallReplacesSymlinkAtOwnedNameWithoutFollowing(t *testin
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("install over a symlink failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if _, err := os.Stat(curatedFile); err != nil {
@@ -681,7 +681,7 @@ func TestRunSkillsDirInstallReplacesSymlinkAtOwnedNameWithoutFollowing(t *testin
 		t.Fatalf("failed to create dangling symlink: %v", err)
 	}
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("install over a dangling symlink failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if _, err := os.Stat(filepath.Join(installedReferences, "note.md")); err != nil {
@@ -700,7 +700,7 @@ func TestRunSkillsDirUninstallRemovesDanglingSymlink(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -734,7 +734,7 @@ func TestRunSkillsDirUninstallRemovesOrphanedOwnedFiles(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -782,12 +782,12 @@ func TestRunSkillsDirListShowsStatuses(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{installedSkill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{installedSkill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 
 	stdout.Reset()
-	code := runSkillsDirList(destinationDir, []skillDefinition{installedSkill, missingSkill}, stdout, stderr)
+	code := runSkillsDirList(destinationDir, []skillDefinition{installedSkill, missingSkill}, nil, stdout, stderr)
 
 	if code != 0 {
 		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
@@ -879,7 +879,7 @@ func TestRunSkillsDirPreservesNeverInstalledOwnedNames(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	code = runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code = runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 
 	if code != 1 {
 		t.Fatalf("install onto never-installed owned names should report a failure: code=%d", code)
@@ -915,7 +915,7 @@ func TestRunSkillsDirInstallContinuesPastBlockedSkill(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	code := runSkillsDirInstall(destinationDir, []skillDefinition{blockedSkill, healthySkill}, stdout, stderr)
+	code := runSkillsDirInstall(destinationDir, []skillDefinition{blockedSkill, healthySkill}, nil, stdout, stderr)
 
 	if code != 1 {
 		t.Fatalf("a blocked skill should fail the run: code=%d", code)
@@ -953,7 +953,7 @@ func TestRunSkillsDirListReportsConflict(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{installedSkill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{installedSkill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if err := os.WriteFile(filepath.Join(destinationDir, "uloop-blocked"), []byte("foreign\n"), 0o644); err != nil {
@@ -961,7 +961,7 @@ func TestRunSkillsDirListReportsConflict(t *testing.T) {
 	}
 
 	stdout.Reset()
-	code := runSkillsDirList(destinationDir, []skillDefinition{blockedSkill, installedSkill}, stdout, stderr)
+	code := runSkillsDirList(destinationDir, []skillDefinition{blockedSkill, installedSkill}, nil, stdout, stderr)
 
 	if code != 0 {
 		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
@@ -1023,7 +1023,7 @@ func TestRunSkillsDirInstallBlocksCaseVariantOwnedEntry(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -1032,7 +1032,7 @@ func TestRunSkillsDirInstallBlocksCaseVariantOwnedEntry(t *testing.T) {
 	}
 
 	stdout.Reset()
-	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 
 	if code != 1 {
 		t.Fatalf("a case-variant owned entry should block the skill: code=%d", code)
@@ -1057,7 +1057,7 @@ func TestRunSkillsDirDetectsBrokenOwnedEntryAsOutdated(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	notePath := filepath.Join(destinationDir, "uloop-sample", "references", "note.md")
@@ -1077,7 +1077,7 @@ func TestRunSkillsDirDetectsBrokenOwnedEntryAsOutdated(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("repair install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "Updated: 1") {
@@ -1148,7 +1148,7 @@ func TestRunSkillsDirRejectsCaseVariantSkillDirectory(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 	if code != 0 {
 		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
 	}
@@ -1157,7 +1157,7 @@ func TestRunSkillsDirRejectsCaseVariantSkillDirectory(t *testing.T) {
 	}
 
 	stdout.Reset()
-	code = runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code = runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 	if code != 1 {
 		t.Fatalf("install onto a case-variant store directory should be blocked: code=%d", code)
 	}
@@ -1189,7 +1189,7 @@ func TestRunSkillsDirReportsDriftedOrphanAsRecoverableConflict(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -1330,12 +1330,12 @@ func TestRunSkillsDirHandlesSymlinkedSourceReference(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
 	}
 
 	stdout.Reset()
-	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 
 	if code != 0 {
 		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
@@ -1392,7 +1392,7 @@ func TestRunSkillsDirUninstallDistinguishesMetaDebrisFromUserMeta(t *testing.T) 
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -1432,7 +1432,7 @@ func TestRunSkillsDirUninstallPreservesUserDirectoryNamedAsDebris(t *testing.T) 
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	installedDir := filepath.Join(destinationDir, "uloop-sample")
@@ -1487,7 +1487,7 @@ func TestRunSkillsDirInstallPreservesSourceOwnedArtifactNamedFile(t *testing.T) 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("first dir install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	storeFile := filepath.Join(destinationDir, "uloop-sample", "data.uloop-tmp-123")
@@ -1500,7 +1500,7 @@ func TestRunSkillsDirInstallPreservesSourceOwnedArtifactNamedFile(t *testing.T) 
 	}
 
 	stdout.Reset()
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("second dir install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	secondContent, err := os.ReadFile(storeFile)
@@ -1533,7 +1533,7 @@ func TestRunSkillsDirSubcommandRejectsOutputDirSymlinkedIntoSkillSource(t *testi
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, storeLink, stdout, stderr)
+	code := runSkillsDirSubcommand("install", t.TempDir(), []skillDefinition{skill}, storeLink, stdout, stderr)
 	if code != 1 {
 		t.Fatalf("symlink into a skill source should fail: code=%d stderr=%s", code, stderr.String())
 	}
@@ -1546,7 +1546,7 @@ func TestRunSkillsDirSubcommandRejectsOutputDirSymlinkedIntoSkillSource(t *testi
 
 	stdout.Reset()
 	stderr.Reset()
-	code = runSkillsDirSubcommand("install", []skillDefinition{skill}, filepath.Join(storeLink, "sub"), stdout, stderr)
+	code = runSkillsDirSubcommand("install", t.TempDir(), []skillDefinition{skill}, filepath.Join(storeLink, "sub"), stdout, stderr)
 	if code != 1 {
 		t.Fatalf("non-existing path under a source-pointing symlink should fail: code=%d stderr=%s", code, stderr.String())
 	}
@@ -1567,7 +1567,7 @@ func TestRunSkillsDirSubcommandRejectsOutputDirInsideSkillSource(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, outputDir, stdout, stderr)
+	code := runSkillsDirSubcommand("install", t.TempDir(), []skillDefinition{skill}, outputDir, stdout, stderr)
 
 	if code != 1 {
 		t.Fatalf("output dir inside a skill source should fail: code=%d stderr=%s", code, stderr.String())
@@ -1598,7 +1598,7 @@ func TestRunSkillsDirSubcommandRejectsOutputDirContainingSkillSource(t *testing.
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, root, stdout, stderr)
+	code := runSkillsDirSubcommand("install", t.TempDir(), []skillDefinition{skill}, root, stdout, stderr)
 
 	if code != 1 {
 		t.Fatalf("output dir containing a skill source should fail: code=%d stderr=%s", code, stderr.String())

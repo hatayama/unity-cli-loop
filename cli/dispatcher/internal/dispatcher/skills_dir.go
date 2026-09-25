@@ -11,11 +11,13 @@ package dispatcher
 // and the run continues, so one occupied name cannot leave the rest of the
 // store half-synced with no summary.
 //
-// Deliberate omissions compared to target installs: disabled-tool filtering and
-// deprecated-skill cleanup do not run here. An external store is not scoped to
-// one Unity project, so one project's tool settings must not hide skills from
-// it, and deleting directories whose names uloop merely used in the past would
-// break the guarantee that only source-owned entries are ever removed. The same
+// Disabled-tool filtering runs here as in target installs: a store synced by
+// --output-dir serves the project it is synced from, so the project's
+// disabledTools hide a skill from install and list, and install removes a
+// disabled skill already in the store through the same evidence-gated path as
+// uninstall. Deprecated-skill cleanup deliberately does not run here: deleting
+// directories whose names uloop merely used in the past would break the
+// guarantee that only source-owned entries are ever removed. The same
 // trade-off applies within a skill: ownership derives from the current source
 // and no manifest is written into the store, so a top-level entry that a newer
 // skill version dropped or renamed is left behind rather than cleaned up.
@@ -32,13 +34,31 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/skillscan"
 )
 
-func runSkillsDirInstall(absDir string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
+func runSkillsDirInstall(
+	absDir string,
+	skills []skillDefinition,
+	disabledTools []string,
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Installing uloop skills (directory)...")
 	clicore.WriteLine(stdout, "")
 	result := skillInstallResult{}
+	disabledRemoved := 0
 	blockedReasons := []string{}
 	for _, skill := range skills {
+		if isSkillDisabledByToolSettings(skill, disabledTools) {
+			removed, err := uninstallSkillFromDir(absDir, skill)
+			if err != nil {
+				clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
+				return 1
+			}
+			if removed {
+				disabledRemoved++
+			}
+			continue
+		}
 		conflictReason, err := installSkillIntoDir(absDir, skill, &result)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
@@ -55,6 +75,9 @@ func runSkillsDirInstall(absDir string, skills []skillDefinition, stdout io.Writ
 	clicore.WriteFormat(stdout, "  Installed: %d\n", result.installed)
 	clicore.WriteFormat(stdout, "  Updated: %d\n", result.updated)
 	clicore.WriteFormat(stdout, "  Skipped: %d\n", result.skipped)
+	if disabledRemoved > 0 {
+		clicore.WriteFormat(stdout, "  Disabled removed: %d\n", disabledRemoved)
+	}
 	if len(blockedReasons) > 0 {
 		clicore.WriteFormat(stdout, "  Blocked: %d\n", len(blockedReasons))
 	}
@@ -110,7 +133,13 @@ func runSkillsDirUninstall(absDir string, skills []skillDefinition, stdout io.Wr
 	return 0
 }
 
-func runSkillsDirList(absDir string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
+func runSkillsDirList(
+	absDir string,
+	skills []skillDefinition,
+	disabledTools []string,
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "uloop Skills Status:")
 	clicore.WriteLine(stdout, "")
@@ -118,6 +147,12 @@ func runSkillsDirList(absDir string, skills []skillDefinition, stdout io.Writer,
 	clicore.WriteFormat(stdout, "Location: %s\n", absDir)
 	clicore.WriteLine(stdout, strings.Repeat("=", 50))
 	for _, skill := range skills {
+		// Reported before the store is inspected because install removes a
+		// disabled skill, so any leftover state would read as a broken install.
+		if isSkillDisabledByToolSettings(skill, disabledTools) {
+			clicore.WriteFormat(stdout, "  %s %s (%s)\n", statusIcon("disabled"), skill.name, statusText("disabled"))
+			continue
+		}
 		state, err := getDirSkillState(absDir, skill)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
