@@ -860,6 +860,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: once the file changed on disk after the hot reload, the same blank line is refused
+        /// as line-not-compiled naming its next statement, not with the patched method's range,
+        /// because that range is in the coordinates of the source the hot reload compiled, and
+        /// hot reloading again is what refreshes it.
+        /// </summary>
+        [Test]
+        public void Enable_BlankLineWhoseNextStatementIsInsideAPatchedMethodWhoseFileChangedOnDisk_RefusesLineNotCompiled()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotBeforeAddWasEdited();
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureBlankLineAboveMethod + 1,
+                    FixtureClosingBraceLine);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureBlankLineAboveMethod,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
+                Assert.That(response.Message, Does.Contain("the next statement, line " + (FixtureBlankLineAboveMethod + 1)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.LineNotCompiledRecommendedNextAction));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
         /// What: the same blank line whose next statement was added after the last compile, with no
         /// patched method in the file, is still refused as line-not-compiled naming that statement.
         /// </summary>
@@ -923,6 +958,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             FixtureStatementLine - 1,
                             FixtureStatementLine - 1)));
                 Assert.That(response.RecommendedNextAction, Does.Not.Contain("--method"));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
+        /// What: once the file changed on disk after the hot reload, a line below the patched method
+        /// that resolves into it is still refused as patched by hot reload, but without an edited
+        /// body range, because the recorded range is in the coordinates of the source the hot reload
+        /// compiled, and no marker is armed.
+        /// </summary>
+        [Test]
+        public void Enable_LineBelowAPatchedMethodWhoseFileChangedOnDisk_RefusesWithoutAnEditedBodyRange()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 1,
+                    FixtureStatementLine - 1);
+                scope.Port.ActiveShimForMethod = method =>
+                    method.Name == nameof(EnableBySourceLocationFixture.Add) ? method : null;
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureClosingBraceLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(
+                    response.ErrorCode,
+                    Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalMessageFormat,
+                            FixtureClosingBraceLine,
+                            "EnableBySourceLocationFixture.Add")));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction));
                 Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
             }
         }
