@@ -9,11 +9,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class PausePointPatchedEditedSpanLocator
     {
-        internal static string FindPatchedMethodContainingEditedLineOrNull(string file, int line)
-        {
-            return FindPatchedSpanContainingEditedLineOrNull(file, line)?.Label;
-        }
-
         // Why read the port here instead of taking the lookup as an argument: the enable use
         // case already fetched it, but threading it through would grow a file kept near its
         // length limit, and the lookup is cheap to fetch again.

@@ -455,7 +455,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a resolve failure in a file with active hot reload changes keeps the resolver
+        /// What: a resolve failure in a file with a hot reload patch keeps the resolver
         /// sentence with the general next action and no line map warning, because --line is an
         /// edited-file line and no longer resolves against the last compiled source there.
         /// </summary>
@@ -464,7 +464,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                scope.Port.ActiveHotReloadChangesInFile = file => true;
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 2,
+                    FixtureClosingBraceLine);
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {

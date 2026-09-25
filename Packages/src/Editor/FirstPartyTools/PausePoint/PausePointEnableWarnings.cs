@@ -118,26 +118,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedMethod);
         }
 
-        internal static string AppendCompiledMethodSpanToDriftWarningOrUnchanged(
-            string driftWarning,
-            string resolvedMethod,
-            int compiledMethodStartLine,
-            int compiledMethodEndLine)
-        {
-            if (string.IsNullOrEmpty(driftWarning)
-                || compiledMethodStartLine <= 0
-                || compiledMethodEndLine <= 0)
-            {
-                return driftWarning ?? string.Empty;
-            }
-
-            return driftWarning + string.Format(
-                SourcePausePointConstants.HotReloadCompiledMethodSpanInLastCompiledSourceFormat,
-                resolvedMethod,
-                compiledMethodStartLine,
-                compiledMethodEndLine);
-        }
-
         internal static string BuildRetargetedToHotReloadPatchWarningOrEmpty(
             bool retargetedToHotReloadPatch,
             string resolvedMethod,
@@ -182,42 +162,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 + SourcePausePointConstants.NearbyCompiledMethodsPrefix
                 + string.Join("; ", parts)
                 + ".";
-        }
-
-        internal static string BuildCompiledLineMapWarningOrEmpty(
-            bool hasActiveHotReloadPatches,
-            string file,
-            string resolvedMethod,
-            bool comparedAndMatched)
-        {
-            if (!hasActiveHotReloadPatches)
-            {
-                return string.Empty;
-            }
-
-            Debug.Assert(!string.IsNullOrEmpty(resolvedMethod), "resolvedMethod must not be empty.");
-            string format = comparedAndMatched
-                ? SourcePausePointConstants.HotReloadCompiledLineMapMatchedWarningFormat
-                : SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat;
-            return string.Format(
-                format,
-                SourcePausePointPathNormalizer.ToForwardSlashes(file),
-                resolvedMethod);
-        }
-
-        internal static string BuildEditedLineRemapWarning(
-            int originalLine,
-            string methodName,
-            int remappedLine)
-        {
-            Debug.Assert(originalLine > 0, "originalLine must be a positive 1-based line number.");
-            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be empty.");
-            Debug.Assert(remappedLine > 0, "remappedLine must be a positive 1-based line number.");
-            return string.Format(
-                SourcePausePointConstants.EditedLineRemapWarningFormat,
-                originalLine,
-                methodName,
-                remappedLine);
         }
 
         internal static string CreateEnableWarning()

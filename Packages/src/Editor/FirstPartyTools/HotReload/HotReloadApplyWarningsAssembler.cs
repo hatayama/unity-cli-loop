@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -19,17 +18,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> additionalWarnings,
             IReadOnlyList<string> rewireFields,
             IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues,
-            Func<string, string> toProjectRelativeScriptPath,
             bool isPlaying,
             bool isPaused)
         {
             Debug.Assert(result != null, "result must not be null.");
-            Debug.Assert(toProjectRelativeScriptPath != null, "toProjectRelativeScriptPath must not be null.");
 
             HotReloadResponseWarnings warnings = new HotReloadResponseWarnings();
             warnings.Add(
                 HotReloadWarningResolution.ClearedByCompile,
-                CollectClearedByCompile(result, additionalWarnings, toProjectRelativeScriptPath));
+                CollectClearedByCompile(result, additionalWarnings));
             warnings.Add(
                 HotReloadWarningResolution.NeedsCallerAction,
                 CollectNeedsCallerAction(result, rewireFields, unrestoredWiredValues, isPlaying, isPaused));
@@ -41,22 +38,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static List<string> CollectClearedByCompile(
             HotReloadOrchestratorResult result,
-            IReadOnlyList<string> additionalWarnings,
-            Func<string, string> toProjectRelativeScriptPath)
+            IReadOnlyList<string> additionalWarnings)
         {
             List<string> lines = new List<string>(result.Warnings);
             if (additionalWarnings != null)
             {
                 lines.AddRange(additionalWarnings);
             }
-
-            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
-                lines,
-                result.Methods,
-                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
-                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot,
-                toProjectRelativeScriptPath,
-                result.ReappliedSiblingPaths);
 
             // A Skipped method is applied by 'uloop compile' like the warnings above it, so its
             // line counts as one. Whether the Message may add the single-compile sentence is

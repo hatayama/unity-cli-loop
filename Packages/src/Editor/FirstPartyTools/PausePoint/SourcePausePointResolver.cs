@@ -278,50 +278,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (startLine, endLine);
         }
 
-        // Why a dedicated API: FindNearbyCompiledMethods does not take methodFilter and cannot
-        // promise the named method's compiled span.
-        internal static IReadOnlyList<SourcePausePointCompiledMethodSpan> FindCompiledMethodSpans(
-            string projectRelativeFilePath,
-            string methodFilter)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
-            if (string.IsNullOrEmpty(methodFilter))
-            {
-                return Array.Empty<SourcePausePointCompiledMethodSpan>();
-            }
-
-            return WithCompiledModuleOrDefault(
-                projectRelativeFilePath,
-                (module, normalizedInputPath) =>
-                    CollectCompiledMethodSpans(module, normalizedInputPath, methodFilter),
-                Array.Empty<SourcePausePointCompiledMethodSpan>());
-        }
-
-        private static IReadOnlyList<SourcePausePointCompiledMethodSpan> CollectCompiledMethodSpans(
-            ModuleDefinition module,
-            string normalizedInputPath,
-            string methodFilter)
-        {
-            List<SourcePausePointCompiledMethodSpan> spans = new List<SourcePausePointCompiledMethodSpan>();
-            foreach (MethodDefinition method in EnumerateMethodsInModule(module))
-            {
-                if (!method.HasBody || !CompiledMethodMatchesFilter(methodFilter, method))
-                {
-                    continue;
-                }
-
-                (int startLine, int endLine) = CollectCompiledMethodSpan(method, normalizedInputPath);
-                if (startLine <= 0 || endLine <= 0)
-                {
-                    continue;
-                }
-
-                spans.Add(new SourcePausePointCompiledMethodSpan(startLine, endLine));
-            }
-
-            return spans;
-        }
-
         /// <summary>
         /// Collects every compiled method span in a file with the display name used in warnings.
         /// </summary>

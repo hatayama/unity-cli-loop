@@ -35,13 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         HotReloadAddedMethodAtLine FindAddedMethodContainingLine(string file, int line);
 
         /// <summary>
-        /// Argument is a forward-slash path (absolute or project-relative); returns whether hot
-        /// reload still has a live patch or an added method in that file, which is what makes
-        /// its edited lines differ from the last compiled line map.
-        /// </summary>
-        bool HasActiveHotReloadChangesInFile(string file);
-
-        /// <summary>
         /// Argument is a forward-slash path (absolute or project-relative); returns true when the
         /// file has an active shim generation and the file's current bytes on disk hash
         /// differently from the source that generation was compiled from, so the patch's line

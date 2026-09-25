@@ -22,8 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public System.Func<string, int, HotReloadAddedMethodAtLine> AddedMethodContainingLine { get; set; }
 
-        public System.Func<string, bool> ActiveHotReloadChangesInFile { get; set; }
-
         public System.Func<string, string> VerifiedSnapshotSourceForFile { get; set; }
 
         public System.Func<string, string, string> VerifiedSnapshotSource { get; set; }
@@ -58,16 +56,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return AddedMethodContainingLine != null
                 ? AddedMethodContainingLine(file, line)
                 : Inner?.FindAddedMethodContainingLine(file, line);
-        }
-
-        public bool HasActiveHotReloadChangesInFile(string file)
-        {
-            if (ActiveHotReloadChangesInFile != null)
-            {
-                return ActiveHotReloadChangesInFile(file);
-            }
-
-            return Inner != null && Inner.HasActiveHotReloadChangesInFile(file);
         }
 
         public bool HasShimSourceChangedOnDisk(string file)

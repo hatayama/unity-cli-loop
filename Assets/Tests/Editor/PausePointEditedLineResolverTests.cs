@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             AssertResolved(resolution, compiledLine: 13, editedLine: 13);
             Assert.That(resolution.EditedMethodStartLine, Is.EqualTo(10));
             Assert.That(resolution.EditedMethodEndLine, Is.EqualTo(16));
-            Assert.That(resolution.UsedFallback, Is.False);
+            Assert.That(resolution.LineBasis, Is.EqualTo("EditedFile"));
             Assert.That(resolution.Warning, Is.Empty);
         }
 

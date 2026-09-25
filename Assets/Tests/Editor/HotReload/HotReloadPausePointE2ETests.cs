@@ -238,7 +238,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(addedAtLine.MethodName, Is.EqualTo("AddedLead"));
             Assert.That(addedAtLine.DeclaringTypeName, Is.EqualTo(nameof(HotReloadE2EFixture)));
             Assert.That(addedAtLine.NestedOuterTypeName, Is.Null);
-            Assert.That(port.HasActiveHotReloadChangesInFile(FixtureProjectRelativePath), Is.True);
 
             PausePointResponse withoutMethod = EnableContinuous(compiledStatementLine);
 
