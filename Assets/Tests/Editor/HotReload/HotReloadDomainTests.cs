@@ -44,6 +44,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string RecordedWorkerSourcePath = "/worker-copy/DomainFileOne.cs";
         private const string RecordedSourceHash = "recorded-sha256";
 
+        // Two recorded paths where the second ends with the first, so a suffix lookup matches both.
+        private const string PlainRecordedPath = "Assets/Fixture/SuffixOwner.cs";
+        private const string NestedRecordedPath = "Packages/sample/Assets/Fixture/SuffixOwner.cs";
+
         private HotReloadDomainTestAccess _access;
 
         private HotReloadDomainTestScope _scope;
@@ -835,6 +839,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a path that ends with two recorded paths names neither of them for sure, so no
+        /// record answers for it rather than the wrong file's.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_PathEndingWithTwoRecordedPaths_ReturnsNull()
+        {
+            RecordReloadOfNestedAndPlainPaths();
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            HotReloadLatestFileReload latest = port.GetLatestReloadOfFile("/project-root/" + NestedRecordedPath);
+
+            Assert.That(latest, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a path that names one recorded path exactly gets that record, even though it also
+        /// ends with another recorded path.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_PathNamingOneRecordExactly_ReturnsThatRecordOverASuffixMatch()
+        {
+            RecordReloadOfNestedAndPlainPaths();
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            HotReloadLatestFileReload latest = port.GetLatestReloadOfFile(NestedRecordedPath);
+
+            Assert.That(latest, Is.Not.Null);
+            Assert.That(latest.UnappliedRows.Count, Is.EqualTo(1));
+            Assert.That(latest.UnappliedRows[0].Label, Is.EqualTo(SkippableLabel()));
+        }
+
+        /// <summary>
         /// What: an empty path has no latest reload.
         /// </summary>
         [Test]
@@ -992,6 +1028,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 rows.Length == 0,
                 RecordedWorkerSourcePath,
                 rows);
+        }
+
+        // Records PlainRecordedPath with no rows and NestedRecordedPath, which ends with it, with
+        // one Skipped row, so a lookup that returns a record shows which one it found.
+        private void RecordReloadOfNestedAndPlainPaths()
+        {
+            _access.Domain.AppliedSources.RecordAppliedSource(
+                PlainRecordedPath,
+                RecordedSourceHash,
+                true,
+                RecordedWorkerSourcePath,
+                Array.Empty<HotReloadUnappliedRow>());
+            _access.Domain.AppliedSources.RecordAppliedSource(
+                NestedRecordedPath,
+                RecordedSourceHash,
+                false,
+                RecordedWorkerSourcePath,
+                new[] { new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped) });
         }
 
         private static string SkippableLabel()
