@@ -71,9 +71,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: when the compiled source had three fewer lines above the class, enable on
-        /// AfterTarget's attribute line arms the mapped compiled line and reports the edited line.
-        /// In this harness the PDB line numbers match the file on disk, so the injected
+        /// What: when the compiled source had one line fewer above the class, enable on the line
+        /// before AfterTarget's declaration maps to the compiled declaration line, which has no
+        /// sequence point, rounds forward to the method's opening brace, and reports that brace's
+        /// edited line, one below the requested line. In this harness the PDB line numbers match the file on disk, so the injected
         /// snapshot plays the compiled source (the roles are reversed from production).
         /// </summary>
         [Test]
@@ -82,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
             int requestedLine = FindLineNumber(onDisk, "public int AfterTarget()") - 1;
             Assert.That(requestedLine, Is.GreaterThan(0));
-            string snapshotWithInsert = InsertBlankLinesAfterLine(onDisk, 9, 3);
+            string snapshotWithInsert = InsertBlankLinesAfterLine(onDisk, 9, 1);
             await HotReloadFromEditedSourceAsync(
                 BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk),
                 "LineDriftShiftedSnapshot.cs");
@@ -90,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             PausePointResponse enable = EnableFixtureLineWithSnapshot(requestedLine, (file, dllPath) => snapshotWithInsert);
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
-            Assert.That(enable.ResolvedLine, Is.EqualTo(requestedLine));
+            Assert.That(enable.ResolvedLine, Is.EqualTo(requestedLine + 1));
             Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.AfterTarget)));
             Assert.That(enable.LineBasis, Is.EqualTo("EditedFile"));
         }
