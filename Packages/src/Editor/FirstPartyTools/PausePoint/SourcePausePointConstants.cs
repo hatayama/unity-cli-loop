@@ -279,6 +279,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "file on disk. If that statement was added after the last compile, run 'uloop compile' "
             + "first, then retry.";
 
+        // Why a clause put before the line advice: a --method that names no method in the file fails
+        // on every line and after every compile, so the line advice alone cannot change the outcome.
+        public const string ResolveFailedMethodFilterNextActionPrefix =
+            "Check that --method is the simple name or 'Type.Method' of a method in --file (the match is "
+            + "case-sensitive), or drop --method. ";
+
         // Why a next action of its own: the statement always throws, so neither the path form nor a
         // compile changes the outcome; only the timing or the line does.
         public const string PostLineAlwaysThrowsRecommendedNextAction =

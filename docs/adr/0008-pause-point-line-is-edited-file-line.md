@@ -27,8 +27,10 @@ on disk now, whether or not hot reload has run.
 - A line with no compiled statement on or after it is refused with
   `PAUSE_POINT_RESOLVE_FAILED`. The message names the requested line and lists the nearby
   compiled methods' spans in edited-file lines, and the next action asks for a compile only
-  if the wanted statement was added after the last compile. A post-line request on a
-  statement that always throws names that statement's edited line.
+  if the wanted statement was added after the last compile. When `--method` was passed, the
+  next action first asks to check it: a name that matches no method in the file fails on every
+  line. A post-line request on a statement that always throws names that statement's edited
+  line.
 - Only when no verified snapshot exists for the file is `N` used as a compiled line number,
   reported as `LineBasis: LastCompiledSource` with one warning.
 

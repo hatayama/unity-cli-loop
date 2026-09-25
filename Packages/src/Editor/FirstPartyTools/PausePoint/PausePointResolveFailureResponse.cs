@@ -41,7 +41,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         : SourcePausePointConstants.NearbyCompiledMethodsPrefix,
                     resolveResult.NearbyCompiledMethods),
                 SourcePausePointConstants.ErrorCodeResolveFailed,
-                SelectRecommendedNextAction(resolveResult.FailureReason, editedFileBasis));
+                SelectRecommendedNextAction(
+                    resolveResult.FailureReason,
+                    editedFileBasis,
+                    !string.IsNullOrEmpty(parameters.Method)));
             List<string> resolveFailureWarnings = new List<string>();
             PausePointEnableWarningList.AddIfNotEmpty(
                 resolveFailureWarnings,
@@ -56,19 +59,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why the edited-file basis narrows the no-statement advice: the file was found in a
         // compiled assembly there, so the path form is not the cause, and a compile helps only
-        // when the wanted statement was added after the last compile.
+        // when the wanted statement was added after the last compile. Why a --method clause on
+        // either basis: a --method that names no method in the file fails on every line, so
+        // without it no advice the caller can follow changes the outcome.
         private static string SelectRecommendedNextAction(
             SourcePausePointResolveFailureReason reason,
-            bool editedFileBasis)
+            bool editedFileBasis,
+            bool methodFiltered)
         {
             if (reason == SourcePausePointResolveFailureReason.PostLineAlwaysThrows)
             {
                 return SourcePausePointConstants.PostLineAlwaysThrowsRecommendedNextAction;
             }
 
-            return editedFileBasis && reason == SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine
+            if (reason != SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine)
+            {
+                return SourcePausePointConstants.ResolveFailedRecommendedNextAction;
+            }
+
+            string lineAdvice = editedFileBasis
                 ? SourcePausePointConstants.ResolveFailedEditedFileRecommendedNextAction
                 : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
+            return methodFiltered
+                ? SourcePausePointConstants.ResolveFailedMethodFilterNextActionPrefix + lineAdvice
+                : lineAdvice;
         }
 
         // Refuses a line whose statement is inside a method hot reload added. The compiled resolver

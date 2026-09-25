@@ -76,6 +76,8 @@ If `enable-pause-point` fails, branch on the failure `ErrorCode` and follow `Rec
 
 If enable fails with a "No sequence point found" error (worded "No compiled statement exists on or after line N" when `--line` was read as a line of the file on disk) even for clearly executable lines, that script's assembly lacks debug sequence points and no line in the file can be patched. Move the pause point to a script in an assembly that carries them, such as a script under `Assets/`.
 
+A "No method named '<name>' ..." failure means no method matching `--method` has a statement on or after `--line`. The match is case-sensitive, on the simple name or `Type.Method`, and a name that matches no method in the file fails on every line and after every compile, so check `--method` (or drop it) before moving `--line`.
+
 ## Debug-switch trade-offs
 
 The warning that the Debug switch happened means the pause point is already armed: do not
