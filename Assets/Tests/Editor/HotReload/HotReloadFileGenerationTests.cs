@@ -21,7 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedMethodType = "FileGenerationFixture";
         private const string OtherAddedMethodKey = "FileGenerationFixture.OtherAddedMember()";
         private const string HostType = "Ns.Host";
-        private const string CompiledAssemblyPath = "<PROJECT_ROOT>/Library/ScriptAssemblies/Fixture.dll";
         private const string NestedCecilType = "Ns.Outer/Inner";
         private const string NestedReflectionType = "Ns.Outer+Inner";
 
@@ -164,58 +163,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(topLevel.MethodName, Is.EqualTo("AddedMember"));
             Assert.That(topLevel.DeclaringTypeName, Is.EqualTo("Host"));
             Assert.That(topLevel.NestedOuterTypeName, Is.Null);
-        }
-
-        /// <summary>
-        /// What: a generation with only added methods of a compiled type still names the compiled
-        /// assembly its verified snapshot is keyed on, so the compiled line map stays reachable
-        /// for a file whose reload added methods but patched none.
-        /// </summary>
-        [Test]
-        public void FindCompiledAssemblyLocation_AddedMethodsOfACompiledType_ReportTheirCompiledAssembly()
-        {
-            HotReloadFileGeneration generation = CreateGeneration();
-            generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(
-                AddedMethodKey,
-                GetAddedTarget(),
-                FixtureProjectRelativePath,
-                "AddedMember",
-                AddedMethodType,
-                compiledAssemblyPath: CompiledAssemblyPath);
-
-            Assert.That(generation.BuildShimLookup(), Is.Null);
-            Assert.That(generation.FindCompiledAssemblyLocation(), Is.EqualTo(CompiledAssemblyPath));
-            Assert.That(generation.HasActiveHotReloadChanges, Is.True);
-        }
-
-        /// <summary>
-        /// What: added methods that name no compiled assembly (an introduced type) leave the
-        /// generation without one, so such a file is never treated as having a compiled line map,
-        /// and a new added-member generation forgets the assembly the previous one named.
-        /// </summary>
-        [Test]
-        public void FindCompiledAssemblyLocation_AddedMethodsWithoutACompiledAssembly_ReportNone()
-        {
-            HotReloadFileGeneration generation = CreateGeneration();
-            generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-
-            Assert.That(generation.FindCompiledAssemblyLocation(), Is.Null);
-            Assert.That(generation.HasActiveHotReloadChanges, Is.True);
-
-            generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(
-                OtherAddedMethodKey,
-                GetAddedTarget(),
-                FixtureProjectRelativePath,
-                "AddedMember",
-                AddedMethodType,
-                compiledAssemblyPath: CompiledAssemblyPath);
-            generation.BeginAddedMemberGeneration();
-
-            Assert.That(generation.FindCompiledAssemblyLocation(), Is.Null);
-            Assert.That(generation.HasActiveHotReloadChanges, Is.False);
         }
 
         /// <summary>

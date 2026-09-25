@@ -515,44 +515,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// The compiled assembly the verified snapshot of this file is keyed on, or null when no
-        /// registered patched or added method names one.
-        /// </summary>
-        /// <remarks>
-        /// Why the first method: every method registered for one source file lives in the same
-        /// compiled assembly. Why added methods too: a reload that only added methods patches
-        /// nothing, and without them its file would lose the compiled line map that pause points
-        /// and the line-shift warning read.
-        /// </remarks>
-        internal string FindCompiledAssemblyLocation()
-        {
-            foreach (MethodBase originalMethod in _shimMethodsByMethod.Keys)
-            {
-                Type declaringType = originalMethod.DeclaringType;
-                if (declaringType == null)
-                {
-                    continue;
-                }
-
-                string dllPath = declaringType.Assembly.Location;
-                if (!string.IsNullOrEmpty(dllPath))
-                {
-                    return dllPath;
-                }
-            }
-
-            foreach (HotReloadAddedMemberInfo member in _addedMembersByMethodKey.Values)
-            {
-                if (!string.IsNullOrEmpty(member.CompiledAssemblyPath))
-                {
-                    return member.CompiledAssemblyPath;
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
         /// This file's shim bytes and the methods pause-point may resolve markers against, or null
         /// when no registered method is still patched.
         /// </summary>
