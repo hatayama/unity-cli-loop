@@ -17,6 +17,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private const string ForwardSlashFile = "Assets/Scripts/Example.cs";
 
+        // The same file as ForwardSlashFile, spelled the way a Windows caller may pass it.
+        private const string BackslashFile = "Assets\\Scripts\\Example.cs";
+
+        private const string UnchangedFile = "Assets/Scripts/Unchanged.cs";
+
         private const int SpanStartLine = 20;
 
         private const int SpanEndLine = 30;
@@ -92,6 +97,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: once a file changed on disk after its hot reload, a line's patched span is not
+        /// returned, because the span is in the coordinates of the source the hot reload compiled;
+        /// the file is matched with forward slashes, and a file that did not change keeps its span.
+        /// </summary>
+        [Test]
+        public void FindPatchedSpanContainingEditedLineOrNull_WhenTheFileChangedOnDiskSinceTheHotReload_ReturnsNull()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateLookup(SpanStartLine, SpanEndLine);
+                scope.Port.ShimSourceChangedOnDisk = file => file == ForwardSlashFile;
+
+                Assert.That(
+                    PausePointPatchedEditedSpanLocator.FindPatchedSpanContainingEditedLineOrNull(BackslashFile, 25),
+                    Is.Null);
+                AssertSpan(
+                    PausePointPatchedEditedSpanLocator.FindPatchedSpanContainingEditedLineOrNull(UnchangedFile, 25));
+            }
+        }
+
+        /// <summary>
+        /// What: once a file changed on disk after its hot reload, a patched method's span is not
+        /// returned either, so the patcher's refusal carries no range from the source the hot reload
+        /// compiled, while a file that did not change still returns the method's span.
+        /// </summary>
+        [Test]
+        public void FindPatchedSpanOfMethodOrNull_WhenTheFileChangedOnDiskSinceTheHotReload_ReturnsNull()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateLookup(SpanStartLine, SpanEndLine);
+                scope.Port.ShimSourceChangedOnDisk = file => file == ForwardSlashFile;
+                MethodBase probe = FindSpanProbe();
+
+                Assert.That(
+                    PausePointPatchedEditedSpanLocator.FindPatchedSpanOfMethodOrNull(BackslashFile, probe),
+                    Is.Null);
+                AssertSpan(PausePointPatchedEditedSpanLocator.FindPatchedSpanOfMethodOrNull(UnchangedFile, probe));
+            }
+        }
+
         internal static int SpanProbe()
         {
             return 424242;
@@ -104,12 +151,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(span.EndLine, Is.EqualTo(SpanEndLine));
         }
 
-        private static HotReloadShimFileLookup CreateLookup(int sourceStartLine, int sourceEndLine)
+        private static MethodBase FindSpanProbe()
         {
             MethodBase probe = typeof(PausePointPatchedEditedSpanLocatorTests).GetMethod(
                 nameof(SpanProbe),
                 BindingFlags.Static | BindingFlags.NonPublic);
             Assert.That(probe, Is.Not.Null);
+            return probe;
+        }
+
+        private static HotReloadShimFileLookup CreateLookup(int sourceStartLine, int sourceEndLine)
+        {
+            MethodBase probe = FindSpanProbe();
             return new HotReloadShimFileLookup(
                 Array.Empty<byte>(),
                 Array.Empty<byte>(),

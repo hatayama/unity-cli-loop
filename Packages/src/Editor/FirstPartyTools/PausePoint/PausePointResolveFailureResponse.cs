@@ -73,6 +73,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointConstants.AddedMethodResolveFailureNextAction);
         }
 
+        // Refuses a line whose statement, or whose next statement, is inside a method hot reload
+        // patched. Why not LINE_NOT_COMPILED: its next action says to hot-reload and retry, but the
+        // method is already patched, so that retry returns the same refusal. patchedLine is the
+        // line inside the patched method, which differs from the requested line when the
+        // requested line has no statement and the next one is inside the patched method.
+        internal static PausePointResponse CreatePatchedMethodRefusal(
+            EnablePausePointSchema parameters,
+            int patchedLine,
+            PausePointPatchedEditedSpan span)
+        {
+            string message = patchedLine == parameters.Line
+                ? string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalMessageFormat,
+                    parameters.Line,
+                    span.Label,
+                    span.StartLine,
+                    span.EndLine)
+                : string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodNextStatementRefusalMessageFormat,
+                    parameters.Line,
+                    patchedLine,
+                    span.Label,
+                    span.StartLine,
+                    span.EndLine);
+            return PausePointFailureResponse.Create(
+                message,
+                SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                    parameters.Line,
+                    span.Label,
+                    span.StartLine,
+                    span.EndLine));
+        }
+
         // Why the resolver's own sentence is dropped: it names a line and reads as a second,
         // competing reason, so the caller retries with other line numbers instead of hot reloading
         // the method. The first sentence already covers every line in the file.

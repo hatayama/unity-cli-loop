@@ -21,7 +21,9 @@ on disk now, whether or not hot reload has run.
   A line inside a method hot reload added is refused with `PAUSE_POINT_RESOLVE_FAILED`;
   `--method` no longer arms a compiled method there.
 - A line that rounds onto the compiled body of a patched method is refused with
-  `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`, naming that method's edited line range.
+  `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`, naming that method's edited line range. So is a line
+  whose forward rounding would cross an uncompiled statement inside a patched method's edited
+  body: that method is already patched, so another hot reload would return the same refusal.
 - Only when no verified snapshot exists for the file is `N` used as a compiled line number,
   reported as `LineBasis: LastCompiledSource` with one warning.
 

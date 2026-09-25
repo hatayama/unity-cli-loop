@@ -517,6 +517,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(response.Success, Is.False);
                 Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
                 Assert.That(response.Message, Does.Contain("beyond the end"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.LineNotCompiledBeyondEndOfFileRecommendedNextActionFormat,
+                            15)));
             }
         }
 
@@ -804,6 +810,117 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a blank line whose next statement is inside a hot-reload patched method is refused
+        /// as patched by hot reload with the method's edited range, not as line-not-compiled, so the
+        /// caller is not told to hot-reload a method that is already patched, and no marker is armed.
+        /// </summary>
+        [Test]
+        public void Enable_BlankLineWhoseNextStatementIsInsideAPatchedMethod_RefusesWithTheEditedBodyRange()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotBeforeAddWasEdited();
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureBlankLineAboveMethod + 1,
+                    FixtureClosingBraceLine);
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureBlankLineAboveMethod,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(
+                    response.ErrorCode,
+                    Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodNextStatementRefusalMessageFormat,
+                            FixtureBlankLineAboveMethod,
+                            FixtureBlankLineAboveMethod + 1,
+                            "EnableBySourceLocationFixture.Add",
+                            FixtureBlankLineAboveMethod + 1,
+                            FixtureClosingBraceLine)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                            FixtureBlankLineAboveMethod,
+                            "EnableBySourceLocationFixture.Add",
+                            FixtureBlankLineAboveMethod + 1,
+                            FixtureClosingBraceLine)));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
+        /// What: once the file changed on disk after the hot reload, the same blank line is refused
+        /// as line-not-compiled naming its next statement, not with the patched method's range,
+        /// because that range is in the coordinates of the source the hot reload compiled, and
+        /// hot reloading again is what refreshes it.
+        /// </summary>
+        [Test]
+        public void Enable_BlankLineWhoseNextStatementIsInsideAPatchedMethodWhoseFileChangedOnDisk_RefusesLineNotCompiled()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotBeforeAddWasEdited();
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureBlankLineAboveMethod + 1,
+                    FixtureClosingBraceLine);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureBlankLineAboveMethod,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
+                Assert.That(response.Message, Does.Contain("the next statement, line " + (FixtureBlankLineAboveMethod + 1)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.LineNotCompiledRecommendedNextAction));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
+        /// What: the same blank line whose next statement was added after the last compile, with no
+        /// patched method in the file, is still refused as line-not-compiled naming that statement.
+        /// </summary>
+        [Test]
+        public void Enable_BlankLineWhoseNextStatementIsUncompiledOutsideEveryPatchedMethod_RefusesLineNotCompiled()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotBeforeAddWasEdited();
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureBlankLineAboveMethod,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
+                Assert.That(response.Message, Does.Contain("the next statement, line " + (FixtureBlankLineAboveMethod + 1)));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
         /// What: a line below a patched method's edited body that resolves into that method is
         /// refused with the method's edited body range, not with --method guidance, and no marker
         /// is armed.
@@ -841,6 +958,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             FixtureStatementLine - 1,
                             FixtureStatementLine - 1)));
                 Assert.That(response.RecommendedNextAction, Does.Not.Contain("--method"));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
+        /// What: once the file changed on disk after the hot reload, a line below the patched method
+        /// that resolves into it is still refused as patched by hot reload, but without an edited
+        /// body range, because the recorded range is in the coordinates of the source the hot reload
+        /// compiled, and no marker is armed.
+        /// </summary>
+        [Test]
+        public void Enable_LineBelowAPatchedMethodWhoseFileChangedOnDisk_RefusesWithoutAnEditedBodyRange()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 1,
+                    FixtureStatementLine - 1);
+                scope.Port.ActiveShimForMethod = method =>
+                    method.Name == nameof(EnableBySourceLocationFixture.Add) ? method : null;
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureClosingBraceLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(
+                    response.ErrorCode,
+                    Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalMessageFormat,
+                            FixtureClosingBraceLine,
+                            "EnableBySourceLocationFixture.Add")));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction));
                 Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
             }
         }
@@ -988,6 +1149,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null,
                 null,
                 methods);
+        }
+
+        // Plays the last compiled source of the fixture from before an edit that inserted the
+        // blank line 8, dropped a trailing comment from Add's declaration, and rewrote its two
+        // statements. Add keeps its signature, so hot reload patches it in place rather than
+        // adding it, and on disk the blank line 8, the declaration on line 9, and the two
+        // statements on lines 11-12 have no compiled counterpart.
+        private static string CreateSnapshotBeforeAddWasEdited()
+        {
+            string onDisk = File.ReadAllText(
+                Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), FixtureFilePath));
+            string snapshot = onDisk
+                .Replace(
+                    "\n\n        public int Add(int left, int right)",
+                    "\n        public int Add(int left, int right) // sums both operands")
+                .Replace("int sum = left + right;", "int result = left + right;")
+                .Replace("return sum;", "return result;");
+            Assert.That(snapshot, Is.Not.EqualTo(onDisk));
+            return snapshot;
         }
 
         // The test assembly stands in for a shim assembly: its PDB maps the fixture file, so the

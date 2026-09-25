@@ -5,7 +5,8 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Finds hot-reload patched methods' edited-file spans, by a line they hold or by the method.
+    /// Finds hot-reload patched methods' edited-file spans, by a line they hold or by the method,
+    /// while the file on disk is still the source the hot reload compiled.
     /// </summary>
     internal static class PausePointPatchedEditedSpanLocator
     {
@@ -89,10 +90,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : "?." + method.Name;
         }
 
+        // Why no spans once the file changed on disk: they are lines of the source the hot reload
+        // compiled, so compared with edited-file lines they would place a line in a method it is
+        // not part of. Callers fall back to text without a range, or to refusals whose next action
+        // is a hot reload, which records spans for the file on disk again.
         private static HotReloadShimFileLookup FindShimLookupOrNull(string file)
         {
-            HotReloadShimFileLookup lookup = HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(
-                SourcePausePointPathNormalizer.ToForwardSlashes(file));
+            IHotReloadPausePointPort hotReloadSide = HotReloadPausePointCoordination.HotReloadSide;
+            string forwardSlashFile = SourcePausePointPathNormalizer.ToForwardSlashes(file);
+            if (hotReloadSide == null || hotReloadSide.HasShimSourceChangedOnDisk(forwardSlashFile))
+            {
+                return null;
+            }
+
+            HotReloadShimFileLookup lookup = hotReloadSide.GetShimLookupForFile(forwardSlashFile);
             return lookup?.Methods == null ? null : lookup;
         }
 

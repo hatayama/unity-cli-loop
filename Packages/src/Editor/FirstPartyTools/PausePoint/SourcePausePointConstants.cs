@@ -350,6 +350,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadPatchedMethodRefusalNextActionFormat =
             "Retry with --line between {2} and {3}.";
 
+        // Why a variant: when the requested line has no statement and the next statement is
+        // inside the patched method, "Line {0} resolves to a statement inside" would place the
+        // requested line in a method it is not part of. Format: requested line, statement line
+        // inside the patched method, patched method display name, edited start line, edited end line.
+        public const string HotReloadPatchedMethodNextStatementRefusalMessageFormat =
+            "Line {0} has no compiled statement of its own, and the next statement, line {1}, is "
+            + "inside '{2}', which hot reload patched, so the compiled body no longer runs. Pass "
+            + "--line inside the method's edited body (lines {3}-{4}).";
+
         // Why a range-less variant: without the method's shim entry the edited range is unknown,
         // and a guessed range would send the caller to a line that is not in the patched body.
         // Format: requested line, patched method display name.
@@ -439,6 +448,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string LineNotCompiledRecommendedNextAction =
             "Run 'uloop hot-reload' (a pause point inside a hot-reload patched method arms the edited code) or 'uloop compile', then retry with the same --line. To arm compiled code instead, pass --line for a statement that is unchanged since the last compile.";
+
+        // Why a next action of its own: hot reload and compile do not change how many lines the
+        // file on disk has, so the shared "hot-reload or compile, then retry with the same --line"
+        // would return the same refusal. Format: line count of the file on disk.
+        public const string LineNotCompiledBeyondEndOfFileRecommendedNextActionFormat =
+            "Pass --line between 1 and {0}; the file on disk has {0} lines. If your editor shows more "
+            + "lines, save the file and retry.";
 
         // Why only a warning: without a verified snapshot there is nothing to map edited lines
         // against, and refusing would make pause points unusable in files such as package sources.

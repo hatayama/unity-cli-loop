@@ -4,19 +4,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Builds the PAUSE_POINT_LINE_NOT_COMPILED refusals for an edited --line that has no
-    /// compiled statement to arm. Every refusal shares one next action, so the caller gets a
-    /// single instruction whichever case applies.
+    /// compiled statement to arm. Every refusal but a line past the end of the file shares one
+    /// next action, so the caller gets a single instruction whichever of those cases applies.
     /// </summary>
     internal static class PausePointLineNotCompiledRefusal
     {
         internal static PausePointResponse BeyondEndOfFile(string file, int requestedLine, int editedLineCount)
         {
             AssertRequest(file, requestedLine);
-            return Create(string.Format(
-                SourcePausePointConstants.LineNotCompiledBeyondEndOfFileMessageFormat,
-                requestedLine,
-                file,
-                editedLineCount));
+            return PausePointFailureResponse.Create(
+                string.Format(
+                    SourcePausePointConstants.LineNotCompiledBeyondEndOfFileMessageFormat,
+                    requestedLine,
+                    file,
+                    editedLineCount),
+                SourcePausePointConstants.ErrorCodePausePointLineNotCompiled,
+                string.Format(
+                    SourcePausePointConstants.LineNotCompiledBeyondEndOfFileRecommendedNextActionFormat,
+                    editedLineCount));
         }
 
         internal static PausePointResponse NoCompiledLineAtOrAfter(string file, int requestedLine)
