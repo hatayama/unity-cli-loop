@@ -235,7 +235,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private void RecordAppliedSourceOnly(string projectRelativePath, bool isFullyApplied = true)
         {
             string workerSourcePath = WriteWorkerSource(projectRelativePath);
-            _access.Domain.RecordAppliedSource(
+            _access.Domain.AppliedSources.RecordAppliedSource(
                 projectRelativePath,
                 new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(workerSourcePath)),
                 isFullyApplied);
@@ -253,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private void RecordEvidence(string projectRelativePath, string assemblyName)
         {
-            _access.Domain.RecordNewSourceMembershipEvidence(
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(
                 projectRelativePath,
                 new HotReloadNewSourceMembershipEvidence(
                     projectRelativePath,

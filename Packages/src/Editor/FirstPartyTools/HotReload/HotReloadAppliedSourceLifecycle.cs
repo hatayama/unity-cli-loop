@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string probeHash = new HotReloadSourceContentHasher().ComputeContentHash(probeBytes);
             HashSet<string> activeLabels = CollectActiveLabelsForFile(domain, projectRelativePath);
             (string Hash, bool IsFullyApplied)? recorded =
-                domain.TryGetAppliedSource(projectRelativePath);
+                domain.AppliedSources.TryGetAppliedSource(projectRelativePath);
             if (recorded == null
                 || !string.Equals(probeHash, recorded.Value.Hash, StringComparison.Ordinal)
                 || (recorded.Value.IsFullyApplied && activeLabels.Count == 0))

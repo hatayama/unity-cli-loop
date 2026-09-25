@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (HotReloadDomain domain = HotReloadCompositionRoot.CreateProductionDomain())
             {
-                domain.RecordAppliedSource(EnumPath, CurrentHash, false);
+                domain.AppliedSources.RecordAppliedSource(EnumPath, CurrentHash, false);
                 HotReloadRunSiblingLedgerUpdates updates = new HotReloadRunSiblingLedgerUpdates(domain);
                 updates.Observe(EnumPath, SkippedResult(EnumPath));
                 updates.ApplyTo(domain);
