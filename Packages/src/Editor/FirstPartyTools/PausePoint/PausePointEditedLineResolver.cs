@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -121,6 +122,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string.Empty,
                 usedFallback: false);
         }
+
+        // Without a verified snapshot there is nothing to map through, so the lines stay
+        // compiled lines and the warning says so instead of passing them off as edited lines.
+        internal static PausePointEditedLineResolution Fallback(
+            SourcePausePointResolveResult result,
+            string file,
+            int requestedLine)
+        {
+            Debug.Assert(result != null, "result must not be null.");
+            if (!result.Success)
+            {
+                return new PausePointEditedLineResolution(
+                    result, 0, 0, 0, 0, LastCompiledSourceLineBasis, null, string.Empty, usedFallback: true);
+            }
+
+            SourcePausePointResolution resolution = result.Resolution;
+            return new PausePointEditedLineResolution(
+                result,
+                resolution.ResolvedLine,
+                resolution.ResolvedEndLine,
+                resolution.CompiledMethodStartLine,
+                resolution.CompiledMethodEndLine,
+                LastCompiledSourceLineBasis,
+                null,
+                string.Format(SourcePausePointConstants.NoVerifiedSnapshotLineBasisWarningFormat, file, requestedLine),
+                usedFallback: true);
+        }
     }
 
     /// <summary>
@@ -131,6 +159,63 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class PausePointEditedLineResolver
     {
+        // normalizedFile must already use forward slashes, and parameters.Line is validated by the use case.
+        internal static PausePointEditedLineResolution Resolve(
+            EnablePausePointSchema parameters,
+            string normalizedFile,
+            SourcePausePointSnapshotTiming timing)
+        {
+            Debug.Assert(parameters != null && parameters.Line > 0, "parameters.Line must be a positive 1-based line number.");
+            Debug.Assert(!string.IsNullOrEmpty(normalizedFile), "normalizedFile must not be null or empty.");
+
+            PausePointEditedLineMap map = BuildMapOrNull(normalizedFile);
+            if (map == null)
+            {
+                return PausePointEditedLineResolution.Fallback(
+                    SourcePausePointResolver.Resolve(normalizedFile, parameters.Line, parameters.Method, timing),
+                    normalizedFile,
+                    parameters.Line);
+            }
+
+            PausePointEditedLineResolveContext context = new PausePointEditedLineResolveContext(
+                map,
+                normalizedFile,
+                parameters,
+                compiledLine => SourcePausePointResolver.Resolve(normalizedFile, compiledLine, parameters.Method, timing),
+                editedLine => PausePointPatchedEditedSpanLocator.FindPatchedSpanContainingEditedLineOrNull(normalizedFile, editedLine),
+                editedLine => PausePointAddedMethodScope.FindAddedMethodContainingLineOrNull(normalizedFile, editedLine));
+            return ResolveThroughMap(context);
+        }
+
+        // Null means fall back to compiled lines: no compiled assembly (the resolver then reports
+        // the same failure), no verified snapshot, no file on disk, or a diff too large to map.
+        private static PausePointEditedLineMap BuildMapOrNull(string normalizedFile)
+        {
+            SourcePausePointCompiledAssemblyLocation location = SourcePausePointCompiledAssemblyLocator.Locate(normalizedFile);
+            if (!location.Found)
+            {
+                return null;
+            }
+
+            // Why the dll-path port: the file-only port returns null until the first hot reload,
+            // which would send every Editor that has not reloaded yet down the fallback.
+            string compiledSource = HotReloadPausePointCoordination.HotReloadSide?.GetVerifiedSnapshotSource(
+                normalizedFile,
+                location.AssemblyPath);
+            if (string.IsNullOrEmpty(compiledSource))
+            {
+                return null;
+            }
+
+            string editedFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
+            if (!File.Exists(editedFilePath))
+            {
+                return null;
+            }
+
+            return PausePointEditedLineMap.BuildOrNull(compiledSource, File.ReadAllText(editedFilePath));
+        }
+
         internal static PausePointEditedLineResolution ResolveThroughMap(PausePointEditedLineResolveContext context)
         {
             Debug.Assert(context != null, "context must not be null.");
