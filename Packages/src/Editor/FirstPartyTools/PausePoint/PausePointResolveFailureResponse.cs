@@ -59,8 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // so there is no resolver sentence to keep.
         internal static PausePointResponse CreateAddedMethodRefusal(
             EnablePausePointSchema parameters,
-            string addedMethodName,
-            bool methodFilterIsAmbiguous)
+            string addedMethodName)
         {
             return PausePointFailureResponse.Create(
                 string.Format(
@@ -68,9 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     addedMethodName),
                 SourcePausePointConstants.ErrorCodeResolveFailed,
-                methodFilterIsAmbiguous
-                    ? SourcePausePointConstants.AmbiguousAddedMethodResolveFailureNextAction
-                    : SourcePausePointConstants.AddedMethodResolveFailureNextAction);
+                SourcePausePointConstants.AddedMethodResolveFailureNextAction);
         }
 
         // Why the resolver's own sentence is dropped: it names a line and reads as a second,
