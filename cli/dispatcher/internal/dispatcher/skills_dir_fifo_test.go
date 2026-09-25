@@ -19,7 +19,7 @@ func TestRunSkillsDirListIgnoresForeignFifo(t *testing.T) {
 	destinationDir := filepath.Join(root, "apm-skills")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, nil, stdout, stderr); code != 0 {
 		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
 	}
 	fifoPath := filepath.Join(destinationDir, "uloop-sample", "queue.pipe")
@@ -28,7 +28,7 @@ func TestRunSkillsDirListIgnoresForeignFifo(t *testing.T) {
 	}
 
 	stdout.Reset()
-	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, nil, stdout, stderr)
 
 	if code != 0 {
 		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
