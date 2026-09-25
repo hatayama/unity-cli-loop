@@ -213,8 +213,8 @@ const (
 	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: reasons a wait saw no hit —
 	// the awaited event simply not having happened, a physics/message callback missing a
 	// pre-existing GameObject, a pre-bound delegate
-	// bypassing the patch, control flow exiting on an earlier branch, or --line resolving
-	// against a compiled map that no longer matches the editor after a hot reload. Kept as a
+	// bypassing the patch, control flow exiting on an earlier branch, or --line arming a
+	// compiled line number because the file had no verified source snapshot. Kept as a
 	// single constant so the two hints stay in sync instead of drifting copies of the same
 	// diagnosis.
 	pausePointNonFiringPatternsHint = "If the target line never hit, check the non-firing patterns: " +
@@ -222,9 +222,8 @@ const (
 		"(1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; " +
 		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; " +
 		"(3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. " +
-		"(4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable." +
-		" For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too." +
-		" Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file."
+		"(4) the enable response reported LineBasis 'LastCompiledSource' (no verified source snapshot for the file), so the armed line is a compiled line number that may not match the editor — check ResolvedMethod, or run 'uloop compile' and re-enable." +
+		" For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too."
 
 	// pausePointHintSuppressedByHotReload short-circuits every other timeout diagnosis:
 	// a suppressed marker cannot fire no matter what the caller does in PlayMode.
