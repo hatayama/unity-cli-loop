@@ -241,6 +241,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ErrorCodePatchFailed = "PAUSE_POINT_PATCH_FAILED";
         public const string ErrorCodePausePointPatchedByHotReload = "PAUSE_POINT_PATCHED_BY_HOT_RELOAD";
         public const string ErrorCodePatchedSourceChanged = "PAUSE_POINT_PATCHED_SOURCE_CHANGED";
+        // A --line that is not in the last compiled source (added or changed since, or past the end
+        // of the file) has its own code because the fix is to compile or pick a compiled line,
+        // not to correct the path or the line syntax as RESOLVE_FAILED asks.
+        public const string ErrorCodePausePointLineNotCompiled = "PAUSE_POINT_LINE_NOT_COMPILED";
 
         // Why: Debug mode is lost on every Editor restart (including uloop launch -r), so the
         // recovery steps must remind callers to re-switch after restart rather than only once.
@@ -532,5 +536,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: original --line, --method name, remapped compiled line.
         public const string EditedLineRemapWarningFormat =
             "--line {0} in method '{1}' was matched by its text to line {2} in the last compiled source, so the marker was placed at line {2}, not at line {0}. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers.";
+
+        // The line-not-compiled refusal messages name only the requested line and the line
+        // that blocks it. Why no "the next compiled line is N" hint: suggesting another line made
+        // agents retry with numbers from a different coordinate system, and the fix is to compile
+        // or to pick an unchanged statement the caller can see in the editor.
+        // Format: requested line, file, edited file line count.
+        public const string LineNotCompiledBeyondEndOfFileMessageFormat =
+            "Line {0} is beyond the end of '{1}' ({2} lines).";
+
+        // Format: requested line, file.
+        public const string LineNotCompiledNoCompiledLineAtOrAfterMessageFormat =
+            "No compiled line exists at or after line {0} of '{1}'; the lines from {0} to the end of the file are not in the last compiled source.";
+
+        // Format: requested line, file, trimmed text of the requested line.
+        public const string LineNotCompiledChangedLineMessageFormat =
+            "Line {0} of '{1}' ('{2}') is not in the last compiled source (added or changed after the last compile).";
+
+        // Format: requested line, file, uncompiled statement line, its trimmed text.
+        public const string LineNotCompiledNextStatementUncompiledMessageFormat =
+            "Line {0} of '{1}' has no compiled statement of its own, and the next statement, line {2} ('{3}'), is not in the last compiled source (added or changed after the last compile).";
+
+        // Format: requested line, file, trimmed text of the compiled statement the line resolved to.
+        public const string LineNotCompiledStatementRemovedMessageFormat =
+            "Line {0} of '{1}' resolves to the compiled statement '{2}', which no longer exists at that place in the edited file (removed or changed after the last compile).";
+
+        public const string LineNotCompiledRecommendedNextAction =
+            "Run 'uloop hot-reload' (a pause point inside a hot-reload patched method arms the edited code) or 'uloop compile', then retry with the same --line. To arm compiled code instead, pass --line for a statement that is unchanged since the last compile.";
+
+        // Why only a warning: without a verified snapshot there is nothing to map edited lines
+        // against, and refusing would make pause points unusable in files such as package sources.
+        // Format: file, requested line.
+        public const string NoVerifiedSnapshotLineBasisWarningFormat =
+            "No verified source snapshot exists for '{0}', so --line {1} was resolved against the last compiled source and ResolvedLine is a compiled line number. Run 'uloop compile' to refresh the snapshot.";
     }
 }
