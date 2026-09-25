@@ -1,7 +1,4 @@
-using System.Collections.Generic;
 using System.Diagnostics;
-
-using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -117,25 +114,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return PausePointFailureResponse.Create(
                 message + string.Format(
                     SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat,
-                    DescribeRows(fileState.UnappliedRows)),
+                    fileState.DescribeUnappliedRows()),
                 SourcePausePointConstants.ErrorCodePausePointLineNotCompiled,
                 SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction);
-        }
-
-        // Why every row, in reported order: the caller finds each one in the hot reload response
-        // by its Methods[].Method string, and a cut list could drop the row that holds the line.
-        private static string DescribeRows(IReadOnlyList<HotReloadUnappliedRow> rows)
-        {
-            List<string> described = new List<string>(rows.Count);
-            foreach (HotReloadUnappliedRow row in rows)
-            {
-                string outcome = row.Kind == HotReloadUnappliedRowKind.Skipped
-                    ? SourcePausePointConstants.HotReloadLeftBehindSkippedVerb
-                    : SourcePausePointConstants.HotReloadLeftBehindFailedVerb;
-                described.Add("'" + row.Label + "' (" + outcome + ")");
-            }
-
-            return string.Join(", ", described);
         }
 
         private static void AssertRequest(string file, int requestedLine)

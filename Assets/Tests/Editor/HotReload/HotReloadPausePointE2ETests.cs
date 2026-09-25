@@ -38,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string LeftBehindCopyFileName = "E2E_left_behind.cs";
         private const string SkippedOnlyCopyFileName = "E2E_skipped_only.cs";
         private const string EditedAfterReloadCopyFileName = "E2E_edited_after_reload.cs";
+        private const string SyntaxErrorCopyFileName = "E2E_syntax_error.cs";
 
         private HotReloadDomainTestScope _scope;
 
@@ -344,6 +345,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: after a reload patched ComputeWithPrivate and a later reload of the same copy could
+        /// not parse it, which keeps the earlier patch and builds no new generation, a line of
+        /// ComputeWithPrivate is refused as an earlier reload's body that lists the '(file)' row and
+        /// offers fixing its Reason and reloading, since a compile stops on the same syntax error.
+        /// </summary>
+        [Test]
+        public async Task PatchThenSyntaxError_LineOfTheEarlierPatch_ListsTheFileRow()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            string patched = ShiftComputeWithPrivateDownTwoLines(BuildEditedComputePlusHundred(onDisk));
+            await HotReloadFromEditedSourceAsync(patched, SyntaxErrorCopyFileName);
+            string broken = patched.Replace("int total = cells.Count;", "int total = cells.Count", StringComparison.Ordinal);
+            Assert.That(broken, Is.Not.EqualTo(patched));
+            HotReloadOrchestratorResult failing = await RunHotReloadOnEditedCopyAsync(broken, SyntaxErrorCopyFileName);
+            Assert.That(
+                failing.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Failed && m.Method == "(file)"),
+                Is.True,
+                FormatHotReloadOutcomes(failing));
+
+            PausePointResponse enable = EnableContinuous(enableLine);
+
+            Assert.That(enable.Success, Is.False, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+            Assert.That(
+                enable.Message,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalMessageFormat,
+                        enableLine,
+                        nameof(HotReloadE2EFixture) + "." + nameof(HotReloadE2EFixture.ComputeWithPrivate),
+                        DescribeUnappliedRows(failing))));
+            Assert.That(
+                enable.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalNextAction));
+            Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: a reload that skipped CallsBase with no earlier patch leaves its compiled body
         /// running, so an unchanged line of it still arms the compiled code.
         /// </summary>
@@ -503,6 +543,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 source);
         }
 
+        // The Skipped and Failed rows of the response in reported order, as a refusal lists them.
+        private static string DescribeUnappliedRows(HotReloadOrchestratorResult result)
+        {
+            return string.Join(
+                ", ",
+                result.Methods
+                    .Where(m => m.Kind == HotReloadMethodOutcomeKind.Skipped || m.Kind == HotReloadMethodOutcomeKind.Failed)
+                    .Select(m => "'" + m.Method + "' ("
+                        + (m.Kind == HotReloadMethodOutcomeKind.Skipped
+                            ? SourcePausePointConstants.HotReloadLeftBehindSkippedVerb
+                            : SourcePausePointConstants.HotReloadLeftBehindFailedVerb)
+                        + ")"));
+        }
+
         private static string FindSkippedLabel(HotReloadOrchestratorResult result, string methodName)
         {
             HotReloadMethodOutcome skipped = result.Methods.FirstOrDefault(
@@ -535,17 +589,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fileName,
             bool requirePatched = true)
         {
-            string fixturePath = ResolveFixtureAbsolutePath();
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
-            Directory.CreateDirectory(directory);
-            string editedPath = Path.Combine(directory, fileName);
-            File.WriteAllText(editedPath, editedSource);
-
-            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                new[] { fixturePath },
-                editedPath,
-                CancellationToken.None);
+            HotReloadOrchestratorResult result = await RunHotReloadOnEditedCopyAsync(editedSource, fileName);
             Assert.That(
                 result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Failed),
                 Is.False,
@@ -559,6 +603,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return result;
+        }
+
+        // Writes the copy and hot reloads the fixture from it, whatever the reload reports.
+        private static async Task<HotReloadOrchestratorResult> RunHotReloadOnEditedCopyAsync(
+            string editedSource,
+            string fileName)
+        {
+            string fixturePath = ResolveFixtureAbsolutePath();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string editedPath = Path.Combine(directory, fileName);
+            File.WriteAllText(editedPath, editedSource);
+
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
         }
 
         private static string ResolveFixtureAbsolutePath()

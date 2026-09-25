@@ -79,6 +79,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _side.FindUnappliedRowForMethod(_normalizedFile, method);
         }
 
+        // Why every row, in reported order: the caller finds each one in the hot reload response
+        // by its Methods[].Method string, and a cut list could drop the row that holds the line.
+        internal string DescribeUnappliedRows()
+        {
+            List<string> described = new List<string>(UnappliedRows.Count);
+            foreach (HotReloadUnappliedRow row in UnappliedRows)
+            {
+                string outcome = row.Kind == HotReloadUnappliedRowKind.Skipped
+                    ? SourcePausePointConstants.HotReloadLeftBehindSkippedVerb
+                    : SourcePausePointConstants.HotReloadLeftBehindFailedVerb;
+                described.Add("'" + row.Label + "' (" + outcome + ")");
+            }
+
+            return string.Join(", ", described);
+        }
+
         internal static PausePointHotReloadFileState Read(string normalizedFile)
         {
             IHotReloadPausePointPort side = HotReloadPausePointCoordination.HotReloadSide;

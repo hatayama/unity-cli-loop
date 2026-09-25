@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (fileState.LatestReloadReadFileAsItIs)
             {
-                return LeftBehind(fileState.FindUnappliedRowForMethodOrNull(method), methodName, requestedLine);
+                return LeftBehind(fileState, method, methodName, requestedLine);
             }
 
             // Why the range-less text without a record: nothing says which reload left this patch,
@@ -91,26 +91,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction);
         }
 
-        // Why a row changes the next action: the row's Reason names what to change so that a
-        // reload applies the method again, whereas without a row only a compile replaces the
-        // earlier body.
+        // Why the rows decide the next action: a row's Reason names what to change so that a
+        // reload applies the method again. Without a row for the method, the rows the reload did
+        // leave name what kept the file from being applied (a '(file)' row's error stops a compile
+        // too), and the method's own row may be among them under another spelling of its
+        // parameter types. Only with no row at all does a compile alone replace the earlier body.
         private static SourcePausePointPatchResult LeftBehind(
-            HotReloadUnappliedRow rowOrNull,
+            PausePointHotReloadFileState fileState,
+            MethodBase method,
             string methodName,
             int requestedLine)
         {
-            if (rowOrNull == null)
+            HotReloadUnappliedRow row = fileState.FindUnappliedRowForMethodOrNull(method);
+            if (row != null)
+            {
+                return LeftBehindWithRow(row, methodName, requestedLine);
+            }
+
+            if (fileState.UnappliedRows.Count > 0)
             {
                 return SourcePausePointPatchResult.Failure(
                     SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
                     string.Format(
-                        SourcePausePointConstants.HotReloadEarlierPatchRefusalMessageFormat,
+                        SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalMessageFormat,
                         requestedLine,
-                        methodName),
-                    SourcePausePointConstants.HotReloadEarlierPatchRefusalNextAction);
+                        methodName,
+                        fileState.DescribeUnappliedRows()),
+                    SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalNextAction);
             }
 
-            string verb = rowOrNull.Kind == HotReloadUnappliedRowKind.Skipped
+            return SourcePausePointPatchResult.Failure(
+                SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
+                string.Format(
+                    SourcePausePointConstants.HotReloadEarlierPatchRefusalMessageFormat,
+                    requestedLine,
+                    methodName),
+                SourcePausePointConstants.HotReloadEarlierPatchRefusalNextAction);
+        }
+
+        private static SourcePausePointPatchResult LeftBehindWithRow(
+            HotReloadUnappliedRow row,
+            string methodName,
+            int requestedLine)
+        {
+            string verb = row.Kind == HotReloadUnappliedRowKind.Skipped
                 ? SourcePausePointConstants.HotReloadLeftBehindSkippedVerb
                 : SourcePausePointConstants.HotReloadLeftBehindFailedVerb;
             return SourcePausePointPatchResult.Failure(
@@ -120,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     requestedLine,
                     methodName,
                     verb,
-                    rowOrNull.Label),
+                    row.Label),
                 SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction);
         }
     }

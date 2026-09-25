@@ -1203,9 +1203,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a patched method the latest reload read and did not report, while its patch is not
-        /// in that reload's generation, is refused as an earlier reload's body that only a compile
-        /// replaces.
+        /// What: a patched method the latest reload read and left no row at all for, while its
+        /// patch is not in that reload's generation, is refused as an earlier reload's body that
+        /// only a compile replaces.
         /// </summary>
         [Test]
         public void Enable_LineOfAnEarlierPatchTheLastReloadDidNotReport_RefusesWithCompile()
@@ -1229,17 +1229,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a file-level row matches no method, so an earlier patch after a reload whose only
-        /// row is '(file)' is refused as an earlier reload's body with a compile.
+        /// What: a line inside the older generation's span, after a reload that could not parse the
+        /// file and so kept the earlier patch and built no new generation, is refused as an earlier
+        /// reload's body that names the '(file)' row and offers fixing its Reason and reloading,
+        /// since a compile stops on the same error.
         /// </summary>
         [Test]
-        public void Enable_LineOfAnEarlierPatchAfterAFileLevelFailure_RefusesWithCompile()
+        public void Enable_LineInsideAStaleSpanAfterAReloadThatCouldNotParseTheFile_NamesTheFileRow()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                scope.Port.ShimLookupForFile = _ => null;
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 2,
+                    FixtureClosingBraceLine);
                 AnswerAddIsPatched(scope.Port);
-                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
                 AnswerTheLatestReloadReadTheFile(
                     scope.Port,
                     new HotReloadUnappliedRow("(file)", HotReloadUnappliedRowKind.Failed));
@@ -1250,8 +1254,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 AssertRefusal(
                     response,
                     SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
-                    EarlierPatchAddMessage(FixtureStatementLine),
-                    SourcePausePointConstants.HotReloadEarlierPatchRefusalNextAction);
+                    EarlierPatchLeftRowsAddMessage(FixtureStatementLine, "'(file)' (could not apply)"),
+                    SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: an earlier patch after a reload that left rows only for other labels lists every
+        /// one of them in reported order, because a failing sibling keeps the whole file unapplied
+        /// and the method's own row may carry another spelling of its parameter types.
+        /// </summary>
+        [Test]
+        public void Enable_LineOfAnEarlierPatchAfterAReloadThatLeftOtherRows_ListsThemInOrder()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => null;
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                AnswerTheLatestReloadReadTheFile(
+                    scope.Port,
+                    new HotReloadUnappliedRow("Fixture.Sibling()", HotReloadUnappliedRowKind.Failed),
+                    new HotReloadUnappliedRow("Fixture.Survivor()", HotReloadUnappliedRowKind.Skipped));
+                scope.Port.UnappliedRowForMethod = (file, method) => null;
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    EarlierPatchLeftRowsAddMessage(
+                        FixtureStatementLine,
+                        "'Fixture.Sibling()' (could not apply), 'Fixture.Survivor()' (skipped)"),
+                    SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalNextAction);
             }
         }
 
@@ -1623,6 +1658,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SourcePausePointConstants.HotReloadEarlierPatchRefusalMessageFormat,
                 line,
                 "EnableBySourceLocationFixture.Add");
+        }
+
+        private static string EarlierPatchLeftRowsAddMessage(int line, string describedRows)
+        {
+            return string.Format(
+                SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalMessageFormat,
+                line,
+                "EnableBySourceLocationFixture.Add",
+                describedRows);
         }
 
         // Plays the last compiled source of the fixture from before an edit that inserted the

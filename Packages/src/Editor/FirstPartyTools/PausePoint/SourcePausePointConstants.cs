@@ -416,9 +416,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Change what that Reason names and run 'uloop hot-reload' on the file again, or run "
             + "'uloop compile'; then retry with the same --line.";
 
-        // Why only compile: the last reload read the file as it is and reported no row for the
-        // method, so reloading the same contents leaves the earlier body running. Format:
-        // requested line, method display name.
+        // Why only compile: the last reload read the file as it is and left no row unapplied, so
+        // reloading the same contents leaves the earlier body running. Format: requested line,
+        // method display name.
         public const string HotReloadEarlierPatchRefusalMessageFormat =
             "Line {0} of the edited file resolves to a statement inside '{1}', which still runs the "
             + "body an earlier hot reload applied: the last hot reload of this file read the file on "
@@ -427,6 +427,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string HotReloadEarlierPatchRefusalNextAction =
             "Run 'uloop compile', then retry with the same --line.";
+
+        // Why the rows and a reload: the last reload read the file as it is and left no row for
+        // the method, but the rows it did leave name what kept the file from being applied, and
+        // the error of a '(file)' row stops a compile too. Format: requested line, method display
+        // name, the rows as the LINE_NOT_COMPILED refusal lists them.
+        public const string HotReloadEarlierPatchLeftRowsRefusalMessageFormat =
+            "Line {0} of the edited file resolves to a statement inside '{1}', which still runs the "
+            + "body an earlier hot reload applied, so no line of this file can be armed in it: the "
+            + "last hot reload of this file read the file on disk as it is now and left these "
+            + "Methods[] rows unapplied: {2}.";
+
+        public const string HotReloadEarlierPatchLeftRowsRefusalNextAction =
+            "Change what those rows' Reasons name and run 'uloop hot-reload' on the file again, or run "
+            + "'uloop compile'; then retry with the same --line.";
 
         public const string NearbyCompiledMethodsPrefix =
             " Nearby methods in the last compiled source: ";
