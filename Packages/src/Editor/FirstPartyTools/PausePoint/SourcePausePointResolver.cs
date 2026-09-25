@@ -100,7 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     string.Format(
                         SourcePausePointConstants.PostLineAlwaysThrowsMessageFormat,
                         sequencePoint.StartLine,
-                        originalInputPath));
+                        originalInputPath),
+                    statementLine: sequencePoint.StartLine);
             }
 
             List<SourcePausePointLocalVariable> locals = SourcePausePointCaptureEligibility.CollectCapturableLocals(method, scopeOffset);

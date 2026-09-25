@@ -36,18 +36,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public SourcePausePointResolution Resolution { get; }
         public IReadOnlyList<SourcePausePointNearbyCompiledMethod> NearbyCompiledMethods { get; }
 
+        /// <summary>
+        /// The line of the statement the failure names, in the same line numbers as ErrorMessage
+        /// and NearbyCompiledMethods; 0 when it names none.
+        /// </summary>
+        public int StatementLine { get; }
+
         private SourcePausePointResolveResult(
             bool success,
             SourcePausePointResolveFailureReason failureReason,
             string errorMessage,
             SourcePausePointResolution resolution,
-            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods)
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods,
+            int statementLine)
         {
             Success = success;
             FailureReason = failureReason;
             ErrorMessage = errorMessage;
             Resolution = resolution;
             NearbyCompiledMethods = nearbyCompiledMethods;
+            StatementLine = statementLine;
         }
 
         public static SourcePausePointResolveResult SuccessResult(SourcePausePointResolution resolution)
@@ -58,21 +66,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointResolveFailureReason.None,
                 string.Empty,
                 resolution,
-                Array.Empty<SourcePausePointNearbyCompiledMethod>());
+                Array.Empty<SourcePausePointNearbyCompiledMethod>(),
+                0);
         }
 
         public static SourcePausePointResolveResult Failure(
             SourcePausePointResolveFailureReason reason,
             string errorMessage,
-            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods = null)
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods = null,
+            int statementLine = 0)
         {
             Debug.Assert(reason != SourcePausePointResolveFailureReason.None, "Failure requires a specific reason.");
+            Debug.Assert(statementLine >= 0, "statementLine must be a 1-based line number, or 0 when the failure names none.");
             return new SourcePausePointResolveResult(
                 false,
                 reason,
                 errorMessage,
                 null,
-                nearbyCompiledMethods ?? Array.Empty<SourcePausePointNearbyCompiledMethod>());
+                nearbyCompiledMethods ?? Array.Empty<SourcePausePointNearbyCompiledMethod>(),
+                statementLine);
         }
     }
 }

@@ -74,7 +74,7 @@ A method hot reload *added* (an `Added` row) cannot hold a pause point: it exist
 
 If `enable-pause-point` fails, branch on the failure `ErrorCode` and follow `RecommendedNextAction`; `Message` explains the rejection in prose. Codes: `INVALID_ARGUMENT` (fix the rejected argument and re-run), `PAUSE_POINT_RELEASE_CODE_OPTIMIZATION` (automatic Debug switch and recompile did not leave the Editor in Debug; retry after a successful compile), `PAUSE_POINT_RESOLVE_FAILED` (the file:line could not be mapped to a patch location), `PAUSE_POINT_PATCH_FAILED` (the resolved method cannot be patched), `PAUSE_POINT_LINE_NOT_COMPILED` (the requested line, or a statement the resolver had to round to, is not in the last compiled source; run `uloop hot-reload` or `uloop compile`, or pick a compiled line), `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` (the line resolves into a patched method's compiled body, or its next statement is uncompiled inside a patched method; use a line in its edited body), `PAUSE_POINT_PATCHED_SOURCE_CHANGED` (see above).
 
-If enable fails with a "No sequence point found" error even for clearly executable lines, that script's assembly lacks debug sequence points and no line in the file can be patched. Move the pause point to a script in an assembly that carries them, such as a script under `Assets/`.
+If enable fails with a "No sequence point found" error (worded "No compiled statement exists on or after line N" when `--line` was read as a line of the file on disk) even for clearly executable lines, that script's assembly lacks debug sequence points and no line in the file can be patched. Move the pause point to a script in an assembly that carries them, such as a script under `Assets/`.
 
 ## Debug-switch trade-offs
 

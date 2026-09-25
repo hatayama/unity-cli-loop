@@ -308,7 +308,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointResolveResult resolveResult = resolution.ResolveResult;
             if (!resolveResult.Success)
             {
-                return PausePointResolveFailureResponse.Create(parameters, normalizedFile, resolveResult);
+                return PausePointResolveFailureResponse.Create(
+                    parameters,
+                    normalizedFile,
+                    resolution.LineBasis,
+                    resolveResult);
             }
 
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(

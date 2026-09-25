@@ -271,6 +271,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
             + "troubleshooting reference for specific failure patterns.";
 
+        // Why a second next action: on the edited-file path the file was already found in a compiled
+        // assembly, so the path form is not the cause, and the lines in the message are already the
+        // caller's. Compile helps only when the wanted statement was added after the last compile.
+        public const string ResolveFailedEditedFileRecommendedNextAction =
+            "Pass --line on an executable statement inside a method body, using the line numbers of the "
+            + "file on disk. If that statement was added after the last compile, run 'uloop compile' "
+            + "first, then retry.";
+
+        // Why a next action of its own: the statement always throws, so neither the path form nor a
+        // compile changes the outcome; only the timing or the line does.
+        public const string PostLineAlwaysThrowsRecommendedNextAction =
+            "Retry with --snapshot-timing pre-line, or pass --line for a statement that does not always throw.";
+
+        // Format: requested edited-file line, project-relative file.
+        public const string ResolveFailedNoCompiledStatementInEditedFileMessageFormat =
+            "No compiled statement exists on or after line {0} of '{1}' (line numbers of the file on disk).";
+
+        // Format: method filter, requested edited-file line, project-relative file.
+        public const string ResolveFailedNoMethodNamedInEditedFileMessageFormat =
+            "No method named '{0}' has a compiled statement on or after line {1} of '{2}' (line numbers of the file on disk).";
+
         // Why a failure text of its own: such a file has no compiled code at all, so the
         // generic advice to fix the path or recompute the line points at causes that cannot apply.
         // Format: the file as the caller passed it.
@@ -372,6 +393,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string NearbyCompiledMethodsPrefix =
             " Nearby methods in the last compiled source: ";
+
+        // Why a second prefix: on the edited-file path the spans are mapped to the file on disk, so
+        // "in the last compiled source" would tell the caller to read them as compiled lines.
+        public const string NearbyCompiledMethodsEditedLinesPrefix =
+            " Nearby compiled methods, with line numbers of the file on disk: ";
 
         public const string NearbyCompiledMethodSpanFormat = "'{0}' spans lines {1}-{2}";
 

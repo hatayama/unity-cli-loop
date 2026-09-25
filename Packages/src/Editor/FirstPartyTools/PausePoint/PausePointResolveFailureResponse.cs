@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static PausePointResponse Create(
             EnablePausePointSchema parameters,
             string normalizedFile,
+            string lineBasis,
             SourcePausePointResolveResult resolveResult)
         {
             bool declaresIntroducedType =
@@ -28,14 +29,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateIntroducedTypeResolveFailure(parameters);
             }
 
-            // Why no hot-reload branch: --line is an edited-file line on every path, so a failure
-            // in a patched file has the same causes as one in an unpatched file.
+            // Why no hot-reload branch: a failure in a patched file has the same causes as one in
+            // an unpatched file. Only the line numbers differ, and the line basis already says
+            // which ones the message uses.
+            bool editedFileBasis = lineBasis == PausePointEditedLineResolution.EditedFileLineBasis;
             PausePointResponse response = PausePointFailureResponse.Create(
                 PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
                     resolveResult.ErrorMessage,
+                    editedFileBasis
+                        ? SourcePausePointConstants.NearbyCompiledMethodsEditedLinesPrefix
+                        : SourcePausePointConstants.NearbyCompiledMethodsPrefix,
                     resolveResult.NearbyCompiledMethods),
                 SourcePausePointConstants.ErrorCodeResolveFailed,
-                SourcePausePointConstants.ResolveFailedRecommendedNextAction);
+                SelectRecommendedNextAction(resolveResult.FailureReason, editedFileBasis));
             List<string> resolveFailureWarnings = new List<string>();
             PausePointEnableWarningList.AddIfNotEmpty(
                 resolveFailureWarnings,
@@ -46,6 +52,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : string.Empty);
             PausePointEnableWarningList.Assign(response, resolveFailureWarnings);
             return response;
+        }
+
+        // Why the edited-file basis narrows the no-statement advice: the file was found in a
+        // compiled assembly there, so the path form is not the cause, and a compile helps only
+        // when the wanted statement was added after the last compile.
+        private static string SelectRecommendedNextAction(
+            SourcePausePointResolveFailureReason reason,
+            bool editedFileBasis)
+        {
+            if (reason == SourcePausePointResolveFailureReason.PostLineAlwaysThrows)
+            {
+                return SourcePausePointConstants.PostLineAlwaysThrowsRecommendedNextAction;
+            }
+
+            return editedFileBasis && reason == SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine
+                ? SourcePausePointConstants.ResolveFailedEditedFileRecommendedNextAction
+                : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
         }
 
         // Refuses a line whose statement is inside a method hot reload added. The compiled resolver

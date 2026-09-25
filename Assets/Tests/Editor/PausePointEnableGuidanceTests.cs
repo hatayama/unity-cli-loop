@@ -462,15 +462,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a resolve failure in a file with a hot reload patch keeps the resolver
-        /// sentence with the general next action and no line map warning, because --line is an
-        /// edited-file line and no longer resolves against the last compiled source there.
+        /// What: a resolve failure in a file with a hot reload patch names the requested line of the
+        /// file on disk, lists the nearby spans in those lines, and gives the edited-file next
+        /// action without a line map warning, because --line is an edited-file line there.
         /// </summary>
         [Test]
-        public void Enable_WhenResolveFailsInAPatchedFile_UsesTheGeneralGuidanceWithoutALineMapWarning()
+        public void Enable_WhenResolveFailsInAPatchedFile_UsesTheEditedFileGuidanceWithoutALineMapWarning()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
+                string fixtureSource = ReadProjectSource(FixtureFilePath);
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
                 scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
                     FixtureStatementLine - 2,
                     FixtureClosingBraceLine);
@@ -485,11 +487,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(response.Success, Is.False);
                 Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(response.Message, Does.StartWith("No sequence point found"));
+                Assert.That(
+                    response.Message,
+                    Does.StartWith(string.Format(
+                        SourcePausePointConstants.ResolveFailedNoCompiledStatementInEditedFileMessageFormat,
+                        UnresolvableFixtureLine,
+                        FixtureFilePath)));
+                Assert.That(response.Message, Does.Contain(SourcePausePointConstants.NearbyCompiledMethodsEditedLinesPrefix));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedEditedFileRecommendedNextAction));
+                Assert.That(response.Warning, Is.Null.Or.Empty);
+            }
+        }
+
+        /// <summary>
+        /// What: without a verified snapshot to map lines through, a resolve failure keeps the
+        /// compiled resolver's sentence, the nearby spans labelled as last compiled lines, and the
+        /// next action that covers the path form and a compile.
+        /// </summary>
+        [Test]
+        public void Enable_WhenResolveFailsWithoutAVerifiedSnapshot_KeepsTheCompiledLineGuidance()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => null;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = UnresolvableFixtureLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.Message, Does.StartWith("No sequence point found on or after line 14"));
+                Assert.That(response.Message, Does.Contain(SourcePausePointConstants.NearbyCompiledMethodsPrefix));
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain(SourcePausePointConstants.NearbyCompiledMethodsEditedLinesPrefix));
                 Assert.That(
                     response.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
-                Assert.That(response.Warning, Is.Null.Or.Empty);
             }
         }
 
@@ -626,14 +667,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: a file that declares an introduced type but also holds compiled methods keeps the
-        /// general resolve guidance and only gains a warning about the introduced type, because
-        /// "this file has no compiled code" is false for such a file.
+        /// general resolve guidance for edited-file lines and only gains a warning about the
+        /// introduced type, because "this file has no compiled code" is false for such a file.
         /// </summary>
         [Test]
         public void Enable_WhenAnIntroducedTypeSharesTheFileWithCompiledMethods_KeepsTheGeneralResolveGuidance()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
+                string fixtureSource = ReadProjectSource(FixtureFilePath);
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
                 scope.Port.IntroducedTypeSourceFiles = new HashSet<string> { FixtureFilePath };
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
@@ -648,7 +691,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
                 Assert.That(
                     response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedEditedFileRecommendedNextAction));
                 Assert.That(
                     response.Warnings,
                     Does.Contain(
@@ -1008,7 +1051,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: enable resolve-failure on a real PDB fixture appends the nearest compiled
-        /// method span from that file.
+        /// method span from that file, labelled with the line numbers of the file on disk.
         /// </summary>
         [Test]
         public void Enable_WhenResolveFails_AppendsNearbyCompiledMethodSpans()
@@ -1018,26 +1061,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(otherMethod.Resolution.CompiledMethodStartLine, Is.GreaterThan(0));
             Assert.That(otherMethod.Resolution.CompiledMethodEndLine, Is.GreaterThan(0));
 
-            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                File = CompiledMethodSpanFixtureFile,
-                Line = 19,
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.SingleShot
-            });
+                // Why the file's own text as the snapshot: the map is then the identity, so the
+                // compiled span lines above are also the expected edited-file lines.
+                string fixtureSource = ReadProjectSource(CompiledMethodSpanFixtureFile);
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
 
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-            string expectedMessage =
-                "No sequence point found on or after line 19 in '" + CompiledMethodSpanFixtureFile + "'."
-                + SourcePausePointConstants.NearbyCompiledMethodsPrefix
-                + string.Format(
-                    SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
-                    "CompiledMethodSpanFixture.OtherMethod",
-                    otherMethod.Resolution.CompiledMethodStartLine,
-                    otherMethod.Resolution.CompiledMethodEndLine)
-                + ".";
-            Assert.That(response.Message, Is.EqualTo(expectedMessage));
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = CompiledMethodSpanFixtureFile,
+                    Line = 19,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                string expectedMessage =
+                    string.Format(
+                        SourcePausePointConstants.ResolveFailedNoCompiledStatementInEditedFileMessageFormat,
+                        19,
+                        CompiledMethodSpanFixtureFile)
+                    + SourcePausePointConstants.NearbyCompiledMethodsEditedLinesPrefix
+                    + string.Format(
+                        SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
+                        "CompiledMethodSpanFixture.OtherMethod",
+                        otherMethod.Resolution.CompiledMethodStartLine,
+                        otherMethod.Resolution.CompiledMethodEndLine)
+                    + ".";
+                Assert.That(response.Message, Is.EqualTo(expectedMessage));
+            }
         }
 
         /// <summary>
@@ -1108,6 +1162,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // pdb-unavailable-probe-unique
             return 1;
+        }
+
+        private static string ReadProjectSource(string projectRelativeFile)
+        {
+            return File.ReadAllText(Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), projectRelativeFile));
         }
 
         private static int FindLineNumberContaining(string source, string fragment)
