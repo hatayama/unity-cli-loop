@@ -10,22 +10,25 @@ enforcing exclusivity, every patch transition re-targets them:
   shows `RetargetedToHotReloadPatch: true`. A marker whose line no longer resolves is
   suppressed instead: the apply response lists it, and status shows
   `SuppressedByHotReload: true` with the reason in `SuppressedByHotReloadReason`.
-- Enabling a new pause point on a currently patched method resolves against the patched
-  body directly. `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` is returned only when the line
-  cannot be mapped onto it (a stale line map or a superseded generation).
-  When the compiled line range of the patched method is known, the failure message also reports it, so you can see how far the edited file's line numbers have shifted from the compiled source.
-  When the line lies outside every patched body but maps into a patched method's compiled
-  span (from above or below it), the next action leads with `--method <Type.Method> --line N`
-  for a line inside an unpatched method; the line is then matched by its text inside that
-  method's compiled span or on its declaration lines (a blank or comment line maps the same
-  way and needs a statement line, or a line inside the edited body, instead).
+- Enabling a new pause point reads `--line` as a line of the edited file, before or after
+  hot reload alike:
+  - A line in a method hot reload has not patched is mapped onto the verified source
+    snapshot of the last compile and armed there (`LineBasis: EditedFile`; `ResolvedLine`
+    is the edited-file line).
+  - A line added or changed since the last compile, or one whose next statement is
+    uncompiled, is refused with `PAUSE_POINT_LINE_NOT_COMPILED`. Hot-reload the change
+    (then the line is inside a patched body) or run `uloop compile`, and retry.
+  - A line inside a patched method's edited body arms the patched body directly. A line
+    that would round onto a patched method's compiled body is refused with
+    `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`, which names the edited line range to use.
+  - Only a file without a verified source snapshot arms the line as a compiled line
+    number, reported as `LineBasis: LastCompiledSource` with a warning to run
+    `uloop compile`.
 - A method hot reload *added* (an `Added` row) cannot hold a pause point until
   `uloop compile`: it has no compiled body and pause-point cannot arm its shim. Enabling
   a line inside it is refused with `PAUSE_POINT_RESOLVE_FAILED` and a message naming the
   added method; it is never armed on another method instead. Compile first, then enable
-  the pause point there. A line that is also inside a compiled method's last compiled
-  span still arms that compiled method when `--method` names it and not the added
-  method too (use `Type.Method` when both share a name).
+  the pause point there.
 - `uloop hot-reload --revert-all` (or reverting a method's patch) re-targets armed
   markers back onto the compiled body; a marker whose line no longer resolves there
   stays suppressed with a reason until `uloop compile` and a re-enable.

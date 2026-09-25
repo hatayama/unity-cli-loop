@@ -427,15 +427,20 @@ Wire details:
   compiled body. The residual limit is a marker whose requested line no longer
   resolves in the code now executing — it is suppressed (`SuppressedByHotReload: true`,
   reason in `SuppressedByHotReloadReason`) rather than cleared, and stays silent until
-  a later patch transition restores the line or `uloop compile` runs. Enabling a new
-  marker on a patched method is rejected with `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` only
-  when the line cannot be mapped onto the patched body.
-  When the compiled line range of the patched method is known, the failure message also reports it, so you can see how far the edited file's line numbers have shifted from the compiled source.
-  When the line lies outside every patched body but maps into a patched method's compiled
-  span (from above or below it), the next action leads with `--method <Type.Method> --line N`
-  for a line inside an unpatched method; the line is then matched by its text inside that
-  method's compiled span or on its declaration lines (a blank or comment line maps the same
-  way and needs a statement line, or a line inside the edited body, instead).
+  a later patch transition restores the line or `uloop compile` runs.
+  Enabling a new marker reads `--line` as a line of the edited file:
+  - A line in a method hot reload has not patched is mapped onto the verified source
+    snapshot of the last compile and armed there. The response reports
+    `LineBasis: EditedFile`, and `ResolvedLine` is the edited-file line.
+  - A line added or changed since the last compile is refused with
+    `PAUSE_POINT_LINE_NOT_COMPILED`. So is a line whose next statement, where the resolver
+    would round to, is uncompiled. Run `uloop hot-reload` or `uloop compile` and retry, or
+    pick an unchanged line.
+  - A line inside a patched method's edited body arms the patched body directly. A line
+    that would round onto the compiled body of a patched method is refused with
+    `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`, naming the method's edited line range.
+  - Only when the file has no verified source snapshot is the line armed as a compiled
+    line number, with `LineBasis: LastCompiledSource` and a warning to run `uloop compile`.
 
 ## Open Questions Tracked for Implementation
 
