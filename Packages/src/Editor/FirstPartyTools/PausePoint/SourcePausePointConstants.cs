@@ -271,12 +271,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
             + "troubleshooting reference for specific failure patterns.";
 
-        // Why a failure text of its own: such a file has no compiled line map at all, so the
+        // Why a failure text of its own: such a file has no compiled code at all, so the
         // generic advice to fix the path or recompute the line points at causes that cannot apply.
         // Format: the file as the caller passed it.
         public const string IntroducedTypeResolveFailureMessageFormat =
             "'{0}' declares a type hot reload introduced without a compile, so it has no compiled "
-            + "line map to resolve --line against. Pause points can bind only to methods hot reload "
+            + "code to resolve --line against. Pause points can bind only to methods hot reload "
             + "has patched in this file.";
 
         // Why a warning rather than the failure text: the file also holds compiled types, so the
@@ -284,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: the file as the caller passed it.
         public const string IntroducedTypeInFileWarningFormat =
             "'{0}' also declares a type hot reload introduced without a compile; lines inside that "
-            + "type have no compiled line map, and a pause point binds there only to a method hot "
+            + "type have no compiled code, and a pause point binds there only to a method hot "
             + "reload has patched.";
 
         public const string IntroducedTypeResolveFailureNextAction =
@@ -293,12 +293,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "Or run 'uloop compile' to compile the type and use the normal path.";
 
         // Why a refusal of its own: an added method exists only in the hot reload shim, which
-        // pause-point cannot arm, and the compiled line map has no counterpart for it. Without
+        // pause-point cannot arm, and the compiled code has no counterpart for it. Without
         // this the compiled resolver would arm the next compiled method or report a wrong line.
         // Format: requested line, added method name.
         public const string AddedMethodResolveFailureMessageFormat =
             "Line {0} is inside '{1}', which hot reload added; pause points cannot be armed inside "
             + "added methods until 'uloop compile', so it was refused instead of arming another method.";
+
+        // Why a variant: when the requested line has no statement and the next statement is the
+        // one inside the added method, "Line {0} is inside" would place the requested line in a
+        // method it is not part of. Format: requested line, added method line, added method name.
+        public const string AddedMethodNextStatementResolveFailureMessageFormat =
+            "Line {0} has no compiled statement of its own, and the next statement, line {1}, is "
+            + "inside '{2}', which hot reload added; pause points cannot be armed inside added "
+            + "methods until 'uloop compile', so it was refused instead of arming another method.";
 
         // Why refuse rather than remap: the running patch maps lines of the source it was compiled
         // from, which is not kept, so a marker placed now would stop at another statement than the
@@ -352,19 +360,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "resolved method '{1}' is not patched by this reload, so --line resolved against "
             + "the last compiled source, not the edited file.";
 
-        // Why a separate failure string: resolve failure leaves ResolvedMethod and
-        // ResolvedLineText empty, so pointing at those fields is a dead end.
-        public const string HotReloadCompiledLineMapResolveFailureWarningFormat =
-            "'{0}' has active hot-reload patches. --line resolves against the last compiled source, "
-            + "not the edited file, so a line number taken from the edited file can miss or fail to "
-            + "resolve. Methods currently patched by hot reload resolve against the edited file instead. "
-            + "Recompute the line against the last compiled source, or run 'uloop compile' "
-            + "and re-enable.";
-
-        public const string HotReloadCompiledLineMapResolveFailureNextAction =
-            "Pass a line number from the last compiled source (the editor shows the edited file, "
-            + "which can drift after hot reload), or run 'uloop compile' and re-enable the pause point.";
-
         // Format: file, resolved line, compiled line text, edited line text.
         public const string HotReloadCompiledLineMapLineDriftWarningFormat =
             "'{0}' line {1} is '{2}' in the last compiled source but '{3}' in the edited file. "
@@ -405,39 +400,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Verify ResolvedLineText is the statement you intended. If it is not, run 'uloop compile' "
             + "and re-enable the pause point.";
 
-        // Format: declaring type name, method name, requested line.
-        public const string HotReloadPatchedLineOutsidePatchedBodyMessageFormat =
-            "'{0}.{1}' is currently hot-reload patched and line {2} does not fall inside any "
-            + "hot-reload patched method's current body, so the marker cannot be placed reliably. "
-            + "Patched methods resolve against the edited file; methods this reload did not patch "
-            + "resolve against the last compiled source. "
-            + "Either the compiled line map for this file is stale, or the method's active patch "
-            + "belongs to a superseded hot-reload generation.";
+        // Why name only the edited body: --line is an edited-file line, so the edited range of
+        // the patched method is the one place the caller can move the line to and still pause
+        // in the running code. Format: requested line, patched method display name, edited start
+        // line, edited end line.
+        public const string HotReloadPatchedMethodRefusalMessageFormat =
+            "Line {0} of the edited file resolves to a statement inside '{1}', which hot reload "
+            + "patched, so the compiled body no longer runs. Pass --line inside the method's edited "
+            + "body (lines {2}-{3}).";
 
-        public const string HotReloadPatchedLineOutsidePatchedBodyNextAction =
-            "Pick a line inside the edited method body, run 'uloop hot-reload --revert-all' to "
-            + "restore compiled bodies, or run 'uloop compile' to realign line numbers.";
+        // Format: same arguments as HotReloadPatchedMethodRefusalMessageFormat.
+        public const string HotReloadPatchedMethodRefusalNextActionFormat =
+            "Retry with --line between {2} and {3}.";
 
-        // Format: declaring type name, method name, requested line, resolved compiled line.
-        public const string HotReloadPatchedLineMapsIntoPatchedBodyMessageFormat =
-            "Line {2} of the edited file lies outside every hot-reload patched method body, but in "
-            + "the last compiled source of this file it maps to line {3}, inside '{0}.{1}', which is "
-            + "hot-reload patched, so the marker cannot be placed there reliably. Methods this "
-            + "reload did not patch resolve against the last compiled line numbers, which the "
-            + "edited file no longer follows, so a line that belongs to an unpatched method, or a "
-            + "blank or comment line, can map into the patched one.";
+        // Why a range-less variant: without the method's shim entry the edited range is unknown,
+        // and a guessed range would send the caller to a line that is not in the patched body.
+        // Format: requested line, patched method display name.
+        public const string HotReloadPatchedMethodWithoutSpanRefusalMessageFormat =
+            "Line {0} of the edited file resolves to a statement inside '{1}', which hot reload "
+            + "patched, so the compiled body no longer runs. Pass --line inside the method's edited "
+            + "body, or run 'uloop compile' and retry.";
 
-        // Format: requested line.
-        public const string HotReloadPatchedLineMapsIntoPatchedBodyNextAction =
-            "If line {0} is inside a method this reload did not patch, pass --method <Type.Method> "
-            + "naming that method together with --line {0}: the line is then matched by its text "
-            + "inside that method's compiled span or on its declaration lines. If line {0} is blank "
-            + "or a comment, pick a statement line instead. To pause inside the patched method "
-            + "itself, pick a line inside its edited body. 'uloop compile' realigns line numbers but "
-            + "ends the active patches; 'uloop hot-reload --revert-all' also ends them.";
-
-        public const string HotReloadPatchedCompiledMethodSpanFormat =
-            " In the last compiled source, '{0}.{1}' spans lines {2}-{3}.";
+        public const string HotReloadPatchedMethodWithoutSpanRefusalNextAction =
+            "Pass --line inside the patched method's edited body, or run 'uloop compile' and retry.";
 
         // Format: resolved method display name, compiled start line, compiled end line.
         public const string HotReloadCompiledMethodSpanInLastCompiledSourceFormat =
@@ -483,13 +468,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NearbyCompiledMethodSpanFormat = "'{0}' spans lines {1}-{2}";
 
         // Format: patched method display name, requested line.
-        // Why a dedicated string: a patched method with no shim PDB still falls through to the
-        // compiled line map, so the generic "patched methods use the edited file" sentence would
-        // be a lie on that path.
+        // Why a refusal of its own: without the shim PDB no running-code statement can be matched
+        // to the line, and arming the compiled body would pause code that no longer runs.
         public const string HotReloadPatchedMethodPdbUnavailableWarningFormat =
             "--line {1} falls inside hot-reload patched method '{0}', but this patch has no debug "
-            + "symbols. Line numbers are therefore resolved against the last compiled source, not "
-            + "the edited file. Run 'uloop compile' and re-enable.";
+            + "symbols, so a pause point cannot be placed on the running code. Run 'uloop compile' "
+            + "and re-enable.";
 
         public const string HotReloadPatchedMethodPdbUnavailableNextAction =
             "Run 'uloop compile' and re-enable the pause point.";
@@ -497,8 +481,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: resolved method display name, requested line, edited start line, edited end line.
         public const string HotReloadRetargetedToEditedFileWarningFormat =
             "--line {1} was resolved against the edited file because it falls inside hot-reload "
-            + "patched method '{0}' (edited lines {2}-{3}). Methods not patched by hot reload "
-            + "resolve against the last compiled source instead. If you meant a different method, "
+            + "patched method '{0}' (edited lines {2}-{3}). If you meant a different method, "
             + "verify ResolvedMethod, or pass a line outside patched methods' edited spans.";
 
         // Why this wording: agents that followed the old "read via execute-dynamic-code"

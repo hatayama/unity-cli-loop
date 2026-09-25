@@ -123,11 +123,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: the same top-of-file insert still retargets a patched method onto the
-        /// hot-reload body, emits the edited-file line-basis warning, and does not emit
-        /// the compiled-line-map warning.
+        /// hot-reload body and warns only about the retarget, without claiming that unpatched
+        /// methods resolve against the last compiled source.
         /// </summary>
         [Test]
-        public async Task Enable_PatchedMethodAfterTopOfFileInsert_DoesNotWarnAboutCompiledLineMap()
+        public async Task Enable_PatchedMethodAfterTopOfFileInsert_RetargetsWithOnlyTheRetargetWarning()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
             string edited = BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk);
@@ -162,6 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         patchedEntry.SourceEndLine)),
                 SourcePausePointConstants.SmallMethodInliningRiskWarning);
             Assert.That(enable.Warning, Is.EqualTo(expectedWarning));
+            Assert.That(enable.Warning, Does.Not.Contain("last compiled source"));
         }
 
         /// <summary>

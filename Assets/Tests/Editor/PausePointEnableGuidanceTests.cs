@@ -392,11 +392,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: a file the hot-reload side reports as declaring an introduced type gets the
-        /// explanation that it has no compiled line map, instead of advice to fix the path or
+        /// explanation that it has no compiled code, instead of advice to fix the path or
         /// recompute the line against a compiled source it does not have.
         /// </summary>
         [Test]
-        public void Enable_WhenTheFileDeclaresAnIntroducedType_ExplainsThereIsNoCompiledLineMap()
+        public void Enable_WhenTheFileDeclaresAnIntroducedType_ExplainsThereIsNoCompiledCode()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
@@ -413,6 +413,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(response.Success, Is.False);
                 Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
                 Assert.That(response.Message, Does.Contain("introduced without a compile"));
+                Assert.That(response.Message, Does.Contain("no compiled code"));
+                Assert.That(response.Message, Does.Not.Contain("line map"));
                 Assert.That(
                     response.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.IntroducedTypeResolveFailureNextAction));
@@ -453,23 +455,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a file with a compiled line map keeps the resolver sentence, so dropping it for
-        /// an introduced-type file does not silence the ordinary unresolvable-line explanation.
+        /// What: a resolve failure in a file with active hot reload changes keeps the resolver
+        /// sentence with the general next action and no line map warning, because --line is an
+        /// edited-file line and no longer resolves against the last compiled source there.
         /// </summary>
         [Test]
-        public void Enable_WhenTheFileHasACompiledLineMap_KeepsTheResolverSentence()
+        public void Enable_WhenResolveFailsInAPatchedFile_UsesTheGeneralGuidanceWithoutALineMapWarning()
         {
-            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                File = FixtureFilePath,
-                Line = UnresolvableFixtureLine,
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.SingleShot
-            });
+                scope.Port.ActiveHotReloadChangesInFile = file => true;
 
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-            Assert.That(response.Message, Does.Contain("No sequence point found"));
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = UnresolvableFixtureLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.Message, Does.StartWith("No sequence point found"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+                Assert.That(response.Warning, Is.Null.Or.Empty);
+            }
         }
 
         /// <summary>
@@ -600,7 +612,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// <summary>
         /// What: a file that declares an introduced type but also holds compiled methods keeps the
         /// general resolve guidance and only gains a warning about the introduced type, because
-        /// "this file has no compiled line map" is false for such a file.
+        /// "this file has no compiled code" is false for such a file.
         /// </summary>
         [Test]
         public void Enable_WhenAnIntroducedTypeSharesTheFileWithCompiledMethods_KeepsTheGeneralResolveGuidance()
@@ -735,10 +747,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: a line above a patched method whose nearest compiled statement lies inside that
-        /// method is refused with guidance that leads with --method, and no marker is armed.
+        /// method is refused with the method's edited body range, and no marker is armed.
         /// </summary>
         [Test]
-        public void Enable_LineAboveAPatchedMethod_RefusesWithTheMethodFilterGuidance()
+        public void Enable_LineAboveAPatchedMethod_RefusesWithTheEditedBodyRange()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
@@ -760,20 +772,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(
                     response.ErrorCode,
                     Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
-                Assert.That(response.Message, Does.Contain("Line " + FixtureBlankLineAboveMethod));
-                Assert.That(response.Message, Does.Contain("'EnableBySourceLocationFixture.Add'"));
-                Assert.That(response.RecommendedNextAction, Does.Contain("--method"));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodRefusalMessageFormat,
+                            FixtureBlankLineAboveMethod,
+                            "EnableBySourceLocationFixture.Add",
+                            FixtureStatementLine - 1,
+                            FixtureClosingBraceLine)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                            FixtureBlankLineAboveMethod,
+                            "EnableBySourceLocationFixture.Add",
+                            FixtureStatementLine - 1,
+                            FixtureClosingBraceLine)));
                 Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
             }
         }
 
         /// <summary>
-        /// What: a line below a patched method's edited body that maps into its compiled span is
-        /// refused with the same --method guidance as a line above it, not with guidance that
-        /// blames a stale line map, and no marker is armed.
+        /// What: a line below a patched method's edited body that resolves into that method is
+        /// refused with the method's edited body range, not with --method guidance, and no marker
+        /// is armed.
         /// </summary>
         [Test]
-        public void Enable_LineBelowAPatchedMethodThatMapsIntoIt_RefusesWithTheMethodFilterGuidance()
+        public void Enable_LineBelowAPatchedMethodThatResolvesIntoIt_RefusesWithTheEditedBodyRange()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
@@ -795,11 +822,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(
                     response.ErrorCode,
                     Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
-                Assert.That(response.Message, Does.Contain("Line " + FixtureClosingBraceLine));
-                Assert.That(response.Message, Does.Contain("'EnableBySourceLocationFixture.Add'"));
-                Assert.That(response.Message, Does.Not.Contain("superseded"));
-                Assert.That(response.RecommendedNextAction, Does.Contain("--method"));
-                Assert.That(response.RecommendedNextAction, Does.Contain("declaration lines"));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodRefusalMessageFormat,
+                            FixtureClosingBraceLine,
+                            "EnableBySourceLocationFixture.Add",
+                            FixtureStatementLine - 1,
+                            FixtureStatementLine - 1)));
+                Assert.That(response.RecommendedNextAction, Does.Not.Contain("--method"));
                 Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
             }
         }
