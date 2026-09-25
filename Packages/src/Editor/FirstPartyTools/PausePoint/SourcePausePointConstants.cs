@@ -440,6 +440,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string LineNotCompiledRecommendedNextAction =
             "Run 'uloop hot-reload' (a pause point inside a hot-reload patched method arms the edited code) or 'uloop compile', then retry with the same --line. To arm compiled code instead, pass --line for a statement that is unchanged since the last compile.";
 
+        // Why a next action of its own: hot reload and compile do not change how many lines the
+        // file on disk has, so the shared "hot-reload or compile, then retry with the same --line"
+        // would return the same refusal. Format: line count of the file on disk.
+        public const string LineNotCompiledBeyondEndOfFileRecommendedNextActionFormat =
+            "Pass --line between 1 and {0}; the file on disk has {0} lines. If your editor shows more "
+            + "lines, save the file and retry.";
+
         // Why only a warning: without a verified snapshot there is nothing to map edited lines
         // against, and refusing would make pause points unusable in files such as package sources.
         // Format: file, requested line.

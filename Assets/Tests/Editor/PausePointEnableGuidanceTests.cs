@@ -517,6 +517,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(response.Success, Is.False);
                 Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
                 Assert.That(response.Message, Does.Contain("beyond the end"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.LineNotCompiledBeyondEndOfFileRecommendedNextActionFormat,
+                            15)));
             }
         }
 

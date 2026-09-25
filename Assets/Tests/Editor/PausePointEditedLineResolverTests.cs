@@ -109,8 +109,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a line past the end of the edited file is refused as not compiled and names the
-        /// file's line count, while the last line of the file still reaches the resolver.
+        /// What: a line past the end of the edited file is refused as not compiled, names the
+        /// file's line count, and points at the valid line range instead of a hot reload or compile
+        /// that cannot change the line count, while the last line still reaches the resolver.
         /// </summary>
         [Test]
         public void Identity_LineBeyondEndOfFile_RefusesLineNotCompiled()
@@ -119,8 +120,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 PausePointEditedLineResolution resolution = Resolve(CompiledLines, line);
 
-                AssertLineNotCompiled(resolution, "beyond the end");
+                Assert.That(resolution.ResolveResult, Is.Null);
+                Assert.That(resolution.Refusal, Is.Not.Null);
+                Assert.That(resolution.Refusal.ErrorCode, Is.EqualTo(LineNotCompiledErrorCode));
+                Assert.That(resolution.Refusal.Message, Does.Contain("beyond the end"));
                 Assert.That(resolution.Refusal.Message, Does.Contain("(18 lines)"));
+                Assert.That(
+                    resolution.Refusal.RecommendedNextAction,
+                    Is.EqualTo(string.Format(
+                        SourcePausePointConstants.LineNotCompiledBeyondEndOfFileRecommendedNextActionFormat,
+                        18)));
             }
 
             AssertUnresolved(Resolve(CompiledLines, 18));
