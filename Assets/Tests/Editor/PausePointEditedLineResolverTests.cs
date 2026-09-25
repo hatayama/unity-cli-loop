@@ -97,15 +97,150 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a line with no sequence point at or after it returns the resolver failure itself,
-        /// so the use case keeps building the existing RESOLVE_FAILED response.
+        /// What: a line with no sequence point at or after it returns a resolve failure that names
+        /// the requested line of the file on disk and lists the nearby spans in edited-file lines,
+        /// so the use case builds the RESOLVE_FAILED response on the edited-file basis.
         /// </summary>
         [Test]
-        public void Identity_NoSequencePointAtOrAfterLine_ReturnsTheResolverFailure()
+        public void Identity_NoSequencePointAtOrAfterLine_ReportsTheRequestedLineAndNearbySpans()
         {
             PausePointEditedLineResolution resolution = Resolve(CompiledLines, 17);
 
             AssertUnresolved(resolution);
+            Assert.That(
+                resolution.ResolveResult.ErrorMessage,
+                Is.EqualTo(string.Format(
+                    SourcePausePointConstants.ResolveFailedNoCompiledStatementInEditedFileMessageFormat,
+                    17,
+                    TestFile)));
+            Assert.That(NearbyOf(resolution), Is.EqualTo(new[] { "First 6-9", "Second 10-16" }));
+        }
+
+        /// <summary>
+        /// What: after a top-of-file insert, a resolve failure names the requested edited line and
+        /// lists the nearby spans shifted to edited-file lines instead of their compiled lines.
+        /// </summary>
+        [Test]
+        public void Shifted_NoSequencePointAtOrAfterLine_ReportsTheEditedLineAndEditedNearbySpans()
+        {
+            PausePointEditedLineResolution resolution = Resolve(Shifted(), 20);
+
+            AssertUnresolved(resolution);
+            Assert.That(
+                resolution.ResolveResult.ErrorMessage,
+                Is.EqualTo(string.Format(
+                    SourcePausePointConstants.ResolveFailedNoCompiledStatementInEditedFileMessageFormat,
+                    20,
+                    TestFile)));
+            Assert.That(NearbyOf(resolution), Is.EqualTo(new[] { "First 9-12", "Second 13-19" }));
+        }
+
+        /// <summary>
+        /// What: a nearby span whose start line was removed since the last compile is left out,
+        /// because its edited range is unknown and a compiled range beside edited ones would be
+        /// read as edited.
+        /// </summary>
+        [Test]
+        public void RemovedMethodHeader_NoSequencePointAtOrAfterLine_DropsNearbySpansWhoseBoundaryWasRemoved()
+        {
+            PausePointEditedLineMap map = PausePointEditedLineMap.BuildOrNull(
+                Join(CompiledLines),
+                Join(RemovedMethodHeader()));
+            Assert.That(map.ToEditedLineOrZero(10), Is.EqualTo(0), "Second's declaration must have no edited line.");
+            Assert.That(map.ToEditedLineOrZero(16), Is.EqualTo(15), "Second's closing brace must stay mapped.");
+
+            PausePointEditedLineResolution resolution = Resolve(RemovedMethodHeader(), 16);
+
+            AssertUnresolved(resolution);
+            Assert.That(
+                resolution.ResolveResult.ErrorMessage,
+                Is.EqualTo(string.Format(
+                    SourcePausePointConstants.ResolveFailedNoCompiledStatementInEditedFileMessageFormat,
+                    16,
+                    TestFile)));
+            Assert.That(NearbyOf(resolution), Is.EqualTo(new[] { "First 6-9" }));
+        }
+
+        /// <summary>
+        /// What: a resolve failure that names no line, such as missing symbols, is returned as the
+        /// resolver reported it, because it has no compiled line to translate.
+        /// </summary>
+        [Test]
+        public void Shifted_FailureWithoutALine_IsReturnedUnchanged()
+        {
+            PausePointEditedLineResolution resolution = Resolve(Shifted(), 16, outcome: FakeOutcome.SymbolsUnavailable);
+
+            Assert.That(resolution.Refusal, Is.Null);
+            Assert.That(resolution.ResolveResult.Success, Is.False);
+            Assert.That(
+                resolution.ResolveResult.FailureReason,
+                Is.EqualTo(SourcePausePointResolveFailureReason.SymbolsUnavailable));
+            Assert.That(resolution.ResolveResult.ErrorMessage, Is.EqualTo("symbols"));
+        }
+
+        /// <summary>
+        /// What: after a top-of-file insert, a statement that always throws is reported with the
+        /// edited line of that statement, not its compiled line or the requested line.
+        /// </summary>
+        [Test]
+        public void Shifted_PostLineAlwaysThrows_ReportsTheEditedStatementLine()
+        {
+            PausePointEditedLineResolution resolution = Resolve(Shifted(), 15, outcome: FakeOutcome.PostLineAlwaysThrows);
+
+            Assert.That(resolution.Refusal, Is.Null);
+            Assert.That(resolution.ResolveResult.Success, Is.False);
+            Assert.That(
+                resolution.ResolveResult.FailureReason,
+                Is.EqualTo(SourcePausePointResolveFailureReason.PostLineAlwaysThrows));
+            Assert.That(
+                resolution.ResolveResult.ErrorMessage,
+                Is.EqualTo(string.Format(SourcePausePointConstants.PostLineAlwaysThrowsMessageFormat, 16, TestFile)));
+            Assert.That(resolution.ResolveResult.StatementLine, Is.EqualTo(16));
+            Assert.That(resolution.LineBasis, Is.EqualTo("EditedFile"));
+        }
+
+        /// <summary>
+        /// What: a statement that always throws but was changed since the last compile is refused
+        /// as not compiled, because the throwing statement no longer exists in the edited file.
+        /// </summary>
+        [Test]
+        public void Changed_PostLineAlwaysThrowsOnAChangedStatement_RefusesStatementRemoved()
+        {
+            PausePointEditedLineResolution resolution = Resolve(ChangedR(), 14, outcome: FakeOutcome.PostLineAlwaysThrows);
+
+            AssertLineNotCompiled(resolution, "resolves to the compiled statement 'return a;', which no longer exists");
+        }
+
+        /// <summary>
+        /// What: a statement that always throws behind a statement inserted after the last compile
+        /// is refused naming the inserted statement, as a statement that does not throw would be.
+        /// </summary>
+        [Test]
+        public void Inserted_PostLineAlwaysThrowsBehindAnUncompiledStatement_RefusesTheUncompiledStatement()
+        {
+            PausePointEditedLineResolution resolution = Resolve(Inserted(), 14, outcome: FakeOutcome.PostLineAlwaysThrows);
+
+            AssertLineNotCompiled(resolution, "the next statement, line 15 ('a += 1;'), is not in the last compiled source");
+        }
+
+        /// <summary>
+        /// What: a statement that always throws inside a hot-reload patched method is refused as
+        /// patched with the method's edited range, as the patcher refuses a statement there that
+        /// does not throw, instead of pointing at a timing whose retry is refused that way anyway.
+        /// </summary>
+        [Test]
+        public void Identity_PostLineAlwaysThrowsInsideAPatchedSpan_RefusesAsPatchedByHotReload()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                CompiledLines,
+                12,
+                patchedSpanOrNull: line => line >= 13 && line <= 16 ? new PausePointPatchedEditedSpan("Owner.Second", 13, 16) : null,
+                outcome: FakeOutcome.PostLineAlwaysThrows);
+
+            AssertPatchedByHotReload(
+                resolution,
+                string.Format(SourcePausePointConstants.HotReloadPatchedMethodRefusalMessageFormat, 12, "Owner.Second", 13, 16),
+                string.Format(SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat, 12, "Owner.Second", 13, 16));
         }
 
         /// <summary>
@@ -145,12 +280,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a statement with a --method filter naming another method returns the resolver failure.
+        /// What: a statement with a --method filter naming another method returns a resolve failure
+        /// that names the method and the requested line of the file on disk.
         /// </summary>
         [Test]
-        public void Identity_Statement_WithNonMatchingMethod_ReturnsTheResolverFailure()
+        public void Identity_Statement_WithNonMatchingMethod_ReportsTheMethodNameAndTheRequestedLine()
         {
-            AssertUnresolved(Resolve(CompiledLines, 13, method: "First"));
+            PausePointEditedLineResolution resolution = Resolve(CompiledLines, 13, method: "First");
+
+            AssertUnresolved(resolution);
+            Assert.That(
+                resolution.ResolveResult.ErrorMessage,
+                Is.EqualTo(string.Format(
+                    SourcePausePointConstants.ResolveFailedNoMethodNamedInEditedFileMessageFormat,
+                    "First",
+                    13,
+                    TestFile)));
         }
 
         /// <summary>
@@ -203,13 +348,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: after a top-of-file insert, a --method filter naming another method returns the
-        /// resolver failure.
+        /// What: after a top-of-file insert, a --method filter naming another method returns a
+        /// resolve failure that names the requested edited line and the edited nearby spans.
         /// </summary>
         [Test]
-        public void Shifted_Statement_WithNonMatchingMethod_ReturnsTheResolverFailure()
+        public void Shifted_Statement_WithNonMatchingMethod_ReportsTheEditedLineAndEditedNearbySpans()
         {
-            AssertUnresolved(Resolve(Shifted(), 16, method: "First"));
+            PausePointEditedLineResolution resolution = Resolve(Shifted(), 16, method: "First");
+
+            AssertUnresolved(resolution);
+            Assert.That(
+                resolution.ResolveResult.ErrorMessage,
+                Is.EqualTo(string.Format(
+                    SourcePausePointConstants.ResolveFailedNoMethodNamedInEditedFileMessageFormat,
+                    "First",
+                    16,
+                    TestFile)));
+            Assert.That(NearbyOf(resolution), Is.EqualTo(new[] { "First 9-12", "Second 13-19" }));
         }
 
         /// <summary>
@@ -451,11 +606,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int line,
             string method = "",
             Func<int, PausePointPatchedEditedSpan> patchedSpanOrNull = null,
-            Func<int, HotReloadAddedMethodAtLine> addedMethodOrNull = null)
+            Func<int, HotReloadAddedMethodAtLine> addedMethodOrNull = null,
+            FakeOutcome outcome = FakeOutcome.Resolve)
         {
             PausePointEditedLineMap map = PausePointEditedLineMap.BuildOrNull(Join(CompiledLines), Join(editedLines));
             EnablePausePointSchema parameters = new EnablePausePointSchema { File = TestFile, Line = line, Method = method };
-            FakeCompiledResolver resolver = new FakeCompiledResolver(CompiledLines, MethodSpans);
+            FakeCompiledResolver resolver = new FakeCompiledResolver(CompiledLines, MethodSpans, outcome);
             PausePointEditedLineResolveContext context = new PausePointEditedLineResolveContext(
                 map,
                 TestFile,
@@ -484,6 +640,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 resolution.ResolveResult.FailureReason,
                 Is.EqualTo(SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine));
+        }
+
+        // Nearby spans as "Name start-end", so a test compares the whole list at once.
+        private static string[] NearbyOf(PausePointEditedLineResolution resolution)
+        {
+            return resolution.ResolveResult.NearbyCompiledMethods
+                .Select(nearby => nearby.DisplayName + " " + nearby.StartLine + "-" + nearby.EndLine)
+                .ToArray();
         }
 
         private static void AssertLineNotCompiled(PausePointEditedLineResolution resolution, string expectedMessagePart)
@@ -569,6 +733,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return lines.ToArray();
         }
 
+        // Second's declaration (compiled 10) is removed, so Second's start has no edited line and
+        // edited 10-17 are compiled 11-18.
+        private static string[] RemovedMethodHeader()
+        {
+            List<string> lines = CompiledLines.ToList();
+            lines.RemoveAt(9);
+            return lines.ToArray();
+        }
+
         // Edited 19-22 follow the compiled namespace brace, so none of them has a compiled line.
         private static string[] Appended()
         {
@@ -602,6 +775,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        // How the fake resolver answers: resolve the statement a compiled line rounds to, report
+        // that statement as always throwing, or fail before reading lines as missing symbols do.
+        private enum FakeOutcome
+        {
+            Resolve,
+            PostLineAlwaysThrows,
+            SymbolsUnavailable,
+        }
+
         private sealed class FakeMethodSpan
         {
             public string Name { get; }
@@ -619,21 +801,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// <summary>
         /// Stands in for the PDB-backed resolver: returns the first sequence point at or after a
         /// compiled line, where a sequence point is any non-blank, non-comment line from a method's
-        /// opening brace (the line after its declaration) to its closing brace.
+        /// opening brace (the line after its declaration) to its closing brace. When none is found,
+        /// the failure lists every method span as nearby, in compiled lines.
         /// </summary>
         private sealed class FakeCompiledResolver
         {
             private readonly IReadOnlyList<string> _compiledLines;
             private readonly IReadOnlyList<FakeMethodSpan> _spans;
+            private readonly FakeOutcome _outcome;
 
-            public FakeCompiledResolver(IReadOnlyList<string> compiledLines, IReadOnlyList<FakeMethodSpan> spans)
+            public FakeCompiledResolver(
+                IReadOnlyList<string> compiledLines,
+                IReadOnlyList<FakeMethodSpan> spans,
+                FakeOutcome outcome)
             {
                 _compiledLines = compiledLines;
                 _spans = spans;
+                _outcome = outcome;
             }
 
             public SourcePausePointResolveResult Resolve(int compiledLine, string method)
             {
+                if (_outcome == FakeOutcome.SymbolsUnavailable)
+                {
+                    return SourcePausePointResolveResult.Failure(
+                        SourcePausePointResolveFailureReason.SymbolsUnavailable, "symbols");
+                }
+
                 for (int line = compiledLine; line <= _compiledLines.Count; line++)
                 {
                     FakeMethodSpan span = SpanWithSequencePointAtOrNull(line);
@@ -645,6 +839,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     if (!string.IsNullOrEmpty(method) && span.Name != method)
                     {
                         continue;
+                    }
+
+                    if (_outcome == FakeOutcome.PostLineAlwaysThrows)
+                    {
+                        return SourcePausePointResolveResult.Failure(
+                            SourcePausePointResolveFailureReason.PostLineAlwaysThrows,
+                            "post",
+                            statementLine: line);
                     }
 
                     return SourcePausePointResolveResult.SuccessResult(new SourcePausePointResolution(
@@ -667,7 +869,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }
 
                 return SourcePausePointResolveResult.Failure(
-                    SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine, "fake");
+                    SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine,
+                    "fake",
+                    _spans.Select(span => new SourcePausePointNearbyCompiledMethod(span.Name, span.Start, span.End)).ToArray());
             }
 
             private FakeMethodSpan SpanWithSequencePointAtOrNull(int line)

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 
@@ -142,6 +143,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(resolveResult.Success, Is.False);
             Assert.That(resolveResult.FailureReason, Is.EqualTo(SourcePausePointResolveFailureReason.PostLineAlwaysThrows));
             Assert.That(resolveResult.ErrorMessage, Does.Contain("--snapshot-timing pre-line"));
+        }
+
+        /// <summary>
+        /// What: enabling post-line timing on a statement that always throws names that line of the
+        /// file on disk and points at pre-line timing or another line, not at a compile or a
+        /// different path form, which cannot change the outcome.
+        /// </summary>
+        [Test]
+        public void Enable_PostLineOnAlwaysThrowingLine_PointsAtPreLineTimingOrAnotherLine()
+        {
+            string fixtureSource = File.ReadAllText(
+                Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), FixturePath));
+            _hotReloadSideScope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
+
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixturePath,
+                Line = ThrowLine,
+                SnapshotTiming = SourcePausePointConstants.PostLineSnapshotTimingValue,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(string.Format(SourcePausePointConstants.PostLineAlwaysThrowsMessageFormat, ThrowLine, FixturePath)));
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.PostLineAlwaysThrowsRecommendedNextAction));
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

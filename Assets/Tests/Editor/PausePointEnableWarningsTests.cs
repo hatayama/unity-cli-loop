@@ -66,7 +66,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new SourcePausePointNearbyCompiledMethod("CompiledMethodSpanFixture.OtherMethod", 15, 18)
             };
 
-            string message = PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(errorMessage, nearby);
+            string message = PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
+                errorMessage,
+                SourcePausePointConstants.NearbyCompiledMethodsPrefix,
+                nearby);
 
             Assert.That(
                 message,
@@ -89,6 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             string message = PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
                 errorMessage,
+                SourcePausePointConstants.NearbyCompiledMethodsPrefix,
                 Array.Empty<SourcePausePointNearbyCompiledMethod>());
 
             Assert.That(message, Is.EqualTo(errorMessage));

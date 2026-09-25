@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 using NUnit.Framework;
 
@@ -19,6 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private const string AddedScopeFixtureFile =
             "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/AddedMethodScopeFixture.cs";
+
+        // A statement inside CompiledMethodSpanFixture.Target.
+        private const int TargetStatementLine = 9;
+
+        // Names no method of the span fixture, so every line of that file fails to resolve.
+        private const string UnknownMethodName = "NoSuchMethod";
 
         // Inside AddedMethodScopeOwner.Advance, the only compiled method of that type.
         private const int OwnerAdvanceStatementLine = 9;
@@ -67,7 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: --method that has no sequence point on or after the line fails instead of
-        /// arming a neighboring method, and the message lists nearby compiled spans.
+        /// arming a neighboring method, and the message names the method and the line of the file
+        /// on disk and lists nearby compiled spans in those lines.
         /// </summary>
         [Test]
         public void Enable_WhenMethodFilterDoesNotMatch_FailsInsteadOfArmingNeighbor()
@@ -75,31 +83,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SourcePausePointResolveResult otherMethod = SourcePausePointResolver.Resolve(SpanFixtureFile, 16);
             Assert.That(otherMethod.Success, Is.True, otherMethod.ErrorMessage);
 
-            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                File = SpanFixtureFile,
-                Line = 16,
-                Method = "Target",
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.SingleShot
-            });
+                // Why the file's own text as the snapshot: the map is then the identity, so the
+                // compiled span lines above are also the expected edited-file lines.
+                string fixtureSource = File.ReadAllText(
+                    Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), SpanFixtureFile));
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
 
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-            Assert.That(response.ResolvedMethod, Is.EqualTo(string.Empty));
-            string expectedMessage =
-                string.Format(
-                    SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
-                    "Target",
-                    16)
-                + SourcePausePointConstants.NearbyCompiledMethodsPrefix
-                + string.Format(
-                    SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
-                    "CompiledMethodSpanFixture.OtherMethod",
-                    otherMethod.Resolution.CompiledMethodStartLine,
-                    otherMethod.Resolution.CompiledMethodEndLine)
-                + ".";
-            Assert.That(response.Message, Is.EqualTo(expectedMessage));
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = SpanFixtureFile,
+                    Line = 16,
+                    Method = "Target",
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.ResolvedMethod, Is.EqualTo(string.Empty));
+                string expectedMessage =
+                    string.Format(
+                        SourcePausePointConstants.ResolveFailedNoMethodNamedInEditedFileMessageFormat,
+                        "Target",
+                        16,
+                        SpanFixtureFile)
+                    + SourcePausePointConstants.NearbyCompiledMethodsEditedLinesPrefix
+                    + string.Format(
+                        SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
+                        "CompiledMethodSpanFixture.OtherMethod",
+                        otherMethod.Resolution.CompiledMethodStartLine,
+                        otherMethod.Resolution.CompiledMethodEndLine)
+                    + ".";
+                Assert.That(response.Message, Is.EqualTo(expectedMessage));
+            }
+        }
+
+        /// <summary>
+        /// What: with a verified snapshot, --method that names no method in the file gets a next
+        /// action that asks to fix or drop --method before the edited-file line advice, because no
+        /// other --line and no compile would change that failure.
+        /// </summary>
+        [Test]
+        public void Enable_WhenMethodFilterNamesNoMethodInTheFile_AsksToCheckTheMethodFilterFirst()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                string fixtureSource = File.ReadAllText(
+                    Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), SpanFixtureFile));
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
+
+                PausePointResponse response = EnableInSpanFixtureWithUnknownMethod();
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.Message,
+                    Does.StartWith(string.Format(
+                        SourcePausePointConstants.ResolveFailedNoMethodNamedInEditedFileMessageFormat,
+                        UnknownMethodName,
+                        TargetStatementLine,
+                        SpanFixtureFile)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        SourcePausePointConstants.ResolveFailedMethodFilterNextActionPrefix
+                        + SourcePausePointConstants.ResolveFailedEditedFileRecommendedNextAction));
+            }
+        }
+
+        /// <summary>
+        /// What: without a verified snapshot, --method that names no method in the file gets the same
+        /// --method clause before the compiled-line advice, so the fallback path cannot send the
+        /// caller into the same failure either.
+        /// </summary>
+        [Test]
+        public void Enable_WhenMethodFilterNamesNoMethodWithoutAVerifiedSnapshot_AsksToCheckTheMethodFilterFirst()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => null;
+
+                PausePointResponse response = EnableInSpanFixtureWithUnknownMethod();
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.Message,
+                    Does.StartWith(string.Format(
+                        SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
+                        UnknownMethodName,
+                        TargetStatementLine)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        SourcePausePointConstants.ResolveFailedMethodFilterNextActionPrefix
+                        + SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+            }
         }
 
         /// <summary>
@@ -275,6 +356,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(SourcePausePointConstants.AddedMethodResolveFailureNextAction));
+        }
+
+        private static PausePointResponse EnableInSpanFixtureWithUnknownMethod()
+        {
+            return new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = SpanFixtureFile,
+                Line = TargetStatementLine,
+                Method = UnknownMethodName,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

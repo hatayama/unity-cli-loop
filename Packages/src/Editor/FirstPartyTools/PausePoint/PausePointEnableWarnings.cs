@@ -138,10 +138,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editedMethodEndLine);
         }
 
+        // nearbyPrefix names the line numbers the spans are in, which differ by line basis.
         internal static string AppendNearbyCompiledMethodsSuffix(
             string errorMessage,
+            string nearbyPrefix,
             IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods)
         {
+            Debug.Assert(!string.IsNullOrEmpty(nearbyPrefix), "nearbyPrefix must name the line numbers of the spans.");
             if (nearbyCompiledMethods == null || nearbyCompiledMethods.Count == 0)
             {
                 return errorMessage;
@@ -159,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return errorMessage
-                + SourcePausePointConstants.NearbyCompiledMethodsPrefix
+                + nearbyPrefix
                 + string.Join("; ", parts)
                 + ".";
         }

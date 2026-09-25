@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 
@@ -251,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointResolveResult result = context.ResolveAtCompiledLine(map.ToCompiledLineOrZero(nextMappedLine));
             if (!result.Success)
             {
-                return PausePointEditedLineResolution.Unresolved(result);
+                return MapFailureToEditedLines(context, requestedLine, nextMappedLine, result);
             }
 
             return MapResolvedStatementBack(context, requestedLine, nextMappedLine, result);
@@ -263,27 +264,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int nextMappedLine,
             SourcePausePointResolveResult result)
         {
-            PausePointEditedLineMap map = context.Map;
             SourcePausePointResolution resolution = result.Resolution;
+            PausePointResponse landingRefusal = RefuseLandingOrNull(
+                context, requestedLine, nextMappedLine, resolution.ResolvedLine);
+            if (landingRefusal != null)
+            {
+                return PausePointEditedLineResolution.Refused(landingRefusal);
+            }
+
+            PausePointEditedLineMap map = context.Map;
             int editedResolvedLine = map.ToEditedLineOrZero(resolution.ResolvedLine);
-            if (editedResolvedLine == 0)
-            {
-                return PausePointEditedLineResolution.Refused(PausePointLineNotCompiledRefusal.StatementRemoved(
-                    context.File, requestedLine, map.CompiledLineTextOrEmpty(resolution.ResolvedLine)));
-            }
-
-            // Why a patched span skips the check: the patcher refuses a statement inside a
-            // hot-reload patched method with guidance to arm its edited body, which is the right
-            // answer there, whereas an uncompiled line inside that body is expected.
-            if (context.PatchedSpanOrNull(editedResolvedLine) == null)
-            {
-                int uncompiledLine = map.FirstUnmappedStatementLineOrZero(nextMappedLine, editedResolvedLine);
-                if (uncompiledLine > 0)
-                {
-                    return PausePointEditedLineResolution.Refused(RefuseUncompiled(context, requestedLine, uncompiledLine));
-                }
-            }
-
             int editedResolvedEndLine = map.ToEditedLineOrZero(resolution.ResolvedEndLine);
             return PausePointEditedLineResolution.Resolved(
                 result,
@@ -291,6 +281,139 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editedResolvedEndLine == 0 ? editedResolvedLine : editedResolvedEndLine,
                 map.ToEditedLineOrZero(resolution.CompiledMethodStartLine),
                 map.ToEditedLineOrZero(resolution.CompiledMethodEndLine));
+        }
+
+        // Refuses landing on a compiled statement the edited file no longer holds, or one that
+        // rounding reaches by skipping an uncompiled statement; null when landing on it is sound.
+        private static PausePointResponse RefuseLandingOrNull(
+            PausePointEditedLineResolveContext context,
+            int requestedLine,
+            int nextMappedLine,
+            int compiledStatementLine)
+        {
+            PausePointEditedLineMap map = context.Map;
+            int editedStatementLine = map.ToEditedLineOrZero(compiledStatementLine);
+            if (editedStatementLine == 0)
+            {
+                return PausePointLineNotCompiledRefusal.StatementRemoved(
+                    context.File, requestedLine, map.CompiledLineTextOrEmpty(compiledStatementLine));
+            }
+
+            // Why a patched span skips the check: the patcher refuses a statement inside a
+            // hot-reload patched method with guidance to arm its edited body, which is the right
+            // answer there, whereas an uncompiled line inside that body is expected.
+            if (context.PatchedSpanOrNull(editedStatementLine) != null)
+            {
+                return null;
+            }
+
+            int uncompiledLine = map.FirstUnmappedStatementLineOrZero(nextMappedLine, editedStatementLine);
+            return uncompiledLine > 0 ? RefuseUncompiled(context, requestedLine, uncompiledLine) : null;
+        }
+
+        // Why map a failure instead of returning it as is: its lines are lines of the last
+        // compiled source, while on this path the caller reads every line as a line of the file
+        // on disk, so the unmapped lines would point at other code once the file changed.
+        private static PausePointEditedLineResolution MapFailureToEditedLines(
+            PausePointEditedLineResolveContext context,
+            int requestedLine,
+            int nextMappedLine,
+            SourcePausePointResolveResult failed)
+        {
+            if (failed.FailureReason == SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine)
+            {
+                return PausePointEditedLineResolution.Unresolved(ToEditedLineFailure(context, requestedLine, failed));
+            }
+
+            if (failed.FailureReason == SourcePausePointResolveFailureReason.PostLineAlwaysThrows)
+            {
+                return MapAlwaysThrowingStatement(context, requestedLine, nextMappedLine, failed);
+            }
+
+            // The other reasons name no line, so they read the same in either line numbering.
+            return PausePointEditedLineResolution.Unresolved(failed);
+        }
+
+        // Why the requested line instead of the compiled line the resolver searched from: the
+        // lines between them hold no code, so "on or after" reads the same from either, and only
+        // the requested line is a line the caller knows.
+        private static SourcePausePointResolveResult ToEditedLineFailure(
+            PausePointEditedLineResolveContext context,
+            int requestedLine,
+            SourcePausePointResolveResult failed)
+        {
+            string methodFilter = context.Parameters.Method;
+            string message = string.IsNullOrEmpty(methodFilter)
+                ? string.Format(
+                    SourcePausePointConstants.ResolveFailedNoCompiledStatementInEditedFileMessageFormat,
+                    requestedLine,
+                    context.File)
+                : string.Format(
+                    SourcePausePointConstants.ResolveFailedNoMethodNamedInEditedFileMessageFormat,
+                    methodFilter,
+                    requestedLine,
+                    context.File);
+            return SourcePausePointResolveResult.Failure(
+                failed.FailureReason,
+                message,
+                MapNearbyToEditedLines(context.Map, failed.NearbyCompiledMethods));
+        }
+
+        // Why drop a span whose start or end has no edited counterpart: that end was removed or
+        // changed since the last compile, so no line of the file on disk can stand for it.
+        private static IReadOnlyList<SourcePausePointNearbyCompiledMethod> MapNearbyToEditedLines(
+            PausePointEditedLineMap map,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> compiledNearby)
+        {
+            List<SourcePausePointNearbyCompiledMethod> editedNearby = new List<SourcePausePointNearbyCompiledMethod>();
+            foreach (SourcePausePointNearbyCompiledMethod nearby in compiledNearby)
+            {
+                int editedStartLine = map.ToEditedLineOrZero(nearby.StartLine);
+                int editedEndLine = map.ToEditedLineOrZero(nearby.EndLine);
+                if (editedStartLine == 0 || editedEndLine == 0)
+                {
+                    continue;
+                }
+
+                editedNearby.Add(new SourcePausePointNearbyCompiledMethod(nearby.DisplayName, editedStartLine, editedEndLine));
+            }
+
+            return editedNearby;
+        }
+
+        // Why the landing checks come first: the always-throwing statement is where the request
+        // lands, so when the file no longer holds it, or rounding onto it skips an uncompiled
+        // statement, retrying with pre-line timing would arm a statement the edited line is not.
+        private static PausePointEditedLineResolution MapAlwaysThrowingStatement(
+            PausePointEditedLineResolveContext context,
+            int requestedLine,
+            int nextMappedLine,
+            SourcePausePointResolveResult failed)
+        {
+            Debug.Assert(failed.StatementLine > 0, "an always-throws failure must name its statement line.");
+            PausePointResponse landingRefusal = RefuseLandingOrNull(
+                context, requestedLine, nextMappedLine, failed.StatementLine);
+            if (landingRefusal != null)
+            {
+                return PausePointEditedLineResolution.Refused(landingRefusal);
+            }
+
+            // Why refuse inside a patched method: the compiled statement is not the code that
+            // runs there, and the pre-line retry the always-throws next action asks for would
+            // only reach the patcher's refusal of that method.
+            int editedStatementLine = context.Map.ToEditedLineOrZero(failed.StatementLine);
+            PausePointPatchedEditedSpan patchedSpan = context.PatchedSpanOrNull(editedStatementLine);
+            if (patchedSpan != null)
+            {
+                return PausePointEditedLineResolution.Refused(
+                    PausePointResolveFailureResponse.CreatePatchedMethodRefusal(context.Parameters, requestedLine, patchedSpan));
+            }
+
+            return PausePointEditedLineResolution.Unresolved(SourcePausePointResolveResult.Failure(
+                SourcePausePointResolveFailureReason.PostLineAlwaysThrows,
+                string.Format(SourcePausePointConstants.PostLineAlwaysThrowsMessageFormat, editedStatementLine, context.File),
+                null,
+                editedStatementLine));
         }
 
         private static PausePointResponse RefuseUncompiled(
