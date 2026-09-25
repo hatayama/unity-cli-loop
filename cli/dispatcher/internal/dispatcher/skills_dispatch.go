@@ -48,7 +48,7 @@ func runSkillsSubcommand(
 	stderr io.Writer,
 ) int {
 	if options.outputDir != "" {
-		return runSkillsDirSubcommand(subcommand, skills, options.outputDir, stdout, stderr)
+		return runSkillsDirSubcommand(subcommand, projectRoot, skills, options.outputDir, stdout, stderr)
 	}
 	switch subcommand {
 	case "list":
@@ -64,6 +64,7 @@ func runSkillsSubcommand(
 
 func runSkillsDirSubcommand(
 	subcommand string,
+	projectRoot string,
 	skills []skillDefinition,
 	directory string,
 	stdout io.Writer,
@@ -105,9 +106,9 @@ func runSkillsDirSubcommand(
 	}
 	switch subcommand {
 	case "list":
-		return runSkillsDirList(absDir, skills, stdout, stderr)
+		return runSkillsDirList(absDir, skills, clicore.LoadDisabledTools(projectRoot), stdout, stderr)
 	case "install":
-		return runSkillsDirInstall(absDir, skills, stdout, stderr)
+		return runSkillsDirInstall(absDir, skills, clicore.LoadDisabledTools(projectRoot), stdout, stderr)
 	case "uninstall":
 		return runSkillsDirUninstall(absDir, skills, stdout, stderr)
 	default:

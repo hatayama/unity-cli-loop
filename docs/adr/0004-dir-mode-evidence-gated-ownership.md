@@ -69,9 +69,15 @@ Related settled points, so they are not relitigated finding by finding:
 - **Installed-side read failures are states, not errors.** An unreadable store-side
   `SKILL.md` is a conflict; an unreadable owned entry is `outdated` (self-repair on next
   sync). Source-side read failures propagate as real errors (fail fast).
-- **No disabled-tool filtering or deprecated-skill cleanup in dir mode.** The store may
-  serve multiple projects; one project's tool settings must not hide or delete skills from
-  it. A disabled tool is still refused at invocation time by the Unity side.
+- **Disabled-tool filtering runs in dir mode; deprecated-skill cleanup does not.** The
+  project's `disabledTools` hide a skill from install and list, and install removes a
+  disabled skill already in the store through the evidence-gated uninstall path, so a
+  hand-authored directory with the same name survives. This reverses the original
+  omission (2026-09-25, issue #2993): the omission assumed one store serving several
+  projects, but no such workflow exists, while the real one — a CI job syncing a
+  repository-managed store for its own project — had disabled skills re-added on every
+  sync. Reopen only if a store genuinely shared across projects appears. Deprecated-skill
+  cleanup stays out because it would delete by name alone.
 - **No cross-process locking.** Concurrent uloop runs against one store are unsynchronized
   everywhere in the CLI; dir mode adds nothing.
 

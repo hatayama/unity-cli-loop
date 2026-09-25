@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IControlPlayModeEditorStateService _editorStateService;
         private readonly IControlPlayModeDomainReloadDropStateProvider _domainReloadDropStateProvider;
         private readonly IEditorFocusStateProvider _editorFocusStateProvider;
+        private readonly ICliPlayModeRunInBackgroundStarter _runInBackgroundStarter;
 
         public ControlPlayModeUseCase(
             IControlPlayModeCompilationFailureProvider compilationFailureProvider = null,
@@ -39,7 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver = null,
             IControlPlayModeEditorStateService editorStateService = null,
             IControlPlayModeDomainReloadDropStateProvider domainReloadDropStateProvider = null,
-            IEditorFocusStateProvider editorFocusStateProvider = null)
+            IEditorFocusStateProvider editorFocusStateProvider = null,
+            ICliPlayModeRunInBackgroundStarter runInBackgroundStarter = null)
         {
             _compilationFailureProvider =
                 compilationFailureProvider ?? ControlPlayModeServices.CompilationFailureProvider;
@@ -52,6 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _domainReloadDropStateProvider =
                 domainReloadDropStateProvider ?? ControlPlayModeServices.DomainReloadDropStateProvider;
             _editorFocusStateProvider = editorFocusStateProvider ?? new EditorFocusStateProvider();
+            _runInBackgroundStarter =
+                runInBackgroundStarter ?? ControlPlayModeServices.RunInBackgroundService;
         }
 
         public Task<ControlPlayModeResponse> ExecuteAsync(ControlPlayModeSchema parameters, CancellationToken ct)
@@ -205,9 +209,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             if (!_editorStateService.IsPlaying)
             {
-                // Why: only CLI-started Play owns the override; manual Editor Play must keep project defaults.
-                ControlPlayModeServices.RunInBackgroundService.EnableForCliPlayStart();
                 _editorStateService.IsPlaying = true;
+                // Why: only CLI-started Play owns the override; manual Editor Play must keep project defaults.
+                // Enabled after the start request so a Play start that throws (for example an invalid Play Mode
+                // configuration) leaves no override behind; Play Mode itself is entered on a later frame.
+                _runInBackgroundStarter.EnableForCliPlayStart();
             }
 
             bool changed = wasPaused || !wasPlaying;
@@ -307,6 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 IsPlaying = _editorStateService.IsPlaying,
                 IsPaused = _editorStateService.IsPaused,
+                ActiveScenario = _editorStateService.ActiveScenarioName,
                 Changed = changed,
                 WasAlreadyStopped = wasAlreadyStopped,
                 ResumedFromPause = resumedFromPause,

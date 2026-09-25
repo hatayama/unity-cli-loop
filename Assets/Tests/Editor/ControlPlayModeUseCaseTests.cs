@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Compilation;
@@ -158,6 +160,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
             Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
             Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: the response names the active non-default Play Mode configuration.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenNonDefaultScenarioActive_ReportsActiveScenario()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false)
+            {
+                ActiveScenarioName = "SampleScenario"
+            };
+            ControlPlayModeUseCase useCase = CreateStatusUseCase(editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Status,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.ActiveScenario, Is.EqualTo("SampleScenario"));
+        }
+
+        /// <summary>
+        /// What: the serialized response omits ActiveScenario while the default configuration is active.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenDefaultConfiguration_OmitsActiveScenarioFromJson()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            ControlPlayModeUseCase useCase = CreateStatusUseCase(editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Status,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+            JObject json = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    response,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(json.ContainsKey("ActiveScenario"), Is.False);
+        }
+
+        private static ControlPlayModeUseCase CreateStatusUseCase(FakeControlPlayModeEditorStateService editorState)
+        {
+            return new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                new StubEditorUnsavedChangesQuietSaver(
+                    saveFailures: System.Array.Empty<string>(),
+                    remainingAfterSave: System.Array.Empty<string>()),
+                editorState);
         }
 
         [Test]
@@ -463,6 +520,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.BlockedByUnsavedChanges, Is.True);
             Assert.That(response.Message, Does.Contain("unsaved scene or prefab changes"));
             Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
+        }
+
+        /// <summary>
+        /// What: a Play start that fails synchronously propagates the error without leaving the CLI runInBackground override enabled.
+        /// </summary>
+        [Test]
+        public void ExecuteAsync_WhenPlayStartThrows_DoesNotEnableRunInBackgroundOverride()
+        {
+            RecordingRunInBackgroundStarter runInBackgroundStarter = new();
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                new StubEditorUnsavedChangesQuietSaver(
+                    saveFailures: System.Array.Empty<string>(),
+                    remainingAfterSave: System.Array.Empty<string>()),
+                new ThrowingPlayStartEditorStateService(),
+                new StubDomainReloadDropStateProvider(),
+                runInBackgroundStarter: runInBackgroundStarter);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => useCase.ExecuteAsync(schema, CancellationToken.None));
+
+            Assert.That(exception.Message, Is.EqualTo("configuration cannot start"));
+            Assert.That(runInBackgroundStarter.EnableCallCount, Is.EqualTo(0));
         }
 
         [Test]
@@ -880,6 +965,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _isPaused = isPaused;
             }
 
+            public string ActiveScenarioName { get; set; }
+
             public bool IsPlaying
             {
                 get => _isPlaying;
@@ -931,6 +1018,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             finally
             {
                 HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalRuntimeChangeCount;
+            }
+        }
+
+        private sealed class RecordingRunInBackgroundStarter : ICliPlayModeRunInBackgroundStarter
+        {
+            public int EnableCallCount { get; private set; }
+
+            public void EnableForCliPlayStart()
+            {
+                EnableCallCount++;
+            }
+        }
+
+        private sealed class ThrowingPlayStartEditorStateService : IControlPlayModeEditorStateService
+        {
+            public bool IsPlaying
+            {
+                get => false;
+                set
+                {
+                    if (value)
+                    {
+                        throw new InvalidOperationException("configuration cannot start");
+                    }
+                }
+            }
+
+            public bool IsPaused { get; set; }
+            public string ActiveScenarioName => null;
+
+            public void Step()
+            {
             }
         }
 

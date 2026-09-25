@@ -39,6 +39,7 @@ type controlPlayModeResponse struct {
 	CompileErrors           []controlPlayModeCompileError `json:"CompileErrors"`
 	Message                 string                        `json:"Message"`
 	Warning                 string                        `json:"Warning"`
+	ActiveScenario          string                        `json:"ActiveScenario,omitempty"`
 }
 
 type controlPlayModeCompileError struct {
