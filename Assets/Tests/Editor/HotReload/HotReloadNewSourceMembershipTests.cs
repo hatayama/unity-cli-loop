@@ -5,6 +5,7 @@ using System.Text;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -116,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // whole replacement domain, and the applied source ledger is part of that domain.
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
                 ActivateIntroducedTypeFor(existingScriptPath);
 
                 ResolveExistingScript("introduced-type-active");
@@ -141,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, currentHash, false);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, currentHash, false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
 
                 HotReloadPatchTargetResolution resolution = ResolveExistingScript("introduced-type-absent");
 
@@ -165,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
 
                 HotReloadPatchTargetResolution resolution = ResolveExistingScript("ledger-entry-stale");
 

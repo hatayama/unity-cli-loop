@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -16,8 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </remarks>
     internal sealed class HotReloadAppliedSourceLedger
     {
-        private readonly Dictionary<string, (string Hash, bool IsFullyApplied)> _appliedSourceByPath =
-            new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
+        private readonly Dictionary<string, HotReloadAppliedSourceRecord> _appliedSourceByPath =
+            new Dictionary<string, HotReloadAppliedSourceRecord>(StringComparer.Ordinal);
 
         // Why it is keyed by the platform's path comparer rather than Ordinal: a file absent from
         // the compiled source list is looked up again from a later run's spelling of the path,
@@ -28,22 +31,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why the flag: a non-baseline entry (Skipped or Failed in the last run) must not
         // short-circuit; it exists only so an identical reload can explain why it re-applies.
+        // Why the path and the rows: the pause-point tool asks whether the file on disk is still
+        // what that reload read, and which rows it left unapplied.
         internal void RecordAppliedSource(
             string projectRelativePath,
             string sourceContentSha256,
-            bool isFullyApplied)
+            bool isFullyApplied,
+            string sourcePath,
+            IReadOnlyList<HotReloadUnappliedRow> unappliedRows)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(!string.IsNullOrEmpty(sourceContentSha256), "sourceContentSha256 must not be empty.");
 
-            _appliedSourceByPath[projectRelativePath] = (sourceContentSha256, isFullyApplied);
+            _appliedSourceByPath[projectRelativePath] = new HotReloadAppliedSourceRecord(
+                sourceContentSha256,
+                isFullyApplied,
+                sourcePath,
+                unappliedRows);
         }
 
         /// <summary>The files whose last reload left Skipped or Failed rows.</summary>
         internal IReadOnlyList<string> ListNotFullyAppliedSourcePaths()
         {
             List<string> paths = new List<string>();
-            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in _appliedSourceByPath)
+            foreach (KeyValuePair<string, HotReloadAppliedSourceRecord> pair in _appliedSourceByPath)
             {
                 if (!pair.Value.IsFullyApplied)
                 {
@@ -58,14 +68,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
 
-            if (!_appliedSourceByPath.TryGetValue(
-                    projectRelativePath,
-                    out (string Hash, bool IsFullyApplied) entry))
+            if (!_appliedSourceByPath.TryGetValue(projectRelativePath, out HotReloadAppliedSourceRecord record))
             {
                 return null;
             }
 
-            return entry;
+            return (record.Hash, record.IsFullyApplied);
+        }
+
+        /// <summary>
+        /// The record a caller outside the apply pipeline means by this path, which may be absolute
+        /// or spelled with the other separator. Null when no record matches, or when more than one
+        /// does.
+        /// </summary>
+        internal HotReloadAppliedSourceRecord FindRecordForRequestedPath(string requestedPath)
+        {
+            if (string.IsNullOrEmpty(requestedPath))
+            {
+                return null;
+            }
+
+            string normalizedRequest = HotReloadSourcePathNormalizer.ToForwardSlashes(requestedPath);
+            StringComparison comparison = Path.DirectorySeparatorChar == '\\'
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            // Why exact-first: the same rule as the shim lookup, so a path that names one file
+            // exactly is never lost to a suffix match on another.
+            foreach (KeyValuePair<string, HotReloadAppliedSourceRecord> pair in _appliedSourceByPath)
+            {
+                if (string.Equals(normalizedRequest, HotReloadSourcePathNormalizer.ToForwardSlashes(pair.Key), comparison))
+                {
+                    return pair.Value;
+                }
+            }
+
+            HotReloadAppliedSourceRecord suffixMatch = null;
+            int suffixMatchCount = 0;
+            foreach (KeyValuePair<string, HotReloadAppliedSourceRecord> pair in _appliedSourceByPath)
+            {
+                if (!HotReloadSourcePathNormalizer.PathsReferToSameFile(requestedPath, pair.Key))
+                {
+                    continue;
+                }
+
+                suffixMatchCount++;
+                suffixMatch = pair.Value;
+                if (suffixMatchCount > 1)
+                {
+                    // Why null on ambiguity: answering from the wrong file's reload is worse than
+                    // answering as if no reload read the file.
+                    return null;
+                }
+            }
+
+            return suffixMatch;
         }
 
         // Why the evidence is kept per file rather than recomputed: a file outside the last
@@ -111,5 +168,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _appliedSourceByPath.Clear();
             _newSourceMembershipEvidenceByPath.Clear();
         }
+    }
+
+    /// <summary>
+    /// What the latest reload that read a file recorded about it.
+    /// </summary>
+    internal sealed class HotReloadAppliedSourceRecord
+    {
+        internal HotReloadAppliedSourceRecord(
+            string hash,
+            bool isFullyApplied,
+            string sourcePath,
+            IReadOnlyList<HotReloadUnappliedRow> unappliedRows)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(hash), "hash must not be empty.");
+
+            // Why these two stop in every build: a record with no path would let the pause-point
+            // port report the file as unchanged, and one with no rows would claim a clean reload.
+            if (string.IsNullOrEmpty(sourcePath))
+            {
+                throw new ArgumentException("An applied-source record needs the path the reload read.", nameof(sourcePath));
+            }
+
+            if (unappliedRows == null)
+            {
+                throw new ArgumentNullException(nameof(unappliedRows));
+            }
+
+            Hash = hash;
+            IsFullyApplied = isFullyApplied;
+            SourcePath = sourcePath;
+            UnappliedRows = unappliedRows;
+        }
+
+        /// <summary>The hash of the bytes that reload read.</summary>
+        internal string Hash { get; }
+
+        /// <summary>Whether that reload applied every change without a Skipped or Failed row.</summary>
+        internal bool IsFullyApplied { get; }
+
+        /// <summary>
+        /// The full path the transform worker read, which differs from the file itself when a
+        /// reload was run from an edited copy.
+        /// </summary>
+        internal string SourcePath { get; }
+
+        /// <summary>The Skipped and Failed rows of that reload, in the order it reported them.</summary>
+        internal IReadOnlyList<HotReloadUnappliedRow> UnappliedRows { get; }
     }
 }

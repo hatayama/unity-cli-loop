@@ -4,6 +4,8 @@ using System.Globalization;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -36,10 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // twice; recording mid-run would short-circuit the second copy.
         // Why the last occurrence wins: only what the last copy landed is what the next run has
         // to compare against.
-        private readonly Dictionary<string, (HotReloadAppliedSourceRecordDecision Decision, HotReloadNewSourceMembershipEvidence Evidence)>
-            _appliedSourceRecordByPath =
-                new Dictionary<string, (HotReloadAppliedSourceRecordDecision Decision, HotReloadNewSourceMembershipEvidence Evidence)>(
-                    StringComparer.Ordinal);
+        private readonly Dictionary<string, StagedAppliedSource> _appliedSourceRecordByPath =
+            new Dictionary<string, StagedAppliedSource>(StringComparer.Ordinal);
         // Why captured at construction: the 0.5s Auto Refresh reconcile can arm the hold while the
         // run is still awaited, so the sync at the end of the run cannot tell a run that armed the
         // hold from one that merely found it armed. What the caller promised is "the first apply
@@ -131,12 +131,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why the worker hash (not the orchestrator probe): the worker re-reads the file in
             // another process, so the bytes it compiled can differ from the probe if the file
             // changed mid-run.
-            _appliedSourceRecordByPath[projectRelativePath] = (
+            // Why the rows are staged with the decision: a Keep then leaves the earlier rows with the
+            // earlier record, and a Forget drops them with it.
+            _appliedSourceRecordByPath[projectRelativePath] = new StagedAppliedSource(
                 HotReloadAppliedSourceRecordDecision.Decide(
                     fileResult.SourceContentSha256,
                     fileResult.Outcomes,
                     fileResult.AppliedAddedFieldsOrConsts),
-                fileResult.NewSourceMembershipEvidence);
+                fileResult.NewSourceMembershipEvidence,
+                fileResult.WorkerSourcePath,
+                CollectUnappliedRows(fileResult.Outcomes));
             _siblingLedgerUpdates.Observe(projectRelativePath, fileResult);
         }
 
@@ -157,8 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public void RecordAppliedSourceHashes()
         {
-            foreach (KeyValuePair<string, (HotReloadAppliedSourceRecordDecision Decision, HotReloadNewSourceMembershipEvidence Evidence)>
-                         pair in _appliedSourceRecordByPath)
+            foreach (KeyValuePair<string, StagedAppliedSource> pair in _appliedSourceRecordByPath)
             {
                 HotReloadAppliedSourceRecordDecision decision = pair.Value.Decision;
                 if (decision.Kind == HotReloadAppliedSourceRecordKind.Keep)
@@ -175,7 +178,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _domain.AppliedSources.RecordAppliedSource(
                     pair.Key,
                     decision.Hash,
-                    decision.Kind == HotReloadAppliedSourceRecordKind.FullyApplied);
+                    decision.Kind == HotReloadAppliedSourceRecordKind.FullyApplied,
+                    pair.Value.WorkerSourcePath,
+                    pair.Value.UnappliedRows);
 
                 // Why a null evidence leaves the recorded one alone: a result that carries none is
                 // a file the compiler lists, or one that ended before its target was resolved.
@@ -359,6 +364,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     string.Join(", ", unreported)));
         }
 
+        // The Skipped and Failed rows of one file's result, in the order the result reports them.
+        private static IReadOnlyList<HotReloadUnappliedRow> CollectUnappliedRows(
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            List<HotReloadUnappliedRow> rows = new List<HotReloadUnappliedRow>();
+            foreach (HotReloadMethodOutcome outcome in outcomes)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped)
+                {
+                    rows.Add(new HotReloadUnappliedRow(outcome.Method, HotReloadUnappliedRowKind.Skipped));
+                    continue;
+                }
+
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    rows.Add(new HotReloadUnappliedRow(outcome.Method, HotReloadUnappliedRowKind.Failed));
+                }
+            }
+
+            return rows;
+        }
+
         private void LogSummary(string correlationId)
         {
             HotReloadOutcomeTally tally = HotReloadOutcomeAggregation.CountMethodOutcomeKinds(_outcomes);
@@ -371,6 +398,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 tally.StaleCount,
                 !tally.HasFailure,
                 correlationId);
+        }
+
+        // What one file's result stages for the end of the run.
+        private sealed class StagedAppliedSource
+        {
+            internal StagedAppliedSource(
+                HotReloadAppliedSourceRecordDecision decision,
+                HotReloadNewSourceMembershipEvidence evidence,
+                string workerSourcePath,
+                IReadOnlyList<HotReloadUnappliedRow> unappliedRows)
+            {
+                Decision = decision;
+                Evidence = evidence;
+                WorkerSourcePath = workerSourcePath;
+                UnappliedRows = unappliedRows;
+            }
+
+            internal HotReloadAppliedSourceRecordDecision Decision { get; }
+
+            internal HotReloadNewSourceMembershipEvidence Evidence { get; }
+
+            internal string WorkerSourcePath { get; }
+
+            internal IReadOnlyList<HotReloadUnappliedRow> UnappliedRows { get; }
         }
     }
 }

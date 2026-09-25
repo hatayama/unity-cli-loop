@@ -35,6 +35,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// <summary>Files answered as introduced-type declarations. Null falls through to <see cref="Inner"/>.</summary>
         public HashSet<string> IntroducedTypeSourceFiles { get; set; }
 
+        public System.Func<string, HotReloadLatestFileReload> LatestReloadOfFile { get; set; }
+
+        public System.Func<string, MethodBase, HotReloadUnappliedRow> UnappliedRowForMethod { get; set; }
+
         public MethodBase GetActiveShimForMethod(MethodBase method)
         {
             return ActiveShimForMethod != null
@@ -105,6 +109,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return Inner != null && Inner.IsIntroducedTypeSourceFile(file);
+        }
+
+        public HotReloadLatestFileReload GetLatestReloadOfFile(string file)
+        {
+            return LatestReloadOfFile != null
+                ? LatestReloadOfFile(file)
+                : Inner?.GetLatestReloadOfFile(file);
+        }
+
+        public HotReloadUnappliedRow FindUnappliedRowForMethod(string file, MethodBase method)
+        {
+            return UnappliedRowForMethod != null
+                ? UnappliedRowForMethod(file, method)
+                : Inner?.FindUnappliedRowForMethod(file, method);
         }
     }
 }

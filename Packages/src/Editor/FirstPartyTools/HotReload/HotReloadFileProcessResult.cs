@@ -31,6 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public string[] AddedEnumMemberNames { get; }
         public string SourceContentSha256 { get; }
+
+        /// <summary>
+        /// The full path the transform worker read the file from; set on every result that carries
+        /// <see cref="SourceContentSha256"/>, so an applied-source record can say what it hashed.
+        /// </summary>
+        public string WorkerSourcePath { get; }
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
         /// <summary>
@@ -64,7 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null,
             int introducedTypeNoticeCount = 0,
-            string[] addedEnumMemberNames = null)
+            string[] addedEnumMemberNames = null,
+            string workerSourcePath = null)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -83,6 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
             IntroducedTypeNoticeCount = introducedTypeNoticeCount;
             AddedEnumMemberNames = addedEnumMemberNames ?? Array.Empty<string>();
+            WorkerSourcePath = workerSourcePath;
         }
     }
 }
