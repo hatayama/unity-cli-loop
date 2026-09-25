@@ -31,6 +31,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
 
+        // A body the transform worker skips: it calls into the base class.
+        private const string ComputeWithBaseCallStatement = "return base.BaseSeed() + _secret + delta + 100;";
+
+        // Each scenario reloads one copy twice, the way a user reloads the same file again.
+        private const string LeftBehindCopyFileName = "E2E_left_behind.cs";
+        private const string SkippedOnlyCopyFileName = "E2E_skipped_only.cs";
+        private const string EditedAfterReloadCopyFileName = "E2E_edited_after_reload.cs";
+
         private HotReloadDomainTestScope _scope;
 
         [SetUp]
@@ -251,6 +259,116 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(withMethod.Message, Does.Contain(addedAtLine.Label));
         }
 
+        /// <summary>
+        /// What: after a reload patched ComputeWithPrivate and a later reload of the same copy
+        /// skipped it while patching another method, a line of ComputeWithPrivate is refused as a
+        /// body an earlier reload left running, naming its Skipped row, and nothing is armed.
+        /// </summary>
+        [Test]
+        public async Task PatchThenSkip_LineOfTheSkippedMethod_RefusesAsLeftBehind()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            await HotReloadFromEditedSourceAsync(
+                ShiftComputeWithPrivateDownTwoLines(BuildEditedComputePlusHundred(onDisk)),
+                LeftBehindCopyFileName);
+            HotReloadOrchestratorResult skipping = await HotReloadFromEditedSourceAsync(
+                ShiftComputeWithPrivateDownTwoLines(
+                    ReplaceSummarizeCellsTotal(ReplaceComputeWithPrivateBody(onDisk, ComputeWithBaseCallStatement))),
+                LeftBehindCopyFileName);
+            string skippedLabel = FindSkippedLabel(skipping, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            PausePointResponse enable = EnableContinuous(enableLine);
+
+            AssertLeftBehindRefusal(enable, enableLine, skippedLabel);
+        }
+
+        /// <summary>
+        /// What: after a reload patched ComputeWithPrivate and a later reload of the same copy only
+        /// skipped it, so no new shim generation was built, a line inside the older generation's
+        /// span and the attribute line above it, outside that span, are both refused as left behind.
+        /// </summary>
+        [Test]
+        public async Task SkippedOnlyReload_LinesOfTheSkippedMethod_RefuseAsLeftBehind()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int statementLine = FindLineNumber(onDisk, "return _secret + delta;");
+            int attributeLine = FindLineNumber(onDisk, "public int ComputeWithPrivate(int delta)") - 1;
+            Assert.That(onDisk.Replace("\r\n", "\n").Split('\n')[attributeLine - 1], Does.Contain("[MethodImpl"));
+            await HotReloadFromEditedSourceAsync(
+                ShiftComputeWithPrivateDownTwoLines(BuildEditedComputePlusHundred(onDisk)),
+                SkippedOnlyCopyFileName);
+            HotReloadOrchestratorResult skipping = await HotReloadFromEditedSourceAsync(
+                ShiftComputeWithPrivateDownTwoLines(ReplaceComputeWithPrivateBody(onDisk, ComputeWithBaseCallStatement)),
+                SkippedOnlyCopyFileName,
+                requirePatched: false);
+            string skippedLabel = FindSkippedLabel(skipping, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            PausePointResponse insideTheStaleSpan = EnableContinuous(statementLine);
+            PausePointResponse aboveTheStaleSpan = EnableContinuous(attributeLine);
+
+            AssertLeftBehindRefusal(insideTheStaleSpan, statementLine, skippedLabel);
+            AssertLeftBehindRefusal(aboveTheStaleSpan, attributeLine, skippedLabel);
+        }
+
+        /// <summary>
+        /// What: after a reload patched ComputeWithPrivate and the copy it read was edited again
+        /// without reloading, the attribute line above the method is refused as patched-source-
+        /// changed, whose reload records the method's edited range again, and nothing is armed.
+        /// </summary>
+        [Test]
+        public async Task PatchThenEdit_LineAboveThePatchedMethod_RefusesWithPatchedSourceChanged()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int attributeLine = FindLineNumber(onDisk, "public int ComputeWithPrivate(int delta)") - 1;
+            await HotReloadFromEditedSourceAsync(
+                ShiftComputeWithPrivateDownTwoLines(BuildEditedComputePlusHundred(onDisk)),
+                EditedAfterReloadCopyFileName);
+            OverwriteEditedCopy(
+                EditedAfterReloadCopyFileName,
+                ShiftComputeWithPrivateDownTwoLines(ReplaceComputeWithPrivateBody(onDisk, "return _secret + delta + 300;")));
+
+            PausePointResponse enable = EnableContinuous(attributeLine);
+
+            Assert.That(enable.Success, Is.False, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodePatchedSourceChanged));
+            Assert.That(
+                enable.Message,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.PatchedSourceChangedOnDiskMessageFormat,
+                        FixtureProjectRelativePath,
+                        attributeLine)));
+            Assert.That(enable.RecommendedNextAction, Is.EqualTo(SourcePausePointConstants.PatchedSourceChangedOnDiskHint));
+            Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a reload that skipped CallsBase with no earlier patch leaves its compiled body
+        /// running, so an unchanged line of it still arms the compiled code.
+        /// </summary>
+        [Test]
+        public async Task SkipWithoutEarlierPatch_UnchangedLineOfTheSkippedMethod_ArmsTheCompiledBody()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return base.BaseSeed() + 1;");
+            string edited = onDisk.Replace(
+                "return base.BaseSeed() + 1;",
+                "return base.BaseSeed() + 2;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            HotReloadOrchestratorResult skipping = await HotReloadFromEditedSourceAsync(
+                edited,
+                "E2E_skip_without_patch.cs",
+                requirePatched: false);
+            FindSkippedLabel(skipping, nameof(HotReloadE2EFixture.CallsBase));
+
+            PausePointResponse enable = EnableContinuous(enableLine);
+
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.False);
+        }
+
         private static PausePointResponse EnableContinuous(int line)
         {
             return new PausePointUseCase().Enable(new EnablePausePointSchema
@@ -340,6 +458,76 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             return edited;
+        }
+
+        // Two comment lines above ComputeWithPrivate put every line of the copy below them two
+        // lines lower than in the project file, so a span of that copy read as a project line
+        // misses the method.
+        private static string ShiftComputeWithPrivateDownTwoLines(string source)
+        {
+            const string original =
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n        public int ComputeWithPrivate(int delta)";
+            string edited = source.Replace(
+                original,
+                "        // Moved down by the edited copy.\n        // Moved down by the edited copy.\n" + original,
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(source));
+            return edited;
+        }
+
+        private static string ReplaceComputeWithPrivateBody(string source, string statement)
+        {
+            string edited = source.Replace(
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                "public int ComputeWithPrivate(int delta)\n        {\n            " + statement + "\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(source));
+            return edited;
+        }
+
+        private static string ReplaceSummarizeCellsTotal(string source)
+        {
+            string edited = source.Replace(
+                "int total = cells.Count;",
+                "int total = cells.Count + 1;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(source));
+            return edited;
+        }
+
+        private static void OverwriteEditedCopy(string fileName, string source)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            File.WriteAllText(
+                Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory, fileName),
+                source);
+        }
+
+        private static string FindSkippedLabel(HotReloadOrchestratorResult result, string methodName)
+        {
+            HotReloadMethodOutcome skipped = result.Methods.FirstOrDefault(
+                m => m.Kind == HotReloadMethodOutcomeKind.Skipped && m.Method.Contains(methodName));
+            Assert.That(skipped, Is.Not.Null, FormatHotReloadOutcomes(result));
+            return skipped.Method;
+        }
+
+        private static void AssertLeftBehindRefusal(PausePointResponse enable, int line, string skippedLabel)
+        {
+            Assert.That(enable.Success, Is.False, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+            Assert.That(
+                enable.Message,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadLeftBehindMethodRefusalMessageFormat,
+                        line,
+                        nameof(HotReloadE2EFixture) + "." + nameof(HotReloadE2EFixture.ComputeWithPrivate),
+                        SourcePausePointConstants.HotReloadLeftBehindSkippedVerb,
+                        skippedLabel)));
+            Assert.That(
+                enable.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction));
+            Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
         }
 
         private static async Task<HotReloadOrchestratorResult> HotReloadFromEditedSourceAsync(

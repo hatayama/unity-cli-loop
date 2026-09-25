@@ -78,6 +78,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
+        // Why no freshness check here, unlike the span lookups: the caller asks whether the latest
+        // shim generation holds the method at all, and has already checked that its source is
+        // the file on disk.
+        internal static bool IsMethodInShimLookup(string file, MethodBase method)
+        {
+            IHotReloadPausePointPort hotReloadSide = HotReloadPausePointCoordination.HotReloadSide;
+            if (string.IsNullOrEmpty(file) || method == null || hotReloadSide == null)
+            {
+                return false;
+            }
+
+            HotReloadShimFileLookup lookup =
+                hotReloadSide.GetShimLookupForFile(SourcePausePointPathNormalizer.ToForwardSlashes(file));
+            if (lookup?.Methods == null)
+            {
+                return false;
+            }
+
+            foreach (HotReloadShimMethodLookup entry in lookup.Methods)
+            {
+                if (entry.OriginalMethod == method)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal static string DescribeMethod(MethodBase method)
         {
             if (method == null)

@@ -397,6 +397,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadPatchedMethodWithoutSpanRefusalNextAction =
             "Pass --line inside the patched method's edited body, or run 'uloop compile' and retry.";
 
+        // Why name the row: the method's Methods[] row in the last hot reload response gives the
+        // Reason that reload did not apply it, which is what the caller has to change before a
+        // reload replaces the earlier body. Format: requested line, method display name, verb
+        // (HotReloadLeftBehindSkippedVerb or HotReloadLeftBehindFailedVerb), row label.
+        public const string HotReloadLeftBehindMethodRefusalMessageFormat =
+            "Line {0} of the edited file resolves to a statement inside '{1}', which the last hot "
+            + "reload of this file {2}, so what runs for it is still the body an earlier hot reload "
+            + "applied. That body matches neither the compiled assembly nor the file on disk, so no "
+            + "line of this file can be armed in it; the Reason of the Methods[] row '{3}' in that "
+            + "hot reload response names what to change.";
+
+        public const string HotReloadLeftBehindSkippedVerb = "skipped";
+
+        public const string HotReloadLeftBehindFailedVerb = "could not apply";
+
+        public const string HotReloadLeftBehindMethodRefusalNextAction =
+            "Change what that Reason names and run 'uloop hot-reload' on the file again, or run "
+            + "'uloop compile'; then retry with the same --line.";
+
+        // Why only compile: the last reload read the file as it is and reported no row for the
+        // method, so reloading the same contents leaves the earlier body running. Format:
+        // requested line, method display name.
+        public const string HotReloadEarlierPatchRefusalMessageFormat =
+            "Line {0} of the edited file resolves to a statement inside '{1}', which still runs the "
+            + "body an earlier hot reload applied: the last hot reload of this file read the file on "
+            + "disk as it is now and did not apply '{1}' again, so no line of this file can be armed "
+            + "in it.";
+
+        public const string HotReloadEarlierPatchRefusalNextAction =
+            "Run 'uloop compile', then retry with the same --line.";
+
         public const string NearbyCompiledMethodsPrefix =
             " Nearby methods in the last compiled source: ";
 
@@ -480,6 +511,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string LineNotCompiledRecommendedNextAction =
             "Run 'uloop hot-reload' (a pause point inside a hot-reload patched method arms the edited code) or 'uloop compile', then retry with the same --line. To arm compiled code instead, pass --line for a statement that is unchanged since the last compile.";
+
+        // Why say what the last reload did: once it read the file as it is on disk, hot reloading
+        // the same contents again gives the same result, so the shared "hot-reload or compile"
+        // next action would return this refusal again. Format: the unapplied rows, described.
+        public const string LineNotCompiledLatestReloadLeftRowsSuffixFormat =
+            " The last hot reload of this file read it as it is on disk now and left these Methods[] "
+            + "rows unapplied: {0}. Hot reloading the same contents again leaves them unapplied.";
+
+        public const string LineNotCompiledLatestReloadAppliedAllSuffix =
+            " The last hot reload of this file read it as it is on disk now, so hot reloading it "
+            + "again does not change this line.";
+
+        public const string LineNotCompiledLatestReloadLeftRowsRecommendedNextAction =
+            "If one of those rows covers this line (its method holds the line, or it is a '(file)' "
+            + "row), change what that row's Reason names and run 'uloop hot-reload' again; otherwise, "
+            + "or to run the edited code as written, run 'uloop compile'. Then retry with the same "
+            + "--line. To arm compiled code instead, pass --line for a statement that is unchanged "
+            + "since the last compile.";
+
+        public const string LineNotCompiledLatestReloadAppliedAllRecommendedNextAction =
+            "Run 'uloop compile', then retry with the same --line. To arm compiled code instead, pass "
+            + "--line for a statement that is unchanged since the last compile.";
 
         // Why a next action of its own: hot reload and compile do not change how many lines the
         // file on disk has, so the shared "hot-reload or compile, then retry with the same --line"
