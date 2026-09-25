@@ -475,18 +475,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void AppliedSource_IsRecordedAndClearedPerFile()
         {
-            _access.Domain.RecordAppliedSource(FileOne, "hash-one", true);
-            _access.Domain.RecordAppliedSource(FileTwo, "hash-two", false);
+            _access.Domain.AppliedSources.RecordAppliedSource(FileOne, "hash-one", true);
+            _access.Domain.AppliedSources.RecordAppliedSource(FileTwo, "hash-two", false);
 
-            (string Hash, bool IsFullyApplied)? recorded = _access.Domain.TryGetAppliedSource(FileOne);
+            (string Hash, bool IsFullyApplied)? recorded = _access.Domain.AppliedSources.TryGetAppliedSource(FileOne);
             Assert.That(recorded, Is.Not.Null);
             Assert.That(recorded.Value.Hash, Is.EqualTo("hash-one"));
             Assert.That(recorded.Value.IsFullyApplied, Is.True);
 
-            _access.Domain.ClearAppliedSource(FileOne);
+            _access.Domain.AppliedSources.ClearAppliedSource(FileOne);
 
-            Assert.That(_access.Domain.TryGetAppliedSource(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetAppliedSource(FileTwo), Is.Not.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileTwo), Is.Not.Null);
         }
 
         /// <summary>
@@ -499,12 +499,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadNewSourceMembershipEvidence evidence = CreateMembershipEvidence(FileOne);
 
-            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, evidence);
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileOne, evidence);
 
             Assert.That(
-                _access.Domain.TryGetNewSourceMembershipEvidence(FileOne),
+                _access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileOne),
                 Is.SameAs(evidence));
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
         }
 
         /// <summary>
@@ -515,13 +515,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ClearAppliedSource_DropsTheMembershipEvidenceOfThatFileOnly()
         {
-            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
-            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
 
-            _access.Domain.ClearAppliedSource(FileOne);
+            _access.Domain.AppliedSources.ClearAppliedSource(FileOne);
 
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Not.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileTwo), Is.Not.Null);
         }
 
         /// <summary>
@@ -546,10 +546,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_access.Domain.DescribeAddedFields(), Is.Empty);
             Assert.That(_access.Domain.DescribeAddedMembers(), Is.Empty);
             Assert.That(HotReloadInvocationRegistry.GetCount(AddedMethodKey), Is.EqualTo(0));
-            Assert.That(_access.Domain.TryGetAppliedSource(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetAppliedSource(FileTwo), Is.Null);
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileTwo), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
             Assert.That(
                 _access.Domain.TryGetSupersededReplacement(SupersededMethodKey, out string _),
                 Is.False);
@@ -566,10 +566,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _access.ReplaceAddedFields(FileOne, new[] { "DomainHost.count" });
             _access.ReplaceAddedFields(FileTwo, new[] { "DomainHost.label" });
             HotReloadInvocationRegistry.Increment(AddedMethodKey);
-            _access.Domain.RecordAppliedSource(FileOne, "hash", true);
-            _access.Domain.RecordAppliedSource(FileTwo, "other-hash", false);
-            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
-            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
+            _access.Domain.AppliedSources.RecordAppliedSource(FileOne, "hash", true);
+            _access.Domain.AppliedSources.RecordAppliedSource(FileTwo, "other-hash", false);
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
             _access.RecordSupersededSignature(FileOne, SupersededMethodKey, "Superseded(int)");
         }
 

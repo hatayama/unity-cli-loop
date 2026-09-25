@@ -222,80 +222,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(normalizedFile);
             if (shimLookup != null)
             {
-                bool shimSourceChanged =
-                    HotReloadPausePointCoordination.HotReloadSide.HasShimSourceChangedOnDisk(normalizedFile);
-                SourcePausePointShimResolution shimResolution =
-                    SourcePausePointShimResolver.Resolve(
-                        shimLookup, normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
-                PausePointResponse staleSourceRefusal =
-                    PausePointPatchedSourceGuard.RefuseWhenChangedOrNull(
-                        shimSourceChanged, shimResolution, normalizedFile, parameters.Line);
-                if (staleSourceRefusal != null)
+                PausePointResponse shimResponse = EnableOnHotReloadShimOrNull(
+                    parameters,
+                    hitWhen,
+                    hitWhenCondition,
+                    normalizedFile,
+                    id,
+                    snapshotTiming,
+                    shimLookup);
+                if (shimResponse != null)
                 {
-                    return staleSourceRefusal;
+                    return shimResponse;
                 }
-
-                if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
-                    || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
-                {
-                    SourcePausePointPatchResult shimPatchResult = SourcePausePointPatcher.PatchShimTarget(
-                        id,
-                        shimResolution,
-                        normalizedFile,
-                        parameters.Line);
-                    if (!shimPatchResult.Success)
-                    {
-                        return new PausePointResponse
-                        {
-                            Success = false,
-                            ErrorCode = SourcePausePointConstants.ErrorCodePatchFailed,
-                            Message = shimPatchResult.ErrorMessage,
-                            RecommendedNextAction = shimPatchResult.Hint,
-                            EditorState = PausePointEditorState.FromSnapshot(
-                                UloopPausePointRegistry.CaptureEditorState()),
-                        };
-                    }
-
-                    // Why the same resolved line twice: shim sequence points do not expose an
-                    // end line distinct from the hit line. Edited method span is passed separately.
-                    return FinishEnableBySourceLocation(
-                        id,
-                        parameters,
-                        hitWhen,
-                        hitWhenCondition,
-                        shimResolution.ResolvedLine,
-                        shimResolution.ResolvedLine,
-                        shimResolution.MethodDisplayName,
-                        shimPatchResult,
-                        "EditedFile",
-                        retargetedToHotReloadPatch: true,
-                        shimResolution.NotCapturableVariables,
-                        editedMethodStartLine: shimResolution.SourceStartLine,
-                        editedMethodEndLine: shimResolution.SourceEndLine);
-                }
-
-                if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
-                {
-                    return PausePointFailureResponse.Create(
-                        shimResolution.ErrorMessage,
-                        SourcePausePointConstants.ErrorCodeResolveFailed,
-                        "Pick a line with an executable statement inside the edited method body.");
-                }
-
-                // Why refuse: without shim debug symbols the edited body has no line map, and
-                // falling through would arm compiled code that no longer runs.
-                if (shimResolution.Kind == SourcePausePointShimResolveKind.PatchedMethodPdbUnavailable)
-                {
-                    return PausePointFailureResponse.Create(
-                        string.Format(
-                            SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
-                            shimResolution.MethodDisplayName,
-                            parameters.Line),
-                        SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
-                        SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableNextAction);
-                }
-
-                // NotInPatchedMethod: fall through to the compiled ScriptAssemblies resolver.
             }
 
             PausePointEditedLineResolution resolution =
@@ -340,6 +278,95 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editedMethodStartLine: resolution.EditedMethodStartLine,
                 editedMethodEndLine: resolution.EditedMethodEndLine,
                 fallbackWarning: resolution.Warning);
+        }
+
+        // Resolves --line against the hot-reload shim of the file and arms or refuses there, or
+        // returns null when the line is outside every patched method so the compiled resolver
+        // takes it.
+        private static PausePointResponse EnableOnHotReloadShimOrNull(
+            EnablePausePointSchema parameters,
+            string hitWhen,
+            UloopPausePointHitWhenCondition hitWhenCondition,
+            string normalizedFile,
+            string id,
+            SourcePausePointSnapshotTiming snapshotTiming,
+            HotReloadShimFileLookup shimLookup)
+        {
+            bool shimSourceChanged =
+                HotReloadPausePointCoordination.HotReloadSide.HasShimSourceChangedOnDisk(normalizedFile);
+            SourcePausePointShimResolution shimResolution =
+                SourcePausePointShimResolver.Resolve(
+                    shimLookup, normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
+            PausePointResponse staleSourceRefusal =
+                PausePointPatchedSourceGuard.RefuseWhenChangedOrNull(
+                    shimSourceChanged, shimResolution, normalizedFile, parameters.Line);
+            if (staleSourceRefusal != null)
+            {
+                return staleSourceRefusal;
+            }
+
+            if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
+                || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
+            {
+                SourcePausePointPatchResult shimPatchResult = SourcePausePointPatcher.PatchShimTarget(
+                    id,
+                    shimResolution,
+                    normalizedFile,
+                    parameters.Line);
+                if (!shimPatchResult.Success)
+                {
+                    return new PausePointResponse
+                    {
+                        Success = false,
+                        ErrorCode = SourcePausePointConstants.ErrorCodePatchFailed,
+                        Message = shimPatchResult.ErrorMessage,
+                        RecommendedNextAction = shimPatchResult.Hint,
+                        EditorState = PausePointEditorState.FromSnapshot(
+                            UloopPausePointRegistry.CaptureEditorState()),
+                    };
+                }
+
+                // Why the same resolved line twice: shim sequence points do not expose an
+                // end line distinct from the hit line. Edited method span is passed separately.
+                return FinishEnableBySourceLocation(
+                    id,
+                    parameters,
+                    hitWhen,
+                    hitWhenCondition,
+                    shimResolution.ResolvedLine,
+                    shimResolution.ResolvedLine,
+                    shimResolution.MethodDisplayName,
+                    shimPatchResult,
+                    "EditedFile",
+                    retargetedToHotReloadPatch: true,
+                    shimResolution.NotCapturableVariables,
+                    editedMethodStartLine: shimResolution.SourceStartLine,
+                    editedMethodEndLine: shimResolution.SourceEndLine);
+            }
+
+            if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
+            {
+                return PausePointFailureResponse.Create(
+                    shimResolution.ErrorMessage,
+                    SourcePausePointConstants.ErrorCodeResolveFailed,
+                    "Pick a line with an executable statement inside the edited method body.");
+            }
+
+            // Why refuse: without shim debug symbols the edited body has no line map, and
+            // falling through would arm compiled code that no longer runs.
+            if (shimResolution.Kind == SourcePausePointShimResolveKind.PatchedMethodPdbUnavailable)
+            {
+                return PausePointFailureResponse.Create(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
+                        shimResolution.MethodDisplayName,
+                        parameters.Line),
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableNextAction);
+            }
+
+            // NotInPatchedMethod: fall through to the compiled ScriptAssemblies resolver.
+            return null;
         }
 
         private static PausePointResponse CreateCompiledPatchFailureResponse(SourcePausePointPatchResult patchResult)

@@ -168,11 +168,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (decision.Kind == HotReloadAppliedSourceRecordKind.Forget)
                 {
-                    _domain.ClearAppliedSource(pair.Key);
+                    _domain.AppliedSources.ClearAppliedSource(pair.Key);
                     continue;
                 }
 
-                _domain.RecordAppliedSource(
+                _domain.AppliedSources.RecordAppliedSource(
                     pair.Key,
                     decision.Hash,
                     decision.Kind == HotReloadAppliedSourceRecordKind.FullyApplied);
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Overwriting with null would strand a new file that was applied in an earlier run.
                 if (pair.Value.Evidence != null)
                 {
-                    _domain.RecordNewSourceMembershipEvidence(pair.Key, pair.Value.Evidence);
+                    _domain.AppliedSources.RecordNewSourceMembershipEvidence(pair.Key, pair.Value.Evidence);
                 }
             }
 

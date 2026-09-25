@@ -116,13 +116,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // whole replacement domain, and the applied source ledger is part of that domain.
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true);
                 ActivateIntroducedTypeFor(existingScriptPath);
 
                 ResolveExistingScript("introduced-type-active");
 
                 Assert.That(
-                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetAppliedSource(existingScriptPath),
                     Is.Not.Null);
             }
         }
@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, currentHash, false);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, currentHash, false);
 
                 HotReloadPatchTargetResolution resolution = ResolveExistingScript("introduced-type-absent");
 
@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     resolution.UnchangedDecision,
                     Is.EqualTo(HotReloadUnchangedSourceDecision.ReapplyNonBaseline));
                 Assert.That(
-                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetAppliedSource(existingScriptPath),
                     Is.EqualTo((currentHash, false)));
             }
         }
@@ -165,13 +165,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true);
 
                 HotReloadPatchTargetResolution resolution = ResolveExistingScript("ledger-entry-stale");
 
                 Assert.That(resolution.UnchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
                 Assert.That(
-                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetAppliedSource(existingScriptPath),
                     Is.EqualTo(("stale-hash", true)));
             }
         }

@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AddIntroducedTypeOwnerPaths(candidates, domain, assemblyName);
             AddCandidatePaths(
                 candidates,
-                domain.ListNotFullyAppliedSourcePaths(),
+                domain.AppliedSources.ListNotFullyAppliedSourcePaths(),
                 HotReloadSiblingInclusionReason.RetryAfterSkip);
             AddCandidatePaths(
                 candidates,
@@ -234,7 +234,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return true;
             }
 
-            evidence = domain.TryGetNewSourceMembershipEvidence(path);
+            evidence = domain.AppliedSources.TryGetNewSourceMembershipEvidence(path);
             return evidence != null
                 && string.Equals(evidence.AssemblyName, assemblyName, StringComparison.Ordinal);
         }
@@ -253,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 string hash = reasons[index] == HotReloadSiblingInclusionReason.Companion
                     ? domain.CompanionSources.TryGetHash(path)
-                    : domain.TryGetAppliedSource(path)?.Hash;
+                    : domain.AppliedSources.TryGetAppliedSource(path)?.Hash;
                 if (hash != null)
                 {
                     expected.Add((reasons[index], hash));

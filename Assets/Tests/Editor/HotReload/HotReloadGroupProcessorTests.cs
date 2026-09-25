@@ -1125,7 +1125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             run.RecordAppliedSourceHashes();
 
             Assert.That(
-                HotReloadCompositionRoot.Services.Domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
                 Is.SameAs(evidence));
         }
 
@@ -1155,7 +1155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             second.RecordAppliedSourceHashes();
 
             Assert.That(
-                HotReloadCompositionRoot.Services.Domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
                 Is.SameAs(evidence));
         }
 
@@ -1168,7 +1168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void RecordAppliedSourceHashes_FailedResultWithoutWorkerHash_KeepsTheEarlierRecord()
         {
             HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
-            domain.RecordAppliedSource(CoverageCallerPath, "earlier-hash", false);
+            domain.AppliedSources.RecordAppliedSource(CoverageCallerPath, "earlier-hash", false);
             HotReloadRunAccumulator run = new HotReloadRunAccumulator(
                 domain,
                 HotReloadCompositionRoot.Services.Patcher,
@@ -1187,7 +1187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceContentSha256: null));
             run.RecordAppliedSourceHashes();
 
-            Assert.That(domain.TryGetAppliedSource(CoverageCallerPath), Is.EqualTo(("earlier-hash", false)));
+            Assert.That(domain.AppliedSources.TryGetAppliedSource(CoverageCallerPath), Is.EqualTo(("earlier-hash", false)));
         }
 
         /// <summary>
@@ -1205,7 +1205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 autoRefreshHeldAtStart: false);
             first.Add(CoverageCallerPath, CreateAppliedResult(CreateChangedMembershipEvidence()));
             first.RecordAppliedSourceHashes();
-            Assert.That(domain.TryGetAppliedSource(CoverageCallerPath), Is.Not.Null, "Precondition: the first run must record the file.");
+            Assert.That(domain.AppliedSources.TryGetAppliedSource(CoverageCallerPath), Is.Not.Null, "Precondition: the first run must record the file.");
 
             HotReloadRunAccumulator second = new HotReloadRunAccumulator(
                 domain,
@@ -1221,8 +1221,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceContentSha256: "later-hash"));
             second.RecordAppliedSourceHashes();
 
-            Assert.That(domain.TryGetAppliedSource(CoverageCallerPath), Is.Null);
-            Assert.That(domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath), Is.Null);
+            Assert.That(domain.AppliedSources.TryGetAppliedSource(CoverageCallerPath), Is.Null);
+            Assert.That(domain.AppliedSources.TryGetNewSourceMembershipEvidence(CoverageCallerPath), Is.Null);
         }
 
         /// <summary>

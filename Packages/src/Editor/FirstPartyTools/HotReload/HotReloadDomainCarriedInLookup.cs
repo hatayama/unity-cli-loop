@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string TryGetAppliedHash(string projectRelativePath)
         {
-            return _domain.TryGetAppliedSource(projectRelativePath)?.Hash;
+            return _domain.AppliedSources.TryGetAppliedSource(projectRelativePath)?.Hash;
         }
 
         public bool IsActive(string projectRelativePath)

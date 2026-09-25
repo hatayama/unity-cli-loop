@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // brought it back.
             for (int index = 0; index < _unappliedRetryPaths.Count; index++)
             {
-                domain.ClearAppliedSource(_unappliedRetryPaths[index]);
+                domain.AppliedSources.ClearAppliedSource(_unappliedRetryPaths[index]);
             }
 
             for (int index = 0; index < _appliedPaths.Count; index++)

@@ -136,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // hash says which bytes it compiled.
         private string FindFullyAppliedSourceHash(string projectRelativePath)
         {
-            (string Hash, bool IsFullyApplied)? applied = _domain.TryGetAppliedSource(projectRelativePath);
+            (string Hash, bool IsFullyApplied)? applied = _domain.AppliedSources.TryGetAppliedSource(projectRelativePath);
             return applied != null && applied.Value.IsFullyApplied ? applied.Value.Hash : null;
         }
 
