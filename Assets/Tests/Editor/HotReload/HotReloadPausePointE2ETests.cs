@@ -208,13 +208,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: (i) after a reload that only added methods above a compiled method, a compiled
-        /// line of that method which the added methods now cover arms the compiled method when
-        /// --method names it (and is still refused without --method), and the file keeps the
-        /// compiled snapshot that the edited-line remap and the line-count warning read.
+        /// What: (i) after a reload that only added methods above a compiled method, a line the
+        /// added methods now cover is refused as inside an added method both without --method and
+        /// with --method naming the compiled method, because --line is an edited-file line and
+        /// that line holds added code.
         /// </summary>
         [Test]
-        public async Task AddOnlyReload_CompiledLineUnderAnAddedMethod_ArmsWithMethodAndKeepsCompiledSnapshot()
+        public async Task AddOnlyReload_CompiledLineUnderAnAddedMethod_RefusesWithAndWithoutMethod()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
             string editedSource = BuildEditedWithMethodsAddedAboveVisibleSibling(onDisk);
@@ -247,32 +247,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             PausePointResponse withMethod = EnableContinuousInMethod(compiledStatementLine, "VisibleSibling");
 
-            Assert.That(withMethod.Success, Is.True, withMethod.Message + " / " + withMethod.RecommendedNextAction);
-            Assert.That(withMethod.ResolvedLine, Is.EqualTo(compiledStatementLine));
-            Assert.That(withMethod.LineBasis, Is.EqualTo("LastCompiledSource"));
-            Assert.That(new HotReloadE2EFixture().VisibleSibling(), Is.EqualTo(1));
-            Assert.That(UloopPausePointRegistry.GetStatus(withMethod.Id).IsHit, Is.True);
-
-            // Why the pieces instead of the enable call: this harness keeps the edited source out
-            // of the fixture file, so only the compiled snapshot can come from the real reload.
-            string compiledSnapshot = port.GetVerifiedSnapshotSourceForFile(FixtureProjectRelativePath);
-            Assert.That(compiledSnapshot, Is.Not.Null.And.Not.Empty);
-            int remappedLine = PausePointEditedLineRemap.FindUniqueMatchingCompiledLineOrZero(
-                "VisibleSibling",
-                SplitLines(editedSource)[editedStatementLine - 1],
-                SplitLines(compiledSnapshot),
-                SourcePausePointResolver.FindCompiledMethodSpans(FixtureProjectRelativePath, "VisibleSibling"));
-            Assert.That(remappedLine, Is.EqualTo(compiledStatementLine));
-
-            List<string> warnings = new List<string>();
-            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
-                warnings,
-                result.Methods,
-                _ => editedSource,
-                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot,
-                _ => FixtureProjectRelativePath,
-                result.ReappliedSiblingPaths);
-            Assert.That(warnings, Has.Some.Contains("line count differs from the last compiled source"));
+            Assert.That(withMethod.Success, Is.False);
+            Assert.That(withMethod.Message, Does.Contain("which hot reload added"));
+            Assert.That(withMethod.Message, Does.Contain(addedAtLine.Label));
         }
 
         private static PausePointResponse EnableContinuous(int line)
@@ -364,11 +341,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             return edited;
-        }
-
-        private static string[] SplitLines(string source)
-        {
-            return source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         }
 
         private static async Task<HotReloadOrchestratorResult> HotReloadFromEditedSourceAsync(

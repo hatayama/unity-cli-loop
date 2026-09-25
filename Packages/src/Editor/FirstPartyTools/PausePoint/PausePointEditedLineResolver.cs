@@ -168,6 +168,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(parameters != null && parameters.Line > 0, "parameters.Line must be a positive 1-based line number.");
             Debug.Assert(!string.IsNullOrEmpty(normalizedFile), "normalizedFile must not be null or empty.");
 
+            // Why before building the map: an added method has no compiled counterpart, so the
+            // compiled-line fallback would round "on or after line N" into the next compiled
+            // method, and no --method may pull the edited line onto a compiled twin either.
+            HotReloadAddedMethodAtLine addedMethod =
+                PausePointAddedMethodScope.FindAddedMethodContainingLineOrNull(normalizedFile, parameters.Line);
+            if (addedMethod != null)
+            {
+                return PausePointEditedLineResolution.Refused(
+                    PausePointResolveFailureResponse.CreateAddedMethodRefusal(parameters, addedMethod.Label));
+            }
+
             PausePointEditedLineMap map = BuildMapOrNull(normalizedFile);
             if (map == null)
             {
@@ -296,7 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (addedMethod != null)
             {
                 return PausePointResolveFailureResponse.CreateAddedMethodRefusal(
-                    context.Parameters, addedMethod.Label, methodFilterIsAmbiguous: false);
+                    context.Parameters, addedMethod.Label);
             }
 
             string lineText = context.Map.EditedLineTextOrEmpty(uncompiledLine);

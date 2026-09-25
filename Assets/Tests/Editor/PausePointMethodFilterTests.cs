@@ -103,12 +103,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a line that also falls inside an added method's edited range arms the compiled
-        /// method --method names when that method's last compiled span holds the line, because the
-        /// caller passed a last-compiled-source line as the resolve failure told them to.
+        /// What: a line inside an added method is refused as an added method even when --method
+        /// names a compiled method whose last compiled span holds the same line number, because
+        /// --line is an edited-file line and that edited line holds added code.
         /// </summary>
         [Test]
-        public void Enable_WhenTheMethodCompiledSpanHoldsALineInsideAnAddedMethod_ArmsTheCompiledMethod()
+        public void Enable_WhenMethodNamesACompiledMethodButLineIsInsideAnAddedMethod_RefusesAsAddedMethod()
         {
             SourcePausePointResolveResult expected =
                 SourcePausePointResolver.Resolve(AddedScopeFixtureFile, HelperStepStatementLine, "Step");
@@ -124,10 +124,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
 
-                Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
-                Assert.That(response.ResolvedMethod, Is.EqualTo(expected.Resolution.MethodDisplayName));
-                Assert.That(response.ResolvedLine, Is.EqualTo(HelperStepStatementLine));
-                Assert.That(response.LineBasis, Is.EqualTo("LastCompiledSource"));
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, "Ns.Owner.AddedStep()");
+            }
+        }
+
+        /// <summary>
+        /// What: a line inside an added method is refused as an added method even when the file
+        /// has no verified snapshot, because the added-method check runs before the resolver
+        /// chooses between the line map and the compiled-line fallback.
+        /// </summary>
+        [Test]
+        public void Enable_WhenLineIsInsideAnAddedMethodAndNoSnapshotExists_StillRefusesAsAddedMethod()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => null;
+                scope.Port.ShimLookupForFile = file => null;
+                scope.Port.AddedMethodContainingLine = (file, line) =>
+                    line == HelperStepStatementLine
+                        ? new HotReloadAddedMethodAtLine("Ns.Owner.AddedStep()", "AddedStep", "Owner", null)
+                        : null;
+
+                PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
+
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, "Ns.Owner.AddedStep()");
             }
         }
 
@@ -181,11 +201,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: an edited line of an added Owner.Step whose number falls inside the compiled
-        /// Helper.Step span is refused under a bare --method Step, because that filter names both
-        /// methods, and the next action says to pass --method as Type.Method.
+        /// Helper.Step span is refused as an added method under a bare --method Step, with the
+        /// plain added-method next action instead of a Type.Method disambiguation hint.
         /// </summary>
         [Test]
-        public void Enable_WhenTheMethodAlsoNamesTheAddedMethodHoldingTheLine_RefusesAsAmbiguous()
+        public void Enable_WhenBareMethodNamesBothTwins_RefusesAsAddedMethodWithoutAmbiguityWording()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
@@ -195,26 +215,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
 
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(
-                    response.Message,
-                    Does.StartWith(
-                        "Line " + HelperStepStatementLine + " is inside '" + AddedOwnerStepLabel
-                        + "', which hot reload added"));
-                Assert.That(
-                    response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.AmbiguousAddedMethodResolveFailureNextAction));
-                Assert.That(response.RecommendedNextAction, Does.Contain("Type.Method"));
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, AddedOwnerStepLabel);
             }
         }
 
         /// <summary>
-        /// What: the same line arms the compiled Helper.Step when --method names it with its type,
-        /// because that filter no longer names the added Owner.Step.
+        /// What: the same line is still refused as the added Owner.Step when --method names the
+        /// compiled Helper.Step with its type, because the edited line belongs to the added method
+        /// whatever compiled method the filter names.
         /// </summary>
         [Test]
-        public void Enable_WhenATypedMethodNamesOnlyTheCompiledMethod_ArmsBesideASameNamedAddedMethod()
+        public void Enable_WhenQualifiedMethodNamesTheCompiledTwin_StillRefusesAsAddedMethod()
         {
             const string typedFilter = "AddedMethodScopeHelper.Step";
             SourcePausePointResolveResult expected =
@@ -229,53 +240,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, typedFilter);
 
-                Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
-                Assert.That(response.ResolvedMethod, Is.EqualTo(expected.Resolution.MethodDisplayName));
-                Assert.That(response.ResolvedLine, Is.EqualTo(HelperStepStatementLine));
-                Assert.That(response.LineBasis, Is.EqualTo("LastCompiledSource"));
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, AddedOwnerStepLabel);
             }
-        }
-
-        /// <summary>
-        /// What: the added-method side of the filter check uses the declaring type's own short
-        /// name for a nested type, as the compiled resolver does, so Inner.Step names an added
-        /// Outer/Inner.Step and Outer.Step does not.
-        /// </summary>
-        [Test]
-        public void AddedMethodScope_NestedAddedMethod_MatchesItsOwnTypeShortNameOnly()
-        {
-            HotReloadAddedMethodAtLine nested = new HotReloadAddedMethodAtLine(
-                "Ns.Outer/Inner.Step(System.Int32)",
-                "Step",
-                "Inner",
-                "Outer");
-
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Step", nested), Is.True);
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Inner.Step", nested), Is.True);
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Outer.Step", nested), Is.False);
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Advance", nested), Is.False);
-        }
-
-        /// <summary>
-        /// What: the span holding the requested line is the one that decides, and a resolved line
-        /// is accepted only while it stays inside that span.
-        /// </summary>
-        [Test]
-        public void AddedMethodScope_AcceptsOnlyTheSpanHoldingTheLineAndResolvedLinesInsideIt()
-        {
-            SourcePausePointCompiledMethodSpan first = new SourcePausePointCompiledMethodSpan(5, 8);
-            SourcePausePointCompiledMethodSpan second = new SourcePausePointCompiledMethodSpan(12, 15);
-            SourcePausePointCompiledMethodSpan[] spans = { first, second };
-
-            Assert.That(PausePointAddedMethodScope.FindSpanContainingLineOrNull(spans, 13), Is.SameAs(second));
-            Assert.That(PausePointAddedMethodScope.FindSpanContainingLineOrNull(spans, 10), Is.Null);
-            Assert.That(PausePointAddedMethodScope.FindSpanContainingLineOrNull(spans, 5), Is.SameAs(first));
-            Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 15), Is.True);
-            Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 16), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 11), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(null, 99), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 15), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 16), Is.True);
         }
 
         // An added Owner.Step(int) whose edited lines overlap the compiled Helper.Step span.

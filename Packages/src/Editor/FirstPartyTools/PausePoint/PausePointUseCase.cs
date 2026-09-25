@@ -306,18 +306,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // NotInPatchedMethod: fall through to the compiled ScriptAssemblies resolver.
             }
 
-            // Why before the compiled resolver: an added method has no compiled counterpart, so
-            // "on or after line N" would land on the next compiled method and arm the wrong code.
             // Asked separately from the shim lookup, which is null when the file has only added
             // methods and no patched ones.
             bool hasActiveHotReloadChanges = HasActiveHotReloadChanges(shimLookup, normalizedFile);
-            HotReloadAddedMethodAtLine addedMethod =
-                PausePointAddedMethodScope.FindAddedMethodContainingLineOrNull(normalizedFile, parameters.Line);
-            if (addedMethod != null)
-            {
-                return EnableInsideAddedMethodCompiledSpan(
-                    parameters, hitWhen, hitWhenCondition, id, normalizedFile, snapshotTiming, addedMethod, hasActiveHotReloadChanges);
-            }
 
             PausePointEditedLineResolution resolution =
                 PausePointEditedLineResolver.Resolve(parameters, normalizedFile, snapshotTiming);
@@ -362,76 +353,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editedMethodStartLine: resolution.EditedMethodStartLine,
                 editedMethodEndLine: resolution.EditedMethodEndLine,
                 fallbackWarning: resolution.Warning);
-        }
-
-        // Why a compiled-coordinate resolve here: this path keeps arming the compiled method that
-        // --method names when the line sits inside an added method, so the edited-line map does
-        // not apply. The whole path goes away when that exception is dropped.
-        private static PausePointResponse EnableInsideAddedMethodCompiledSpan(
-            EnablePausePointSchema parameters,
-            string hitWhen,
-            UloopPausePointHitWhenCondition hitWhenCondition,
-            string id,
-            string normalizedFile,
-            SourcePausePointSnapshotTiming snapshotTiming,
-            HotReloadAddedMethodAtLine addedMethod,
-            bool hasActiveHotReloadChanges)
-        {
-            (SourcePausePointCompiledMethodSpan Span, PausePointResponse Refusal) addedMethodScope =
-                PausePointAddedMethodScope.ScopeAddedMethodLineToCompiledSpan(parameters, addedMethod);
-            if (addedMethodScope.Refusal != null)
-            {
-                return addedMethodScope.Refusal;
-            }
-
-            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
-                normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
-            if (!resolveResult.Success)
-            {
-                return PausePointResolveFailureResponse.Create(
-                    parameters,
-                    normalizedFile,
-                    hasActiveHotReloadPatches: hasActiveHotReloadChanges,
-                    resolveResult,
-                    string.Empty);
-            }
-
-            // Why after resolving: rounding forward past the span end reaches another method of
-            // the same name, which is the wrong code the refusal above exists to avoid.
-            if (PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(
-                    addedMethodScope.Span,
-                    resolveResult.Resolution.ResolvedLine))
-            {
-                return PausePointResolveFailureResponse.CreateAddedMethodRefusal(
-                    parameters,
-                    addedMethod.Label,
-                    methodFilterIsAmbiguous: false);
-            }
-
-            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(
-                id,
-                resolveResult.Resolution,
-                normalizedFile,
-                parameters.Line);
-            if (!patchResult.Success)
-            {
-                return CreateCompiledPatchFailureResponse(patchResult);
-            }
-
-            return FinishEnableBySourceLocation(
-                id,
-                parameters,
-                hitWhen,
-                hitWhenCondition,
-                resolveResult.Resolution.ResolvedLine,
-                resolveResult.Resolution.ResolvedEndLine,
-                resolveResult.Resolution.MethodDisplayName,
-                patchResult,
-                "LastCompiledSource",
-                retargetedToHotReloadPatch: false,
-                resolveResult.Resolution.NotCapturableVariables,
-                editedMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
-                editedMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine);
         }
 
         private static PausePointResponse CreateCompiledPatchFailureResponse(SourcePausePointPatchResult patchResult)
