@@ -283,6 +283,131 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a blank line whose next uncompiled statement is inside a hot-reload patched method
+        /// is refused as patched by hot reload with the method's edited range, not as not compiled,
+        /// because hot-reloading an already patched method would return the same refusal.
+        /// </summary>
+        [Test]
+        public void PatchedBodyAfterBlank_BlockerInsideAPatchedSpan_RefusesAsPatchedByHotReloadWithTheEditedRange()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                PatchedBodyAfterBlank(),
+                10,
+                patchedSpanOrNull: line => line >= 11 && line <= 16 ? PatchedSecondSpan() : null);
+
+            AssertPatchedByHotReload(
+                resolution,
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodNextStatementRefusalMessageFormat,
+                    10,
+                    11,
+                    "Owner.Second",
+                    11,
+                    16),
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                    10,
+                    "Owner.Second",
+                    11,
+                    16));
+        }
+
+        /// <summary>
+        /// What: the same blank line is still refused as not compiled when the uncompiled
+        /// statement after it is outside every patched method.
+        /// </summary>
+        [Test]
+        public void PatchedBodyAfterBlank_BlockerOutsideEveryPatchedSpan_StillRefusesLineNotCompiled()
+        {
+            PausePointEditedLineResolution resolution = Resolve(PatchedBodyAfterBlank(), 10);
+
+            AssertLineNotCompiled(resolution, "the next statement, line 11 ('public int Second() // patched')");
+        }
+
+        /// <summary>
+        /// What: an uncompiled requested line that is itself inside a patched method is refused
+        /// with the message that places the requested line in that method.
+        /// </summary>
+        [Test]
+        public void PatchedBodyAfterBlank_RequestedLineItselfInsideAPatchedSpan_UsesTheSingleLineMessage()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                PatchedBodyAfterBlank(),
+                13,
+                patchedSpanOrNull: line => line >= 11 && line <= 16 ? PatchedSecondSpan() : null);
+
+            AssertPatchedByHotReload(
+                resolution,
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalMessageFormat,
+                    13,
+                    "Owner.Second",
+                    11,
+                    16),
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                    13,
+                    "Owner.Second",
+                    11,
+                    16));
+        }
+
+        /// <summary>
+        /// What: when the blocking statement is inside both a hot-reload added method and a patched
+        /// span, the added-method refusal wins, because only a compile gives an added method
+        /// compiled code to arm.
+        /// </summary>
+        [Test]
+        public void PatchedBodyAfterBlank_BlockerInsideBothAnAddedMethodAndAPatchedSpan_PrefersTheAddedMethodRefusal()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                PatchedBodyAfterBlank(),
+                10,
+                patchedSpanOrNull: line => line >= 11 && line <= 16 ? PatchedSecondSpan() : null,
+                addedMethodOrNull: line => line == 11
+                    ? new HotReloadAddedMethodAtLine("Fixture.Owner.Second()", "Second", "Owner", null)
+                    : null);
+
+            Assert.That(resolution.ResolveResult, Is.Null);
+            Assert.That(resolution.Refusal, Is.Not.Null);
+            Assert.That(resolution.Refusal.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            Assert.That(resolution.Refusal.Message, Does.Contain("which hot reload added"));
+            Assert.That(
+                resolution.Refusal.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.AddedMethodResolveFailureNextAction));
+        }
+
+        /// <summary>
+        /// What: when the resolved statement is outside every patched span but the uncompiled
+        /// statement between the requested line and it is inside one, the refusal is patched by
+        /// hot reload with that span's edited range.
+        /// </summary>
+        [Test]
+        public void Inserted_BlockerInsideAPatchedSpanBehindTheResolvedLine_RefusesAsPatchedByHotReload()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                Inserted(),
+                14,
+                patchedSpanOrNull: line => line == 15 ? new PausePointPatchedEditedSpan("Owner.Second", 15, 15) : null);
+
+            AssertPatchedByHotReload(
+                resolution,
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodNextStatementRefusalMessageFormat,
+                    14,
+                    15,
+                    "Owner.Second",
+                    15,
+                    15),
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                    14,
+                    "Owner.Second",
+                    15,
+                    15));
+        }
+
+        /// <summary>
         /// What: a comment line whose compiled successor statement was removed is refused instead
         /// of arming the removed statement.
         /// </summary>
@@ -373,6 +498,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(SourcePausePointConstants.LineNotCompiledRecommendedNextAction));
         }
 
+        private static void AssertPatchedByHotReload(
+            PausePointEditedLineResolution resolution,
+            string expectedMessage,
+            string expectedNextAction)
+        {
+            Assert.That(resolution.ResolveResult, Is.Null);
+            Assert.That(resolution.Refusal, Is.Not.Null);
+            Assert.That(resolution.Refusal.Success, Is.False);
+            Assert.That(
+                resolution.Refusal.ErrorCode,
+                Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+            Assert.That(resolution.Refusal.Message, Is.EqualTo(expectedMessage));
+            Assert.That(resolution.Refusal.RecommendedNextAction, Is.EqualTo(expectedNextAction));
+        }
+
         // Three "// pad" lines after line 1, so every compiled line from 2 on sits 3 lines lower.
         private static string[] Shifted()
         {
@@ -397,6 +537,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<string> lines = CompiledLines.ToList();
             lines.Insert(14, "            a += 1;");
             return lines.ToArray();
+        }
+
+        // A blank line is inserted before Second, and Second's declaration and statements are
+        // rewritten as a patched method body would be, so edited 10, 11, 13 and 15 have no
+        // compiled twin. Edited 12 is the compiled brace 11 and edited 14 is the compiled blank 14.
+        private static string[] PatchedBodyAfterBlank()
+        {
+            List<string> lines = CompiledLines.Take(9).ToList();
+            lines.Add(string.Empty);
+            lines.Add("        public int Second() // patched");
+            lines.Add("        {");
+            lines.Add("            int b = 3;");
+            lines.Add(string.Empty);
+            lines.Add("            return b;");
+            lines.AddRange(CompiledLines.Skip(15));
+            return lines.ToArray();
+        }
+
+        // The edited span hot reload reports for Second in PatchedBodyAfterBlank.
+        private static PausePointPatchedEditedSpan PatchedSecondSpan()
+        {
+            return new PausePointPatchedEditedSpan("Owner.Second", 11, 16);
         }
 
         // Edited 13 is the compiled blank line 14 and edited 14 is the compiled "return a;".

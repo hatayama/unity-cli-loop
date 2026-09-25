@@ -19,8 +19,9 @@ enforcing exclusivity, every patch transition re-targets them:
     uncompiled, is refused with `PAUSE_POINT_LINE_NOT_COMPILED`. Hot-reload the change
     (then the line is inside a patched body) or run `uloop compile`, and retry.
   - A line inside a patched method's edited body arms the patched body directly. A line
-    that would round onto a patched method's compiled body is refused with
-    `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`, which names the edited line range to use.
+    that would round onto a patched method's compiled body, or whose uncompiled next
+    statement is inside a patched method's edited body, is refused with
+    `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` instead, which names the edited line range to use.
   - Only a file without a verified source snapshot arms the line as a compiled line
     number, reported as `LineBasis: LastCompiledSource` with a warning to run
     `uloop compile`.

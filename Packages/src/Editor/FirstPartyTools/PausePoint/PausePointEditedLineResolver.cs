@@ -305,6 +305,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     context.Parameters, uncompiledLine, addedMethod.Label);
             }
 
+            // Why after the added-method check: an added method has no compiled twin to arm, so
+            // pointing at its edited body would not help there; only a compile does.
+            PausePointPatchedEditedSpan patchedSpan = context.PatchedSpanOrNull(uncompiledLine);
+            if (patchedSpan != null)
+            {
+                return PausePointResolveFailureResponse.CreatePatchedMethodRefusal(
+                    context.Parameters, uncompiledLine, patchedSpan);
+            }
+
             string lineText = context.Map.EditedLineTextOrEmpty(uncompiledLine);
             if (uncompiledLine == requestedLine)
             {

@@ -810,6 +810,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a blank line whose next statement is inside a hot-reload patched method is refused
+        /// as patched by hot reload with the method's edited range, not as line-not-compiled, so the
+        /// caller is not told to hot-reload a method that is already patched, and no marker is armed.
+        /// </summary>
+        [Test]
+        public void Enable_BlankLineWhoseNextStatementIsInsideAPatchedMethod_RefusesWithTheEditedBodyRange()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotWithARenamedAddMethod();
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureBlankLineAboveMethod + 1,
+                    FixtureClosingBraceLine);
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureBlankLineAboveMethod,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(
+                    response.ErrorCode,
+                    Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodNextStatementRefusalMessageFormat,
+                            FixtureBlankLineAboveMethod,
+                            FixtureBlankLineAboveMethod + 1,
+                            "EnableBySourceLocationFixture.Add",
+                            FixtureBlankLineAboveMethod + 1,
+                            FixtureClosingBraceLine)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                            FixtureBlankLineAboveMethod,
+                            "EnableBySourceLocationFixture.Add",
+                            FixtureBlankLineAboveMethod + 1,
+                            FixtureClosingBraceLine)));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
+        /// What: the same blank line whose next statement was added after the last compile, with no
+        /// patched method in the file, is still refused as line-not-compiled naming that statement.
+        /// </summary>
+        [Test]
+        public void Enable_BlankLineWhoseNextStatementIsUncompiledOutsideEveryPatchedMethod_RefusesLineNotCompiled()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotWithARenamedAddMethod();
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = FixtureBlankLineAboveMethod,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
+                Assert.That(response.Message, Does.Contain("the next statement, line " + (FixtureBlankLineAboveMethod + 1)));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
         /// What: a line below a patched method's edited body that resolves into that method is
         /// refused with the method's edited body range, not with --method guidance, and no marker
         /// is armed.
@@ -994,6 +1070,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null,
                 null,
                 methods);
+        }
+
+        // Plays the last compiled source of the fixture as if Add had been renamed from Sub and
+        // its body edited after that compile, so on disk the blank line 8, the header on line 9,
+        // and the two statements on lines 11-12 have no compiled counterpart.
+        private static string CreateSnapshotWithARenamedAddMethod()
+        {
+            string onDisk = File.ReadAllText(
+                Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), FixtureFilePath));
+            string snapshot = onDisk
+                .Replace("\n\n        public int Add(int left, int right)", "\n        public int Sub(int left, int right)")
+                .Replace("int sum = left + right;", "int diff = left - right;")
+                .Replace("return sum;", "return diff;");
+            Assert.That(snapshot, Is.Not.EqualTo(onDisk));
+            return snapshot;
         }
 
         // The test assembly stands in for a shim assembly: its PDB maps the fixture file, so the

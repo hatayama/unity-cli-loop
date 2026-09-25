@@ -437,8 +437,9 @@ Wire details:
     would round to, is uncompiled. Run `uloop hot-reload` or `uloop compile` and retry, or
     pick an unchanged line.
   - A line inside a patched method's edited body arms the patched body directly. A line
-    that would round onto the compiled body of a patched method is refused with
-    `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`, naming the method's edited line range.
+    that would round onto the compiled body of a patched method, or whose uncompiled next
+    statement is inside a patched method's edited body, is refused with
+    `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` instead, naming the method's edited line range.
   - Only when the file has no verified source snapshot is the line armed as a compiled
     line number, with `LineBasis: LastCompiledSource` and a warning to run `uloop compile`.
 

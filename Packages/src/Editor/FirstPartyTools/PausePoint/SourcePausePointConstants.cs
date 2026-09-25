@@ -350,6 +350,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadPatchedMethodRefusalNextActionFormat =
             "Retry with --line between {2} and {3}.";
 
+        // Why a variant: when the requested line has no statement and the next statement is
+        // inside the patched method, "Line {0} resolves to a statement inside" would place the
+        // requested line in a method it is not part of. Format: requested line, statement line
+        // inside the patched method, patched method display name, edited start line, edited end line.
+        public const string HotReloadPatchedMethodNextStatementRefusalMessageFormat =
+            "Line {0} has no compiled statement of its own, and the next statement, line {1}, is "
+            + "inside '{2}', which hot reload patched, so the compiled body no longer runs. Pass "
+            + "--line inside the method's edited body (lines {3}-{4}).";
+
         // Why a range-less variant: without the method's shim entry the edited range is unknown,
         // and a guessed range would send the caller to a line that is not in the patched body.
         // Format: requested line, patched method display name.
