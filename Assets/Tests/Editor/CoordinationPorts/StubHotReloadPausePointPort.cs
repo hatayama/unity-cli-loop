@@ -22,8 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public System.Func<string, int, HotReloadAddedMethodAtLine> AddedMethodContainingLine { get; set; }
 
-        public System.Func<string, string> VerifiedSnapshotSourceForFile { get; set; }
-
         public System.Func<string, string, string> VerifiedSnapshotSource { get; set; }
 
         public System.Func<MethodBase, IReadOnlyList<LocalBuilder>> TransplantLocals { get; set; }
@@ -66,13 +64,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return Inner != null && Inner.HasShimSourceChangedOnDisk(file);
-        }
-
-        public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)
-        {
-            return VerifiedSnapshotSourceForFile != null
-                ? VerifiedSnapshotSourceForFile(projectRelativeFile)
-                : Inner?.GetVerifiedSnapshotSourceForFile(projectRelativeFile);
         }
 
         public string GetVerifiedSnapshotSource(string projectRelativeFile, string dllPath)

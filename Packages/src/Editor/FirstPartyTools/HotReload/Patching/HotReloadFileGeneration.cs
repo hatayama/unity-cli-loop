@@ -515,21 +515,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// The source this generation's shim assembly was compiled from, or null when this
-        /// generation registered no method that names a compiled assembly on disk.
-        /// </summary>
-        internal string LoadVerifiedSnapshotSource()
-        {
-            string dllPath = FindCompiledAssemblyLocation();
-            if (string.IsNullOrEmpty(dllPath))
-            {
-                return null;
-            }
-
-            return HotReloadSourceBaseline.LoadVerifiedSnapshotSource(Path, dllPath);
-        }
-
-        /// <summary>
         /// The compiled assembly the verified snapshot of this file is keyed on, or null when no
         /// registered patched or added method names one.
         /// </summary>

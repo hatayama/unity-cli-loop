@@ -44,15 +44,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         bool HasShimSourceChangedOnDisk(string file);
 
         /// <summary>
-        /// Returns the PDB-checksum-verified compiled snapshot text for a project-relative source
-        /// file, or null when no snapshot is available.
-        /// </summary>
-        string GetVerifiedSnapshotSourceForFile(string projectRelativeFile);
-
-        /// <summary>
         /// Returns the PDB-checksum-verified snapshot text for a project-relative source path and
-        /// the compiled assembly path, or null when none. Use this after the shim registry is
-        /// cleared (revert/restore) when file lookup can no longer find a generation.
+        /// the compiled assembly path, or null when none. It does not depend on a hot reload
+        /// generation, so it also answers for files hot reload never touched.
         /// </summary>
         string GetVerifiedSnapshotSource(string projectRelativeFile, string dllPath);
 

@@ -47,11 +47,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.HasShimSourceChangedOnDisk(file, _readSourceContentHashOrNull);
         }
 
-        public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)
-        {
-            return _domain.LoadVerifiedSnapshotSourceForFile(projectRelativeFile);
-        }
-
         public string GetVerifiedSnapshotSource(string projectRelativeFile, string dllPath)
         {
             if (string.IsNullOrEmpty(projectRelativeFile) || string.IsNullOrEmpty(dllPath))
