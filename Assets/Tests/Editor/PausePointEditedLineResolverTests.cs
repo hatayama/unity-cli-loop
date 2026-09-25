@@ -280,6 +280,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a line inside a type appended after the last compiled line has no compiled line
+        /// at or after it, so it is refused instead of resolving compiled line 0.
+        /// </summary>
+        [Test]
+        public void Appended_LineInsideTheAppendedType_RefusesNoCompiledLineAtOrAfter()
+        {
+            PausePointEditedLineResolution resolution = Resolve(Appended(), 20);
+
+            AssertLineNotCompiled(resolution, "No compiled line exists at or after line 20 of '" + TestFile + "'");
+        }
+
+        /// <summary>
         /// What: when the rounded-to statement lies inside a hot-reload patched span, the check for
         /// uncompiled statements in between is skipped so the patcher refuses with its guidance.
         /// </summary>
@@ -378,6 +390,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<string> lines = CompiledLines.ToList();
             lines.RemoveAt(12);
             return lines.ToArray();
+        }
+
+        // Edited 19-22 follow the compiled namespace brace, so none of them has a compiled line.
+        private static string[] Appended()
+        {
+            return CompiledLines.Concat(new[] { "", "internal sealed class Extra", "{", "}" }).ToArray();
         }
 
         private static string[] ReplaceLine(int line, string text)
