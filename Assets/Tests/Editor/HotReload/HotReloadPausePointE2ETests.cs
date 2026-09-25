@@ -184,7 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: (h) in a file where the reload added a method, a line inside an untouched compiled
-        /// method still enables on the compiled line map, so the added-method refusal does not
+        /// method still enables through the edited line map onto its compiled body, so the added-method refusal does not
         /// swallow lines outside the added range.
         /// </summary>
         [Test]
@@ -238,7 +238,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(addedAtLine.MethodName, Is.EqualTo("AddedLead"));
             Assert.That(addedAtLine.DeclaringTypeName, Is.EqualTo(nameof(HotReloadE2EFixture)));
             Assert.That(addedAtLine.NestedOuterTypeName, Is.Null);
-            Assert.That(port.HasActiveHotReloadChangesInFile(FixtureProjectRelativePath), Is.True);
 
             PausePointResponse withoutMethod = EnableContinuous(compiledStatementLine);
 

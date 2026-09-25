@@ -73,7 +73,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 additionalWarnings,
                 rewireFields,
                 unrestoredWiredValues,
-                toProjectRelativeScriptPath,
                 isPlaying,
                 isPaused);
             bool allRequestedSkipped = DecideAllRequestedSkipped(result, toProjectRelativeScriptPath);

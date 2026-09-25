@@ -539,16 +539,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return currentHash != null && generation.HasShimSourceChangedFrom(currentHash);
         }
 
-        internal bool HasActiveHotReloadChangesInFile(string requestedPath)
-        {
-            return FindGenerationForRequestedPath(requestedPath)?.HasActiveHotReloadChanges == true;
-        }
-
-        internal string LoadVerifiedSnapshotSourceForFile(string requestedPath)
-        {
-            return FindGenerationForRequestedPath(requestedPath)?.LoadVerifiedSnapshotSource();
-        }
-
         // Why the flag: a non-baseline entry (Skipped or Failed in the last run) must not
         // short-circuit; it exists only so an identical reload can explain why it re-applies.
         internal void RecordAppliedSource(

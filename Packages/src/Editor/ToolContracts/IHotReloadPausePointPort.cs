@@ -35,13 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         HotReloadAddedMethodAtLine FindAddedMethodContainingLine(string file, int line);
 
         /// <summary>
-        /// Argument is a forward-slash path (absolute or project-relative); returns whether hot
-        /// reload still has a live patch or an added method in that file, which is what makes
-        /// its edited lines differ from the last compiled line map.
-        /// </summary>
-        bool HasActiveHotReloadChangesInFile(string file);
-
-        /// <summary>
         /// Argument is a forward-slash path (absolute or project-relative); returns true when the
         /// file has an active shim generation and the file's current bytes on disk hash
         /// differently from the source that generation was compiled from, so the patch's line
@@ -51,15 +44,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         bool HasShimSourceChangedOnDisk(string file);
 
         /// <summary>
-        /// Returns the PDB-checksum-verified compiled snapshot text for a project-relative source
-        /// file, or null when no snapshot is available.
-        /// </summary>
-        string GetVerifiedSnapshotSourceForFile(string projectRelativeFile);
-
-        /// <summary>
         /// Returns the PDB-checksum-verified snapshot text for a project-relative source path and
-        /// the compiled assembly path, or null when none. Use this after the shim registry is
-        /// cleared (revert/restore) when file lookup can no longer find a generation.
+        /// the compiled assembly path, or null when none. It does not depend on a hot reload
+        /// generation, so it also answers for files hot reload never touched.
         /// </summary>
         string GetVerifiedSnapshotSource(string projectRelativeFile, string dllPath);
 
@@ -89,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// <summary>
         /// Argument is a forward-slash path (absolute or project-relative); returns true when that
         /// file declares a type hot reload introduced without a compile, so the file has no
-        /// compiled line map of its own.
+        /// compiled source to resolve a pause point line against.
         /// </summary>
         bool IsIntroducedTypeSourceFile(string file);
     }

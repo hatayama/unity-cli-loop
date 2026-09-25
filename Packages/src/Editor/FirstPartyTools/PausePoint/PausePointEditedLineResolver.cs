@@ -64,7 +64,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal string LineBasis { get; }
         internal PausePointResponse Refusal { get; }
         internal string Warning { get; }
-        internal bool UsedFallback { get; }
 
         private PausePointEditedLineResolution(
             SourcePausePointResolveResult resolveResult,
@@ -74,8 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int editedMethodEndLine,
             string lineBasis,
             PausePointResponse refusal,
-            string warning,
-            bool usedFallback)
+            string warning)
         {
             ResolveResult = resolveResult;
             EditedResolvedLine = editedResolvedLine;
@@ -85,21 +83,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LineBasis = lineBasis;
             Refusal = refusal;
             Warning = warning;
-            UsedFallback = usedFallback;
         }
 
         internal static PausePointEditedLineResolution Refused(PausePointResponse refusal)
         {
             Debug.Assert(refusal != null, "refusal must not be null.");
             return new PausePointEditedLineResolution(
-                null, 0, 0, 0, 0, EditedFileLineBasis, refusal, string.Empty, usedFallback: false);
+                null, 0, 0, 0, 0, EditedFileLineBasis, refusal, string.Empty);
         }
 
         internal static PausePointEditedLineResolution Unresolved(SourcePausePointResolveResult failedResult)
         {
             Debug.Assert(failedResult != null && !failedResult.Success, "failedResult must be a failed resolve result.");
             return new PausePointEditedLineResolution(
-                failedResult, 0, 0, 0, 0, EditedFileLineBasis, null, string.Empty, usedFallback: false);
+                failedResult, 0, 0, 0, 0, EditedFileLineBasis, null, string.Empty);
         }
 
         internal static PausePointEditedLineResolution Resolved(
@@ -119,8 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editedMethodEndLine,
                 EditedFileLineBasis,
                 null,
-                string.Empty,
-                usedFallback: false);
+                string.Empty);
         }
 
         // Without a verified snapshot there is nothing to map through, so the lines stay
@@ -134,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!result.Success)
             {
                 return new PausePointEditedLineResolution(
-                    result, 0, 0, 0, 0, LastCompiledSourceLineBasis, null, string.Empty, usedFallback: true);
+                    result, 0, 0, 0, 0, LastCompiledSourceLineBasis, null, string.Empty);
             }
 
             SourcePausePointResolution resolution = result.Resolution;
@@ -146,8 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.CompiledMethodEndLine,
                 LastCompiledSourceLineBasis,
                 null,
-                string.Format(SourcePausePointConstants.NoVerifiedSnapshotLineBasisWarningFormat, file, requestedLine),
-                usedFallback: true);
+                string.Format(SourcePausePointConstants.NoVerifiedSnapshotLineBasisWarningFormat, file, requestedLine));
         }
     }
 

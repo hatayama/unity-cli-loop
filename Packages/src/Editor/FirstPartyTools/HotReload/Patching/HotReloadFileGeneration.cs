@@ -139,8 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string methodName,
             string declaringTypeMetadataName,
             int sourceStartLine = 0,
-            int sourceEndLine = 0,
-            string compiledAssemblyPath = null)
+            int sourceEndLine = 0)
         {
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
             Debug.Assert(shimMethod != null, "shimMethod must not be null.");
@@ -163,7 +162,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     shimMethod,
                     sourceStartLine,
                     sourceEndLine,
-                    compiledAssemblyPath,
                     methodName,
                     declaringTypeMetadataName);
         }
@@ -450,12 +448,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal bool HasAddedFields => _addedFields.HasFields;
 
-        /// <summary>
-        /// Whether this file still has a live patch or an added method, which is what makes its
-        /// edited lines differ from the compiled line map pause points resolve against.
-        /// </summary>
-        internal bool HasActiveHotReloadChanges => ActivePatchCount > 0 || AddedMemberCount > 0;
-
         internal bool IsActiveMember(string methodKey)
         {
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
@@ -512,59 +504,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return _supersededReplacementByOldMethodKey.TryGetValue(oldMethodKey, out replacementDisplayName);
-        }
-
-        /// <summary>
-        /// The source this generation's shim assembly was compiled from, or null when this
-        /// generation registered no method that names a compiled assembly on disk.
-        /// </summary>
-        internal string LoadVerifiedSnapshotSource()
-        {
-            string dllPath = FindCompiledAssemblyLocation();
-            if (string.IsNullOrEmpty(dllPath))
-            {
-                return null;
-            }
-
-            return HotReloadSourceBaseline.LoadVerifiedSnapshotSource(Path, dllPath);
-        }
-
-        /// <summary>
-        /// The compiled assembly the verified snapshot of this file is keyed on, or null when no
-        /// registered patched or added method names one.
-        /// </summary>
-        /// <remarks>
-        /// Why the first method: every method registered for one source file lives in the same
-        /// compiled assembly. Why added methods too: a reload that only added methods patches
-        /// nothing, and without them its file would lose the compiled line map that pause points
-        /// and the line-shift warning read.
-        /// </remarks>
-        internal string FindCompiledAssemblyLocation()
-        {
-            foreach (MethodBase originalMethod in _shimMethodsByMethod.Keys)
-            {
-                Type declaringType = originalMethod.DeclaringType;
-                if (declaringType == null)
-                {
-                    continue;
-                }
-
-                string dllPath = declaringType.Assembly.Location;
-                if (!string.IsNullOrEmpty(dllPath))
-                {
-                    return dllPath;
-                }
-            }
-
-            foreach (HotReloadAddedMemberInfo member in _addedMembersByMethodKey.Values)
-            {
-                if (!string.IsNullOrEmpty(member.CompiledAssemblyPath))
-                {
-                    return member.CompiledAssemblyPath;
-                }
-            }
-
-            return null;
         }
 
         /// <summary>

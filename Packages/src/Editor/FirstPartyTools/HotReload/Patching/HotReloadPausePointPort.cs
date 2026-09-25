@@ -40,21 +40,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.FindAddedMethodContainingLine(file, line);
         }
 
-        public bool HasActiveHotReloadChangesInFile(string file)
-        {
-            return _domain.HasActiveHotReloadChangesInFile(file);
-        }
-
         // Why the domain picks the path to read: it is the path the transform worker hashed, which
         // differs from the argument when a reload was run from an edited copy.
         public bool HasShimSourceChangedOnDisk(string file)
         {
             return _domain.HasShimSourceChangedOnDisk(file, _readSourceContentHashOrNull);
-        }
-
-        public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)
-        {
-            return _domain.LoadVerifiedSnapshotSourceForFile(projectRelativeFile);
         }
 
         public string GetVerifiedSnapshotSource(string projectRelativeFile, string dllPath)

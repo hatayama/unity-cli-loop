@@ -627,7 +627,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: the pause point side is told a project-relative path declares an introduced type,
-        /// so it can explain why that file has no compiled line map instead of failing blankly.
+        /// so it can explain why that file has no compiled source instead of failing blankly.
         /// </summary>
         [Test]
         public void IsIntroducedTypeSourceFile_WithTheOwnerProjectRelativePath_ReturnsTrue()

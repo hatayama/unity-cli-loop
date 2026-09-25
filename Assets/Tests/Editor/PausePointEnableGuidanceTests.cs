@@ -22,6 +22,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class PausePointEnableGuidanceTests
     {
         private const string FixtureFilePath = "Assets/Tests/Editor/PausePointToolsFixture.cs";
+
+        // This file itself: its PDB-mapped PdbUnavailableProbe is the method a no-PDB shim lookup
+        // claims as patched.
+        private const string GuidanceTestsFilePath = "Assets/Tests/Editor/PausePointEnableGuidanceTests.cs";
+
+        private const string CompiledMethodSpanFixtureFile =
+            "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/CompiledMethodSpanFixture.cs";
         private const int FixtureStatementLine = 12;
         private const int FixtureClosingBraceLine = 13;
 
@@ -455,7 +462,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a resolve failure in a file with active hot reload changes keeps the resolver
+        /// What: a resolve failure in a file with a hot reload patch keeps the resolver
         /// sentence with the general next action and no line map warning, because --line is an
         /// edited-file line and no longer resolves against the last compiled source there.
         /// </summary>
@@ -464,7 +471,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                scope.Port.ActiveHotReloadChangesInFile = file => true;
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 2,
+                    FixtureClosingBraceLine);
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -836,9 +845,122 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: enable resolve-failure on a real PDB fixture appends the nearest compiled
+        /// method span from that file.
+        /// </summary>
+        [Test]
+        public void Enable_WhenResolveFails_AppendsNearbyCompiledMethodSpans()
+        {
+            SourcePausePointResolveResult otherMethod = SourcePausePointResolver.Resolve(CompiledMethodSpanFixtureFile, 16);
+            Assert.That(otherMethod.Success, Is.True, otherMethod.ErrorMessage);
+            Assert.That(otherMethod.Resolution.CompiledMethodStartLine, Is.GreaterThan(0));
+            Assert.That(otherMethod.Resolution.CompiledMethodEndLine, Is.GreaterThan(0));
+
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = CompiledMethodSpanFixtureFile,
+                Line = 19,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            string expectedMessage =
+                "No sequence point found on or after line 19 in '" + CompiledMethodSpanFixtureFile + "'."
+                + SourcePausePointConstants.NearbyCompiledMethodsPrefix
+                + string.Format(
+                    SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
+                    "CompiledMethodSpanFixture.OtherMethod",
+                    otherMethod.Resolution.CompiledMethodStartLine,
+                    otherMethod.Resolution.CompiledMethodEndLine)
+                + ".";
+            Assert.That(response.Message, Is.EqualTo(expectedMessage));
+        }
+
+        /// <summary>
+        /// What: a line inside a patched method with no shim PDB is a distinct Kind, not
+        /// NotInPatchedMethod.
+        /// </summary>
+        [Test]
+        public void ShimResolve_WhenLineIsInPatchedMethodButPdbBytesAreMissing_ReturnsPatchedMethodPdbUnavailable()
+        {
+            SourcePausePointShimResolution resolution = SourcePausePointShimResolver.Resolve(
+                CreatePdbUnavailableLookup(PdbUnavailableProbeMethod(), 10),
+                GuidanceTestsFilePath,
+                10);
+
+            Assert.That(
+                resolution.Kind,
+                Is.EqualTo(SourcePausePointShimResolveKind.PatchedMethodPdbUnavailable));
+            Assert.That(
+                resolution.MethodDisplayName,
+                Is.EqualTo("PausePointEnableGuidanceTests.PdbUnavailableProbe"));
+        }
+
+        /// <summary>
+        /// What: a line inside a patched method whose shim lookup has no PDB bytes is refused as
+        /// patched by hot reload, because the compiled body no longer runs and the patch cannot be
+        /// resolved to a statement.
+        /// </summary>
+        [Test]
+        public void Enable_WhenPatchedMethodHasNoPdbBytes_RefusesAsPatchedByHotReload()
+        {
+            string absolutePath = Path.Combine(
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                GuidanceTestsFilePath);
+            string diskSource = File.ReadAllText(absolutePath);
+            // Split so this search literal is not itself the line it finds.
+            int requestedLine = FindLineNumberContaining(
+                diskSource,
+                "pdb-unavailable" + "-probe-unique") + 1;
+            Assert.That(requestedLine, Is.GreaterThan(1));
+
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile =
+                    _ => CreatePdbUnavailableLookup(PdbUnavailableProbeMethod(), requestedLine);
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = GuidanceTestsFilePath,
+                    Line = requestedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_PATCHED_BY_HOT_RELOAD"));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
+                            "PausePointEnableGuidanceTests.PdbUnavailableProbe",
+                            requestedLine)));
+                Assert.That(response.RecommendedNextAction, Does.Contain("uloop compile"));
+                Assert.That(response.Message, Does.Contain("cannot be placed on the running code"));
+            }
+        }
+
         internal static int PdbUnavailableProbe()
         {
+            // pdb-unavailable-probe-unique
             return 1;
+        }
+
+        private static int FindLineNumberContaining(string source, string fragment)
+        {
+            string[] lines = source.Replace("\r\n", "\n").Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                if (lines[index].Contains(fragment))
+                {
+                    return index + 1;
+                }
+            }
+
+            return -1;
         }
 
         private static MethodBase PdbUnavailableProbeMethod()
