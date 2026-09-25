@@ -199,14 +199,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        // Why the port as well as the shim lookup: the lookup lists patched methods only, and
-        // a reload that only added methods moves edited lines off the compiled map just the same.
-        private static bool HasActiveHotReloadChanges(HotReloadShimFileLookup shimLookup, string normalizedFile)
-        {
-            return shimLookup != null
-                || HotReloadPausePointCoordination.HotReloadSide?.HasActiveHotReloadChangesInFile(normalizedFile) == true;
-        }
-
         // Resolves File:Line to a patch location via the Resolver, patches it via Harmony, then
         // arms the same registry state machine the Id path uses, keyed by the derived source id.
         private static PausePointResponse EnableBySourceLocation(
@@ -306,10 +298,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // NotInPatchedMethod: fall through to the compiled ScriptAssemblies resolver.
             }
 
-            // Asked separately from the shim lookup, which is null when the file has only added
-            // methods and no patched ones.
-            bool hasActiveHotReloadChanges = HasActiveHotReloadChanges(shimLookup, normalizedFile);
-
             PausePointEditedLineResolution resolution =
                 PausePointEditedLineResolver.Resolve(parameters, normalizedFile, snapshotTiming);
             if (resolution.Refusal != null)
@@ -320,12 +308,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointResolveResult resolveResult = resolution.ResolveResult;
             if (!resolveResult.Success)
             {
-                return PausePointResolveFailureResponse.Create(
-                    parameters,
-                    normalizedFile,
-                    hasActiveHotReloadPatches: hasActiveHotReloadChanges,
-                    resolveResult,
-                    string.Empty);
+                return PausePointResolveFailureResponse.Create(parameters, normalizedFile, resolveResult);
             }
 
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(

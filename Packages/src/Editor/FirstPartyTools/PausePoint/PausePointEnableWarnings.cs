@@ -138,36 +138,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compiledMethodEndLine);
         }
 
-        /// <summary>
-        /// Builds a resolve-failure Message: Nearby methods, then Candidate when hot-reload
-        /// patches are active and the edited --line text was read.
-        /// </summary>
-        internal static string BuildResolveFailureMessage(
-            string errorMessage,
-            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods,
-            bool hasActiveHotReloadPatches,
-            int requestedLine,
-            bool requestedLineReadOk,
-            string requestedLineEditedText,
-            IReadOnlyList<string> compiledSourceLinesOrNull,
-            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans = null)
-        {
-            string message = AppendNearbyCompiledMethodsSuffix(errorMessage, nearbyCompiledMethods);
-            // Why skip Candidate when the edited line was not read: the Candidate sentence names
-            // the text at --line N in the edited file, which is false if that read failed.
-            if (!hasActiveHotReloadPatches || !requestedLineReadOk)
-            {
-                return message;
-            }
-
-            return PausePointCandidateCompiledLineWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
-                message,
-                requestedLine,
-                requestedLineEditedText,
-                compiledSourceLinesOrNull,
-                namedCompiledMethodSpans);
-        }
-
         internal static string BuildRetargetedToHotReloadPatchWarningOrEmpty(
             bool retargetedToHotReloadPatch,
             string resolvedMethod,
@@ -214,18 +184,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 + ".";
         }
 
-        internal static string ChooseCompiledLineMapWarning(
-            string patchedMethodPdbUnavailableWarning,
-            string genericCompiledLineMapWarning)
-        {
-            if (!string.IsNullOrEmpty(patchedMethodPdbUnavailableWarning))
-            {
-                return patchedMethodPdbUnavailableWarning;
-            }
-
-            return genericCompiledLineMapWarning;
-        }
-
         internal static string BuildCompiledLineMapWarningOrEmpty(
             bool hasActiveHotReloadPatches,
             string file,
@@ -245,20 +203,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 format,
                 SourcePausePointPathNormalizer.ToForwardSlashes(file),
                 resolvedMethod);
-        }
-
-        internal static string BuildCompiledLineMapResolveFailureWarningOrEmpty(
-            bool hasActiveHotReloadPatches,
-            string file)
-        {
-            if (!hasActiveHotReloadPatches)
-            {
-                return string.Empty;
-            }
-
-            return string.Format(
-                SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
-                SourcePausePointPathNormalizer.ToForwardSlashes(file));
         }
 
         internal static string BuildEditedLineRemapWarning(

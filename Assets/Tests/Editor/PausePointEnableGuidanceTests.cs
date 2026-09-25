@@ -453,23 +453,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a file with a compiled line map keeps the resolver sentence, so dropping it for
-        /// an introduced-type file does not silence the ordinary unresolvable-line explanation.
+        /// What: a resolve failure in a file with active hot reload changes keeps the resolver
+        /// sentence with the general next action and no line map warning, because --line is an
+        /// edited-file line and no longer resolves against the last compiled source there.
         /// </summary>
         [Test]
-        public void Enable_WhenTheFileHasACompiledLineMap_KeepsTheResolverSentence()
+        public void Enable_WhenResolveFailsInAPatchedFile_UsesTheGeneralGuidanceWithoutALineMapWarning()
         {
-            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                File = FixtureFilePath,
-                Line = UnresolvableFixtureLine,
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.SingleShot
-            });
+                scope.Port.ActiveHotReloadChangesInFile = file => true;
 
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-            Assert.That(response.Message, Does.Contain("No sequence point found"));
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = UnresolvableFixtureLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.Message, Does.StartWith("No sequence point found"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+                Assert.That(response.Warning, Is.Null.Or.Empty);
+            }
         }
 
         /// <summary>

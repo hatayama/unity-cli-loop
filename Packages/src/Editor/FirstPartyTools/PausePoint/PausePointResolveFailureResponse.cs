@@ -13,37 +13,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Why the compiled method spans decide: a file can hold both compiled types and a type
         // hot reload introduced. Only when the file has no compiled method at all is "there is no
-        // compiled line map here" the whole truth; otherwise the general guidance still applies
+        // compiled code here" the whole truth; otherwise the general guidance still applies
         // and the introduced type is one more thing to know about the file.
         internal static PausePointResponse Create(
             EnablePausePointSchema parameters,
             string normalizedFile,
-            bool hasActiveHotReloadPatches,
-            SourcePausePointResolveResult resolveResult,
-            string patchedMethodPdbUnavailableWarning)
+            SourcePausePointResolveResult resolveResult)
         {
             bool declaresIntroducedType =
                 HotReloadPausePointCoordination.HotReloadSide?.IsIntroducedTypeSourceFile(normalizedFile) == true;
             if (declaresIntroducedType
                 && SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(parameters.File).Count == 0)
             {
-                return CreateIntroducedTypeResolveFailure(
-                    parameters,
-                    patchedMethodPdbUnavailableWarning);
+                return CreateIntroducedTypeResolveFailure(parameters);
             }
 
-            PausePointResolveFailureText failureText = PausePointResolveFailureTextBuilder.Build(
-                parameters.File,
-                parameters.Line,
-                hasActiveHotReloadPatches,
-                resolveResult,
-                patchedMethodPdbUnavailableWarning);
+            // Why no hot-reload branch: --line is an edited-file line on every path, so a failure
+            // in a patched file has the same causes as one in an unpatched file.
             PausePointResponse response = PausePointFailureResponse.Create(
-                failureText.Message,
+                PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
+                    resolveResult.ErrorMessage,
+                    resolveResult.NearbyCompiledMethods),
                 SourcePausePointConstants.ErrorCodeResolveFailed,
-                failureText.RecommendedNextAction);
+                SourcePausePointConstants.ResolveFailedRecommendedNextAction);
             List<string> resolveFailureWarnings = new List<string>();
-            PausePointEnableWarningList.AddIfNotEmpty(resolveFailureWarnings, failureText.Warning);
             PausePointEnableWarningList.AddIfNotEmpty(
                 resolveFailureWarnings,
                 declaresIntroducedType
@@ -72,24 +65,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why the resolver's own sentence is dropped: it names a line and reads as a second,
         // competing reason, so the caller retries with other line numbers instead of hot reloading
-        // the method. The first sentence already covers every line in the file. The pdb warning
-        // travels along because "hot reload it and try again" hides the real cause when the method
-        // the caller means is already patched and its pdb is the part that is missing.
-        private static PausePointResponse CreateIntroducedTypeResolveFailure(
-            EnablePausePointSchema parameters,
-            string patchedMethodPdbUnavailableWarning)
+        // the method. The first sentence already covers every line in the file.
+        private static PausePointResponse CreateIntroducedTypeResolveFailure(EnablePausePointSchema parameters)
         {
             string message = string.Format(
                 SourcePausePointConstants.IntroducedTypeResolveFailureMessageFormat,
                 parameters.File);
-            PausePointResponse response = PausePointFailureResponse.Create(
+            return PausePointFailureResponse.Create(
                 message,
                 SourcePausePointConstants.ErrorCodeResolveFailed,
                 SourcePausePointConstants.IntroducedTypeResolveFailureNextAction);
-            List<string> warnings = new List<string>();
-            PausePointEnableWarningList.AddIfNotEmpty(warnings, patchedMethodPdbUnavailableWarning);
-            PausePointEnableWarningList.Assign(response, warnings);
-            return response;
         }
     }
 

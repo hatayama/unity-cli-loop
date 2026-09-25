@@ -276,7 +276,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: the file as the caller passed it.
         public const string IntroducedTypeResolveFailureMessageFormat =
             "'{0}' declares a type hot reload introduced without a compile, so it has no compiled "
-            + "line map to resolve --line against. Pause points can bind only to methods hot reload "
+            + "code to resolve --line against. Pause points can bind only to methods hot reload "
             + "has patched in this file.";
 
         // Why a warning rather than the failure text: the file also holds compiled types, so the
@@ -284,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: the file as the caller passed it.
         public const string IntroducedTypeInFileWarningFormat =
             "'{0}' also declares a type hot reload introduced without a compile; lines inside that "
-            + "type have no compiled line map, and a pause point binds there only to a method hot "
+            + "type have no compiled code, and a pause point binds there only to a method hot "
             + "reload has patched.";
 
         public const string IntroducedTypeResolveFailureNextAction =
@@ -351,19 +351,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "identical in the edited file. '{0}' has active hot-reload patches and the "
             + "resolved method '{1}' is not patched by this reload, so --line resolved against "
             + "the last compiled source, not the edited file.";
-
-        // Why a separate failure string: resolve failure leaves ResolvedMethod and
-        // ResolvedLineText empty, so pointing at those fields is a dead end.
-        public const string HotReloadCompiledLineMapResolveFailureWarningFormat =
-            "'{0}' has active hot-reload patches. --line resolves against the last compiled source, "
-            + "not the edited file, so a line number taken from the edited file can miss or fail to "
-            + "resolve. Methods currently patched by hot reload resolve against the edited file instead. "
-            + "Recompute the line against the last compiled source, or run 'uloop compile' "
-            + "and re-enable.";
-
-        public const string HotReloadCompiledLineMapResolveFailureNextAction =
-            "Pass a line number from the last compiled source (the editor shows the edited file, "
-            + "which can drift after hot reload), or run 'uloop compile' and re-enable the pause point.";
 
         // Format: file, resolved line, compiled line text, edited line text.
         public const string HotReloadCompiledLineMapLineDriftWarningFormat =

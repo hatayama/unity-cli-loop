@@ -33,21 +33,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             + "patches and the resolved method 'ExampleType.ExampleMethod' is not patched by "
             + "this reload, so --line resolved against the last compiled source, not the edited file.";
 
-        private const string ExpectedCompiledLineMapResolveFailureWarning =
-            "'Assets/Scripts/Example.cs' has active hot-reload patches. --line resolves against "
-            + "the last compiled source, not the edited file, so a line number taken from the "
-            + "edited file can miss or fail to resolve. Methods currently patched by hot reload "
-            + "resolve against the edited file instead. Recompute the line against the last "
-            + "compiled source, or run 'uloop compile' and re-enable.";
-
-        private const string ExpectedEnableResolveFailureWarning =
-            "'Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs' has active "
-            + "hot-reload patches. --line resolves against the last compiled source, not the "
-            + "edited file, so a line number taken from the edited file can miss or fail to "
-            + "resolve. Methods currently patched by hot reload resolve against the edited file "
-            + "instead. Recompute the line against the last compiled source, or run 'uloop compile' "
-            + "and re-enable.";
-
         private const string ResolveFailureFile =
             "Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs";
 
@@ -134,47 +119,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 true);
 
             Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapMatchedWarning));
-        }
-
-        /// <summary>
-        /// What: resolve-failure warning names compiled-line drift without pointing at
-        /// ResolvedMethod or ResolvedLineText, which stay empty on that failure.
-        /// </summary>
-        [Test]
-        public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenPatchesAreActive_ReturnsFormattedWarning()
-        {
-            string warning = PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                true,
-                ForwardSlashFile);
-
-            Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapResolveFailureWarning));
-        }
-
-        /// <summary>
-        /// What: a backslash path is normalized before it is interpolated into the
-        /// resolve-failure warning.
-        /// </summary>
-        [Test]
-        public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenFileUsesBackslashes_NormalizesToForwardSlashes()
-        {
-            string warning = PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                true,
-                "Assets\\Scripts\\Example.cs");
-
-            Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapResolveFailureWarning));
-        }
-
-        /// <summary>
-        /// What: the resolve-failure helper stays silent when the file has no active patches.
-        /// </summary>
-        [Test]
-        public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenPatchesAreInactive_ReturnsEmpty()
-        {
-            string warning = PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                false,
-                ForwardSlashFile);
-
-            Assert.That(warning, Is.EqualTo(string.Empty));
         }
 
         /// <summary>
@@ -1297,139 +1241,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: an active hot-reload gate plus a compiled-source match appends Candidate after
-        /// Nearby methods on a resolve-failure Message.
-        /// </summary>
-        [Test]
-        public void BuildResolveFailureMessage_WhenHotReloadGateTrueAndLineMatches_AppendsNearbyThenCandidate()
-        {
-            const string errorMessage =
-                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
-            SourcePausePointNearbyCompiledMethod[] nearby =
-            {
-                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
-            };
-            string[] compiledLines =
-            {
-                "            return 2;"
-            };
-
-            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
-                errorMessage,
-                nearby,
-                true,
-                116,
-                true,
-                "return 2;",
-                compiledLines);
-
-            Assert.That(
-                result,
-                Is.EqualTo(
-                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
-                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."
-                    + " Candidate: the text at --line 116 in the edited file appears at line 1 in the last compiled source."));
-        }
-
-        /// <summary>
-        /// What: the same matching inputs without the hot-reload gate keep Nearby methods and omit
-        /// Candidate.
-        /// </summary>
-        [Test]
-        public void BuildResolveFailureMessage_WhenHotReloadGateFalseAndLineMatches_AppendsNearbyOnly()
-        {
-            const string errorMessage =
-                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
-            SourcePausePointNearbyCompiledMethod[] nearby =
-            {
-                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
-            };
-            string[] compiledLines =
-            {
-                "            return 2;"
-            };
-
-            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
-                errorMessage,
-                nearby,
-                false,
-                116,
-                true,
-                "return 2;",
-                compiledLines);
-
-            Assert.That(
-                result,
-                Is.EqualTo(
-                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
-                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."));
-        }
-
-        /// <summary>
-        /// What: a null compiled-source list under an active hot-reload gate keeps Nearby methods
-        /// and omits Candidate.
-        /// </summary>
-        [Test]
-        public void BuildResolveFailureMessage_WhenCompiledSourceLinesNull_AppendsNearbyOnly()
-        {
-            const string errorMessage =
-                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
-            SourcePausePointNearbyCompiledMethod[] nearby =
-            {
-                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
-            };
-
-            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
-                errorMessage,
-                nearby,
-                true,
-                116,
-                true,
-                "return 2;",
-                null);
-
-            Assert.That(
-                result,
-                Is.EqualTo(
-                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
-                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."));
-        }
-
-        /// <summary>
-        /// What: a failed edited-line read under an active hot-reload gate keeps Nearby methods and
-        /// omits Candidate even when compiled source would match.
-        /// </summary>
-        [Test]
-        public void BuildResolveFailureMessage_WhenRequestedLineReadFails_AppendsNearbyOnly()
-        {
-            const string errorMessage =
-                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
-            SourcePausePointNearbyCompiledMethod[] nearby =
-            {
-                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
-            };
-            string[] compiledLines =
-            {
-                "            return 2;"
-            };
-
-            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
-                errorMessage,
-                nearby,
-                true,
-                116,
-                false,
-                "return 2;",
-                compiledLines);
-
-            Assert.That(
-                result,
-                Is.EqualTo(
-                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
-                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."));
-        }
-
-        /// <summary>
         /// What: retarget warning interpolates resolved method, requested line, and edited span.
         /// </summary>
         [Test]
@@ -1547,72 +1358,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a resolve-failure enable response with active hot-reload patches uses the
-        /// failure warning and next-action constants, not the success-path wording.
-        /// </summary>
-        [Test]
-        public void Enable_WhenResolveFailsAndFileHasActivePatches_UsesResolveFailureWarningAndNextAction()
-        {
-            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
-            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
-                Array.Empty<byte>(),
-                Array.Empty<byte>(),
-                null,
-                Array.Empty<HotReloadShimMethodLookup>());
-
-            try
-            {
-                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
-                PausePointResponse withPatches = EnableUnresolvableLine();
-
-                Assert.That(withPatches.Success, Is.False);
-                Assert.That(withPatches.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(withPatches.Warning, Is.EqualTo(ExpectedEnableResolveFailureWarning));
-                Assert.That(
-                    withPatches.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction));
-
-                hotReloadSideScope.Port.ShimLookupForFile = _ => null;
-                PausePointResponse withoutPatches = EnableUnresolvableLine();
-
-                Assert.That(withoutPatches.Success, Is.False);
-                Assert.That(withoutPatches.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(withoutPatches.Warning, Is.Null);
-                Assert.That(
-                    withoutPatches.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
-            }
-            finally
-            {
-                hotReloadSideScope.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// What: a file whose reload only added methods has no shim lookup, yet its resolve failure
-        /// still gets the hot-reload warning and next action, because the added methods moved its
-        /// edited lines away from the compiled line map all the same.
-        /// </summary>
-        [Test]
-        public void Enable_WhenResolveFailsAndFileHasOnlyAddedMethods_UsesResolveFailureWarningAndNextAction()
-        {
-            using (HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope())
-            {
-                hotReloadSideScope.Port.ShimLookupForFile = _ => null;
-                hotReloadSideScope.Port.ActiveHotReloadChangesInFile = _ => true;
-
-                PausePointResponse response = EnableUnresolvableLine();
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(response.Warning, Is.EqualTo(ExpectedEnableResolveFailureWarning));
-                Assert.That(
-                    response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction));
-            }
-        }
-
-        /// <summary>
         /// What: a line inside a patched method with no shim PDB is a distinct Kind, not
         /// NotInPatchedMethod.
         /// </summary>
@@ -1692,34 +1437,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return -1;
-        }
-
-        private static PausePointResponse EnableUnresolvableLine()
-        {
-            return new PausePointUseCase().Enable(new EnablePausePointSchema
-            {
-                File = ResolveFailureFile,
-                Line = LastNonEmptyLineOfResolveFailureFile(),
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.SingleShot
-            });
-        }
-
-        // The namespace's closing brace is inside the file but has no sequence point on or after
-        // it, so the resolver fails there on both the mapped and the fallback path; a line past
-        // the end of the file would be refused as not compiled before the resolver runs.
-        private static int LastNonEmptyLineOfResolveFailureFile()
-        {
-            string[] lines = File.ReadAllLines(
-                Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), ResolveFailureFile));
-            int lastLine = lines.Length;
-            while (lastLine > 0 && lines[lastLine - 1].Trim().Length == 0)
-            {
-                lastLine--;
-            }
-
-            Assert.That(lastLine, Is.GreaterThan(0));
-            return lastLine;
         }
 
         private static HotReloadShimFileLookup CreatePdbUnavailableLookup(MethodBase patchedMethod, int line)
