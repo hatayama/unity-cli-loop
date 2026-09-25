@@ -154,6 +154,15 @@ pause points are removed automatically on `clear-pause-point`/`ClearAll` and are
 script compile or domain reload unless enabled with `--persist`, which re-arms them after the
 reload.
 
+### Line basis
+
+The `LineBasis` field of a successful source pause point enable, naming the coordinates
+`--line` was resolved in. `EditedFile` means the line was read as a line of the file on disk
+(mapped onto the verified source snapshot, or inside a hot-reload patched body), so
+`ResolvedLine` matches the editor. `LastCompiledSource` means the file had no verified source
+snapshot, so `--line` was used as a compiled line number and may not match the editor. See
+`docs/adr/0008-pause-point-line-is-edited-file-line.md`.
+
 ### Captured variable
 
 One local, parameter, or `this` instance field snapshotted at the moment execution reaches
