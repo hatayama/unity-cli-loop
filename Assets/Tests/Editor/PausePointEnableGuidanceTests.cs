@@ -819,7 +819,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotWithARenamedAddMethod();
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotBeforeAddWasEdited();
                 scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
                     FixtureBlankLineAboveMethod + 1,
                     FixtureClosingBraceLine);
@@ -868,7 +868,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotWithARenamedAddMethod();
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotBeforeAddWasEdited();
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -1072,17 +1072,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 methods);
         }
 
-        // Plays the last compiled source of the fixture as if Add had been renamed from Sub and
-        // its body edited after that compile, so on disk the blank line 8, the header on line 9,
-        // and the two statements on lines 11-12 have no compiled counterpart.
-        private static string CreateSnapshotWithARenamedAddMethod()
+        // Plays the last compiled source of the fixture from before an edit that inserted the
+        // blank line 8, dropped a trailing comment from Add's declaration, and rewrote its two
+        // statements. Add keeps its signature, so hot reload patches it in place rather than
+        // adding it, and on disk the blank line 8, the declaration on line 9, and the two
+        // statements on lines 11-12 have no compiled counterpart.
+        private static string CreateSnapshotBeforeAddWasEdited()
         {
             string onDisk = File.ReadAllText(
                 Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), FixtureFilePath));
             string snapshot = onDisk
-                .Replace("\n\n        public int Add(int left, int right)", "\n        public int Sub(int left, int right)")
-                .Replace("int sum = left + right;", "int diff = left - right;")
-                .Replace("return sum;", "return diff;");
+                .Replace(
+                    "\n\n        public int Add(int left, int right)",
+                    "\n        public int Add(int left, int right) // sums both operands")
+                .Replace("int sum = left + right;", "int result = left + right;")
+                .Replace("return sum;", "return result;");
             Assert.That(snapshot, Is.Not.EqualTo(onDisk));
             return snapshot;
         }
