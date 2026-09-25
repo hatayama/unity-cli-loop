@@ -249,7 +249,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: when the uncompiled statement blocking the request lies inside a method hot reload
-        /// added, the refusal is the added-method refusal with that method's label.
+        /// added, the refusal names that method and the blocking line, and does not claim the
+        /// requested line itself is inside the added method.
         /// </summary>
         [Test]
         public void Inserted_BlockerInsideAnAddedMethod_RefusesWithTheAddedMethodLabel()
@@ -265,6 +266,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(resolution.ResolveResult, Is.Null);
             Assert.That(resolution.Refusal.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
             Assert.That(resolution.Refusal.Message, Does.Contain("Fixture.Owner.Added()"));
+            Assert.That(resolution.Refusal.Message, Does.Contain("line 15"));
+            Assert.That(resolution.Refusal.Message, Does.Not.Contain("Line 14 is inside"));
+            Assert.That(
+                resolution.Refusal.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.AddedMethodResolveFailureNextAction));
         }
 
         /// <summary>

@@ -176,7 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (addedMethod != null)
             {
                 return PausePointEditedLineResolution.Refused(
-                    PausePointResolveFailureResponse.CreateAddedMethodRefusal(parameters, addedMethod.Label));
+                    PausePointResolveFailureResponse.CreateAddedMethodRefusal(parameters, parameters.Line, addedMethod.Label));
             }
 
             PausePointEditedLineMap map = BuildMapOrNull(normalizedFile);
@@ -307,7 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (addedMethod != null)
             {
                 return PausePointResolveFailureResponse.CreateAddedMethodRefusal(
-                    context.Parameters, addedMethod.Label);
+                    context.Parameters, uncompiledLine, addedMethod.Label);
             }
 
             string lineText = context.Map.EditedLineTextOrEmpty(uncompiledLine);

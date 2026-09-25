@@ -1262,6 +1262,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         42,
                         10,
                         20)));
+            Assert.That(warning, Does.Not.Contain("last compiled source"));
         }
 
         /// <summary>
@@ -1416,6 +1417,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             "PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe",
                             requestedLine)));
                 Assert.That(response.RecommendedNextAction, Does.Contain("uloop compile"));
+                Assert.That(response.Message, Does.Contain("cannot be placed on the running code"));
             }
         }
 

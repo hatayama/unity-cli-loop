@@ -48,17 +48,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        // Refuses a line inside a method hot reload added. The compiled resolver is not asked,
-        // so there is no resolver sentence to keep.
+        // Refuses a line whose statement is inside a method hot reload added. The compiled resolver
+        // is not asked, so there is no resolver sentence to keep. addedMethodLine is the line
+        // inside the added method, which differs from the requested line when the requested line
+        // has no statement and the next one is inside the added method.
         internal static PausePointResponse CreateAddedMethodRefusal(
             EnablePausePointSchema parameters,
+            int addedMethodLine,
             string addedMethodName)
         {
-            return PausePointFailureResponse.Create(
-                string.Format(
+            string message = addedMethodLine == parameters.Line
+                ? string.Format(
                     SourcePausePointConstants.AddedMethodResolveFailureMessageFormat,
                     parameters.Line,
-                    addedMethodName),
+                    addedMethodName)
+                : string.Format(
+                    SourcePausePointConstants.AddedMethodNextStatementResolveFailureMessageFormat,
+                    parameters.Line,
+                    addedMethodLine,
+                    addedMethodName);
+            return PausePointFailureResponse.Create(
+                message,
                 SourcePausePointConstants.ErrorCodeResolveFailed,
                 SourcePausePointConstants.AddedMethodResolveFailureNextAction);
         }
