@@ -224,7 +224,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File);
             string id = BuildSourcePausePointId(parameters.File, parameters.Line);
-            string patchedMethodPdbUnavailableWarning = string.Empty;
             SourcePausePointSnapshotTiming snapshotTiming = ParseSnapshotTiming(parameters.SnapshotTiming);
 
             HotReloadShimFileLookup shimLookup =
@@ -278,7 +277,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         shimPatchResult,
                         "EditedFile",
                         retargetedToHotReloadPatch: true,
-                        hasActiveHotReloadPatches: true,
                         shimResolution.NotCapturableVariables,
                         editedMethodStartLine: shimResolution.SourceStartLine,
                         editedMethodEndLine: shimResolution.SourceEndLine);
@@ -292,38 +290,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Pick a line with an executable statement inside the edited method body.");
                 }
 
-                patchedMethodPdbUnavailableWarning = PausePointEnableWarnings.BuildPatchedMethodPdbUnavailableWarningOrEmpty(
-                    shimResolution.Kind == SourcePausePointShimResolveKind.PatchedMethodPdbUnavailable,
-                    shimResolution.MethodDisplayName,
-                    parameters.Line);
-                // NotInPatchedMethod and PatchedMethodPdbUnavailable: fall through to the
-                // compiled ScriptAssemblies resolver. The latter still uses the compiled line
-                // map; only the warning text differs.
+                // Why refuse: without shim debug symbols the edited body has no line map, and
+                // falling through would arm compiled code that no longer runs.
+                if (shimResolution.Kind == SourcePausePointShimResolveKind.PatchedMethodPdbUnavailable)
+                {
+                    return PausePointFailureResponse.Create(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
+                            shimResolution.MethodDisplayName,
+                            parameters.Line),
+                        SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                        SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableNextAction);
+                }
+
+                // NotInPatchedMethod: fall through to the compiled ScriptAssemblies resolver.
             }
 
             // Why before the compiled resolver: an added method has no compiled counterpart, so
             // "on or after line N" would land on the next compiled method and arm the wrong code.
             // Asked separately from the shim lookup, which is null when the file has only added
             // methods and no patched ones.
+            bool hasActiveHotReloadChanges = HasActiveHotReloadChanges(shimLookup, normalizedFile);
             HotReloadAddedMethodAtLine addedMethod =
                 PausePointAddedMethodScope.FindAddedMethodContainingLineOrNull(normalizedFile, parameters.Line);
-            SourcePausePointCompiledMethodSpan addedLineCompiledSpan = null;
             if (addedMethod != null)
             {
-                (SourcePausePointCompiledMethodSpan Span, PausePointResponse Refusal) addedMethodScope =
-                    PausePointAddedMethodScope.ScopeAddedMethodLineToCompiledSpan(parameters, addedMethod);
-                if (addedMethodScope.Refusal != null)
-                {
-                    return addedMethodScope.Refusal;
-                }
-
-                addedLineCompiledSpan = addedMethodScope.Span;
+                return EnableInsideAddedMethodCompiledSpan(
+                    parameters, hitWhen, hitWhenCondition, id, normalizedFile, snapshotTiming, addedMethod, hasActiveHotReloadChanges);
             }
 
-            bool hasActiveHotReloadChanges = HasActiveHotReloadChanges(shimLookup, normalizedFile);
-            (SourcePausePointResolveResult resolveResult, string editedLineRemapWarning) =
-                PausePointEditedLineRemap.ResolveWithEditedLineRemap(
-                    parameters.File, parameters.Line, parameters.Method, snapshotTiming);
+            PausePointEditedLineResolution resolution =
+                PausePointEditedLineResolver.Resolve(parameters, normalizedFile, snapshotTiming);
+            if (resolution.Refusal != null)
+            {
+                return resolution.Refusal;
+            }
+
+            SourcePausePointResolveResult resolveResult = resolution.ResolveResult;
             if (!resolveResult.Success)
             {
                 return PausePointResolveFailureResponse.Create(
@@ -331,13 +334,72 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     normalizedFile,
                     hasActiveHotReloadPatches: hasActiveHotReloadChanges,
                     resolveResult,
-                    patchedMethodPdbUnavailableWarning);
+                    string.Empty);
+            }
+
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(
+                id,
+                resolveResult.Resolution,
+                normalizedFile,
+                parameters.Line);
+            if (!patchResult.Success)
+            {
+                return CreateCompiledPatchFailureResponse(patchResult);
+            }
+
+            return FinishEnableBySourceLocation(
+                id,
+                parameters,
+                hitWhen,
+                hitWhenCondition,
+                resolution.EditedResolvedLine,
+                resolution.EditedResolvedEndLine,
+                resolveResult.Resolution.MethodDisplayName,
+                patchResult,
+                resolution.LineBasis,
+                retargetedToHotReloadPatch: false,
+                resolveResult.Resolution.NotCapturableVariables,
+                editedMethodStartLine: resolution.EditedMethodStartLine,
+                editedMethodEndLine: resolution.EditedMethodEndLine,
+                fallbackWarning: resolution.Warning);
+        }
+
+        // Why a compiled-coordinate resolve here: this path keeps arming the compiled method that
+        // --method names when the line sits inside an added method, so the edited-line map does
+        // not apply. The whole path goes away when that exception is dropped.
+        private static PausePointResponse EnableInsideAddedMethodCompiledSpan(
+            EnablePausePointSchema parameters,
+            string hitWhen,
+            UloopPausePointHitWhenCondition hitWhenCondition,
+            string id,
+            string normalizedFile,
+            SourcePausePointSnapshotTiming snapshotTiming,
+            HotReloadAddedMethodAtLine addedMethod,
+            bool hasActiveHotReloadChanges)
+        {
+            (SourcePausePointCompiledMethodSpan Span, PausePointResponse Refusal) addedMethodScope =
+                PausePointAddedMethodScope.ScopeAddedMethodLineToCompiledSpan(parameters, addedMethod);
+            if (addedMethodScope.Refusal != null)
+            {
+                return addedMethodScope.Refusal;
+            }
+
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
+            if (!resolveResult.Success)
+            {
+                return PausePointResolveFailureResponse.Create(
+                    parameters,
+                    normalizedFile,
+                    hasActiveHotReloadPatches: hasActiveHotReloadChanges,
+                    resolveResult,
+                    string.Empty);
             }
 
             // Why after resolving: rounding forward past the span end reaches another method of
             // the same name, which is the wrong code the refusal above exists to avoid.
             if (PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(
-                    addedLineCompiledSpan,
+                    addedMethodScope.Span,
                     resolveResult.Resolution.ResolvedLine))
             {
                 return PausePointResolveFailureResponse.CreateAddedMethodRefusal(
@@ -353,18 +415,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Line);
             if (!patchResult.Success)
             {
-                string errorCode =
-                    patchResult.FailureReason == SourcePausePointPatchFailureReason.MethodPatchedByHotReload
-                        ? SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload
-                        : SourcePausePointConstants.ErrorCodePatchFailed;
-                return new PausePointResponse
-                {
-                    Success = false,
-                    ErrorCode = errorCode,
-                    Message = patchResult.ErrorMessage,
-                    RecommendedNextAction = patchResult.Hint,
-                    EditorState = PausePointEditorState.FromSnapshot(UloopPausePointRegistry.CaptureEditorState()),
-                };
+                return CreateCompiledPatchFailureResponse(patchResult);
             }
 
             return FinishEnableBySourceLocation(
@@ -378,12 +429,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchResult,
                 "LastCompiledSource",
                 retargetedToHotReloadPatch: false,
-                hasActiveHotReloadPatches: hasActiveHotReloadChanges,
                 resolveResult.Resolution.NotCapturableVariables,
-                compiledMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
-                compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine,
-                patchedMethodPdbUnavailableWarning: patchedMethodPdbUnavailableWarning,
-                editedLineRemapWarning: editedLineRemapWarning);
+                editedMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
+                editedMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine);
+        }
+
+        private static PausePointResponse CreateCompiledPatchFailureResponse(SourcePausePointPatchResult patchResult)
+        {
+            string errorCode =
+                patchResult.FailureReason == SourcePausePointPatchFailureReason.MethodPatchedByHotReload
+                    ? SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload
+                    : SourcePausePointConstants.ErrorCodePatchFailed;
+            return new PausePointResponse
+            {
+                Success = false,
+                ErrorCode = errorCode,
+                Message = patchResult.ErrorMessage,
+                RecommendedNextAction = patchResult.Hint,
+                EditorState = PausePointEditorState.FromSnapshot(UloopPausePointRegistry.CaptureEditorState()),
+            };
         }
 
         // Validation already rejected anything but the two accepted values.
@@ -436,14 +500,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointPatchResult patchResult,
             string lineBasis,
             bool retargetedToHotReloadPatch,
-            bool hasActiveHotReloadPatches,
             IReadOnlyList<string> notCapturableVariables,
             int editedMethodStartLine = 0,
             int editedMethodEndLine = 0,
-            int compiledMethodStartLine = 0,
-            int compiledMethodEndLine = 0,
-            string patchedMethodPdbUnavailableWarning = "",
-            string editedLineRemapWarning = "")
+            string fallbackWarning = "")
         {
             string rearmWarning = PausePointEnableWarnings.BuildRearmDiscardWarningOrEmpty(
                 UloopPausePointRegistry.GetStatus(id));
@@ -465,18 +525,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 snapshot = UloopPausePointRegistry.GetStatus(id);
             }
 
-            bool compareCompiledLineDrift = hasActiveHotReloadPatches && !retargetedToHotReloadPatch;
-            string compiledSnapshotSource = compareCompiledLineDrift
-                ? PausePointCompiledSourceReader.LoadSnapshotOrEmpty(parameters.File)
+            // Why empty on the compiled basis: a compiled line number read against the edited disk
+            // file shows whatever statement drifted onto it. The disk read spans
+            // resolvedLine..resolvedEndLine so a rounded-forward multi-line statement keeps its full text.
+            string resolvedLineText = lineBasis == "EditedFile"
+                ? PausePointLineTextReader.ReadResolvedLineText(parameters.File, resolvedLine, resolvedEndLine)
                 : string.Empty;
-            // Why snapshot over disk: the editor file may already include unpatched-line drift, so
-            // reading disk at the compiled ResolvedLine shows the wrong statement (FB9 empty/mismatch).
-            // The snapshot read stays single-line because the verified snapshot has no end-line data;
-            // the disk read spans resolvedLine..resolvedEndLine so a rounded-forward multi-line
-            // statement returns its full text.
-            string resolvedLineText = compareCompiledLineDrift
-                ? SourcePausePointSourceLineReader.ReadLineTextFromSource(compiledSnapshotSource, resolvedLine)
-                : PausePointLineTextReader.ReadResolvedLineText(parameters.File, resolvedLine, resolvedEndLine);
             UloopPausePointRegistry.SetResolvedLine(id, resolvedLine, resolvedLineText);
             UloopPausePointRegistry.SetNotCapturableVariables(id, notCapturableVariables);
 
@@ -493,7 +547,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PausePointEnableWarningList.AddIfNotEmpty(
                 warningEntries,
                 PausePointEnableWarnings.CreateEnableWarning());
-            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, editedLineRemapWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, fallbackWarning);
             PausePointEnableWarningList.AddIfNotEmpty(
                 warningEntries,
                 PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
@@ -502,36 +556,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     editedMethodStartLine,
                     editedMethodEndLine));
-            // Why skip after a text-match remap: the remap warning already names the armed line, and a
-            // "snapped forward" sentence for a line chosen by text would contradict it.
-            (string comparisonWarning, bool comparedAndMatched) =
-                PausePointCompiledLineComparisonWarnings.BuildEnableComparisonWarningOrEmpty(
-                    compareCompiledLineDrift && string.IsNullOrEmpty(editedLineRemapWarning),
-                    parameters.File,
-                    parameters.Line,
-                    resolvedLine,
-                    resolvedMethod,
-                    resolvedLineText,
-                    compiledSnapshotSource,
-                    compiledMethodStartLine,
-                    compiledMethodEndLine);
-
-            PausePointEnableWarningList.AddIfNotEmpty(
-                warningEntries,
-                PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                    patchedMethodPdbUnavailableWarning,
-                    PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                        compareCompiledLineDrift,
-                        parameters.File,
-                        resolvedMethod,
-                        comparedAndMatched)));
-            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, comparisonWarning);
-            if (comparisonWarning.Length > 0)
-            {
-                response.RecommendedNextAction =
-                    SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction;
-            }
-
             PausePointEnableWarningList.AddRangeIfNotEmpty(warningEntries, patchResult.Warnings);
             PausePointEnableWarningList.AddIfNotEmpty(
                 warningEntries,
@@ -553,7 +577,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolvedLineText,
                     resolvedLine,
                     resolvedMethod,
-                    compiledMethodEndLine,
                     editedMethodEndLine));
             PausePointEnableWarningList.Assign(response, warningEntries);
             response.RecommendedNextAction = PausePointEnableWarnings

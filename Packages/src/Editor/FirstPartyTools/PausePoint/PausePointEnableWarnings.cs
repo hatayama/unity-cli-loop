@@ -94,22 +94,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why also match method end: a using/lock Dispose nested "}" has a sequence point, so
         // Trim()=="}" alone would claim every return path reaches an inner brace.
-        // Why fail-closed when both ends are 0: the "method's closing brace" wording would be a lie.
+        // Why fail-closed when the end is 0: the "method's closing brace" wording would be a lie.
+        // methodEndLine is in the same coordinates as resolvedLine.
         internal static string BuildClosingBraceWarningOrEmpty(
             string resolvedLineText,
             int resolvedLine,
             string resolvedMethod,
-            int compiledMethodEndLine,
-            int editedMethodEndLine)
+            int methodEndLine)
         {
             if (string.IsNullOrEmpty(resolvedLineText) || resolvedLineText.Trim() != "}")
             {
                 return string.Empty;
             }
 
-            bool atCompiledMethodEnd = compiledMethodEndLine > 0 && resolvedLine == compiledMethodEndLine;
-            bool atEditedMethodEnd = editedMethodEndLine > 0 && resolvedLine == editedMethodEndLine;
-            if (!atCompiledMethodEnd && !atEditedMethodEnd)
+            if (methodEndLine <= 0 || resolvedLine != methodEndLine)
             {
                 return string.Empty;
             }
@@ -214,24 +212,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 + SourcePausePointConstants.NearbyCompiledMethodsPrefix
                 + string.Join("; ", parts)
                 + ".";
-        }
-
-        internal static string BuildPatchedMethodPdbUnavailableWarningOrEmpty(
-            bool patchedMethodPdbUnavailable,
-            string methodDisplayName,
-            int requestedLine)
-        {
-            if (!patchedMethodPdbUnavailable)
-            {
-                return string.Empty;
-            }
-
-            Debug.Assert(!string.IsNullOrEmpty(methodDisplayName), "methodDisplayName must not be empty.");
-            Debug.Assert(requestedLine > 0, "requestedLine must be a positive 1-based line number.");
-            return string.Format(
-                SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
-                methodDisplayName,
-                requestedLine);
         }
 
         internal static string ChooseCompiledLineMapWarning(
