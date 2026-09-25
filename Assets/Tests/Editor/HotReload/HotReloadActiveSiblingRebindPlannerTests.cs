@@ -6,6 +6,7 @@ using System.Reflection;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -238,7 +239,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _access.Domain.AppliedSources.RecordAppliedSource(
                 projectRelativePath,
                 new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(workerSourcePath)),
-                isFullyApplied);
+                isFullyApplied,
+                "/worker-copy/Recorded.cs",
+                Array.Empty<HotReloadUnappliedRow>());
         }
 
         private string WriteWorkerSource(string projectRelativePath)

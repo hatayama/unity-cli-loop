@@ -99,5 +99,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return false;
         }
+
+        // Why the recorded path is hashed rather than the argument: it is the copy the transform
+        // worker read, which differs from the argument when a reload was run from an edited copy.
+        // Why an unreadable file counts as unchanged: the shim-source check treats it the same way,
+        // so the two answers never disagree about one file.
+        public HotReloadLatestFileReload GetLatestReloadOfFile(string file)
+        {
+            HotReloadAppliedSourceRecord record = _domain.AppliedSources.FindRecordForRequestedPath(file);
+            if (record == null)
+            {
+                return null;
+            }
+
+            string currentHash = _readSourceContentHashOrNull(record.SourcePath);
+            bool fileChangedSince = currentHash != null
+                && !string.Equals(currentHash, record.Hash, StringComparison.Ordinal);
+            return new HotReloadLatestFileReload(fileChangedSince, record.UnappliedRows);
+        }
+
+        // Why the label match is exact: a worker row spells a constructed generic parameter type
+        // the way Cecil does (List`1<System.Int32>) while a MethodBase spells it the way the CLR
+        // does (List`1[System.Int32]); such a method finds no row rather than a guessed one.
+        public HotReloadUnappliedRow FindUnappliedRowForMethod(string file, MethodBase method)
+        {
+            if (method == null || method.DeclaringType == null)
+            {
+                return null;
+            }
+
+            HotReloadLatestFileReload latest = GetLatestReloadOfFile(file);
+            if (latest == null || latest.FileChangedSince)
+            {
+                return null;
+            }
+
+            string label = HotReloadMethodKeys.FormatMethodLabel(method);
+            foreach (HotReloadUnappliedRow row in latest.UnappliedRows)
+            {
+                if (string.Equals(row.Label, label, StringComparison.Ordinal))
+                {
+                    return row;
+                }
+            }
+
+            return null;
+        }
     }
 }

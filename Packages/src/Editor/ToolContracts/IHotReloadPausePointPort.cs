@@ -79,5 +79,20 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// compiled source to resolve a pause point line against.
         /// </summary>
         bool IsIntroducedTypeSourceFile(string file);
+
+        /// <summary>
+        /// Argument is a forward-slash path (absolute or project-relative); returns what the latest
+        /// hot reload that read the file recorded about it, or null when none is recorded (never
+        /// reloaded, or a reload that left nothing of the file loaded). A file whose current bytes
+        /// cannot be read counts as unchanged.
+        /// </summary>
+        HotReloadLatestFileReload GetLatestReloadOfFile(string file);
+
+        /// <summary>
+        /// Returns the Skipped or Failed row the latest hot reload of the file left for the method,
+        /// or null when that reload applied the method, reported no row whose label matches it, or
+        /// the file changed since.
+        /// </summary>
+        HotReloadUnappliedRow FindUnappliedRowForMethod(string file, MethodBase method);
     }
 }

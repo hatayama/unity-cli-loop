@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -141,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             using (HotReloadDomain domain = HotReloadCompositionRoot.CreateProductionDomain())
             {
-                domain.AppliedSources.RecordAppliedSource(EnumPath, CurrentHash, false);
+                domain.AppliedSources.RecordAppliedSource(EnumPath, CurrentHash, false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
                 HotReloadRunSiblingLedgerUpdates updates = new HotReloadRunSiblingLedgerUpdates(domain);
                 updates.Observe(EnumPath, SkippedResult(EnumPath));
                 updates.ApplyTo(domain);
