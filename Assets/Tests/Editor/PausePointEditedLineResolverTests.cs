@@ -20,6 +20,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string TestFile = "Assets/Fixture/Owner.cs";
         private const string LineNotCompiledErrorCode = "PAUSE_POINT_LINE_NOT_COMPILED";
 
+        // Rows a latest reload left unapplied, and how the refusal lists them in reported order.
+        private static readonly HotReloadUnappliedRow SkippedSecondRow =
+            new HotReloadUnappliedRow("Fixture.Owner.Second()", HotReloadUnappliedRowKind.Skipped);
+        private static readonly HotReloadUnappliedRow FailedFirstRow =
+            new HotReloadUnappliedRow("Fixture.Owner.First()", HotReloadUnappliedRowKind.Failed);
+        private const string DescribedRows =
+            "'Fixture.Owner.Second()' (skipped), 'Fixture.Owner.First()' (could not apply)";
+
         // Line numbers of the compiled source, which every expected value below depends on:
         //  1 using System;              10 public int Second()
         //  2 namespace Fixture          11 {
@@ -601,13 +609,188 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             AssertResolved(resolution, compiledLine: 15, editedLine: 16);
         }
 
+        /// <summary>
+        /// What: a changed line after a hot reload that read the file as it is now says so, lists
+        /// every row that reload left unapplied, and points at those rows' Reasons or a compile
+        /// instead of another reload, whether or not that reload built a new shim generation.
+        /// </summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Changed_AfterAReloadThatReadTheFile_ListsTheUnappliedRows(bool shimSourceChanged)
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                ChangedA(),
+                13,
+                fileState: ReadAsItIs(shimSourceChanged, SkippedSecondRow, FailedFirstRow));
+
+            AssertLineNotCompiledAfterAReadingReload(
+                resolution,
+                string.Format(SourcePausePointConstants.LineNotCompiledChangedLineMessageFormat, 13, TestFile, "int a = 20;")
+                + string.Format(SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat, DescribedRows),
+                SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction);
+        }
+
+        /// <summary>
+        /// What: in a file shifted since the last compile, the changed-line refusal still names the
+        /// line of the file on disk and lists the unapplied rows of a reload that read it.
+        /// </summary>
+        [Test]
+        public void ChangedInAShiftedFile_AfterAReloadThatReadTheFile_ListsTheUnappliedRows()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                ShiftedChangedA(),
+                16,
+                fileState: ReadAsItIs(false, SkippedSecondRow, FailedFirstRow));
+
+            AssertLineNotCompiledAfterAReadingReload(
+                resolution,
+                string.Format(SourcePausePointConstants.LineNotCompiledChangedLineMessageFormat, 16, TestFile, "int a = 20;")
+                + string.Format(SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat, DescribedRows),
+                SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction);
+        }
+
+        /// <summary>
+        /// What: a blank line whose next statement was inserted, after a hot reload that read the
+        /// file as it is now, lists that reload's unapplied rows.
+        /// </summary>
+        [Test]
+        public void NextStatementUncompiled_AfterAReloadThatReadTheFile_ListsTheUnappliedRows()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                Inserted(),
+                14,
+                fileState: ReadAsItIs(false, SkippedSecondRow, FailedFirstRow));
+
+            AssertLineNotCompiledAfterAReadingReload(
+                resolution,
+                string.Format(
+                    SourcePausePointConstants.LineNotCompiledNextStatementUncompiledMessageFormat,
+                    14,
+                    TestFile,
+                    15,
+                    "a += 1;")
+                + string.Format(SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat, DescribedRows),
+                SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction);
+        }
+
+        /// <summary>
+        /// What: a line that rounds to a compiled statement the file no longer holds, after a hot
+        /// reload that read the file as it is now, lists that reload's unapplied rows.
+        /// </summary>
+        [Test]
+        public void StatementRemoved_AfterAReloadThatReadTheFile_ListsTheUnappliedRows()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                ChangedR(),
+                14,
+                fileState: ReadAsItIs(false, SkippedSecondRow, FailedFirstRow));
+
+            AssertLineNotCompiledAfterAReadingReload(
+                resolution,
+                string.Format(SourcePausePointConstants.LineNotCompiledStatementRemovedMessageFormat, 14, TestFile, "return a;")
+                + string.Format(SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat, DescribedRows),
+                SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction);
+        }
+
+        /// <summary>
+        /// What: a line with no compiled line at or after it, after a hot reload that read the file
+        /// as it is now, lists that reload's unapplied rows.
+        /// </summary>
+        [Test]
+        public void NoCompiledLineAtOrAfter_AfterAReloadThatReadTheFile_ListsTheUnappliedRows()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                Appended(),
+                20,
+                fileState: ReadAsItIs(false, SkippedSecondRow, FailedFirstRow));
+
+            AssertLineNotCompiledAfterAReadingReload(
+                resolution,
+                string.Format(SourcePausePointConstants.LineNotCompiledNoCompiledLineAtOrAfterMessageFormat, 20, TestFile)
+                + string.Format(SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat, DescribedRows),
+                SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction);
+        }
+
+        /// <summary>
+        /// What: after a hot reload that read the file as it is now and applied everything, the
+        /// refusal says reloading again does not change the line and points at a compile only.
+        /// </summary>
+        [Test]
+        public void NextStatementUncompiled_AfterAReloadThatAppliedEverything_SuggestsCompile()
+        {
+            PausePointEditedLineResolution resolution = Resolve(Inserted(), 14, fileState: ReadAsItIs(false));
+
+            AssertLineNotCompiledAfterAReadingReload(
+                resolution,
+                string.Format(
+                    SourcePausePointConstants.LineNotCompiledNextStatementUncompiledMessageFormat,
+                    14,
+                    TestFile,
+                    15,
+                    "a += 1;")
+                + SourcePausePointConstants.LineNotCompiledLatestReloadAppliedAllSuffix,
+                SourcePausePointConstants.LineNotCompiledLatestReloadAppliedAllRecommendedNextAction);
+        }
+
+        /// <summary>
+        /// What: a file-level row the latest reload could not apply is listed under its Methods[]
+        /// label, so the caller can find it in that hot reload response.
+        /// </summary>
+        [Test]
+        public void Changed_AfterAReloadThatCouldNotApplyTheFile_ListsTheFileRow()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                ChangedA(),
+                13,
+                fileState: ReadAsItIs(false, new HotReloadUnappliedRow("(file)", HotReloadUnappliedRowKind.Failed)));
+
+            AssertLineNotCompiledAfterAReadingReload(
+                resolution,
+                string.Format(SourcePausePointConstants.LineNotCompiledChangedLineMessageFormat, 13, TestFile, "int a = 20;")
+                + string.Format(SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat, "'(file)' (could not apply)"),
+                SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction);
+        }
+
+        /// <summary>
+        /// What: once the file changed since the latest reload, the refusal keeps the shared
+        /// hot-reload-or-compile next action, because a reload of the edited file can change it.
+        /// </summary>
+        [Test]
+        public void ChangedInAShiftedFile_AfterTheFileChangedSinceTheReload_KeepsTheHotReloadNextAction()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                ShiftedChangedA(),
+                16,
+                fileState: PausePointHotReloadFileState.ChangedSinceLatestReload(new StubHotReloadPausePointPort(), TestFile, false));
+
+            AssertLineNotCompiled(resolution, "Line 16 of '" + TestFile + "' ('int a = 20;') is not in the last compiled source");
+            Assert.That(resolution.Refusal.Message, Does.Not.Contain("The last hot reload of this file"));
+        }
+
+        /// <summary>
+        /// What: with no reload of the file recorded, the refusal keeps the shared
+        /// hot-reload-or-compile next action and claims nothing about a reload.
+        /// </summary>
+        [Test]
+        public void Changed_WithoutAReloadRecord_KeepsTheHotReloadNextAction()
+        {
+            PausePointEditedLineResolution resolution = Resolve(
+                ChangedA(),
+                13,
+                fileState: PausePointHotReloadFileState.Unrecorded(new StubHotReloadPausePointPort(), TestFile, false));
+
+            AssertLineNotCompiled(resolution, "Line 13 of '" + TestFile + "' ('int a = 20;') is not in the last compiled source");
+            Assert.That(resolution.Refusal.Message, Does.Not.Contain("The last hot reload of this file"));
+        }
+
         private static PausePointEditedLineResolution Resolve(
             IReadOnlyList<string> editedLines,
             int line,
             string method = "",
             Func<int, PausePointPatchedEditedSpan> patchedSpanOrNull = null,
             Func<int, HotReloadAddedMethodAtLine> addedMethodOrNull = null,
-            FakeOutcome outcome = FakeOutcome.Resolve)
+            FakeOutcome outcome = FakeOutcome.Resolve,
+            PausePointHotReloadFileState fileState = null)
         {
             PausePointEditedLineMap map = PausePointEditedLineMap.BuildOrNull(Join(CompiledLines), Join(editedLines));
             EnablePausePointSchema parameters = new EnablePausePointSchema { File = TestFile, Line = line, Method = method };
@@ -618,7 +801,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 parameters,
                 compiledLine => resolver.Resolve(compiledLine, method),
                 patchedSpanOrNull ?? (_ => null),
-                addedMethodOrNull ?? (_ => null));
+                addedMethodOrNull ?? (_ => null),
+                fileState ?? PausePointHotReloadFileState.NotReloaded);
             return PausePointEditedLineResolver.ResolveThroughMap(context);
         }
 
@@ -648,6 +832,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return resolution.ResolveResult.NearbyCompiledMethods
                 .Select(nearby => nearby.DisplayName + " " + nearby.StartLine + "-" + nearby.EndLine)
                 .ToArray();
+        }
+
+        private static void AssertLineNotCompiledAfterAReadingReload(
+            PausePointEditedLineResolution resolution,
+            string expectedMessage,
+            string expectedNextAction)
+        {
+            Assert.That(resolution.ResolveResult, Is.Null);
+            Assert.That(resolution.Refusal, Is.Not.Null);
+            Assert.That(resolution.Refusal.Success, Is.False);
+            Assert.That(resolution.Refusal.ErrorCode, Is.EqualTo(LineNotCompiledErrorCode));
+            Assert.That(resolution.Refusal.Message, Is.EqualTo(expectedMessage));
+            Assert.That(resolution.Refusal.RecommendedNextAction, Is.EqualTo(expectedNextAction));
+        }
+
+        // A state whose latest reload read the file as it is on disk and left these rows.
+        private static PausePointHotReloadFileState ReadAsItIs(bool shimSourceChanged, params HotReloadUnappliedRow[] rows)
+        {
+            return PausePointHotReloadFileState.ReadAsItIs(new StubHotReloadPausePointPort(), TestFile, shimSourceChanged, rows);
         }
 
         private static void AssertLineNotCompiled(PausePointEditedLineResolution resolution, string expectedMessagePart)
@@ -688,6 +891,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static string[] ChangedA()
         {
             return ReplaceLine(13, "            int a = 20;");
+        }
+
+        // Shifted() with compiled 13 (edited 16) changed, so the changed line is 16 of the file on disk.
+        private static string[] ShiftedChangedA()
+        {
+            string[] lines = Shifted();
+            lines[15] = "            int a = 20;";
+            return lines;
         }
 
         private static string[] ChangedR()

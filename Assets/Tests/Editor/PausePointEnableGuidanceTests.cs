@@ -48,6 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         // Past the end of the fixture, for a patched span that no fixture line falls inside.
         private const int LinePastTheEndOfTheFixture = 9999;
 
+        // The Methods[] label hot reload reports for the fixture's Add.
+        private const string FixtureAddRowLabel =
+            "io.github.hatayama.UnityCliLoop.Tests.PausePointToolsFixtures.EnableBySourceLocationFixture.Add(System.Int32,System.Int32)";
+
         private const string ExpectedArmingNextActionForJump =
             "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
 
@@ -739,8 +743,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a line inside a patched method whose source changed on disk after the patch is
-        /// refused with the patched-source-changed code and recovery hint, and no marker is armed.
+        /// What: a line inside a patched method whose source changed on disk after the patch, with
+        /// no reload of the file recorded, is refused with the patched-source-changed code and
+        /// recovery hint, and no marker is armed.
         /// </summary>
         [Test]
         public void Enable_LineInsidePatchedMethodWhoseSourceChangedOnDisk_RefusesWithPatchedSourceChanged()
@@ -751,6 +756,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     FixtureStatementLine - 2,
                     FixtureClosingBraceLine);
                 scope.Port.ShimSourceChangedOnDisk = _ => true;
+                scope.Port.LatestReloadOfFile = _ => null;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -918,6 +924,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     FixtureBlankLineAboveMethod + 1,
                     FixtureClosingBraceLine);
                 scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerTheFileChangedSinceTheLatestReload(scope.Port);
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
@@ -1007,45 +1014,416 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: once the file changed on disk after the hot reload, a line below the patched method
-        /// that resolves into it is still refused as patched by hot reload, but without an edited
-        /// body range, because the recorded range is in the coordinates of the source the hot reload
-        /// compiled, and no marker is armed.
+        /// that resolves into it is refused as patched-source-changed, whose next action (reload
+        /// the file) records the method's edited range again, and no marker is armed.
         /// </summary>
         [Test]
-        public void Enable_LineBelowAPatchedMethodWhoseFileChangedOnDisk_RefusesWithoutAnEditedBodyRange()
+        public void Enable_LineBelowAPatchedMethodWhoseFileChangedOnDisk_RefusesWithPatchedSourceChanged()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
                 scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
                     FixtureStatementLine - 1,
                     FixtureStatementLine - 1);
-                scope.Port.ActiveShimForMethod = method =>
-                    method.Name == nameof(EnableBySourceLocationFixture.Add) ? method : null;
+                AnswerAddIsPatched(scope.Port);
                 scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerTheFileChangedSinceTheLatestReload(scope.Port);
+
+                PausePointResponse response = EnableFixtureLine(FixtureClosingBraceLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePatchedSourceChanged,
+                    string.Format(
+                        SourcePausePointConstants.PatchedSourceChangedOnDiskMessageFormat,
+                        FixtureFilePath,
+                        FixtureClosingBraceLine),
+                    SourcePausePointConstants.PatchedSourceChangedOnDiskHint);
+            }
+        }
+
+        /// <summary>
+        /// What: the blank line above a patched method, which rounds into it, is refused as
+        /// patched-source-changed once the file changed since the latest reload, instead of the
+        /// range-less text that sent the caller into the body only to be refused again.
+        /// </summary>
+        [Test]
+        public void Enable_LineAboveAPatchedMethodWhoseFileChangedSinceTheReload_RefusesWithPatchedSourceChanged()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 1,
+                    FixtureClosingBraceLine);
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerTheFileChangedSinceTheLatestReload(scope.Port);
+
+                PausePointResponse response = EnableFixtureLine(FixtureBlankLineAboveMethod);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePatchedSourceChanged,
+                    string.Format(
+                        SourcePausePointConstants.PatchedSourceChangedOnDiskMessageFormat,
+                        FixtureFilePath,
+                        FixtureBlankLineAboveMethod),
+                    SourcePausePointConstants.PatchedSourceChangedOnDiskHint);
+            }
+        }
+
+        /// <summary>
+        /// What: a line of a patched method the latest reload skipped, while that reload read the
+        /// file as it is, is refused as a body an earlier reload left running, naming the Methods[]
+        /// row whose Reason says what to change, for a statement and for the blank line above it.
+        /// </summary>
+        [TestCase(FixtureStatementLine)]
+        [TestCase(FixtureBlankLineAboveMethod)]
+        public void Enable_LineOfAMethodTheLastReloadSkipped_RefusesAsLeftBehind(int line)
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => null;
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                AnswerLeftBehindAdd(scope.Port, HotReloadUnappliedRowKind.Skipped);
+
+                PausePointResponse response = EnableFixtureLine(line);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    LeftBehindAddMessage(line, SourcePausePointConstants.HotReloadLeftBehindSkippedVerb),
+                    SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: the left-behind refusal does not depend on --method: a filter that names the
+        /// skipped method gets the same refusal.
+        /// </summary>
+        [Test]
+        public void Enable_LineOfAMethodTheLastReloadSkippedWithMethodFilter_RefusesAsLeftBehind()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => null;
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                AnswerLeftBehindAdd(scope.Port, HotReloadUnappliedRowKind.Skipped);
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine, nameof(EnableBySourceLocationFixture.Add));
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    LeftBehindAddMessage(FixtureStatementLine, SourcePausePointConstants.HotReloadLeftBehindSkippedVerb),
+                    SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: after a reload that could not resolve the file and so built no new generation, a
+        /// line of a method with a Failed row is refused as left behind with "could not apply",
+        /// though the older generation still lists the method elsewhere in the file.
+        /// </summary>
+        [Test]
+        public void Enable_LineOfAMethodTheLastReloadCouldNotResolve_RefusesAsLeftBehind()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    LinePastTheEndOfTheFixture - 1,
+                    LinePastTheEndOfTheFixture);
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerLeftBehindAdd(scope.Port, HotReloadUnappliedRowKind.Failed);
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    LeftBehindAddMessage(FixtureStatementLine, SourcePausePointConstants.HotReloadLeftBehindFailedVerb),
+                    SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: a line inside the older generation's span, after a reload that read the file as it
+        /// is but built no new generation, skips that stale span and is refused as left behind,
+        /// not as patched-source-changed, whose reload would only skip the method again.
+        /// </summary>
+        [Test]
+        public void Enable_LineInsideAStaleSpanAfterAReloadThatBuiltNoGeneration_RefusesAsLeftBehind()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 2,
+                    FixtureClosingBraceLine);
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerLeftBehindAdd(scope.Port, HotReloadUnappliedRowKind.Skipped);
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    LeftBehindAddMessage(FixtureStatementLine, SourcePausePointConstants.HotReloadLeftBehindSkippedVerb),
+                    SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: the same stale span after a reload that could not resolve the file is refused as
+        /// left behind with "could not apply", because reloading the same contents fails the same way.
+        /// </summary>
+        [Test]
+        public void Enable_LineInsideAStaleSpanAfterAReloadThatCouldNotResolve_RefusesAsLeftBehind()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 2,
+                    FixtureClosingBraceLine);
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerLeftBehindAdd(scope.Port, HotReloadUnappliedRowKind.Failed);
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    LeftBehindAddMessage(FixtureStatementLine, SourcePausePointConstants.HotReloadLeftBehindFailedVerb),
+                    SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: a patched method the latest reload read and left no row at all for, while its
+        /// patch is not in that reload's generation, is refused as an earlier reload's body that
+        /// only a compile replaces.
+        /// </summary>
+        [Test]
+        public void Enable_LineOfAnEarlierPatchTheLastReloadDidNotReport_RefusesWithCompile()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => null;
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                AnswerTheLatestReloadReadTheFile(scope.Port);
+                scope.Port.UnappliedRowForMethod = (file, method) => null;
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    EarlierPatchAddMessage(FixtureStatementLine),
+                    SourcePausePointConstants.HotReloadEarlierPatchRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: a line inside the older generation's span, after a reload that could not parse the
+        /// file and so kept the earlier patch and built no new generation, is refused as an earlier
+        /// reload's body that names the '(file)' row and offers fixing its Reason and reloading,
+        /// since a compile stops on the same error.
+        /// </summary>
+        [Test]
+        public void Enable_LineInsideAStaleSpanAfterAReloadThatCouldNotParseTheFile_NamesTheFileRow()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
+                    FixtureStatementLine - 2,
+                    FixtureClosingBraceLine);
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerTheLatestReloadReadTheFile(
+                    scope.Port,
+                    new HotReloadUnappliedRow("(file)", HotReloadUnappliedRowKind.Failed));
+                scope.Port.UnappliedRowForMethod = (file, method) => null;
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    EarlierPatchLeftRowsAddMessage(FixtureStatementLine, "'(file)' (could not apply)"),
+                    SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: an earlier patch after a reload that left rows only for other labels lists every
+        /// one of them in reported order, because a failing sibling keeps the whole file unapplied
+        /// and the method's own row may carry another spelling of its parameter types.
+        /// </summary>
+        [Test]
+        public void Enable_LineOfAnEarlierPatchAfterAReloadThatLeftOtherRows_ListsThemInOrder()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => null;
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                AnswerTheLatestReloadReadTheFile(
+                    scope.Port,
+                    new HotReloadUnappliedRow("Fixture.Sibling()", HotReloadUnappliedRowKind.Failed),
+                    new HotReloadUnappliedRow("Fixture.Survivor()", HotReloadUnappliedRowKind.Skipped));
+                scope.Port.UnappliedRowForMethod = (file, method) => null;
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    EarlierPatchLeftRowsAddMessage(
+                        FixtureStatementLine,
+                        "'Fixture.Sibling()' (could not apply), 'Fixture.Survivor()' (skipped)"),
+                    SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: a method in the latest generation whose edited range was not recorded keeps the
+        /// range-less refusal, since its patch is that reload's, not an earlier one's.
+        /// </summary>
+        [Test]
+        public void Enable_LineOfAPatchedMethodWithoutARecordedSpan_RefusesWithoutARange()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(0, 0);
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                AnswerTheLatestReloadReadTheFile(scope.Port);
+                scope.Port.UnappliedRowForMethod = (file, method) => null;
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalMessageFormat,
+                        FixtureStatementLine,
+                        "EnableBySourceLocationFixture.Add"),
+                    SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: with no reload of the file recorded, a patched method outside every shim lookup
+        /// keeps the range-less refusal, since nothing says an earlier reload left it.
+        /// </summary>
+        [Test]
+        public void Enable_LineOfAPatchedMethodWithNoReloadRecord_KeepsTheRangelessRefusal()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => null;
+                AnswerAddIsPatched(scope.Port);
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                scope.Port.LatestReloadOfFile = _ => null;
+                scope.Port.UnappliedRowForMethod = (file, method) => null;
+
+                PausePointResponse response = EnableFixtureLine(FixtureStatementLine);
+
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalMessageFormat,
+                        FixtureStatementLine,
+                        "EnableBySourceLocationFixture.Add"),
+                    SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction);
+            }
+        }
+
+        /// <summary>
+        /// What: a changed line after a reload that read the file as it is and skipped methods is
+        /// refused as line-not-compiled listing those rows, with a next action that names their
+        /// Reasons or a compile rather than another reload of the same contents.
+        /// </summary>
+        [Test]
+        public void Enable_ChangedLineAfterAReloadThatSkippedMethods_ListsThemAndSuggestsCompile()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => CreateSnapshotBeforeAddWasEdited();
+                scope.Port.ShimLookupForFile = _ => null;
+                scope.Port.ShimSourceChangedOnDisk = _ => false;
+                AnswerTheLatestReloadReadTheFile(
+                    scope.Port,
+                    new HotReloadUnappliedRow(FixtureAddRowLabel, HotReloadUnappliedRowKind.Skipped));
+
+                PausePointResponse response = EnableFixtureLine(FixtureBlankLineAboveMethod);
+
+                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
+                Assert.That(response.Message, Does.Contain("the next statement, line " + (FixtureBlankLineAboveMethod + 1)));
+                Assert.That(
+                    response.Message,
+                    Does.EndWith(
+                        string.Format(
+                            SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsSuffixFormat,
+                            "'" + FixtureAddRowLabel + "' (skipped)")));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.LineNotCompiledLatestReloadLeftRowsRecommendedNextAction));
+                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+            }
+        }
+
+        /// <summary>
+        /// What: a line inside the older generation's span of a method without PDB bytes, after a
+        /// reload that read the file as it is but built no new generation, is refused as left behind
+        /// rather than with the no-PDB text of that stale generation.
+        /// </summary>
+        [Test]
+        public void Enable_LineInsideAStaleSpanWithoutPdbAfterAReloadThatBuiltNoGeneration_RefusesAsLeftBehind()
+        {
+            string diskSource = ReadProjectSource(GuidanceTestsFilePath);
+            // Split so this search literal is not itself the line it finds.
+            int requestedLine = FindLineNumberContaining(diskSource, "pdb-unavailable" + "-probe-unique") + 1;
+            Assert.That(requestedLine, Is.GreaterThan(1));
+            MethodBase probe = PdbUnavailableProbeMethod();
+            HotReloadUnappliedRow probeRow = new HotReloadUnappliedRow(
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.PausePointEnableGuidanceTests.PdbUnavailableProbe()",
+                HotReloadUnappliedRowKind.Skipped);
+
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.ShimLookupForFile = _ => CreatePdbUnavailableLookup(probe, requestedLine);
+                scope.Port.ActiveShimForMethod = method => method == probe ? method : null;
+                scope.Port.ShimSourceChangedOnDisk = _ => true;
+                AnswerTheLatestReloadReadTheFile(scope.Port, probeRow);
+                scope.Port.UnappliedRowForMethod = (file, method) => method == probe ? probeRow : null;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
                 {
-                    File = FixtureFilePath,
-                    Line = FixtureClosingBraceLine,
+                    File = GuidanceTestsFilePath,
+                    Line = requestedLine,
                     TimeoutSeconds = 30,
                     Mode = UloopPausePointCaptureMode.SingleShot
                 });
 
-                Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
-                Assert.That(
-                    response.ErrorCode,
-                    Is.EqualTo(SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload));
-                Assert.That(
-                    response.Message,
-                    Is.EqualTo(
-                        string.Format(
-                            SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalMessageFormat,
-                            FixtureClosingBraceLine,
-                            "EnableBySourceLocationFixture.Add")));
-                Assert.That(
-                    response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction));
-                Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+                AssertRefusal(
+                    response,
+                    SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                    string.Format(
+                        SourcePausePointConstants.HotReloadLeftBehindMethodRefusalMessageFormat,
+                        requestedLine,
+                        "PausePointEnableGuidanceTests.PdbUnavailableProbe",
+                        SourcePausePointConstants.HotReloadLeftBehindSkippedVerb,
+                        probeRow.Label),
+                    SourcePausePointConstants.HotReloadLeftBehindMethodRefusalNextAction);
             }
         }
 
@@ -1208,6 +1586,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null,
                 null,
                 methods);
+        }
+
+        private static PausePointResponse EnableFixtureLine(int line, string method = "")
+        {
+            return new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureFilePath,
+                Line = line,
+                Method = method,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+        }
+
+        private static void AssertRefusal(
+            PausePointResponse response,
+            string expectedErrorCode,
+            string expectedMessage,
+            string expectedNextAction)
+        {
+            Assert.That(response.Success, Is.False, response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ErrorCode, Is.EqualTo(expectedErrorCode));
+            Assert.That(response.Message, Is.EqualTo(expectedMessage));
+            Assert.That(response.RecommendedNextAction, Is.EqualTo(expectedNextAction));
+            Assert.That(UloopPausePointRegistry.GetActiveCount(), Is.EqualTo(0));
+        }
+
+        private static void AnswerAddIsPatched(StubHotReloadPausePointPort port)
+        {
+            port.ActiveShimForMethod = method =>
+                method.Name == nameof(EnableBySourceLocationFixture.Add) ? method : null;
+        }
+
+        // The latest hot reload of the fixture read it as it is on disk and left these rows.
+        private static void AnswerTheLatestReloadReadTheFile(
+            StubHotReloadPausePointPort port,
+            params HotReloadUnappliedRow[] rows)
+        {
+            port.LatestReloadOfFile = _ => new HotReloadLatestFileReload(false, rows);
+        }
+
+        private static void AnswerTheFileChangedSinceTheLatestReload(StubHotReloadPausePointPort port)
+        {
+            port.LatestReloadOfFile = _ => new HotReloadLatestFileReload(true, Array.Empty<HotReloadUnappliedRow>());
+        }
+
+        // The latest hot reload read the fixture as it is and left Add with a row of this kind,
+        // while Add keeps running the patch an earlier reload applied.
+        private static void AnswerLeftBehindAdd(StubHotReloadPausePointPort port, HotReloadUnappliedRowKind kind)
+        {
+            HotReloadUnappliedRow row = new HotReloadUnappliedRow(FixtureAddRowLabel, kind);
+            AnswerTheLatestReloadReadTheFile(port, row);
+            port.UnappliedRowForMethod = (file, method) =>
+                method.Name == nameof(EnableBySourceLocationFixture.Add) ? row : null;
+        }
+
+        private static string LeftBehindAddMessage(int line, string verb)
+        {
+            return string.Format(
+                SourcePausePointConstants.HotReloadLeftBehindMethodRefusalMessageFormat,
+                line,
+                "EnableBySourceLocationFixture.Add",
+                verb,
+                FixtureAddRowLabel);
+        }
+
+        private static string EarlierPatchAddMessage(int line)
+        {
+            return string.Format(
+                SourcePausePointConstants.HotReloadEarlierPatchRefusalMessageFormat,
+                line,
+                "EnableBySourceLocationFixture.Add");
+        }
+
+        private static string EarlierPatchLeftRowsAddMessage(int line, string describedRows)
+        {
+            return string.Format(
+                SourcePausePointConstants.HotReloadEarlierPatchLeftRowsRefusalMessageFormat,
+                line,
+                "EnableBySourceLocationFixture.Add",
+                describedRows);
         }
 
         // Plays the last compiled source of the fixture from before an edit that inserted the

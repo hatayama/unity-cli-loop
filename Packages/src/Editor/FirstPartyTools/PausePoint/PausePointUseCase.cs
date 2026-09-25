@@ -218,9 +218,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string id = BuildSourcePausePointId(parameters.File, parameters.Line);
             SourcePausePointSnapshotTiming snapshotTiming = ParseSnapshotTiming(parameters.SnapshotTiming);
 
+            PausePointHotReloadFileState fileState = PausePointHotReloadFileState.Read(normalizedFile);
             HotReloadShimFileLookup shimLookup =
                 HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(normalizedFile);
-            if (shimLookup != null)
+            if (shimLookup != null && !fileState.SkipsShimPath)
             {
                 PausePointResponse shimResponse = EnableOnHotReloadShimOrNull(
                     parameters,
@@ -229,7 +230,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     normalizedFile,
                     id,
                     snapshotTiming,
-                    shimLookup);
+                    shimLookup,
+                    !fileState.ShimSpansFollowFile);
                 if (shimResponse != null)
                 {
                     return shimResponse;
@@ -282,7 +284,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Resolves --line against the hot-reload shim of the file and arms or refuses there, or
         // returns null when the line is outside every patched method so the compiled resolver
-        // takes it.
+        // takes it. Skipped when the latest reload read the file as it is but built no new shim
+        // generation, so a changed shim source seen here is an edit a reload of the file picks up.
         private static PausePointResponse EnableOnHotReloadShimOrNull(
             EnablePausePointSchema parameters,
             string hitWhen,
@@ -290,10 +293,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string normalizedFile,
             string id,
             SourcePausePointSnapshotTiming snapshotTiming,
-            HotReloadShimFileLookup shimLookup)
+            HotReloadShimFileLookup shimLookup,
+            bool shimSourceChanged)
         {
-            bool shimSourceChanged =
-                HotReloadPausePointCoordination.HotReloadSide.HasShimSourceChangedOnDisk(normalizedFile);
             SourcePausePointShimResolution shimResolution =
                 SourcePausePointShimResolver.Resolve(
                     shimLookup, normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
@@ -371,18 +373,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static PausePointResponse CreateCompiledPatchFailureResponse(SourcePausePointPatchResult patchResult)
         {
-            string errorCode =
-                patchResult.FailureReason == SourcePausePointPatchFailureReason.MethodPatchedByHotReload
-                    ? SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload
-                    : SourcePausePointConstants.ErrorCodePatchFailed;
             return new PausePointResponse
             {
                 Success = false,
-                ErrorCode = errorCode,
+                ErrorCode = ToErrorCode(patchResult.FailureReason),
                 Message = patchResult.ErrorMessage,
                 RecommendedNextAction = patchResult.Hint,
                 EditorState = PausePointEditorState.FromSnapshot(UloopPausePointRegistry.CaptureEditorState()),
             };
+        }
+
+        private static string ToErrorCode(SourcePausePointPatchFailureReason failureReason)
+        {
+            if (failureReason == SourcePausePointPatchFailureReason.MethodPatchedByHotReload)
+            {
+                return SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload;
+            }
+
+            return failureReason == SourcePausePointPatchFailureReason.PatchedSourceChangedSinceReload
+                ? SourcePausePointConstants.ErrorCodePatchedSourceChanged
+                : SourcePausePointConstants.ErrorCodePatchFailed;
         }
 
         // Validation already rejected anything but the two accepted values.

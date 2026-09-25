@@ -21,6 +21,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal Func<int, SourcePausePointResolveResult> ResolveAtCompiledLine { get; }
         internal Func<int, PausePointPatchedEditedSpan> PatchedSpanOrNull { get; }
         internal Func<int, HotReloadAddedMethodAtLine> AddedMethodOrNull { get; }
+        // What the latest hot reload of the file says about it, which picks the next action of a
+        // line-not-compiled refusal.
+        internal PausePointHotReloadFileState FileState { get; }
 
         internal PausePointEditedLineResolveContext(
             PausePointEditedLineMap map,
@@ -28,19 +31,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EnablePausePointSchema parameters,
             Func<int, SourcePausePointResolveResult> resolveAtCompiledLine,
             Func<int, PausePointPatchedEditedSpan> patchedSpanOrNull,
-            Func<int, HotReloadAddedMethodAtLine> addedMethodOrNull)
+            Func<int, HotReloadAddedMethodAtLine> addedMethodOrNull,
+            PausePointHotReloadFileState fileState)
         {
             Debug.Assert(map != null, "map must not be null.");
             Debug.Assert(parameters != null && parameters.Line > 0, "parameters.Line must be a positive 1-based line number.");
             Debug.Assert(
                 resolveAtCompiledLine != null && patchedSpanOrNull != null && addedMethodOrNull != null,
                 "the resolve, patched-span, and added-method functions must not be null.");
+            Debug.Assert(fileState != null, "fileState must not be null.");
             Map = map;
             File = file;
             Parameters = parameters;
             ResolveAtCompiledLine = resolveAtCompiledLine;
             PatchedSpanOrNull = patchedSpanOrNull;
             AddedMethodOrNull = addedMethodOrNull;
+            FileState = fileState;
         }
     }
 
@@ -190,7 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters,
                 compiledLine => SourcePausePointResolver.Resolve(normalizedFile, compiledLine, parameters.Method, timing),
                 editedLine => PausePointPatchedEditedSpanLocator.FindPatchedSpanContainingEditedLineOrNull(normalizedFile, editedLine),
-                editedLine => PausePointAddedMethodScope.FindAddedMethodContainingLineOrNull(normalizedFile, editedLine));
+                editedLine => PausePointAddedMethodScope.FindAddedMethodContainingLineOrNull(normalizedFile, editedLine),
+                PausePointHotReloadFileState.Read(normalizedFile));
             return ResolveThroughMap(context);
         }
 
@@ -238,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (nextMappedLine == 0)
             {
                 return PausePointEditedLineResolution.Refused(
-                    PausePointLineNotCompiledRefusal.NoCompiledLineAtOrAfter(context.File, requestedLine));
+                    PausePointLineNotCompiledRefusal.NoCompiledLineAtOrAfter(context.File, requestedLine, context.FileState));
             }
 
             // Lines between the request and the next compiled line would be skipped by rounding;
@@ -296,7 +303,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (editedStatementLine == 0)
             {
                 return PausePointLineNotCompiledRefusal.StatementRemoved(
-                    context.File, requestedLine, map.CompiledLineTextOrEmpty(compiledStatementLine));
+                    context.File, requestedLine, map.CompiledLineTextOrEmpty(compiledStatementLine), context.FileState);
             }
 
             // Why a patched span skips the check: the patcher refuses a statement inside a
@@ -440,11 +447,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string lineText = context.Map.EditedLineTextOrEmpty(uncompiledLine);
             if (uncompiledLine == requestedLine)
             {
-                return PausePointLineNotCompiledRefusal.ChangedLine(context.File, requestedLine, lineText);
+                return PausePointLineNotCompiledRefusal.ChangedLine(context.File, requestedLine, lineText, context.FileState);
             }
 
             return PausePointLineNotCompiledRefusal.NextStatementUncompiled(
-                context.File, requestedLine, uncompiledLine, lineText);
+                context.File, requestedLine, uncompiledLine, lineText, context.FileState);
         }
     }
 }
