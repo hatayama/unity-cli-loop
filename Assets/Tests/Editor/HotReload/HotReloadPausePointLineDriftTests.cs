@@ -16,24 +16,14 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// FB9 repro: a top-of-file insert plus a hot reload of one method makes --line on an
-    /// unpatched method resolve against the compiled line map (a different method).
+    /// FB9 repro: a top-of-file insert plus a hot reload of one method must not make --line on
+    /// an unpatched method resolve to a different method; --line is an edited-file line mapped
+    /// onto the last compiled source.
     /// </summary>
     public class HotReloadPausePointLineDriftTests
     {
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs";
-
-        private const string HotReloadCompiledLineMapWarningPrefix =
-            "--line resolved against the last compiled source, not the edited file: "
-            + "'Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs' has active "
-            + "hot-reload patches and the resolved method '";
-
-        private const string HotReloadCompiledLineMapWarningSuffix =
-            "' is not patched by this reload. Verify ResolvedLineText matches the statement you "
-            + "meant, or run 'uloop compile' and re-enable.";
-
-        private const string CompiledSnapshotSentinel = "SENTINEL_COMPILED_LINE_TEXT";
 
         private const string RestoreSnapshotSentinel = "SENTINEL_RESTORE_LINE_TEXT";
 
@@ -55,57 +45,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: after a 3-line top-of-file insert and a hot reload of PatchTarget only,
-        /// enable on UnpatchedTarget's edited line resolves to AfterTarget, warns about the
-        /// compiled line map, and fills ResolvedLineText from the compiled snapshot.
+        /// What: with a snapshot identical to the edited file, enable on UnpatchedTarget arms the
+        /// requested line on the edited-file basis. In this harness the PDB line numbers match the file on disk, so the injected
+        /// snapshot plays the compiled source (the roles are reversed from production).
         /// </summary>
         [Test]
-        public async Task Enable_UnpatchedMethodAfterTopOfFileInsert_WarnsAndFillsCompiledLineText()
+        public async Task Enable_UnpatchedMethodWithIdenticalSnapshot_ArmsTheRequestedLineOnTheEditedFileBasis()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
-            string edited = BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk);
-            int compiledUnpatchedLine = FindLineNumber(onDisk, "return 22;");
-            int editedUnpatchedLine = FindLineNumber(edited, "return 22;");
-            int compiledAfterStart = FindLineNumber(onDisk, "public int AfterTarget()");
-            Assert.That(compiledUnpatchedLine, Is.GreaterThan(0));
-            Assert.That(editedUnpatchedLine, Is.EqualTo(compiledUnpatchedLine + 3));
-            Assert.That(
-                editedUnpatchedLine,
-                Is.GreaterThanOrEqualTo(compiledAfterStart),
-                "The edited UnpatchedTarget line must land inside AfterTarget's compiled range.");
+            int unpatchedLine = FindLineNumber(onDisk, "return 22;");
+            Assert.That(unpatchedLine, Is.GreaterThan(0));
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk),
+                "LineDriftIdenticalSnapshot.cs");
 
-            await HotReloadFromEditedSourceAsync(edited, "LineDriftUnpatched.cs");
-
-            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
-            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => BuildSentinelSnapshot(
-                CompiledSnapshotSentinel,
-                80);
-            PausePointResponse enable;
-            try
-            {
-                enable = new PausePointUseCase().Enable(new EnablePausePointSchema
-                {
-                    File = FixtureProjectRelativePath,
-                    Line = editedUnpatchedLine,
-                    TimeoutSeconds = 30,
-                    Mode = UloopPausePointCaptureMode.SingleShot
-                });
-            }
-            finally
-            {
-                snapshotScope.Dispose();
-            }
+            PausePointResponse enable = EnableFixtureLineWithSnapshot(unpatchedLine, (file, dllPath) => onDisk);
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.ResolvedLine, Is.EqualTo(unpatchedLine));
+            Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.UnpatchedTarget)));
+            Assert.That(enable.LineBasis, Is.EqualTo("EditedFile"));
+            Assert.That(enable.ResolvedLineText, Does.Contain("return 22;"));
             Assert.That(enable.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(enable.Warning ?? string.Empty, Does.Not.Contain("No verified source snapshot"));
+        }
+
+        /// <summary>
+        /// What: when the compiled source had one line fewer above the class, enable on the line
+        /// before AfterTarget's declaration maps to the compiled declaration line, which has no
+        /// sequence point, rounds forward to the method's opening brace, and reports that brace's
+        /// edited line, one below the requested line. In this harness the PDB line numbers match the file on disk, so the injected
+        /// snapshot plays the compiled source (the roles are reversed from production).
+        /// </summary>
+        [Test]
+        public async Task Enable_UnpatchedMethodAfterTopOfFileInsert_ArmsTheMappedCompiledLineAndReportsTheEditedLine()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int requestedLine = FindLineNumber(onDisk, "public int AfterTarget()") - 1;
+            Assert.That(requestedLine, Is.GreaterThan(0));
+            string snapshotWithInsert = InsertBlankLinesAfterLine(onDisk, 9, 1);
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk),
+                "LineDriftShiftedSnapshot.cs");
+
+            PausePointResponse enable = EnableFixtureLineWithSnapshot(requestedLine, (file, dllPath) => snapshotWithInsert);
+
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.ResolvedLine, Is.EqualTo(requestedLine + 1));
             Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.AfterTarget)));
-            Assert.That(enable.ResolvedMethod, Does.Not.Contain(nameof(HotReloadPausePointLineDriftFixture.UnpatchedTarget)));
-            string expectedCompiledLineMapWarning =
-                HotReloadCompiledLineMapWarningPrefix
-                + enable.ResolvedMethod
-                + HotReloadCompiledLineMapWarningSuffix;
-            Assert.That(enable.Warning, Does.Contain(expectedCompiledLineMapWarning));
-            Assert.That(enable.ResolvedLineText, Is.EqualTo(CompiledSnapshotSentinel));
+            Assert.That(enable.LineBasis, Is.EqualTo("EditedFile"));
+        }
+
+        /// <summary>
+        /// What: a line whose statement text differs from the compiled snapshot is refused as not
+        /// compiled instead of arming whatever compiled statement sits at that line number.
+        /// In this harness the PDB line numbers match the file on disk, so the injected
+        /// snapshot plays the compiled source (the roles are reversed from production).
+        /// </summary>
+        [Test]
+        public async Task Enable_UnpatchedMethodWhoseLineChangedOnDisk_RefusesLineNotCompiled()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int unpatchedLine = FindLineNumber(onDisk, "return 22;");
+            Assert.That(unpatchedLine, Is.GreaterThan(0));
+            string snapshotWithOtherReturn = onDisk.Replace("return 22;", "return 99;", StringComparison.Ordinal);
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk),
+                "LineDriftChangedLine.cs");
+
+            PausePointResponse enable = EnableFixtureLineWithSnapshot(unpatchedLine, (file, dllPath) => snapshotWithOtherReturn);
+
+            Assert.That(enable.Success, Is.False);
+            Assert.That(enable.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
+            Assert.That(enable.Message, Does.Contain("is not in the last compiled source"));
+            Assert.That(enable.RecommendedNextAction, Does.Contain("uloop compile"));
         }
 
         /// <summary>
@@ -221,37 +234,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: compiled-side enable with an active hot-reload file but no verified snapshot
-        /// leaves ResolvedLineText empty instead of reading the edited file on disk.
+        /// What: without a verified snapshot, enable on UnpatchedTarget falls back to compiled line
+        /// numbers, says so in a warning, and leaves ResolvedLineText empty instead of reading the
+        /// edited file on disk. In this harness the PDB line numbers match the file on disk, so the injected
+        /// snapshot plays the compiled source (the roles are reversed from production).
         /// </summary>
         [Test]
-        public async Task Enable_UnpatchedMethodWithoutSnapshot_LeavesResolvedLineTextEmpty()
+        public async Task Enable_UnpatchedMethodWithoutSnapshot_FallsBackToCompiledLinesWithAWarning()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
-            string edited = BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk);
-            int editedUnpatchedLine = FindLineNumber(edited, "return 22;");
-            await HotReloadFromEditedSourceAsync(edited, "LineDriftNoSnapshot.cs");
+            int unpatchedLine = FindLineNumber(onDisk, "return 22;");
+            Assert.That(unpatchedLine, Is.GreaterThan(0));
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk),
+                "LineDriftNoSnapshot.cs");
 
-            HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope();
-            snapshotScope.Port.VerifiedSnapshotSourceForFile = _ => null;
-            PausePointResponse enable;
-            try
-            {
-                enable = new PausePointUseCase().Enable(new EnablePausePointSchema
-                {
-                    File = FixtureProjectRelativePath,
-                    Line = editedUnpatchedLine,
-                    TimeoutSeconds = 30,
-                    Mode = UloopPausePointCaptureMode.SingleShot
-                });
-            }
-            finally
-            {
-                snapshotScope.Dispose();
-            }
+            PausePointResponse enable = EnableFixtureLineWithSnapshot(unpatchedLine, (file, dllPath) => null);
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
-            Assert.That(enable.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(enable.ResolvedLine, Is.EqualTo(unpatchedLine));
+            Assert.That(enable.LineBasis, Is.EqualTo("LastCompiledSource"));
+            Assert.That(enable.Warning, Does.Contain("No verified source snapshot"));
             Assert.That(enable.ResolvedLineText, Is.Empty);
         }
 
@@ -309,6 +312,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
             Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
             Assert.That(afterRevert.ResolvedLineText, Is.Empty);
+        }
+
+        private static PausePointResponse EnableFixtureLineWithSnapshot(
+            int line,
+            Func<string, string, string> verifiedSnapshotSource)
+        {
+            using (HotReloadSidePortScope snapshotScope = new HotReloadSidePortScope())
+            {
+                snapshotScope.Port.VerifiedSnapshotSource = verifiedSnapshotSource;
+                return new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureProjectRelativePath,
+                    Line = line,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+            }
+        }
+
+        private static string InsertBlankLinesAfterLine(string source, int line, int count)
+        {
+            List<string> lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
+            lines.InsertRange(line, Enumerable.Repeat(string.Empty, count));
+            return string.Join("\n", lines);
         }
 
         private static PausePointResponse EnablePatchedLineWithMethodFilter(int line, string methodFilter)

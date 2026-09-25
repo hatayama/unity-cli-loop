@@ -496,6 +496,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "symbols. Line numbers are therefore resolved against the last compiled source, not "
             + "the edited file. Run 'uloop compile' and re-enable.";
 
+        public const string HotReloadPatchedMethodPdbUnavailableNextAction =
+            "Run 'uloop compile' and re-enable the pause point.";
+
         // Format: resolved method display name, requested line, edited start line, edited end line.
         public const string HotReloadRetargetedToEditedFileWarningFormat =
             "--line {1} was resolved against the edited file because it falls inside hot-reload "

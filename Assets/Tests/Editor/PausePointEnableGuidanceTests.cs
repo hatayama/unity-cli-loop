@@ -34,8 +34,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private const int IntroducedTypeRequestedLine = 10;
 
-        // Past the end of the fixture, so the compiled line map of that file cannot resolve it.
-        private const int UnresolvableFixtureLine = 9999;
+        // The class's closing brace: inside the file, but no sequence point exists on or after it
+        // (Add's closing brace is line 13), so the resolver fails with nearby method spans.
+        private const int UnresolvableFixtureLine = 14;
+
+        // Past the end of the fixture, for a patched span that no fixture line falls inside.
+        private const int LinePastTheEndOfTheFixture = 9999;
 
         private const string ExpectedArmingNextActionForJump =
             "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
@@ -189,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Formatting.None,
                 UnityCliLoopJsonResponseSerializerSettings.Settings);
             JObject payload = JObject.Parse(json);
-            Assert.That(payload["LineBasis"]?.Value<string>(), Is.EqualTo("LastCompiledSource"));
+            Assert.That(payload["LineBasis"]?.Value<string>(), Is.EqualTo("EditedFile"));
         }
 
         /// <summary>
@@ -254,7 +258,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a resolved closing brace at the compiled method end uses the closing-brace warning literal.
+        /// What: a resolved closing brace at the method end uses the closing-brace warning literal.
         /// </summary>
         [Test]
         public void BuildClosingBraceWarningOrEmpty_WhenResolvedLineIsClosingBrace_ReturnsWarning()
@@ -263,23 +267,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "}",
                 42,
                 "Player.Move",
-                42,
-                0);
-
-            Assert.That(warning, Is.EqualTo(ExpectedClosingBraceWarningForPlayerMoveLine42));
-        }
-
-        /// <summary>
-        /// What: a closing brace at the edited method end (shim path) uses the same warning literal.
-        /// </summary>
-        [Test]
-        public void BuildClosingBraceWarningOrEmpty_WhenResolvedLineIsEditedMethodEnd_ReturnsWarning()
-        {
-            string warning = PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
-                "}",
-                42,
-                "Player.Move",
-                0,
                 42);
 
             Assert.That(warning, Is.EqualTo(ExpectedClosingBraceWarningForPlayerMoveLine42));
@@ -295,14 +282,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "return sum;",
                 12,
                 "EnableBySourceLocationFixture.Add",
-                13,
-                0);
+                13);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }
 
         /// <summary>
-        /// What: a nested closing brace that is not the compiled or edited method end stays silent.
+        /// What: a nested closing brace that is not the method end stays silent.
         /// </summary>
         [Test]
         public void BuildClosingBraceWarningOrEmpty_WhenClosingBraceIsNotMethodEnd_ReturnsEmpty()
@@ -311,14 +297,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "}",
                 20,
                 "Player.Move",
-                42,
-                40);
+                42);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }
 
         /// <summary>
-        /// What: a closing brace with neither compiled nor edited method end available stays silent.
+        /// What: a closing brace with no method end available stays silent.
         /// </summary>
         [Test]
         public void BuildClosingBraceWarningOrEmpty_WhenMethodEndIsUnknown_ReturnsEmpty()
@@ -327,7 +312,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "}",
                 42,
                 "Player.Move",
-                0,
                 0);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
@@ -489,6 +473,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: with a verified snapshot, a line past the end of the edited file is refused as not
+        /// compiled instead of reaching the compiled resolver.
+        /// </summary>
+        [Test]
+        public void Enable_WhenLineIsBeyondTheEndOfTheFile_RefusesLineNotCompiled()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                string fixtureSource = File.ReadAllText(
+                    Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), FixtureFilePath));
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureFilePath,
+                    Line = LinePastTheEndOfTheFixture,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_LINE_NOT_COMPILED"));
+                Assert.That(response.Message, Does.Contain("beyond the end"));
+            }
+        }
+
+        /// <summary>
         /// What: a line inside a method hot reload added is refused with a message naming that
         /// method and the compile it needs, even when the file has no patched method and so no
         /// shim lookup.
@@ -621,11 +632,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: the introduced-type explanation keeps the warning that the patched method has no
-        /// PDB, so the caller is not told to hot reload a method that is already patched.
+        /// What: a line in a patched method without PDB is refused as patched by hot reload before
+        /// the introduced-type explanation, so the caller is told to compile rather than to hot
+        /// reload a method that is already patched.
         /// </summary>
         [Test]
-        public void Enable_WhenTheIntroducedTypeFileHasAPatchedMethodWithoutPdb_KeepsThePdbWarning()
+        public void Enable_WhenTheIntroducedTypeFileHasAPatchedMethodWithoutPdb_RefusesAsPatchedByHotReloadBeforeTheIntroducedTypeGuidance()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
@@ -643,14 +655,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 });
 
                 Assert.That(response.Success, Is.False);
-                Assert.That(response.Message, Does.Contain("introduced without a compile"));
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_PATCHED_BY_HOT_RELOAD"));
                 Assert.That(
-                    response.Warnings,
-                    Does.Contain(
+                    response.Message,
+                    Is.EqualTo(
                         string.Format(
                             SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
                             "PausePointEnableGuidanceTests.PdbUnavailableProbe",
                             IntroducedTypeRequestedLine)));
+                Assert.That(response.Message, Does.Not.Contain("introduced without a compile"));
+                Assert.That(response.RecommendedNextAction, Does.Contain("uloop compile"));
             }
         }
 
@@ -702,8 +716,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
                 scope.Port.ShimLookupForFile = _ => CreateFixtureShimLookup(
-                    UnresolvableFixtureLine - 1,
-                    UnresolvableFixtureLine);
+                    LinePastTheEndOfTheFixture - 1,
+                    LinePastTheEndOfTheFixture);
                 scope.Port.ShimSourceChangedOnDisk = _ => true;
 
                 PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema

@@ -51,10 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string ResolveFailureFile =
             "Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs";
 
-        private const int UnresolvableLine = 999999;
-
-        private const string GenericPatchedMethodsUseEditedFileSentence =
-            "Methods currently patched by hot reload resolve against the edited file instead";
+        private const int LinePastTheEndOfTheFile = 999999;
 
         private const string CompiledMethodSpanFixtureFile =
             "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/CompiledMethodSpanFixture.cs";
@@ -405,7 +402,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             (bool readOk, string text) = PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
                 CompiledMethodSpanFixtureFile,
-                UnresolvableLine);
+                LinePastTheEndOfTheFile);
 
             Assert.That(readOk, Is.False);
             Assert.That(text, Is.EqualTo(string.Empty));
@@ -656,320 +653,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "Candidate: the edited line's text appears at line 2 in the last compiled source. "
                     + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source."));
             Assert.That(comparedAndMatched, Is.False);
-        }
-
-        /// <summary>
-        /// What: enable on an unpatched method in a hot-reloaded file merges the exact drift
-        /// warning and sets the drift next-action when compiled vs edited text differ.
-        /// </summary>
-        [Test]
-        public void Enable_WhenCompiledLineDriftsFromEditedFile_AddsDriftWarningAndNextAction()
-        {
-            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
-            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
-                Array.Empty<byte>(),
-                Array.Empty<byte>(),
-                null,
-                Array.Empty<HotReloadShimMethodLookup>());
-
-            string absolutePath = Path.Combine(
-                UnityCliLoopPathResolver.GetProjectRoot(),
-                ResolveFailureFile);
-            string diskSource = File.ReadAllText(absolutePath);
-            int markerLine = FindLineNumberContaining(
-                diskSource,
-                "compiled-line-drift" + "-probe-unique");
-            Assert.That(markerLine, Is.GreaterThan(0));
-            int requestedLine = markerLine + 1;
-
-            string[] snapshotLines = diskSource.Replace("\r\n", "\n").Split('\n');
-            snapshotLines[requestedLine - 1] = "            return 0;";
-            snapshotLines[markerLine - 1] = "            return 424242;";
-            string snapshotSource = string.Join("\n", snapshotLines);
-
-            try
-            {
-                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
-                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => snapshotSource;
-
-                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
-                {
-                    File = ResolveFailureFile,
-                    Line = requestedLine,
-                    TimeoutSeconds = 30,
-                    Mode = UloopPausePointCaptureMode.SingleShot
-                });
-
-                Assert.That(
-                    response.Success,
-                    Is.True,
-                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
-                Assert.That(
-                    response.ResolvedMethod,
-                    Is.EqualTo(
-                        "System.Int32 io.github.hatayama.UnityCliLoop.Tests.Editor.PausePointCompiledLineMapWarningTests::CompiledLineDriftProbe()"));
-                SourcePausePointResolveResult spanResult = SourcePausePointResolver.Resolve(
-                    ResolveFailureFile,
-                    response.ResolvedLine);
-                Assert.That(spanResult.Success, Is.True, spanResult.ErrorMessage);
-                IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans =
-                    SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(ResolveFailureFile);
-                Assert.That(spanResult.Resolution.CompiledMethodStartLine, Is.GreaterThan(0));
-                Assert.That(spanResult.Resolution.CompiledMethodEndLine, Is.GreaterThan(0));
-                string expectedDrift = string.Format(
-                    SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
-                    ResolveFailureFile,
-                    response.ResolvedLine,
-                    "return 0;",
-                    "return 424242;");
-                expectedDrift = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
-                    expectedDrift,
-                    response.ResolvedMethod,
-                    spanResult.Resolution.CompiledMethodStartLine,
-                    spanResult.Resolution.CompiledMethodEndLine);
-                expectedDrift = PausePointCandidateCompiledLineWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
-                    expectedDrift,
-                    "return 424242;",
-                    snapshotLines,
-                    namedCompiledMethodSpans);
-                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
-                    PausePointEnableWarnings.MergeWarnings(
-                        PausePointEnableWarnings.MergeWarnings(
-                            PausePointEnableWarnings.CreateEnableWarning(),
-                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                                true,
-                                ResolveFailureFile,
-                                response.ResolvedMethod,
-                                false)),
-                        expectedDrift),
-                    SourcePausePointConstants.SmallMethodInliningRiskWarning);
-                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
-                Assert.That(
-                    response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
-                AssertLineBasis(response, "LastCompiledSource");
-            }
-            finally
-            {
-                hotReloadSideScope.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// What: enable on an unpatched method whose compiled and edited statement text match
-        /// uses the matched compiled-line-map warning through PausePointUseCase.Enable.
-        /// </summary>
-        [Test]
-        public void Enable_WhenCompiledLineMatchesEditedFile_UsesMatchedCompiledLineMapWarning()
-        {
-            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
-            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
-                Array.Empty<byte>(),
-                Array.Empty<byte>(),
-                null,
-                Array.Empty<HotReloadShimMethodLookup>());
-
-            string absolutePath = Path.Combine(
-                UnityCliLoopPathResolver.GetProjectRoot(),
-                ResolveFailureFile);
-            string diskSource = File.ReadAllText(absolutePath);
-            int markerLine = FindLineNumberContaining(
-                diskSource,
-                "compiled-line-drift" + "-probe-unique");
-            Assert.That(markerLine, Is.GreaterThan(0));
-            int requestedLine = markerLine + 1;
-
-            try
-            {
-                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
-                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => diskSource;
-
-                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
-                {
-                    File = ResolveFailureFile,
-                    Line = requestedLine,
-                    TimeoutSeconds = 30,
-                    Mode = UloopPausePointCaptureMode.SingleShot
-                });
-
-                Assert.That(
-                    response.Success,
-                    Is.True,
-                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
-                Assert.That(
-                    response.ResolvedMethod,
-                    Is.EqualTo(
-                        "System.Int32 io.github.hatayama.UnityCliLoop.Tests.Editor.PausePointCompiledLineMapWarningTests::CompiledLineDriftProbe()"));
-                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
-                    PausePointEnableWarnings.MergeWarnings(
-                        PausePointEnableWarnings.CreateEnableWarning(),
-                        PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                            true,
-                            ResolveFailureFile,
-                            response.ResolvedMethod,
-                            true)),
-                    SourcePausePointConstants.SmallMethodInliningRiskWarning);
-                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
-                string expectedArming =
-                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \""
-                    + ResolveFailureFile
-                    + ":"
-                    + requestedLine
-                    + "\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \""
-                    + ResolveFailureFile
-                    + ":"
-                    + requestedLine
-                    + "\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
-                Assert.That(response.RecommendedNextAction, Is.EqualTo(expectedArming));
-                AssertLineBasis(response, "LastCompiledSource");
-            }
-            finally
-            {
-                hotReloadSideScope.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// What: enable on a comment line that rounds forward discloses the snap even when the
-        /// armed compiled and edited texts match, and still sets the drift next-action.
-        /// </summary>
-        [Test]
-        public void Enable_WhenRequestedLineSnapsForward_DisclosesSnapAndSetsNextAction()
-        {
-            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
-            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
-                Array.Empty<byte>(),
-                Array.Empty<byte>(),
-                null,
-                Array.Empty<HotReloadShimMethodLookup>());
-
-            string absolutePath = Path.Combine(
-                UnityCliLoopPathResolver.GetProjectRoot(),
-                ResolveFailureFile);
-            string diskSource = File.ReadAllText(absolutePath);
-            int requestedLine = FindLineNumberContaining(
-                diskSource,
-                "compiled-line-drift" + "-probe-unique");
-            Assert.That(requestedLine, Is.GreaterThan(0));
-            int compiledResolvedLine = requestedLine + 1;
-
-            try
-            {
-                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
-                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => diskSource;
-
-                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
-                {
-                    File = ResolveFailureFile,
-                    Line = requestedLine,
-                    TimeoutSeconds = 30,
-                    Mode = UloopPausePointCaptureMode.SingleShot
-                });
-
-                Assert.That(
-                    response.Success,
-                    Is.True,
-                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
-                Assert.That(
-                    response.ResolvedMethod,
-                    Is.EqualTo(
-                        "System.Int32 io.github.hatayama.UnityCliLoop.Tests.Editor.PausePointCompiledLineMapWarningTests::CompiledLineDriftProbe()"));
-                Assert.That(response.ResolvedLine, Is.EqualTo(compiledResolvedLine));
-                SourcePausePointResolveResult spanResult = SourcePausePointResolver.Resolve(
-                    ResolveFailureFile,
-                    response.ResolvedLine);
-                Assert.That(spanResult.Success, Is.True, spanResult.ErrorMessage);
-                string requestedEditedText = "// compiled-line-drift" + "-probe-unique";
-                string expectedSnap =
-                    "'" + ResolveFailureFile + "' --line " + requestedLine
-                    + " is '" + requestedEditedText + "' in the edited file, but the marker snapped forward to line "
-                    + compiledResolvedLine + " in '" + response.ResolvedMethod + "'."
-                    + " In the last compiled source, '" + response.ResolvedMethod + "' spans lines "
-                    + spanResult.Resolution.CompiledMethodStartLine + "-"
-                    + spanResult.Resolution.CompiledMethodEndLine + "."
-                    + " Candidate: the text at --line " + requestedLine
-                    + " in the edited file appears at line " + requestedLine
-                    + " (in 'PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe') in the last compiled source.";
-                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
-                    PausePointEnableWarnings.MergeWarnings(
-                        PausePointEnableWarnings.MergeWarnings(
-                            PausePointEnableWarnings.CreateEnableWarning(),
-                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                                true,
-                                ResolveFailureFile,
-                                response.ResolvedMethod,
-                                true)),
-                        expectedSnap),
-                    SourcePausePointConstants.SmallMethodInliningRiskWarning);
-                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
-                Assert.That(
-                    response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
-            }
-            finally
-            {
-                hotReloadSideScope.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// What: when the compiled resolve lands on a line that the edited file now places inside
-        /// a hot-reload patched method, enable warns that the file drifted and names that method
-        /// instead of saying no drift is visible.
-        /// </summary>
-        [Test]
-        public void Enable_WhenResolvedLineFallsInsideAPatchedEditedSpan_WarnsDriftInsteadOfMatched()
-        {
-            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
-            string absolutePath = Path.Combine(
-                UnityCliLoopPathResolver.GetProjectRoot(),
-                ResolveFailureFile);
-            string diskSource = File.ReadAllText(absolutePath);
-            int markerLine = FindLineNumberContaining(
-                diskSource,
-                "compiled-line-drift" + "-probe-unique");
-            Assert.That(markerLine, Is.GreaterThan(0));
-            MethodBase probe = CompiledLineDriftProbeMethod();
-            // The span starts below the requested line, so the shim resolver finds no patched
-            // body for it and the compiled resolve snaps forward into the span.
-            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
-                Array.Empty<byte>(),
-                Array.Empty<byte>(),
-                null,
-                new[] { new HotReloadShimMethodLookup(probe, probe, true, markerLine + 1, markerLine + 2) });
-
-            try
-            {
-                hotReloadSideScope.Port.ShimLookupForFile = _ => stubLookup;
-                hotReloadSideScope.Port.VerifiedSnapshotSourceForFile = _ => diskSource;
-
-                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
-                {
-                    File = ResolveFailureFile,
-                    Line = markerLine,
-                    TimeoutSeconds = 30,
-                    Mode = UloopPausePointCaptureMode.SingleShot
-                });
-
-                Assert.That(
-                    response.Success,
-                    Is.True,
-                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
-                Assert.That(response.ResolvedLine, Is.EqualTo(markerLine + 1));
-                Assert.That(response.Warning, Does.Contain("but the marker snapped forward to line " + (markerLine + 1)));
-                Assert.That(
-                    response.Warning,
-                    Does.Contain("now falls inside 'PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe'"));
-                Assert.That(response.Warning, Does.Contain("which is hot-reload patched"));
-                Assert.That(response.Warning, Does.Not.Contain("No drift is visible"));
-                Assert.That(
-                    response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
-            }
-            finally
-            {
-                hotReloadSideScope.Dispose();
-            }
         }
 
         /// <summary>
@@ -1787,40 +1470,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: the PDB-unavailable helper interpolates method name and requested line.
-        /// </summary>
-        [Test]
-        public void BuildPatchedMethodPdbUnavailableWarningOrEmpty_WhenUnavailable_ReturnsFormattedWarning()
-        {
-            string warning = PausePointEnableWarnings.BuildPatchedMethodPdbUnavailableWarningOrEmpty(
-                true,
-                "Example.Run",
-                42);
-
-            Assert.That(
-                warning,
-                Is.EqualTo(
-                    string.Format(
-                        SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
-                        "Example.Run",
-                        42)));
-        }
-
-        /// <summary>
-        /// What: the PDB-unavailable helper stays silent when the shim PDB is present.
-        /// </summary>
-        [Test]
-        public void BuildPatchedMethodPdbUnavailableWarningOrEmpty_WhenAvailable_ReturnsEmpty()
-        {
-            string warning = PausePointEnableWarnings.BuildPatchedMethodPdbUnavailableWarningOrEmpty(
-                false,
-                "Example.Run",
-                42);
-
-            Assert.That(warning, Is.EqualTo(string.Empty));
-        }
-
-        /// <summary>
         /// What: nearby compiled spans are formatted as a suffix on a resolve-failure message.
         /// </summary>
         [Test]
@@ -1878,7 +1527,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
             {
                 File = file,
-                Line = 9999,
+                Line = 19,
                 TimeoutSeconds = 30,
                 Mode = UloopPausePointCaptureMode.SingleShot
             });
@@ -1886,7 +1535,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
             string expectedMessage =
-                "No sequence point found on or after line 9999 in '" + file + "'."
+                "No sequence point found on or after line 19 in '" + file + "'."
                 + SourcePausePointConstants.NearbyCompiledMethodsPrefix
                 + string.Format(
                     SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
@@ -1984,11 +1633,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a patched method whose shim lookup has no PDB bytes falls through to compiled
-        /// resolve and emits the dedicated warning instead of the generic edited-file sentence.
+        /// What: a line inside a patched method whose shim lookup has no PDB bytes is refused as
+        /// patched by hot reload, because the compiled body no longer runs and the patch cannot be
+        /// resolved to a statement.
         /// </summary>
         [Test]
-        public void Enable_WhenPatchedMethodHasNoPdbBytes_EmitsDedicatedWarningOnSuccess()
+        public void Enable_WhenPatchedMethodHasNoPdbBytes_RefusesAsPatchedByHotReload()
         {
             string absolutePath = Path.Combine(
                 UnityCliLoopPathResolver.GetProjectRoot(),
@@ -1999,8 +1649,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compiled-line-drift" + "-probe-unique") + 1;
             Assert.That(requestedLine, Is.GreaterThan(1));
 
-            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
-            try
+            using (HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope())
             {
                 hotReloadSideScope.Port.ShimLookupForFile =
                     _ => CreatePdbUnavailableLookup(CompiledLineDriftProbeMethod(), requestedLine);
@@ -2012,58 +1661,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     Mode = UloopPausePointCaptureMode.SingleShot
                 });
 
-                Assert.That(
-                    response.Success,
-                    Is.True,
-                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
-                Assert.That(response.RetargetedToHotReloadPatch, Is.False);
-                AssertLineBasis(response, "LastCompiledSource");
-                string dedicatedWarning = string.Format(
-                    SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
-                    "PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe",
-                    requestedLine);
-                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
-                    PausePointEnableWarnings.MergeWarnings(
-                        PausePointEnableWarnings.CreateEnableWarning(),
-                        dedicatedWarning),
-                    SourcePausePointConstants.SmallMethodInliningRiskWarning);
-                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
-                Assert.That(response.Warning, Does.Not.Contain(GenericPatchedMethodsUseEditedFileSentence));
-            }
-            finally
-            {
-                hotReloadSideScope.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// What: resolve failure inside a patched method with no shim PDB uses the dedicated
-        /// warning, not the generic compiled-line-map failure sentence.
-        /// </summary>
-        [Test]
-        public void Enable_WhenPatchedMethodHasNoPdbBytes_EmitsDedicatedWarningOnResolveFailure()
-        {
-            HotReloadSidePortScope hotReloadSideScope = new HotReloadSidePortScope();
-            try
-            {
-                hotReloadSideScope.Port.ShimLookupForFile =
-                    _ => CreatePdbUnavailableLookup(CompiledLineDriftProbeMethod(), UnresolvableLine);
-                PausePointResponse response = EnableUnresolvableLine();
-
                 Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.ErrorCode, Is.EqualTo("PAUSE_POINT_PATCHED_BY_HOT_RELOAD"));
                 Assert.That(
-                    response.Warning,
+                    response.Message,
                     Is.EqualTo(
                         string.Format(
                             SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
                             "PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe",
-                            UnresolvableLine)));
-                Assert.That(response.Warning, Does.Not.Contain(GenericPatchedMethodsUseEditedFileSentence));
-            }
-            finally
-            {
-                hotReloadSideScope.Dispose();
+                            requestedLine)));
+                Assert.That(response.RecommendedNextAction, Does.Contain("uloop compile"));
             }
         }
 
@@ -2087,21 +1694,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return -1;
         }
 
-        // Confirms a source-location enable response reports the resolver basis callers must use.
-        private static void AssertLineBasis(PausePointResponse response, string expected)
-        {
-            Assert.That(response.LineBasis, Is.EqualTo(expected));
-        }
-
         private static PausePointResponse EnableUnresolvableLine()
         {
             return new PausePointUseCase().Enable(new EnablePausePointSchema
             {
                 File = ResolveFailureFile,
-                Line = UnresolvableLine,
+                Line = LastNonEmptyLineOfResolveFailureFile(),
                 TimeoutSeconds = 30,
                 Mode = UloopPausePointCaptureMode.SingleShot
             });
+        }
+
+        // The namespace's closing brace is inside the file but has no sequence point on or after
+        // it, so the resolver fails there on both the mapped and the fallback path; a line past
+        // the end of the file would be refused as not compiled before the resolver runs.
+        private static int LastNonEmptyLineOfResolveFailureFile()
+        {
+            string[] lines = File.ReadAllLines(
+                Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), ResolveFailureFile));
+            int lastLine = lines.Length;
+            while (lastLine > 0 && lines[lastLine - 1].Trim().Length == 0)
+            {
+                lastLine--;
+            }
+
+            Assert.That(lastLine, Is.GreaterThan(0));
+            return lastLine;
         }
 
         private static HotReloadShimFileLookup CreatePdbUnavailableLookup(MethodBase patchedMethod, int line)
