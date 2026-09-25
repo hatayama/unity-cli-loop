@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.5.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.5.0...uloop-project-runner-v3.5.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* Busy errors explain that uloop runs one command at a time and how to recover ([#2945](https://github.com/hatayama/unity-cli-loop/issues/2945)) ([e706b3f](https://github.com/hatayama/unity-cli-loop/commit/e706b3f92f6c054ed9b1b440837bc9fad2262f15))
+* Busy errors no longer report a command as running while it only waits for a stalled Unity main thread ([#2948](https://github.com/hatayama/unity-cli-loop/issues/2948)) ([0acc1a7](https://github.com/hatayama/unity-cli-loop/commit/0acc1a7d652dd64ad5fc9346346852f5160758a5))
+* Concurrent compile-check runs on one project wait for each other instead of corrupting each other's results ([#2946](https://github.com/hatayama/unity-cli-loop/issues/2946)) ([6e2d1c5](https://github.com/hatayama/unity-cli-loop/commit/6e2d1c5ba3df51929963a0c5c6e963e716ba3213))
+* control-play-mode follows the active Play Mode Scenario so Virtual Players launch ([#2980](https://github.com/hatayama/unity-cli-loop/issues/2980)) ([741e47d](https://github.com/hatayama/unity-cli-loop/commit/741e47def853db7a3549731f77ad9e96f71e3119))
+
 ## [3.5.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.4.0...uloop-project-runner-v3.5.0) (2026-09-23)
 
 
