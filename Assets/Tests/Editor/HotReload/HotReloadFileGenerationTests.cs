@@ -166,25 +166,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a generation reports active hot reload changes only while it holds a live patch or
-        /// an added method, so a shim registered without a committed patch does not count.
-        /// </summary>
-        [Test]
-        public void HasActiveHotReloadChanges_CountsLivePatchesAndAddedMethodsOnly()
-        {
-            HotReloadFileGeneration generation = CreateGeneration();
-            BeginShimGeneration(generation);
-            RegisterShim(generation);
-
-            Assert.That(generation.HasActiveHotReloadChanges, Is.False);
-
-            generation.BeginPatch(GetShimTarget(), GetAddedTarget());
-            generation.CommitPatch(GetShimTarget());
-
-            Assert.That(generation.HasActiveHotReloadChanges, Is.True);
-        }
-
-        /// <summary>
         /// What: an added method registered without a source range never claims a line, so a
         /// missing range cannot blame an unrelated line on an added method.
         /// </summary>

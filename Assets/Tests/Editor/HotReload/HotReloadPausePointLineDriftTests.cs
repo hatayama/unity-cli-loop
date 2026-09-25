@@ -167,7 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: --method that names a compiled neighbor skips the patched shim entry and
-        /// falls through to the compiled line map instead of retargeting onto the patch.
+        /// falls through to the compiled resolver instead of retargeting onto the patch.
         /// </summary>
         [Test]
         public async Task Enable_PatchedLineWithUnpatchedMethodFilter_FallsThroughToCompiledResolver()

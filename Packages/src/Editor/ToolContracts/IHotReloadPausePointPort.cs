@@ -76,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// <summary>
         /// Argument is a forward-slash path (absolute or project-relative); returns true when that
         /// file declares a type hot reload introduced without a compile, so the file has no
-        /// compiled line map of its own.
+        /// compiled source to resolve a pause point line against.
         /// </summary>
         bool IsIntroducedTypeSourceFile(string file);
     }
