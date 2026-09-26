@@ -438,6 +438,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the patches and added members inside each type introduced into a compiled file
+        /// are recorded under that type, while those of the compiled type beside them stay rows
+        /// of their own, and every change is still one row. Two introduced types share the file
+        /// and the artifact, so only the type name can tell their changes apart.
+        /// </summary>
+        [Test]
+        public async Task CollectActiveIdentities_ChangesInsideTypesIntroducedIntoACompiledFile_AreRecordedUnderEachType()
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                try
+                {
+                    await RunIntroducingTwoTypesAsync();
+                    HotReloadOrchestratorResult second = await RunEditingAndAddingOnEveryTypeAsync();
+
+                    Assert.That(
+                        second.IntroducedTypes.Select(outcome => outcome.Kind),
+                        Is.EqualTo(new[]
+                        {
+                            HotReloadIntroducedTypeOutcomeKind.AlreadyActive,
+                            HotReloadIntroducedTypeOutcomeKind.AlreadyActive
+                        }),
+                        "Precondition: the second run must keep both types the first one introduced.");
+                    List<string> expected = ExpectRowsOfAppliedChanges(second);
+                    Assert.That(
+                        expected.Count,
+                        Is.EqualTo(8),
+                        "Precondition: the second run must patch and add on every type in the file.\n"
+                        + string.Join("\n", second.Methods.Select(outcome => outcome.Kind + " " + outcome.Method)));
+
+                    IReadOnlyList<string> identities = HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities();
+
+                    Assert.That(
+                        identities,
+                        Is.EquivalentTo(expected),
+                        "A change inside an introduced type must be recorded under that type and no "
+                        + "other, and a change of the compiled type in the same file under none.");
+                    Assert.That(
+                        identities.Count,
+                        Is.EqualTo(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal),
+                        "Every change must stay one row, so the count still matches what Play entry warns it discards.");
+                }
+                finally
+                {
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
+            }
+        }
+
+        /// <summary>
         /// What: the next apply after a revert-all names the added fields the revert dropped, and
         /// not a field it adds for the first time.
         /// </summary>
@@ -661,6 +711,85 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadPlayModeEntryDropLedger.GetIdentities(),
                 Is.EquivalentTo(new[] { failedIdentity, "Type.Kept()" }),
                 "A type the apply could not introduce is still lost, so its record stays.");
+        }
+
+        /// <summary>
+        /// What: an apply that introduces a type again, or finds it still active, also removes
+        /// the patches and added members Play entry recorded inside that type, while the ones
+        /// recorded inside a type it failed to introduce stay with that type.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_TypeBroughtBack_RemovesTheChangesRecordedInsideIt()
+        {
+            string introducedIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1");
+            string alreadyActiveIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T2");
+            string failedIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T3");
+            string patchInsideFailed =
+                HotReloadPlayModeEntryDropIdentity.ForMemberOfType(failedIdentity, "Fixture.T3.Patched()");
+            HotReloadPlayModeEntryDropLedger.Record(
+                new[]
+                {
+                    introducedIdentity,
+                    HotReloadPlayModeEntryDropIdentity.ForMemberOfType(introducedIdentity, "Fixture.T1.Patched()"),
+                    HotReloadPlayModeEntryDropIdentity.ForMemberOfType(introducedIdentity, "Fixture.T1.Added()"),
+                    alreadyActiveIdentity,
+                    HotReloadPlayModeEntryDropIdentity.ForMemberOfType(alreadyActiveIdentity, "Fixture.T2.Added()"),
+                    failedIdentity,
+                    patchInsideFailed,
+                    "Fixture.Compiled.Patched()"
+                });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>
+                {
+                    HotReloadIntroducedTypeOutcome.Introduced("Fixture.T1", "Fixture.Assembly", "Assets/A.cs"),
+                    HotReloadIntroducedTypeOutcome.AlreadyActive(
+                        "Fixture.T2",
+                        "Fixture.Assembly",
+                        "Assets/A.cs",
+                        bodyEdited: false),
+                    HotReloadIntroducedTypeOutcome.Failed("Fixture.T3", "Fixture.Assembly", "Assets/A.cs", "reason")
+                },
+                Array.Empty<string>());
+
+            Assert.That(
+                HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                Is.EquivalentTo(new[] { failedIdentity, patchInsideFailed, "Fixture.Compiled.Patched()" }),
+                "A type introduced again declares the patched bodies and added members it carried, "
+                + "so they come back with it; a type that failed brings nothing back.");
+        }
+
+        /// <summary>
+        /// What: bringing a type back removes only the changes recorded inside that type, not
+        /// those inside a type whose name starts with the same text or a type of the same name
+        /// in another assembly.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_TypeBroughtBack_KeepsTheChangesRecordedInsideOtherTypes()
+        {
+            string introducedIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1");
+            string insideLongerName = HotReloadPlayModeEntryDropIdentity.ForMemberOfType(
+                HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1Other"),
+                "Fixture.T1Other.Patched()");
+            string insideOtherAssembly = HotReloadPlayModeEntryDropIdentity.ForMemberOfType(
+                HotReloadPlayModeEntryDropIdentity.ForType("Other.Assembly", "Fixture.T1"),
+                "Fixture.T1.Patched()");
+            HotReloadPlayModeEntryDropLedger.Record(
+                new[] { introducedIdentity, insideLongerName, insideOtherAssembly });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>
+                {
+                    HotReloadIntroducedTypeOutcome.Introduced("Fixture.T1", "Fixture.Assembly", "Assets/A.cs")
+                },
+                Array.Empty<string>());
+
+            Assert.That(
+                HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                Is.EquivalentTo(new[] { insideLongerName, insideOtherAssembly }),
+                "Only the type the apply brought back may take its recorded changes along.");
         }
 
         /// <summary>
@@ -906,6 +1035,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
         }
 
+        private static async Task<HotReloadOrchestratorResult> RunIntroducingTwoTypesAsync()
+        {
+            string hostPath = FixturePath(HostFileName);
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "PlayModeEntryDropIdentityHostTwoTypes.cs",
+                    EditTheScaledBody(
+                        InsertIntroducedTypeDeclaration(
+                            InsertIntroducedTypeDeclaration(
+                                File.ReadAllText(hostPath),
+                                IntroducedValueSimpleName,
+                                IntroducedReadValue,
+                                string.Empty),
+                            IntroducedOtherSimpleName,
+                            IntroducedReadValue,
+                            string.Empty))),
+                CancellationToken.None);
+        }
+
+        // Why every type is edited and given a member: the one file then holds a patch and an
+        // added member inside each introduced type and on the compiled one, which is what the
+        // recording has to tell apart.
+        private static async Task<HotReloadOrchestratorResult> RunEditingAndAddingOnEveryTypeAsync()
+        {
+            string hostPath = FixturePath(HostFileName);
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "PlayModeEntryDropIdentityHostEveryType.cs",
+                    InsertHostAddedMethod(
+                        EditTheScaledBody(
+                            InsertIntroducedTypeDeclaration(
+                                InsertIntroducedTypeDeclaration(
+                                    File.ReadAllText(hostPath),
+                                    IntroducedValueSimpleName,
+                                    EditedIntroducedReadValue,
+                                    IntroducedAddedMember),
+                                IntroducedOtherSimpleName,
+                                EditedIntroducedReadValue,
+                                IntroducedAddedMember)))),
+                CancellationToken.None);
+        }
+
+        // Why the owner is found by the name prefix here: the fixture's types are top-level and
+        // neither name starts with the other, so the test can say where each row belongs without
+        // the domain query under test.
+        private static List<string> ExpectRowsOfAppliedChanges(HotReloadOrchestratorResult result)
+        {
+            List<string> expected = new List<string>();
+            Dictionary<string, string> typeIdentityByPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (HotReloadIntroducedTypeOutcome type in result.IntroducedTypes)
+            {
+                string typeIdentity = HotReloadPlayModeEntryDropIdentity.ForType(type.OriginalAssemblyName, type.MetadataName);
+                expected.Add(typeIdentity);
+                typeIdentityByPrefix.Add(type.MetadataName + ".", typeIdentity);
+            }
+
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Patched
+                    && outcome.Kind != HotReloadMethodOutcomeKind.Added)
+                {
+                    continue;
+                }
+
+                string owner = typeIdentityByPrefix
+                    .Where(pair => outcome.Method.StartsWith(pair.Key, StringComparison.Ordinal))
+                    .Select(pair => pair.Value)
+                    .FirstOrDefault();
+                expected.Add(owner == null ? outcome.Method : HotReloadPlayModeEntryDropIdentity.ForMemberOfType(owner, outcome.Method));
+            }
+
+            return expected;
+        }
+
+        private static string InsertHostAddedMethod(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostBodyAnchor), "Precondition: host body anchor must exist.");
+            return hostSource.Replace(
+                HostBodyAnchor,
+                HostBodyAnchor + "\n        public int HostAdded()\n        {\n            return 2;\n        }\n",
+                StringComparison.Ordinal);
+        }
+
         private static string EditTheScaledBody(string hostSource)
         {
             Assert.That(hostSource, Does.Contain(ScaledBodyAnchor), "Precondition: scaled body anchor must exist.");
@@ -928,14 +1142,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string InsertIntroducedType(string hostSource)
         {
+            return InsertIntroducedTypeDeclaration(hostSource, IntroducedValueSimpleName, IntroducedReadValue, string.Empty);
+        }
+
+        private static string InsertIntroducedTypeDeclaration(
+            string hostSource,
+            string simpleName,
+            int readValue,
+            string extraMembers)
+        {
             Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
             string introduced =
-                "    public sealed class HotReloadPlayModeEntryDropIntroducedValue\n"
+                "    public sealed class " + simpleName + "\n"
                 + "    {\n"
                 + "        public int Read()\n"
                 + "        {\n"
-                + "            return 13;\n"
+                + "            return " + readValue.ToString() + ";\n"
                 + "        }\n"
+                + extraMembers
                 + "    }\n"
                 + "\n";
             return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
@@ -956,6 +1180,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.IntroducedB");
 
         private const string HostFileName = "HotReloadCrossFileAddedMemberHost.cs";
+
+        private const string IntroducedValueSimpleName = "HotReloadPlayModeEntryDropIntroducedValue";
+
+        private const string IntroducedOtherSimpleName = "HotReloadPlayModeEntryDropIntroducedOther";
+
+        private const int IntroducedReadValue = 13;
+
+        private const int EditedIntroducedReadValue = 14;
+
+        private const string IntroducedAddedMember =
+            "\n        public int ReadTwice()\n        {\n            return Read() * 2;\n        }\n";
 
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
 

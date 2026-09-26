@@ -123,6 +123,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 recoveredIdentities.Add(outcome.Method);
             }
 
+            List<string> recoveredTypeIdentities = ListRecoveredTypeIdentities(introducedTypes);
+            recoveredIdentities.AddRange(recoveredTypeIdentities);
+            // Why the changes recorded inside a recovered type go with it: the apply that
+            // introduces a type again declares the edited bodies and the added members Play entry
+            // recorded inside it, and reports no Patched or Added row for any of them.
+            recoveredIdentities.AddRange(ListChangesRecordedInside(recoveredTypeIdentities));
+            RemoveFromLedgers(recoveredIdentities);
+            List<string> rewireFields = ListHeldByRewireLedger(addedFields);
+            // Why removed once named: the next apply adds the same fields again, and asking again
+            // would claim a value wired after this warning was lost too.
+            HotReloadRewireLedger.Remove(rewireFields);
+            return rewireFields;
+        }
+
+        private static List<string> ListRecoveredTypeIdentities(
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes)
+        {
+            List<string> typeIdentities = new List<string>();
             for (int index = 0; index < introducedTypes.Count; index++)
             {
                 HotReloadIntroducedTypeOutcome outcome = introducedTypes[index];
@@ -134,17 +152,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                recoveredIdentities.Add(HotReloadPlayModeEntryDropIdentity.ForType(
+                typeIdentities.Add(HotReloadPlayModeEntryDropIdentity.ForType(
                     outcome.OriginalAssemblyName,
                     outcome.MetadataName));
             }
 
-            RemoveFromLedgers(recoveredIdentities);
-            List<string> rewireFields = ListHeldByRewireLedger(addedFields);
-            // Why removed once named: the next apply adds the same fields again, and asking again
-            // would claim a value wired after this warning was lost too.
-            HotReloadRewireLedger.Remove(rewireFields);
-            return rewireFields;
+            return typeIdentities;
+        }
+
+        private static List<string> ListChangesRecordedInside(IReadOnlyList<string> typeIdentities)
+        {
+            List<string> inside = new List<string>();
+            if (typeIdentities.Count == 0)
+            {
+                return inside;
+            }
+
+            IReadOnlyList<string> recorded = HotReloadPlayModeEntryDropLedger.GetIdentities();
+            for (int index = 0; index < recorded.Count; index++)
+            {
+                if (IsRecordedInsideAny(recorded[index], typeIdentities))
+                {
+                    inside.Add(recorded[index]);
+                }
+            }
+
+            return inside;
+        }
+
+        private static bool IsRecordedInsideAny(string identity, IReadOnlyList<string> typeIdentities)
+        {
+            for (int index = 0; index < typeIdentities.Count; index++)
+            {
+                if (HotReloadPlayModeEntryDropIdentity.IsMemberOfType(identity, typeIdentities[index]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // Why only the held ones: a field this run added for the first time held no value a
@@ -339,7 +385,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Every hot-reload change the next domain reload would discard, in ledger identity form:
-        /// patched methods, added members, and the types this domain introduced.
+        /// patched methods, added members, and the types this domain introduced. A patch or an
+        /// added member inside an introduced type is recorded under that type.
         /// </summary>
         internal static IReadOnlyList<string> CollectActiveIdentities()
         {
@@ -348,15 +395,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadActivePatchInfo> patches = services.Patcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers =
                 services.Domain.DescribeAddedMembers();
+            // Why read here: the domain about to unload the introduced types is the only one that
+            // can still say which of these changes live inside one.
+            HotReloadIntroducedTypeChangeOwners owners = new HotReloadIntroducedTypeChangeOwners(services.Domain);
             List<string> identities = new List<string>(patches.Count + addedMembers.Count);
             for (int index = 0; index < patches.Count; index++)
             {
-                identities.Add(patches[index].MethodKey);
+                identities.Add(owners.ToPatchIdentity(patches[index].MethodKey));
             }
 
             for (int index = 0; index < addedMembers.Count; index++)
             {
-                identities.Add(addedMembers[index].MethodKey);
+                identities.Add(owners.ToAddedMemberIdentity(addedMembers[index].MethodKey));
             }
 
             // Why the types belong here: they live in artifact assemblies only a domain reload

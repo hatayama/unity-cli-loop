@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 using NUnit.Framework;
 
+using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -317,6 +318,110 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 File.Delete(ownerAbsolutePath);
+                ledgerScope.Restore();
+            }
+        }
+
+        /// <summary>
+        /// What: Play entry discards a type introduced from a new file together with the patch
+        /// and the added member a later reload put on it, and the reload that introduces the type
+        /// again leaves nothing counted as dropped. That reload declares the edited body and the
+        /// added member inside the type, so it reports no row of its own for either.
+        /// </summary>
+        [Test]
+        public async Task PlayEntryDropOfAnIntroducedTypeWithAPatchAndAnAddedMember_IntroducingItAgain_LeavesNothingDropped()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await AssertIntroducingAgainLeavesNothingDroppedAsync(callerPath, CreateMemberAddedEdits(callerPath));
+        }
+
+        /// <summary>
+        /// What: when the member a later reload added is gone from the owner file by the time the
+        /// type is introduced again, nothing is left counted as dropped for it either: there is
+        /// no edit of it left to bring back.
+        /// </summary>
+        [Test]
+        public async Task PlayEntryDropOfAnIntroducedTypeWithAPatchAndAnAddedMember_IntroducingItAgainWithoutTheMember_LeavesNothingDropped()
+        {
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await AssertIntroducingAgainLeavesNothingDroppedAsync(
+                callerPath,
+                new Dictionary<string, string>
+                {
+                    [OwnerRequestedPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "NewFileIntroducedOwnerWithoutPong.cs",
+                        BuildOwnerSource(EditedPingValue, NoExtraMembers)),
+                    [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "NewFileIntroducedCallerWithoutPong.cs",
+                        CallIntroducedType(File.ReadAllText(callerPath), "new " + IntroducedTypeSimpleName + "().Ping()"))
+                });
+        }
+
+        // Why two domains: Play entry unloads the type the first one introduced, and only a domain
+        // that never held it introduces it again. Why the first domain's patches are reverted
+        // before the second starts: the reload would have unpatched them, and a patch left on the
+        // caller would stand in front of the one the second domain applies.
+        private static async Task AssertIntroducingAgainLeavesNothingDroppedAsync(
+            string callerPath,
+            Dictionary<string, string> reintroducingEdits)
+        {
+            HotReloadPlayModeEntryDropLedgerSessionScope ledgerScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
+            try
+            {
+                await RunInIntroducedTypeDomainAsync(async _ =>
+                {
+                    await RunReloadAsync(OwnerRequestedPath, callerPath, CreateIntroducingEdits(callerPath));
+                    HotReloadOrchestratorResult second = await RunReloadAsync(
+                        OwnerRequestedPath,
+                        callerPath,
+                        CreateMemberAddedEdits(callerPath));
+                    AssertIntroducedTypeRow(second, HotReloadIntroducedTypeOutcomeKind.AlreadyActive);
+                    AssertOutcome(second, HotReloadMethodOutcomeKind.Patched, "Ping");
+                    AssertOutcome(second, HotReloadMethodOutcomeKind.Added, "Pong");
+
+                    HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+                    HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                        PlayModeStateChange.ExitingEditMode,
+                        HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities(),
+                        HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources(domain),
+                        HotReloadPlayModeEntryDropRecorder.CollectActiveAddedFields(domain),
+                        isDomainReloadDisabledOnEnterPlayMode: false);
+                    Assert.That(
+                        HotReloadPlayModeEntryDropLedger.Count,
+                        Is.EqualTo(domain.CountActiveChanges().RuntimeChangeTotal),
+                        "Precondition: Play entry must record every change it is about to discard.");
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                });
+                HotReloadPlayModeEntryDropRecorder.ResetPendingForTesting();
+
+                await RunInIntroducedTypeDomainAsync(async _ =>
+                {
+                    HotReloadOrchestratorResult again = await RunReloadAsync(
+                        OwnerRequestedPath,
+                        callerPath,
+                        reintroducingEdits);
+                    Assert.That(CountFailures(again), Is.EqualTo(0), DescribeOutcomes(again));
+                    AssertIntroducedTypeRow(again, HotReloadIntroducedTypeOutcomeKind.Introduced);
+
+                    HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                        again.Methods,
+                        again.IntroducedTypes,
+                        again.AddedFields);
+
+                    Assert.That(
+                        HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                        Is.Empty,
+                        "The type introduced again carries its edited body and its members, so no "
+                        + "change Play entry discarded may be left counted as dropped.\n"
+                        + DescribeOutcomes(again));
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                });
+            }
+            finally
+            {
+                HotReloadPlayModeEntryDropRecorder.ResetPendingForTesting();
                 ledgerScope.Restore();
             }
         }
