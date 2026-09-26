@@ -160,6 +160,7 @@ public static class SpikeS7OverrideSnippet
         // A method left without the flag calls a tiny flagged method whose body reaches an
         // internal member of another assembly. The JIT may inline the callee into the caller, and
         // the question is whether the access check then runs in the unflagged caller's context.
+        // AggressiveInlining makes the inlining attempt certain rather than heuristic.
         private const string InliningSnippetSource = @"public static class SpikeS7InliningSnippet
 {
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
@@ -345,17 +346,15 @@ public static class SpikeS7OverrideSnippet
         }
 
         /// <summary>
-        /// What: a method without the flag that calls a tiny flagged method reaching an internal
-        /// member of another assembly still gets the value while the JIT may inline the callee,
-        /// so ungranted code such as a shim can call granted code such as an artifact.
+        /// What: a method without the flag that inlines a tiny flagged method reaching an internal
+        /// member of another assembly throws MethodAccessException, because the JIT checks the
+        /// inlined body against the caller's flag. Ungranted code such as a shim therefore cannot
+        /// call granted code as it stands.
         /// </summary>
         [Test]
-        public async Task InliningSnippet_UnflaggedCallerOfFlaggedTinyMethod_ReachesInternalMember()
+        public async Task InliningSnippet_UnflaggedCallerInliningAFlaggedTinyMethod_ThrowsMethodAccessException()
         {
-            Assume.That(
-                CompilationPipeline.codeOptimization,
-                Is.EqualTo(CodeOptimization.Release),
-                "Debug code optimization turns JIT inlining off, which would make this pass trivially.");
+            AssumeReleaseCodeOptimization();
             Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
                 "S7-inlining", InliningSnippetSource, "SpikeS7InliningSnippet", new List<string>());
             MethodInfo caller = snippetType.GetMethod("UnflaggedCaller");
@@ -364,7 +363,40 @@ public static class SpikeS7OverrideSnippet
 
             Func<int> call = (Func<int>)caller.CreateDelegate(typeof(Func<int>));
 
+            Assert.Throws<MethodAccessException>(() => call());
+        }
+
+        /// <summary>
+        /// What: setting NoInlining in the MonoMethod implementation flags of the flagged methods
+        /// as well keeps the JIT from inlining them, even over AggressiveInlining, so the
+        /// unflagged caller calls the callee, which runs under its own flag and returns the value.
+        /// </summary>
+        [Test]
+        public async Task InliningSnippet_FlaggedTinyMethodMarkedNoInlining_UnflaggedCallerReachesInternalMember()
+        {
+            AssumeReleaseCodeOptimization();
+            Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
+                "S7-noinlining", InliningSnippetSource, "SpikeS7InliningSnippet", new List<string>());
+            MethodInfo caller = snippetType.GetMethod("UnflaggedCaller");
+            MethodInfo callee = snippetType.GetMethod("TinyInternalRead");
+            MonoSkipVisibilityFlag.SetOnEveryMethodOfExcept(snippetType.Assembly, caller);
+            MonoSkipVisibilityFlag.SetNoInlining(callee);
+
+            Func<int> call = (Func<int>)caller.CreateDelegate(typeof(Func<int>));
+
             Assert.That(call(), Is.EqualTo(63), "Three calls returning 21 each.");
+            Assert.That(
+                callee.MethodImplementationFlags & MethodImplAttributes.NoInlining,
+                Is.EqualTo(MethodImplAttributes.NoInlining),
+                "Reflection reads the implementation flags back from the same record.");
+        }
+
+        private static void AssumeReleaseCodeOptimization()
+        {
+            Assume.That(
+                CompilationPipeline.codeOptimization,
+                Is.EqualTo(CodeOptimization.Release),
+                "Debug code optimization turns JIT inlining off, which would make this pass trivially.");
         }
 
         /// <summary>
@@ -377,6 +409,7 @@ public static class SpikeS7OverrideSnippet
             // inline_info, inline_failure, wrapper_type:5, string_ctor, save_lmf, dynamic,
             // sre_method, is_generic, is_inflated, skip_visibility (bit 13).
             private const int FlagsOffset = 0;
+            private const int ImplFlagsOffset = 2;
             private const int TokenOffset = 4;
             private static readonly int NameOffset = 8 + (3 * IntPtr.Size) - IntPtr.Size;
             private static readonly int BitfieldOffset = 8 + (3 * IntPtr.Size);
@@ -390,6 +423,10 @@ public static class SpikeS7OverrideSnippet
                     (ushort)Marshal.ReadInt16(record, FlagsOffset),
                     Is.EqualTo((ushort)method.Attributes),
                     "flags must sit at offset 0.");
+                Assert.That(
+                    (ushort)Marshal.ReadInt16(record, ImplFlagsOffset),
+                    Is.EqualTo((ushort)method.MethodImplementationFlags),
+                    "iflags must sit at offset 2.");
                 Assert.That(
                     Marshal.ReadInt32(record, TokenOffset),
                     Is.EqualTo(method.MetadataToken),
@@ -431,6 +468,14 @@ public static class SpikeS7OverrideSnippet
                         Set(constructor);
                     }
                 }
+            }
+
+            public static void SetNoInlining(MethodBase method)
+            {
+                AssertLayoutMatches(method);
+                IntPtr record = method.MethodHandle.Value;
+                short implFlags = Marshal.ReadInt16(record, ImplFlagsOffset);
+                Marshal.WriteInt16(record, ImplFlagsOffset, (short)(implFlags | (short)MethodImplAttributes.NoInlining));
             }
 
             private static void Set(MethodBase method)
