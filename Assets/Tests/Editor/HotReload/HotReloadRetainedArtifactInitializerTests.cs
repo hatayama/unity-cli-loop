@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class HotReloadRetainedArtifactInitializerTests
     {
-        private const string SkipReasonFragment = "Added field initializer";
+        private const string SkipReasonFragment = "has an initializer that is not a literal or an externally visible static member";
 
         private const string SourceFormat =
             "namespace Example\n"
