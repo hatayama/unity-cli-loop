@@ -493,7 +493,9 @@ namespace System.Runtime.CompilerServices
         /// and the publicized copy only, loads the produced assembly into the Editor domain, and
         /// returns the named snippet type.
         /// </summary>
-        private static async Task<Type> CompileAndLoadSnippetAsync(
+        // Why internal: spike S7 reuses the same compile-against-publicized setup, so both spikes
+        // observe the runtime check on identically built snippets.
+        internal static async Task<Type> CompileAndLoadSnippetAsync(
             string workSubdirectoryName,
             string snippetSource,
             string snippetTypeName,
