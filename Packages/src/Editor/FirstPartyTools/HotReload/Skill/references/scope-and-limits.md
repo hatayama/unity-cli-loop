@@ -256,7 +256,7 @@ missing assembly, reflection, or event-driven calls), the note is omitted. Only 
 are counted: a method hot reload added or patched that calls the method already runs the patched
 body, which the note does not see. To see an
 initialization change take effect, run `uloop compile` and restart
-Play Mode — with Domain Reload enabled (the default), a fresh Play entry reloads the
+Play Mode — with Domain Reload enabled (the default for projects created before Unity 6.6), a fresh Play entry reloads the
 domain and drops the patch, so the patched body alone cannot carry the change into the
 next session. Better, keep values you expect to
 tune out of one-shot paths entirely: read them in a body that runs per frame or per event,

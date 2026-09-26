@@ -88,7 +88,7 @@ use into the new type's bodies works only if the same reload also edits the reta
 `--revert-all` reverts patches and added members but cannot unload an introduced type; the
 response says how many stayed. Auto Refresh stays held while any introduced type is active —
 `uloop compile` always releases it, `--revert-all` only when no introduced type remains.
-With Domain Reload enabled on Play entry (the default), entering Play Mode reloads the domain and
+With Domain Reload enabled on Play entry (the default for projects created before Unity 6.6), entering Play Mode reloads the domain and
 discards the types with the patches; they are counted in `DroppedByPlayModeEntryCount` until a
 later apply re-introduces them. With Enter Play Mode Options set to disable Domain Reload, the
 active changes and the introduced types survive Play entry and nothing is recorded as dropped.
