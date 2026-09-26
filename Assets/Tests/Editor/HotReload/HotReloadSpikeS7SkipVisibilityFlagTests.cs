@@ -201,6 +201,31 @@ public static class SpikeS7OverrideSnippet
         }
 
         /// <summary>
+        /// What: the two bits right below skip_visibility in the MonoMethod bitfield word read as
+        /// the Mono source orders them: is_generic (bit 11) is set only on a generic method
+        /// definition and is_inflated (bit 12) only on a constructed generic method. A probe that
+        /// checks them proves the bit order next to bit 13, which the field checks cannot.
+        /// </summary>
+        [Test]
+        public void MonoMethodBitfield_GenericAndInflatedBitsSitRightBelowSkipVisibility()
+        {
+            MethodInfo ordinary = typeof(SpikePrivateAccessFixture).GetMethod(
+                nameof(SpikePrivateAccessFixture.ReplaceableCompute));
+            MethodInfo definition = typeof(MonoBitfieldFixture).GetMethod(nameof(MonoBitfieldFixture.Echo));
+            MethodInfo constructed = definition.MakeGenericMethod(typeof(int));
+            MonoSkipVisibilityFlag.AssertLayoutMatches(ordinary);
+            MonoSkipVisibilityFlag.AssertLayoutMatches(definition);
+            MonoSkipVisibilityFlag.AssertLayoutMatches(constructed);
+
+            Assert.That(MonoSkipVisibilityFlag.IsBitSet(ordinary, 11), Is.False, "An ordinary method is not generic.");
+            Assert.That(MonoSkipVisibilityFlag.IsBitSet(ordinary, 12), Is.False, "An ordinary method is not inflated.");
+            Assert.That(MonoSkipVisibilityFlag.IsBitSet(definition, 11), Is.True, "A generic method definition is generic.");
+            Assert.That(MonoSkipVisibilityFlag.IsBitSet(definition, 12), Is.False, "A generic method definition is not inflated.");
+            Assert.That(MonoSkipVisibilityFlag.IsBitSet(constructed, 12), Is.True, "A constructed generic method is inflated.");
+            Assert.That(MonoSkipVisibilityFlag.IsSet(constructed), Is.False, "A constructed method must not skip visibility checks.");
+        }
+
+        /// <summary>
         /// What: with the flag set on every method of the snippet assembly before the first call,
         /// the snippet S1 pins as throwing FieldAccessException writes a private field, calls a
         /// private method and calls a method of an internal type of another assembly.
@@ -400,6 +425,17 @@ public static class SpikeS7OverrideSnippet
         }
 
         /// <summary>
+        /// Holds one generic method whose definition and constructed form the bitfield probe reads.
+        /// </summary>
+        private static class MonoBitfieldFixture
+        {
+            public static T Echo<T>(T value)
+            {
+                return value;
+            }
+        }
+
+        /// <summary>
         /// Reads and writes the skip_visibility bit of Mono's native method record.
         /// </summary>
         private static class MonoSkipVisibilityFlag
@@ -440,6 +476,11 @@ public static class SpikeS7OverrideSnippet
             public static bool IsSet(MethodBase method)
             {
                 return (Marshal.ReadInt32(method.MethodHandle.Value, BitfieldOffset) & SkipVisibilityBit) != 0;
+            }
+
+            public static bool IsBitSet(MethodBase method, int bit)
+            {
+                return (Marshal.ReadInt32(method.MethodHandle.Value, BitfieldOffset) & (1 << bit)) != 0;
             }
 
             public static void SetOnEveryMethodOf(Assembly assembly)
