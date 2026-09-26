@@ -36,10 +36,17 @@ declares it stays in the tree, the rest of the reload continues, and the respons
 | Type deriving from `UnityEngine.Object` | `Unity object introduced type requires a compile: <type>` |
 | Type marked `[Serializable]` | `Serializable introduced type requires a compile: <type>` |
 | Type declaring a `[ModuleInitializer]` method | `Module initializer introduced type requires a compile: <type>` |
+| Internal, protected internal, or private protected override of a compiled or retained base member | `Internal override in an introduced type requires a compile: <type>.<member>` |
 | Delegate | `Delegate introduced type requires a compile: <type>` |
 | Any other type kind | `Unsupported introduced type requires a compile: <type>` |
 | Nested type added to a type the assembly already holds | `Nested type requires a compile: <type>` |
 | Type that itself declares a nested type | `Nested declaration inside an introduced type requires a compile: <type>/<nested>` |
+
+Public and protected overrides remain supported. Assembly-constrained overrides are supported
+only when the base is also newly introduced in the same artifact, not when its declaration is
+merely re-read from source after an earlier reload retained it. This includes property, indexer,
+and event accessors. An inaccessible internal base does not hide Unity object ancestry: those
+descendants still require a compile.
 
 Three conditions are reported as `Failed` rows in `IntroducedTypes` instead, because the run
 cannot proceed as if the declaration were absent. A `Failed` row stops that assembly before any

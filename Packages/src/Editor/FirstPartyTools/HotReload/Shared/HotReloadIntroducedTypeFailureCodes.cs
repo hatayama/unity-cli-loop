@@ -50,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 [HotReloadWorkerReasonCode.IntroducedTypeSerializable] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeModuleInitializer] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeUnsupported] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeInternalOverride] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeDelegate] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeNested] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeNestedDeclaration] = DeclarationArgument,

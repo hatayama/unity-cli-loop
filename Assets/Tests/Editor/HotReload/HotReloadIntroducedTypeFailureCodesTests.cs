@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("IntroducedTypeSerializable")]
         [TestCase("IntroducedTypeModuleInitializer")]
         [TestCase("IntroducedTypeUnsupported")]
+        [TestCase("IntroducedTypeInternalOverride")]
         [TestCase("IntroducedTypeDelegate")]
         [TestCase("IntroducedTypeNested")]
         [TestCase("IntroducedTypeNestedDeclaration")]

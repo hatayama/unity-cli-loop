@@ -55,6 +55,17 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
+            if (IntroducedTypeInternalOverrideGuard.TryFindUnsupportedOverride(
+                    typeSymbol, home, targetAssemblyMvid, artifactMap, out string overrideMember))
+            {
+                unit.IntroducedTypeDiagnostics.Add(
+                    WorkerReason.Of(
+                        HotReloadWorkerReasonCode.IntroducedTypeInternalOverride,
+                        CecilTypeNames.ToMetadataName(typeSymbol),
+                        overrideMember));
+                continue;
+            }
+
             if (IntroducedTypeConstDriftDetector.TryFindUnusableReferencedConst(
                     declaration,
                     unit.ConstDriftSemanticModel ?? unit.SemanticModel,
@@ -335,10 +346,26 @@ internal static class IntroducedTypePlanner
                 return true;
             }
 
-            current = current.BaseType;
+            current = ResolveBaseType(current);
         }
 
         return false;
+    }
+
+    // Inaccessible metadata bases still carry their unique candidate. Following only that
+    // candidate preserves Unity object refusal without guessing at ambiguous or missing types.
+    private static INamedTypeSymbol ResolveBaseType(INamedTypeSymbol typeSymbol)
+    {
+        INamedTypeSymbol baseType = typeSymbol.BaseType;
+        if (baseType is IErrorTypeSymbol error
+            && error.CandidateReason == CandidateReason.Inaccessible
+            && error.CandidateSymbols.Length == 1
+            && error.CandidateSymbols[0] is INamedTypeSymbol candidate)
+        {
+            return candidate;
+        }
+
+        return baseType;
     }
 
     private static bool HasSerializableAttribute(INamedTypeSymbol typeSymbol)

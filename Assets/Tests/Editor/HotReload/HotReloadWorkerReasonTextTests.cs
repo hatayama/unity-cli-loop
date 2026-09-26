@@ -721,6 +721,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Example.Type" },
                 "Unsupported introduced type requires a compile: Example.Type");
             yield return Case(
+                HotReloadWorkerReasonCode.IntroducedTypeInternalOverride,
+                new[] { "Example.Type", "Read" },
+                "Internal override in an introduced type requires a compile: Example.Type.Read");
+            yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeConstValueUnverifiable,
                 new[] { "Example.Other.Limit", "Example.Type" },
                 "Const value cannot be verified: Example.Other.Limit referenced by Example.Type");

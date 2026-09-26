@@ -44,6 +44,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.IntroducedTypeUnsupported,
                 Plain("Unsupported introduced type requires a compile: {0}", 1));
             templates.Add(
+                HotReloadWorkerReasonCode.IntroducedTypeInternalOverride,
+                Plain("Internal override in an introduced type requires a compile: {0}.{1}", 2));
+            templates.Add(
                 HotReloadWorkerReasonCode.IntroducedTypeConstValueUnverifiable,
                 Plain("Const value cannot be verified: {0} referenced by {1}", 2));
             templates.Add(

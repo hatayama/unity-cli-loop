@@ -122,6 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         IntroducedTypeSerializable,
         IntroducedTypeModuleInitializer,
         IntroducedTypeUnsupported,
+        IntroducedTypeInternalOverride,
         IntroducedTypeConstValueUnverifiable,
         IntroducedTypeConstChanged,
         IntroducedTypeDelegate,
