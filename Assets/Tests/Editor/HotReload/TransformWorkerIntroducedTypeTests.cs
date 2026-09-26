@@ -6,8 +6,6 @@ using System.Threading.Tasks;
 
 using NUnit.Framework;
 
-using UnityEditor.Compilation;
-
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -23,8 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class TransformWorkerIntroducedTypeTests
     {
-        private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
-
         // A second file the fingerprint cases never edit, so only the first file introduces a type.
         private const string UnrelatedSecondSource = "namespace Unrelated { public class Untouched { } }";
 
@@ -53,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 secondSourcePath,
                 "namespace Example.Introduced { internal class Hidden { } public class Generic<T> { } internal class Outer { public class Nested { } } }");
 
-            TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath);
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
@@ -91,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_NestedInsideAnIntroducedType_ReportsOnlyTheOuterRefusal()
         {
-            string directory = CreateSourceDirectory("NestedDiagnostics");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("NestedDiagnostics");
             string introducedOuterPath = Path.Combine(directory, "IntroducedOuter.cs");
             string compiledOuterPath = Path.Combine(directory, "CompiledOuter.cs");
             File.WriteAllText(
@@ -100,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(compiledOuterPath, CompiledOuterWithNestedSource);
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(introducedOuterPath, compiledOuterPath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(introducedOuterPath, compiledOuterPath),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -121,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_NestedInsideACompiledType_ReportsTheNestedRefusal()
         {
-            string directory = CreateSourceDirectory("NestedDiagnostics");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("NestedDiagnostics");
             string introducedOuterPath = Path.Combine(directory, "IntroducedOuter.cs");
             string compiledOuterPath = Path.Combine(directory, "CompiledOuter.cs");
             File.WriteAllText(
@@ -130,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(compiledOuterPath, CompiledOuterWithNestedSource);
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(introducedOuterPath, compiledOuterPath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(introducedOuterPath, compiledOuterPath),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -152,14 +148,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_ParseFailedSibling_DoesNotEnterSharedAnalysis()
         {
-            string directory = CreateSourceDirectory("ParseIsolation");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("ParseIsolation");
             string validSourcePath = Path.Combine(directory, "Valid.cs");
             string invalidSourcePath = Path.Combine(directory, "Invalid.cs");
             File.WriteAllText(validSourcePath, "namespace Example { public class ValidIntroduced { } }");
             File.WriteAllText(invalidSourcePath, "namespace Example { public class BrokenIntroduced { ");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(validSourcePath, invalidSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(validSourcePath, invalidSourcePath),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -175,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_NestedAliasScopes_PreservesNamespaceHierarchy()
         {
-            string directory = CreateSourceDirectory("NamespaceAliases");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("NamespaceAliases");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -183,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Outer { using Alias = System.String; namespace Inner { using Alias = System.Int32; public class Aliased { public Alias Value; } } }");
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
 
-            TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath);
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
@@ -203,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_GlobalNamespaceSources_CompileWithoutChangingAliasBindings()
         {
-            string directory = CreateSourceDirectory("GlobalNamespaceSources");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("GlobalNamespaceSources");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -213,7 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 secondSourcePath,
                 "using System; using Alias = System.ICloneable; public class GlobalSecond { public Alias Create() { return null; } }");
 
-            TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath);
             TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
@@ -222,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(workerResult.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
             Assert.That(workerResult.Output.files[1].introducedTypes, Has.Length.EqualTo(1));
             List<HotReloadIntroducedTypeDescriptor> descriptors =
-                CreateDescriptors(workerResult.Output.files);
+                TransformWorkerIntroducedTypeTestInputs.CreateDescriptors(workerResult.Output.files);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             HotReloadIntroducedTypeArtifactPathFactory factory =
                 new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "global-namespace-sources");
@@ -251,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_GlobalUsingAlias_CompilesTwoIntroducedTypes()
         {
-            string directory = CreateSourceDirectory("GlobalUsingAlias");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("GlobalUsingAlias");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -261,12 +257,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 secondSourcePath,
                 "namespace GlobalAliasFixture { public class Second { public Alias Create() { return null; } } }");
 
-            TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath);
             TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
-            List<HotReloadIntroducedTypeDescriptor> descriptors = CreateDescriptors(workerResult.Output.files);
+            List<HotReloadIntroducedTypeDescriptor> descriptors = TransformWorkerIntroducedTypeTestInputs.CreateDescriptors(workerResult.Output.files);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             HotReloadIntroducedTypeCompilationRequest request =
                 HotReloadIntroducedTypeCompilationRequest.CreateBatch(
@@ -303,7 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_RootUsing_KeepsGlobalNamespaceBinding()
         {
-            string directory = CreateSourceDirectory("RootUsingScope");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("RootUsingScope");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -311,12 +307,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "using ScopeGlobal; using static ScopeStatic.Helpers; using ExtensionGlobal; namespace ScopeGlobal { public class Bound { } } namespace ScopeFixture.ScopeGlobal { public class Bound { } } namespace ScopeStatic { public static class Helpers { public static int Value() { return 7; } } } namespace ScopeFixture.ScopeStatic { public static class Helpers { public static int Value() { return 9; } } } namespace ExtensionGlobal { public static class Extensions { public static int ExtensionValue(this string value) { return 17; } } } namespace ScopeFixture.ExtensionGlobal { public static class Extensions { public static int ExtensionValue(this string value) { return 19; } } } namespace ScopeFixture { public class Consumer { public Bound Create() { return null; } public int GetValue() { return Value(); } public int GetExtensionValue() { return \"test\".ExtensionValue(); } } }");
             File.WriteAllText(secondSourcePath, "namespace ScopeFixture { public class Other { } }");
 
-            TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath);
             TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
 
-            List<HotReloadIntroducedTypeDescriptor> descriptors = CreateDescriptors(workerResult.Output.files);
+            List<HotReloadIntroducedTypeDescriptor> descriptors = TransformWorkerIntroducedTypeTestInputs.CreateDescriptors(workerResult.Output.files);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             HotReloadIntroducedTypeCompilationRequest request =
                 HotReloadIntroducedTypeCompilationRequest.CreateBatch(
@@ -342,7 +338,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_UnsupportedSemanticCategories_ReportDiagnostics()
         {
-            string directory = CreateSourceDirectory("UnsupportedCategories");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("UnsupportedCategories");
             string firstSourcePath = Path.Combine(directory, "Unsupported.cs");
             string secondSourcePath = Path.Combine(directory, "Other.cs");
             File.WriteAllText(
@@ -352,7 +348,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -376,7 +372,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_OuterContainingNestedDeclaration_IsRejectedBeforeArtifactCompile()
         {
-            string directory = CreateSourceDirectory("NestedArtifactRejection");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("NestedArtifactRejection");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -385,7 +381,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "namespace Example { public class Outer { public static class Nested { [System.Runtime.CompilerServices.ModuleInitializer] public static void Initialize() { } } } public class Safe { } }");
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
 
-            TransformWorkerInputDto input = CreateInput(firstSourcePath, secondSourcePath);
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath);
             TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
@@ -399,7 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(workerResult.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Safe"));
             Assert.That(HotReloadWorkerReasonTestText.RenderAll(workerResult.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Nested"));
 
-            List<HotReloadIntroducedTypeDescriptor> descriptors = CreateDescriptors(workerResult.Output.files);
+            List<HotReloadIntroducedTypeDescriptor> descriptors = TransformWorkerIntroducedTypeTestInputs.CreateDescriptors(workerResult.Output.files);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             HotReloadIntroducedTypeCompilationRequest request =
                 HotReloadIntroducedTypeCompilationRequest.CreateBatch(
@@ -422,7 +418,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_TracksOnlyDefinitionInputs()
         {
-            string directory = CreateSourceDirectory("Fingerprints");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("Fingerprints");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -430,41 +426,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } } namespace Unrelated { using Other = System.Text; class Ignore { } }");
             File.WriteAllText(secondSourcePath, "namespace Unrelated { using Other = System.String; public class OtherType { } }");
             TransformWorkerClientResult first = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } public class LaterIntroduced { } } namespace Unrelated { using Other = System.Text; class Ignore { } }");
             TransformWorkerClientResult laterType = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } } namespace Unrelated { using Other = System.IO; class Ignore { } }");
             TransformWorkerClientResult unrelatedUsing = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { /* trivia */ public class Fingerprint { public Alias Create() { return null; } } } namespace Unrelated { using Other = System.IO; class Ignore { } }");
             TransformWorkerClientResult trivia = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.ICloneable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } }");
             TransformWorkerClientResult aliasChanged = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Alias = System.IDisposable; using System.Text; namespace Example { public class Fingerprint { public Alias Create() { return null; } } }");
-            TransformWorkerInputDto definesChangedInput = CreateInput(firstSourcePath, secondSourcePath);
+            TransformWorkerInputDto definesChangedInput = TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath);
             definesChangedInput.defines = new[] { "CHANGED_DEFINE" };
             TransformWorkerClientResult definesChanged = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                 definesChangedInput,
@@ -556,7 +552,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_DistinguishesAliasBindingExchange()
         {
-            string directory = CreateSourceDirectory("AliasBindingExchange");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("AliasBindingExchange");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -564,14 +560,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "using Left = System.Int32; using Right = System.String; namespace Example { public class Sample { public Left A; public Right B; } }");
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
             TransformWorkerClientResult before = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "using Left = System.String; using Right = System.Int32; namespace Example { public class Sample { public Left A; public Right B; } }");
             TransformWorkerClientResult after = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             Assert.That(before.Success, Is.True, before.ErrorMessage);
@@ -588,7 +584,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_ChangedReferencedExistingConst_IsRejected()
         {
-            string directory = CreateSourceDirectory("ChangedExistingConst");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("ChangedExistingConst");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
             string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
@@ -597,7 +593,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class Existing { public const int Value = 2; } public class Introduced { public int Get() { return Existing.Value; } } public class Safe { } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -614,7 +610,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_ChangedConstInAnotherFile_IsRejected()
         {
-            string directory = CreateSourceDirectory("ChangedConstInAnotherFile");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("ChangedConstInAnotherFile");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string siblingPath = Path.Combine(directory, "Sibling.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
@@ -627,7 +623,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class Existing { public const int Value = 2; } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInputWithSiblings(
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInputWithSiblings(
                     sourcePath,
                     targetAssemblyPath,
                     targetAssemblyMvid,
@@ -647,7 +643,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_ChangedConstNamedOnlyInNameof_IsNotRejected()
         {
-            string directory = CreateSourceDirectory("ChangedConstNamedOnlyInNameof");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("ChangedConstNamedOnlyInNameof");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string siblingPath = Path.Combine(directory, "Sibling.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
@@ -660,7 +656,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class Existing { public const int Value = 2; } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInputWithSiblings(
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInputWithSiblings(
                     sourcePath,
                     targetAssemblyPath,
                     targetAssemblyMvid,
@@ -681,7 +677,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_UnreadableConstInAnotherFile_IsRejected()
         {
-            string directory = CreateSourceDirectory("UnreadableConstInAnotherFile");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("UnreadableConstInAnotherFile");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string siblingPath = Path.Combine(directory, "Sibling.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
@@ -694,7 +690,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class Existing { public const int Value = ; } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInputWithSiblings(
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInputWithSiblings(
                     sourcePath,
                     targetAssemblyPath,
                     targetAssemblyMvid,
@@ -712,7 +708,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_UnreferencedChangedExistingConst_DoesNotRejectIntroducedType()
         {
-            string directory = CreateSourceDirectory("UnreferencedChangedExistingConst");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("UnreferencedChangedExistingConst");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
             string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
@@ -721,7 +717,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class Existing { public const int Value = 2; } public class Introduced { public int Get() { return 3; } } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -736,7 +732,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_UnchangedReferencedExistingConst_RemainsSupported()
         {
-            string directory = CreateSourceDirectory("UnchangedExistingConst");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("UnchangedExistingConst");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
             string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
@@ -745,7 +741,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class Existing { public const int Value = 1; } public class Introduced { public int Get() { return Existing.Value; } } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInput(sourcePath, targetAssemblyPath, targetAssemblyMvid),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -761,7 +757,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_DistinguishesTokenBoundaries()
         {
-            string directory = CreateSourceDirectory("TokenBoundaries");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("TokenBoundaries");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(
@@ -769,14 +765,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "namespace Example { public class TokenBoundary { private int a; private int b; public int Value() { return a + ++b; } } }");
             File.WriteAllText(secondSourcePath, "namespace Example { public class Other { } }");
             TransformWorkerClientResult before = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             File.WriteAllText(
                 firstSourcePath,
                 "namespace Example { public class TokenBoundary { private int a; private int b; public int Value() { return a++ + b; } } }");
             TransformWorkerClientResult after = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             Assert.That(before.Success, Is.True, before.ErrorMessage);
@@ -793,7 +789,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_SeparatesBodyEditsFromSignatureEdits()
         {
-            string directory = CreateSourceDirectory("FingerprintBodyEdits");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintBodyEdits");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -839,7 +835,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_ReorderedMembers_ReportOrderChanged()
         {
-            string directory = CreateSourceDirectory("FingerprintMemberOrder");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintMemberOrder");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -882,7 +878,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_SurfaceEdits_ReportDeclarationChanged()
         {
-            string directory = CreateSourceDirectory("FingerprintSurfaceEdits");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintSurfaceEdits");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -943,7 +939,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_BodyRewrites_StayBodyOnly()
         {
-            string directory = CreateSourceDirectory("FingerprintBodyRewrites");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintBodyRewrites");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -987,7 +983,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_DuplicateMemberSignature_StillProducesAFingerprint()
         {
-            string directory = CreateSourceDirectory("FingerprintDuplicateMembers");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintDuplicateMembers");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -1010,7 +1006,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_AccessorExpressionBody_StaysBodyOnly()
         {
-            string directory = CreateSourceDirectory("FingerprintAccessorArrow");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintAccessorArrow");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -1034,7 +1030,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_CommentInsideAParameterType_IsIdentical()
         {
-            string directory = CreateSourceDirectory("FingerprintTypeComment");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintTypeComment");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -1059,7 +1055,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_LineCommentInsideADeclaration_StillProducesAFingerprint()
         {
-            string directory = CreateSourceDirectory("FingerprintLineComment");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintLineComment");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -1085,7 +1081,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_Fingerprint_SwappedAliasesInOneBody_ReportBodyOnly()
         {
-            string directory = CreateSourceDirectory("FingerprintAliasSwap");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("FingerprintAliasSwap");
             string firstSourcePath = Path.Combine(directory, "First.cs");
             string secondSourcePath = Path.Combine(directory, "Second.cs");
             File.WriteAllText(secondSourcePath, UnrelatedSecondSource);
@@ -1145,20 +1141,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             File.WriteAllText(firstSourcePath, source);
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateInput(firstSourcePath, secondSourcePath),
+                TransformWorkerIntroducedTypeTestInputs.CreateInput(firstSourcePath, secondSourcePath),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
             return result.Output.files[0].introducedTypes[0].declarationFingerprint;
-        }
-
-        private static string CreateSourceDirectory(string name)
-        {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string directory = Path.Combine(projectRoot, "Library", "UloopHotReload", "TestSources", "IntroducedTypes", name);
-            Directory.CreateDirectory(directory);
-            return directory;
         }
 
         /// <summary>
@@ -1168,14 +1156,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_UnreadableTargetAssembly_ReportsNoIntroducedType()
         {
-            string directory = CreateSourceDirectory("UnreadableTarget");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("UnreadableTarget");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string targetAssemblyPath = Path.Combine(directory, "Unreadable.dll");
             File.WriteAllText(targetAssemblyPath, "this is not an assembly");
             File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -1193,7 +1181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_UnreadableReference_ReportsNoIntroducedType()
         {
-            string directory = CreateSourceDirectory("UnreadableReference");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("UnreadableReference");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
             string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
@@ -1202,7 +1190,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreatePreparationInput(
+                TransformWorkerIntroducedTypeTestInputs.CreatePreparationInput(
                     sourcePath,
                     targetAssemblyPath,
                     "ConstDriftTarget",
@@ -1226,14 +1214,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_TargetAssemblyMvidMismatch_ReportsNoIntroducedType()
         {
-            string directory = CreateSourceDirectory("TargetMvidMismatch");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("TargetMvidMismatch");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
             CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
             File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
+                TransformWorkerIntroducedTypeTestInputs.CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -1251,20 +1239,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_SameMetadataNameInOtherAssembly_IsStillIntroduced()
         {
-            string directory = CreateSourceDirectory("SameNameOtherAssembly");
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("SameNameOtherAssembly");
             string sourcePath = Path.Combine(directory, "Edited.cs");
             string targetAssemblyPath = Path.Combine(directory, "SameNameTarget.dll");
             string otherAssemblyPath = Path.Combine(directory, "SameNameOther.dll");
-            string targetAssemblyMvid = CreateAssemblyWithType(
+            string targetAssemblyMvid = TransformWorkerIntroducedTypeTestInputs.CreateAssemblyWithType(
                 targetAssemblyPath,
                 "SameNameTarget",
                 "Example",
                 "Unrelated");
-            CreateAssemblyWithType(otherAssemblyPath, "SameNameOther", "Example", "Shared");
+            TransformWorkerIntroducedTypeTestInputs.CreateAssemblyWithType(otherAssemblyPath, "SameNameOther", "Example", "Shared");
             File.WriteAllText(sourcePath, "namespace Example { public class Shared { } }");
 
             TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
-                CreatePreparationInput(
+                TransformWorkerIntroducedTypeTestInputs.CreatePreparationInput(
                     sourcePath,
                     targetAssemblyPath,
                     "SameNameTarget",
@@ -1281,137 +1269,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].introducedTypes[0].originalAssemblyName,
                 Is.EqualTo("SameNameTarget"));
-        }
-
-        private static TransformWorkerInputDto CreateInput(string firstSourcePath, string secondSourcePath)
-        {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                "Library",
-                "ScriptAssemblies",
-                TestAssemblyName + ".dll");
-            Assert.That(File.Exists(targetDllPath), Is.True, "Test assembly DLL must exist.");
-            UnityEditor.Compilation.Assembly compilationAssembly = FindCompilationAssembly();
-            return new TransformWorkerInputDto
-            {
-                operation = "prepareIntroducedTypes",
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = firstSourcePath,
-                        projectRelativePath = "Assets/First.cs"
-                    },
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = secondSourcePath,
-                        projectRelativePath = "Assets/Second.cs"
-                    }
-                },
-                defines = compilationAssembly.defines ?? Array.Empty<string>(),
-                referencePaths = BuildAbsoluteReferencePaths(compilationAssembly.allReferences, targetDllPath),
-                targetTypesAssemblyPath = targetDllPath,
-                targetAssemblyName = TestAssemblyName,
-                targetAssemblyMvid = typeof(TransformWorkerIntroducedTypeTests).Assembly.ManifestModule.ModuleVersionId.ToString(),
-                assemblySourcePaths = Array.Empty<string>(),
-                changedSiblingSourcePaths = Array.Empty<string>()
-            };
-        }
-
-        private static TransformWorkerInputDto CreateConstDriftInput(
-            string sourcePath,
-            string targetAssemblyPath,
-            string targetAssemblyMvid)
-        {
-            return CreatePreparationInput(
-                sourcePath,
-                targetAssemblyPath,
-                "ConstDriftTarget",
-                targetAssemblyMvid,
-                Array.Empty<string>(),
-                Array.Empty<string>());
-        }
-
-        private static TransformWorkerInputDto CreateConstDriftInputWithSiblings(
-            string sourcePath,
-            string targetAssemblyPath,
-            string targetAssemblyMvid,
-            string[] changedSiblingSourcePaths)
-        {
-            return CreatePreparationInput(
-                sourcePath,
-                targetAssemblyPath,
-                "ConstDriftTarget",
-                targetAssemblyMvid,
-                Array.Empty<string>(),
-                changedSiblingSourcePaths);
-        }
-
-        private static TransformWorkerInputDto CreatePreparationInput(
-            string sourcePath,
-            string targetAssemblyPath,
-            string targetAssemblyName,
-            string targetAssemblyMvid,
-            string[] extraReferencePaths,
-            string[] changedSiblingSourcePaths)
-        {
-            UnityEditor.Compilation.Assembly compilationAssembly = FindCompilationAssembly();
-            List<string> referencePaths = new List<string>(
-                BuildAbsoluteReferencePaths(compilationAssembly.allReferences, targetAssemblyPath));
-            foreach (string extraReferencePath in extraReferencePaths)
-            {
-                referencePaths.Add(Path.GetFullPath(extraReferencePath));
-            }
-
-            return new TransformWorkerInputDto
-            {
-                operation = "prepareIntroducedTypes",
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = sourcePath,
-                        projectRelativePath = "Assets/Edited.cs"
-                    }
-                },
-                defines = compilationAssembly.defines ?? Array.Empty<string>(),
-                referencePaths = referencePaths.ToArray(),
-                targetTypesAssemblyPath = targetAssemblyPath,
-                targetAssemblyName = targetAssemblyName,
-                targetAssemblyMvid = targetAssemblyMvid,
-                assemblySourcePaths = Array.Empty<string>(),
-                changedSiblingSourcePaths = changedSiblingSourcePaths
-            };
-        }
-
-        private static string CreateAssemblyWithType(
-            string path,
-            string assemblyName,
-            string typeNamespace,
-            string typeName)
-        {
-            AssemblyNameDefinition assemblyNameDefinition = new AssemblyNameDefinition(
-                assemblyName,
-                new Version(1, 0, 0, 0));
-            using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(
-                assemblyNameDefinition,
-                assemblyName,
-                ModuleKind.Dll))
-            {
-                TypeDefinition type = new TypeDefinition(
-                    typeNamespace,
-                    typeName,
-                    CecilTypeAttributes.Public | CecilTypeAttributes.Class,
-                    assembly.MainModule.TypeSystem.Object);
-                assembly.MainModule.Types.Add(type);
-                assembly.Write(path);
-            }
-
-            using (ModuleDefinition module = ModuleDefinition.ReadModule(path))
-            {
-                return module.Mvid.ToString();
-            }
         }
 
         private static string CreateConstDriftTargetAssembly(string path, int constantValue)
@@ -1447,60 +1304,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
-        private static UnityEditor.Compilation.Assembly FindCompilationAssembly()
-        {
-            foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
-            {
-                if (assembly.name == TestAssemblyName)
-                {
-                    return assembly;
-                }
-            }
-
-            Assert.Fail("Compilation assembly was not found.");
-            return null;
-        }
-
-        private static List<HotReloadIntroducedTypeDescriptor> CreateDescriptors(
-            TransformWorkerFileOutputDto[] files)
-        {
-            List<HotReloadIntroducedTypeDescriptor> descriptors = new List<HotReloadIntroducedTypeDescriptor>();
-            foreach (TransformWorkerFileOutputDto file in files)
-            {
-                foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
-                {
-                    descriptors.Add(
-                        new HotReloadIntroducedTypeDescriptor(
-                            introducedType.originalAssemblyName,
-                            introducedType.originalAssemblyMvid,
-                            introducedType.metadataName,
-                            introducedType.ownerProjectRelativePath,
-                            introducedType.declarationFingerprint,
-                            introducedType.source));
-                }
-            }
-
-            return descriptors;
-        }
-
-        private static string[] BuildAbsoluteReferencePaths(string[] allReferences, string targetDllPath)
-        {
-            List<string> paths = new List<string>();
-            foreach (string reference in allReferences)
-            {
-                if (!string.IsNullOrEmpty(reference) && File.Exists(reference))
-                {
-                    paths.Add(Path.GetFullPath(reference));
-                }
-            }
-
-            string targetPath = Path.GetFullPath(targetDllPath);
-            if (!paths.Contains(targetPath))
-            {
-                paths.Add(targetPath);
-            }
-
-            return paths.ToArray();
-        }
     }
 }

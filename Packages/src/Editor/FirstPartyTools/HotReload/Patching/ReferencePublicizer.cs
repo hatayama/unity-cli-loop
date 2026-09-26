@@ -62,6 +62,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTypeHome home,
             IReadOnlyCollection<string> resolverSearchDirectories)
         {
+            return GetOrCreateRewrittenCopy(
+                home,
+                resolverSearchDirectories,
+                HotReloadConstants.PublicizedRefsRelativeDirectory,
+                PublicizeType);
+        }
+
+        private static string GetOrCreateRewrittenCopy(
+            HotReloadTypeHome home,
+            IReadOnlyCollection<string> resolverSearchDirectories,
+            string outputRelativeDirectory,
+            Action<TypeDefinition> rewriteType)
+        {
             Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(home.IsPublicizable, "home must be publicizable.");
             Debug.Assert(resolverSearchDirectories != null, "resolverSearchDirectories must not be null.");
@@ -85,7 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string assemblyName = assemblyDefinition.Name.Name;
             string mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
-            string outputDirectory = ResolvePublicizedRefsDirectory();
+            string outputDirectory = ResolveOutputDirectory(outputRelativeDirectory);
             Directory.CreateDirectory(outputDirectory);
 
             string outputDllPath = Path.Combine(
@@ -106,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // An Mvid change means the assembly already reloaded; no in-flight compile can still
             // need the previous publicized copy, so drop stale siblings before writing the new one.
-            DeleteStalePublicizedCopies(outputDirectory, assemblyName, outputDllPath);
+            DeleteStaleCopies(outputDirectory, assemblyName, outputDllPath);
 
             foreach (ModuleDefinition module in assemblyDefinition.Modules)
             {
@@ -118,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    PublicizeType(type);
+                    rewriteType(type);
                 }
             }
 
@@ -140,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return outputDllPath;
         }
 
-        private static void DeleteStalePublicizedCopies(
+        private static void DeleteStaleCopies(
             string outputDirectory,
             string assemblyName,
             string currentOutputDllPath)
@@ -217,10 +230,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return normalizedSourcePath.StartsWith(normalizedDirectory + "/", comparison);
         }
 
-        private static string ResolvePublicizedRefsDirectory()
+        private static string ResolveOutputDirectory(string relativeDirectory)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            return Path.Combine(projectRoot, HotReloadConstants.PublicizedRefsRelativeDirectory);
+            return Path.Combine(projectRoot, relativeDirectory);
         }
 
         private static DefaultAssemblyResolver CreateAssemblyResolver(
