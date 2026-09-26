@@ -530,11 +530,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "AddedMaybe",
                 "Added methods whose bodies access private/internal members");
             AssertHasSkip(result, "AddedMaybe", "Accessor rewrite unavailable:");
-            AssertHasSkip(result, "AddedMaybe", "Run 'uloop compile'.");
+            AssertHasSkip(result, "AddedMaybe", "Run 'uloop compile' to keep the code as written.");
             string skipReason = FindSkipReason(result, "AddedMaybe");
             Assert.That(skipReason, Is.Not.Null);
             int unavailableIndex = skipReason.IndexOf("Accessor rewrite unavailable:", StringComparison.Ordinal);
-            int compileIndex = skipReason.IndexOf("Run 'uloop compile'.", StringComparison.Ordinal);
+            int compileIndex = skipReason.IndexOf("Run 'uloop compile' to keep the code as written.", StringComparison.Ordinal);
             Assert.That(unavailableIndex, Is.GreaterThan(-1));
             Assert.That(compileIndex, Is.GreaterThan(unavailableIndex));
             Assert.That(FindEntry(result, "AddedMaybe"), Is.Null);
