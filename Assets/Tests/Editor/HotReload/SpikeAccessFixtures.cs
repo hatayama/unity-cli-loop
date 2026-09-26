@@ -63,4 +63,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             return 21;
         }
     }
+
+    /// <summary>
+    /// Internal base type the S7 spike derives from in another assembly, asking whether the Mono
+    /// type loader checks the accessibility of a base type the way the JIT checks member access.
+    /// </summary>
+    internal class SpikeInternalBaseFixture
+    {
+        internal virtual int Value()
+        {
+            return 7;
+        }
+    }
+
+    /// <summary>
+    /// Internal interface the S7 spike implements in another assembly, for the same question as
+    /// <see cref="SpikeInternalBaseFixture"/> asked of interface implementation.
+    /// </summary>
+    internal interface ISpikeInternalContract
+    {
+        int Contract();
+    }
 }

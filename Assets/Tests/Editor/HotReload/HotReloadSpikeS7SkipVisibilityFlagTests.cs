@@ -66,6 +66,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
 }
 ";
 
+        // Generic methods are instantiated per type argument into inflated MonoMethods, and a
+        // closure inside a generic method lives in a generic display class; both are asked
+        // whether they inherit the flag set on the generic definition.
+        private const string GenericSnippetSource = @"public static class SpikeS7GenericSnippet
+{
+    public static int ReadCounter<T>(
+        io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture instance)
+    {
+        return instance._counter;
+    }
+
+    public static int ReadCounterThroughGenericClosure<T>(
+        io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture instance,
+        T unused)
+    {
+        System.Func<int> read = () => instance._counter + (unused == null ? 0 : 1);
+        return read();
+    }
+
+    public static int CountInternalItems()
+    {
+        System.Collections.Generic.List<io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikeInternalFixture> items =
+            new System.Collections.Generic.List<io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikeInternalFixture>();
+        items.Add(new io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikeInternalFixture());
+        return items.Count;
+    }
+}
+";
+
+        // A type in the loaded assembly that derives from an internal class and implements an
+        // internal interface of another assembly: the type loader, not the JIT, decides whether
+        // this loads, and the flag is per method.
+        private const string InheritanceSnippetSource = @"public class SpikeS7DerivedSnippet
+    : io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikeInternalBaseFixture,
+      io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.ISpikeInternalContract
+{
+    public override int Value()
+    {
+        return base.Value() + 1;
+    }
+
+    public int Contract()
+    {
+        return 30;
+    }
+
+    public static int Run()
+    {
+        SpikeS7DerivedSnippet instance = new SpikeS7DerivedSnippet();
+        io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.ISpikeInternalContract contract = instance;
+        return instance.Value() + contract.Contract();
+    }
+}
+";
+
         /// <summary>
         /// What: the MonoMethod record behind a method handle carries the method's metadata flags
         /// and token at offsets 0 and 4 and its name pointer at the offset the Mono source gives,
@@ -152,6 +207,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             MonoSkipVisibilityFlag.SetOnEveryMethodOf(snippetType.Assembly);
 
             Assert.That(poke(new SpikePrivateAccessFixture(), 5), Is.EqualTo(16));
+        }
+
+        /// <summary>
+        /// What: with the flag set on the generic definitions, instantiations over a reference
+        /// type and a value type, a closure inside a generic method, and a generic collection of
+        /// an internal type of another assembly all reach the private and internal members.
+        /// </summary>
+        [Test]
+        public async Task GenericSnippet_WithFlagSet_ReachesPrivateAndInternalMembers()
+        {
+            Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
+                "S7-generic", GenericSnippetSource, "SpikeS7GenericSnippet", new List<string>());
+            MonoSkipVisibilityFlag.SetOnEveryMethodOf(snippetType.Assembly);
+
+            MethodInfo readCounter = snippetType.GetMethod("ReadCounter");
+            MethodInfo readThroughClosure = snippetType.GetMethod("ReadCounterThroughGenericClosure");
+            Func<SpikePrivateAccessFixture, int> readOverString = (Func<SpikePrivateAccessFixture, int>)readCounter
+                .MakeGenericMethod(typeof(string))
+                .CreateDelegate(typeof(Func<SpikePrivateAccessFixture, int>));
+            Func<SpikePrivateAccessFixture, int> readOverInt = (Func<SpikePrivateAccessFixture, int>)readCounter
+                .MakeGenericMethod(typeof(int))
+                .CreateDelegate(typeof(Func<SpikePrivateAccessFixture, int>));
+            Func<SpikePrivateAccessFixture, int, int> closureOverInt = (Func<SpikePrivateAccessFixture, int, int>)readThroughClosure
+                .MakeGenericMethod(typeof(int))
+                .CreateDelegate(typeof(Func<SpikePrivateAccessFixture, int, int>));
+            Func<int> countInternalItems = (Func<int>)snippetType
+                .GetMethod("CountInternalItems")
+                .CreateDelegate(typeof(Func<int>));
+
+            Assert.That(readOverString(new SpikePrivateAccessFixture()), Is.EqualTo(10), "Instantiation over a reference type.");
+            Assert.That(readOverInt(new SpikePrivateAccessFixture()), Is.EqualTo(10), "Instantiation over a value type.");
+            Assert.That(closureOverInt(new SpikePrivateAccessFixture(), 3), Is.EqualTo(11), "Closure in a generic method.");
+            Assert.That(countInternalItems(), Is.EqualTo(1), "Generic collection of an internal type.");
+        }
+
+        /// <summary>
+        /// What: a type that derives from an internal class and implements an internal interface
+        /// of another assembly loads, and with the flag set its methods call the internal base.
+        /// </summary>
+        [Test]
+        public async Task InheritanceSnippet_WithFlagSet_DerivesFromInternalBaseAndInterface()
+        {
+            Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
+                "S7-inherit", InheritanceSnippetSource, "SpikeS7DerivedSnippet", new List<string>());
+            MonoSkipVisibilityFlag.SetOnEveryMethodOf(snippetType.Assembly);
+
+            Func<int> run = (Func<int>)snippetType
+                .GetMethod("Run")
+                .CreateDelegate(typeof(Func<int>));
+
+            Assert.That(run(), Is.EqualTo(38), "7 (base) + 1 (override) + 30 (interface).");
         }
 
         /// <summary>
