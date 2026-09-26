@@ -74,6 +74,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
         {
             return 7;
         }
+
+        // Calls the virtual from inside this assembly, the way compiled code reaches an override.
+        internal int ValueThroughBase()
+        {
+            return Value();
+        }
+    }
+
+    /// <summary>
+    /// Internal abstract base the S7 spike implements in another assembly. The C# compiler emits
+    /// internal virtual and abstract members with the strict (check-access-on-override) flag, so
+    /// the question is whether the runtime lets an override from another assembly fill the slot.
+    /// </summary>
+    internal abstract class SpikeInternalAbstractBaseFixture
+    {
+        internal abstract int Area();
+
+        internal int AreaThroughBase()
+        {
+            return Area();
+        }
     }
 
     /// <summary>

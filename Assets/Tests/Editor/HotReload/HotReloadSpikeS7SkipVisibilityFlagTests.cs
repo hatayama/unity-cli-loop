@@ -121,6 +121,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
 }
 ";
 
+        // Overrides of internal virtual and abstract members of another assembly, reached the way
+        // compiled code reaches them: through a method of the base type.
+        private const string OverrideSnippetSource = @"public class SpikeS7VirtualOverrideSnippet
+    : io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikeInternalBaseFixture
+{
+    public override int Value()
+    {
+        return 70;
+    }
+}
+
+public class SpikeS7AbstractOverrideSnippet
+    : io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikeInternalAbstractBaseFixture
+{
+    public override int Area()
+    {
+        return 12;
+    }
+}
+
+public static class SpikeS7OverrideSnippet
+{
+    public static int VirtualThroughBase()
+    {
+        return new SpikeS7VirtualOverrideSnippet().ValueThroughBase();
+    }
+
+    public static int AbstractThroughBase()
+    {
+        return new SpikeS7AbstractOverrideSnippet().AreaThroughBase();
+    }
+}
+";
+
         /// <summary>
         /// What: the MonoMethod record behind a method handle carries the method's metadata flags
         /// and token at offsets 0 and 4 and its name pointer at the offset the Mono source gives,
@@ -258,6 +292,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                 .CreateDelegate(typeof(Func<int>));
 
             Assert.That(run(), Is.EqualTo(38), "7 (base) + 1 (override) + 30 (interface).");
+        }
+
+        /// <summary>
+        /// What: with the flag set, overrides from another assembly of an internal virtual member
+        /// and of an internal abstract member fill the base slots, so a method of the base type
+        /// that calls the virtual reaches the override. The C# compiler emits both base members
+        /// with the strict (check-access-on-override) flag.
+        /// </summary>
+        [Test]
+        public async Task OverrideSnippet_WithFlagSet_OverridesInternalVirtualAndAbstractMembers()
+        {
+            Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
+                "S7-override", OverrideSnippetSource, "SpikeS7OverrideSnippet", new List<string>());
+            MonoSkipVisibilityFlag.SetOnEveryMethodOf(snippetType.Assembly);
+
+            Func<int> virtualThroughBase = (Func<int>)snippetType
+                .GetMethod("VirtualThroughBase")
+                .CreateDelegate(typeof(Func<int>));
+            Func<int> abstractThroughBase = (Func<int>)snippetType
+                .GetMethod("AbstractThroughBase")
+                .CreateDelegate(typeof(Func<int>));
+
+            Assert.That(virtualThroughBase(), Is.EqualTo(70), "7 would mean the override did not fill the slot.");
+            Assert.That(abstractThroughBase(), Is.EqualTo(12));
         }
 
         /// <summary>
