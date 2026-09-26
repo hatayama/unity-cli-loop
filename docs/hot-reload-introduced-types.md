@@ -126,7 +126,7 @@ recompiled rather than reused once that generation is gone.
 - Auto Refresh stays held while any introduced type is active, so returning focus to the Editor
   does not recompile. `--revert-all` releases the hold only when no introduced type remains;
   `uloop compile` always releases it.
-- When Domain Reload is enabled on Play entry (the default), entering Play Mode reloads the
+- When Domain Reload is enabled on Play entry (the default for projects created before Unity 6.6), entering Play Mode reloads the
   domain, which discards the introduced types along with the patches. They are counted in
   `DroppedByPlayModeEntryCount` on the next `--status`, and re-applying the same declaration
   clears that record. With Enter Play Mode Options set to disable Domain Reload, Play entry

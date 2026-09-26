@@ -19,12 +19,14 @@ With domain reload enabled on Play entry, hot reload keeps working but guarantee
 - Running `uloop hot-reload` again, or `uloop compile`, brings the changes back. Values wired
   into added fields are not brought back; the apply names the fields to wire again.
 
-The code behind these guarantees stays and is frozen: the Play-entry drop ledgers,
-`DroppedByPlayModeEntryCount`, re-selecting the owner files of discarded introduced types on a
-run without `--files`, the rewire warning, and the Play-start warning. On this path only
-defects that give a wrong result, or lose state without saying so, are fixed. Wording and
-guidance improvements specific to it are not taken, and usability rounds do not run with
-domain reload enabled.
+The code behind these guarantees stays. The parts only Play entry uses are frozen: recording
+what Play entry discards, the ledger behind `DroppedByPlayModeEntryCount`, and the Play-start
+warning. The owner-file ledger that lets a run without `--files` select discarded
+introduced-type files again, and the rewire ledger and its warning, also serve `--revert-all`
+in every configuration; they are maintained as part of that path, and only their Play-entry use
+is frozen. On the Play-entry path only defects that give a wrong result, or lose state without
+saying so, are fixed. Wording and guidance improvements specific to it are not taken, and
+usability rounds do not run with domain reload enabled.
 
 Hot reload does not refuse to run, and does not ask the user to change Enter Play Mode
 Settings, when domain reload is enabled.
@@ -37,10 +39,10 @@ removal of Mono and of the domain reload mechanism in future versions
 (<https://docs.unity.com/en-us/engine/6000.6/manual/whats-new/unity66>). Existing projects keep
 the setting they have.
 
-With domain reload enabled, each kind of change hot reload makes (patched methods, added
-members, introduced types, added-field values) needs its own bookkeeping: recorded at Play
-entry, recovered by a later apply, and counted in between. That bookkeeping is where the cases
-multiply. After the usability rounds had converged on the primary configuration, the first
+With domain reload enabled, Play entry has to record every kind of change hot reload makes so
+that a later apply can account for it: patched methods, added members, and introduced types
+stay counted until an apply brings them back, and added fields are remembered so the apply can
+name the ones to wire again. That bookkeeping is where the cases multiply. After the usability rounds had converged on the primary configuration, the first
 round run with domain reload enabled found that patches and added members inside a
 re-introduced type stayed counted as dropped. Keeping this path at the same polish as the
 primary one means running every round twice, for a configuration Unity is moving away from.
@@ -55,8 +57,9 @@ primary one means running every round twice, for a configuration Unity is moving
   hot reload applied after entering Play Mode is not affected by the reload at all. Refusing
   would block those projects for no gain.
 - **Remove the domain-reload bookkeeping now.** It works and is covered by tests. Removing it
-  would leave projects that still reload the domain without the count and without the
-  re-selection of discarded files, and the removal is a change set with its own risk.
+  would leave projects that still reload the domain without the count and without
+  re-selecting the files Play entry discarded, and the removal is a change set with its own
+  risk.
 
 ## Consequences
 
@@ -65,8 +68,9 @@ primary one means running every round twice, for a configuration Unity is moving
 - A finding from use with domain reload enabled is triaged by one question: does a result go
   wrong, or state get lost without notice? If so it is fixed; otherwise it is not taken.
 - Usability rounds run their tester projects with Reload Scene only.
-- When Unity removes domain reload from the Editor, the frozen code becomes unreachable and
-  can be deleted in one change.
+- When Unity removes domain reload from the Editor, the Play-entry recording, its count, and
+  the Play-start warning become unreachable and can be deleted in one change. The ledgers and
+  the re-selection shared with `--revert-all` stay.
 
 ## Reversal condition
 

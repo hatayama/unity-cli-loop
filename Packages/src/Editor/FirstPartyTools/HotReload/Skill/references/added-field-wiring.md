@@ -106,8 +106,8 @@ What play mode costs depends on the project's Enter Play Mode Options.
 
 | Setting | What survives | What to do |
 |---------|---------------|------------|
-| Domain reload on (Unity's default) | Nothing. `--status` reports `0 change(s) currently active` and says the changes were discarded when play mode was entered | Re-apply the hot reload, then re-run the wiring script — both work from inside play mode |
-| Domain reload disabled | The declarations, and the values written through `SetInstanceField` when the host is a scene object or an asset and the value is a plain value, a scene object, or an asset. `--status` still lists the `Active` and `AddedField` rows. Some values that could not be restored are named by `--status` and by the `Warnings` of the next apply; the rest are not named (see below) | Wire again every value named as not restored, and the one unnamed case below |
+| Domain reload on (the default for projects created before Unity 6.6) | Nothing. `--status` reports `0 change(s) currently active` and says the changes were discarded when play mode was entered | Re-apply the hot reload, then re-run the wiring script — both work from inside play mode |
+| Domain reload disabled (the default for new projects since Unity 6.6) | The declarations, and the values written through `SetInstanceField` when the host is a scene object or an asset and the value is a plain value, a scene object, or an asset. `--status` still lists the `Active` and `AddedField` rows. Some values that could not be restored are named by `--status` and by the `Warnings` of the next apply; the rest are not named (see below) | Wire again every value named as not restored, and the one unnamed case below |
 
 Play mode builds the scene's objects again either way, and an added field on a new instance starts
 at its initializer unless something gives the value back.
