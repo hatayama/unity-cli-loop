@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -14,10 +15,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class HotReloadPausePointPort : IHotReloadPausePointPort
     {
         private readonly HotReloadDomain _domain;
+        private readonly Func<string, string> _readSourceContentHashOrNull;
 
-        public HotReloadPausePointPort(HotReloadDomain domain)
+        // Why the hash reader is passed in: the hasher lives in the apply pipeline's assembly,
+        // which this one may not reference, and the check must hash the way the worker did.
+        public HotReloadPausePointPort(HotReloadDomain domain, Func<string, string> readSourceContentHashOrNull)
         {
             _domain = domain;
+            _readSourceContentHashOrNull = readSourceContentHashOrNull;
         }
 
         public MethodBase GetActiveShimForMethod(MethodBase method)
@@ -35,14 +40,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _domain.FindAddedMethodContainingLine(file, line);
         }
 
-        public bool HasActiveHotReloadChangesInFile(string file)
+        // Why the domain picks the path to read: it is the path the transform worker hashed, which
+        // differs from the argument when a reload was run from an edited copy.
+        public bool HasShimSourceChangedOnDisk(string file)
         {
-            return _domain.HasActiveHotReloadChangesInFile(file);
-        }
-
-        public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)
-        {
-            return _domain.LoadVerifiedSnapshotSourceForFile(projectRelativeFile);
+            return _domain.HasShimSourceChangedOnDisk(file, _readSourceContentHashOrNull);
         }
 
         public string GetVerifiedSnapshotSource(string projectRelativeFile, string dllPath)
@@ -96,6 +98,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        // Why the recorded path is hashed rather than the argument: it is the copy the transform
+        // worker read, which differs from the argument when a reload was run from an edited copy.
+        // Why an unreadable file counts as unchanged: the shim-source check treats it the same way,
+        // so the two answers never disagree about one file.
+        public HotReloadLatestFileReload GetLatestReloadOfFile(string file)
+        {
+            HotReloadAppliedSourceRecord record = _domain.AppliedSources.FindRecordForRequestedPath(file);
+            if (record == null)
+            {
+                return null;
+            }
+
+            string currentHash = _readSourceContentHashOrNull(record.SourcePath);
+            bool fileChangedSince = currentHash != null
+                && !string.Equals(currentHash, record.Hash, StringComparison.Ordinal);
+            return new HotReloadLatestFileReload(fileChangedSince, record.UnappliedRows);
+        }
+
+        // Why the label match is exact: a worker row spells a constructed generic parameter type
+        // the way Cecil does (List`1<System.Int32>) while a MethodBase spells it the way the CLR
+        // does (List`1[System.Int32]); such a method finds no row rather than a guessed one.
+        public HotReloadUnappliedRow FindUnappliedRowForMethod(string file, MethodBase method)
+        {
+            if (method == null || method.DeclaringType == null)
+            {
+                return null;
+            }
+
+            HotReloadLatestFileReload latest = GetLatestReloadOfFile(file);
+            if (latest == null || latest.FileChangedSince)
+            {
+                return null;
+            }
+
+            string label = HotReloadMethodKeys.FormatMethodLabel(method);
+            foreach (HotReloadUnappliedRow row in latest.UnappliedRows)
+            {
+                if (string.Equals(row.Label, label, StringComparison.Ordinal))
+                {
+                    return row;
+                }
+            }
+
+            return null;
         }
     }
 }

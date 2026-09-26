@@ -271,7 +271,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome hostSkip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, "Scaled");
             Assert.That(hostSkip.Reason, Is.EqualTo(HotReloadConstants.AtomicFileSkipReason));
             HotReloadMethodOutcome callerSkip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, "Call(");
-            Assert.That(callerSkip.Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+            Assert.That(
+                callerSkip.Reason,
+                Is.EqualTo(
+                    string.Format(
+                        HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat,
+                        typeof(HotReloadCrossFileAddedMemberHost).FullName + ".Added()")));
+            Assert.That(callerSkip.Reason, Does.Not.Contain("Failed row"));
             Assert.That(callerSkip.FilePath, Is.EqualTo(FixturePath(CallerFileName)));
             AssertNothingApplied(result);
         }
@@ -296,8 +302,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 callerSource);
 
             AssertOnlyFailureIsBrokenHostValue(result);
-            AssertIsolatedCallerSkip(result, "AddedRelay", FixturePath(CallerFileName));
-            AssertIsolatedCallerSkip(result, "Call(", FixturePath(CallerFileName));
+            AssertIsolatedCallerSkip(result, "AddedRelay", "Added", FixturePath(CallerFileName));
+            AssertIsolatedCallerSkip(result, "Call(", "AddedRelay", FixturePath(CallerFileName));
             AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Other");
             Assert.That(new HotReloadCrossFileAddedMemberCaller().Other(), Is.EqualTo(8));
         }
@@ -337,9 +343,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
 
             AssertOnlyFailureIsBrokenHostValue(result);
-            AssertIsolatedCallerSkip(result, "AddedMid", siblingPath);
-            AssertIsolatedCallerSkip(result, "AddedOuter", siblingPath);
-            AssertIsolatedCallerSkip(result, "ExistingCaller", siblingPath);
+            AssertIsolatedCallerSkip(result, "AddedMid", "Added", siblingPath);
+            AssertIsolatedCallerSkip(result, "AddedOuter", "AddedMid", siblingPath);
+            AssertIsolatedCallerSkip(result, "ExistingCaller", "AddedOuter", siblingPath);
             AssertNothingApplied(result);
         }
 
@@ -927,10 +933,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerProjectRelativePath(),
                 HotReloadMethodOutcomeKind.Skipped,
                 "Call");
-            Assert.That(
-                callerOutcome.Reason,
-                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason),
-                FormatOutcomes(second));
+            AssertNamesUnappliedCallee(callerOutcome.Reason, "Added", FormatOutcomes(second));
             Assert.That(
                 CountWarningsContaining(second, "re-applied"),
                 Is.EqualTo(0),
@@ -949,6 +952,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: an existing method of a file brought back to re-bind its active patches, whose
+        /// body subscribes to an event the host added, is Skipped rather than Failed once a later
+        /// reload no longer brings the host back, and its reason names the host file to pass.
+        /// </summary>
+        [Test]
+        public async Task Run_ReappliedSiblingBodyNoLongerBinds_IsSkippedAndNamesTheMissingFile()
+        {
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string otherPath = FixturePath(OtherSameAssemblyFileName);
+            string callerSource = ReplaceInSource(ReadFixture(CallerFileName), CallerOtherBodyAnchor, "return 8;");
+            callerSource = ReplaceInSource(callerSource, CallerCallBodyAnchor, "host.Hit += OnHit;\n            return host.Value();");
+            callerSource = ReplaceInSource(callerSource, CallerMemberAnchor, "        private void OnHit()\n        {\n        }\n\n" + CallerMemberAnchor);
+            Dictionary<string, string> overrides = new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "ReappliedUnboundHost.cs",
+                    InsertHostMember(
+                        "        public event System.Action Hit;\n\n        public void RaiseHit()\n        {\n            Hit?.Invoke();\n        }\n\n")),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource("ReappliedUnboundCaller.cs", callerSource)
+            };
+
+            HotReloadOrchestratorResult first = await RunWithOverridesAsync(new[] { hostPath, callerPath }, overrides);
+            Assert.That(
+                FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".Call(").WorkerReason?.Code,
+                Is.EqualTo(HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent),
+                FormatOutcomes(first));
+            FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".RaiseHit(");
+            FindOutcome(first, HotReloadMethodOutcomeKind.Patched, ".Other(");
+            Assert.That(CountOutcomesOfKindForFile(first, HostFileName, HotReloadMethodOutcomeKind.Patched, HotReloadMethodOutcomeKind.Added), Is.Zero, FormatOutcomes(first));
+
+            overrides[otherPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "ReappliedUnboundOther2.cs",
+                ReplaceInSource(ReadFixture(OtherSameAssemblyFileName), OtherExistingValueAnchor, OtherExistingValueEdited));
+            HotReloadOrchestratorResult second = await RunWithOverridesAsync(new[] { otherPath }, overrides);
+            Assert.That(second.ReappliedSiblingPaths, Does.Contain(HostProjectRelativePath()), FormatOutcomes(second));
+            FindOutcome(second, HotReloadMethodOutcomeKind.Skipped, ".Call(");
+
+            overrides[otherPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "ReappliedUnboundOther3.cs",
+                ReplaceInSource(
+                    ReadFixture(OtherSameAssemblyFileName),
+                    OtherExistingValueAnchor,
+                    OtherExistingValueEdited.Replace("return 2;", "return 3;")));
+            HotReloadOrchestratorResult third = await RunWithOverridesAsync(new[] { otherPath }, overrides);
+
+            Assert.That(third.ReappliedSiblingPaths, Does.Not.Contain(HostProjectRelativePath()), FormatOutcomes(third));
+            Assert.That(CountOutcomesOfKindForFile(third, null, HotReloadMethodOutcomeKind.Failed), Is.Zero, FormatOutcomes(third));
+            HotReloadMethodOutcome call = FindOutcome(third, HotReloadMethodOutcomeKind.Skipped, ".Call(");
+            Assert.That(call.Reason, Does.Contain(HostFileName).And.Contain("uloop compile"), FormatOutcomes(third));
+            FindOutcome(third, HotReloadMethodOutcomeKind.Added, ".OnHit(");
+            Assert.That(CountWarningsContaining(third, SiblingRebindFailedWarningNeedle), Is.Zero, string.Join("\n", third.Warnings));
         }
 
         /// <summary>
@@ -1153,6 +1211,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
         }
 
+        private static Task<HotReloadOrchestratorResult> RunWithOverridesAsync(
+            string[] files,
+            Dictionary<string, string> overrides)
+        {
+            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                files,
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>(overrides));
+        }
+
+        // Counts the outcomes of the given kinds, only those of the named file when one is given.
+        private static int CountOutcomesOfKindForFile(
+            HotReloadOrchestratorResult result,
+            string fileName,
+            params HotReloadMethodOutcomeKind[] kinds)
+        {
+            int count = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                bool fileMatches = fileName == null || (outcome.FilePath != null && outcome.FilePath.EndsWith(fileName, StringComparison.Ordinal));
+                if (fileMatches && Array.IndexOf(kinds, outcome.Kind) >= 0)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static string InsertHostMember(string memberText)
         {
             string source = ReadFixture(HostFileName);
@@ -1198,14 +1286,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static void AssertIsolatedCallerSkip(
             HotReloadOrchestratorResult result,
             string methodNamePart,
+            string calledMethodName,
             string expectedFilePath)
         {
             HotReloadMethodOutcome skip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, methodNamePart);
-            Assert.That(
-                skip.Reason,
-                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason),
-                FormatOutcomes(result));
+            AssertNamesUnappliedCallee(skip.Reason, calledMethodName, FormatOutcomes(result));
             Assert.That(skip.FilePath, Is.EqualTo(expectedFilePath));
+        }
+
+        // The worker names the callee in its source spelling, so the test checks the method name
+        // inside the quoted callee rather than spelling out every namespace and parameter type.
+        private static void AssertNamesUnappliedCallee(string reason, string calledMethodName, string context)
+        {
+            string[] parts = HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat.Split(new[] { "{0}" }, StringSplitOptions.None);
+            Assert.That(reason, Does.StartWith(parts[0]), context);
+            Assert.That(reason, Does.EndWith(parts[1]), context);
+            string callee = reason.Substring(parts[0].Length, reason.Length - parts[0].Length - parts[1].Length);
+            Assert.That(callee, Does.Contain("." + calledMethodName + "("), context);
         }
 
         private static string ReplaceHostBody(string bodyAnchor, string bodyText)

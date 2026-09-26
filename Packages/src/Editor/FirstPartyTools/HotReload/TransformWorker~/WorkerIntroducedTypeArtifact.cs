@@ -25,6 +25,8 @@ internal sealed class WorkerIntroducedTypeArtifact
     public string ReferencePath { get; set; }
 
     public WorkerIntroducedTypeArtifactType[] Types { get; set; }
+
+    public bool PreparedByThisRun { get; set; }
 }
 
 // One retained type inside an artifact assembly, with the original identity it normalizes back to.
@@ -39,4 +41,7 @@ internal sealed class WorkerIntroducedTypeArtifactType
     public string OwnerProjectRelativePath { get; set; }
 
     public string DeclarationFingerprint { get; set; }
+
+    // The owner file's hash as the last reload applied it in full, or null.
+    public string OwnerAppliedSourceHash { get; set; }
 }

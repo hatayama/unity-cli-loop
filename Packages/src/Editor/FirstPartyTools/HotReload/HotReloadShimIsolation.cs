@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFilePaths groupFilePaths,
             string correlationId,
             IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes,
+            HotReloadCompileFailureNoteSources noteSources,
             CancellationToken ct)
         {
             if (compileResult.Errors.Count == 0)
@@ -64,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
                 workerOutput.entries,
                 attribution,
-                workerOutput.skipped,
+                noteSources,
                 groupFilePaths,
                 groupPaths);
             List<HotReloadMethodOutcome> failedMethodOutcomes =
@@ -130,7 +131,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblySourcePaths = workerInput.assemblySourcePaths,
                 // Why copy: retry must still scan the same snapshot-mismatched siblings so
                 // siblingConstDriftWarnings stay populated on the retry worker output.
-                changedSiblingSourcePaths = workerInput.changedSiblingSourcePaths
+                changedSiblingSourcePaths = workerInput.changedSiblingSourcePaths,
+                // Why copy: the retry reports the skipped-writer warnings in place of the first run.
+                activeMethodLabels = workerInput.activeMethodLabels
             };
 
             TransformWorkerClientResult retryWorkerResult =

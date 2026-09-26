@@ -15,6 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _handler = handler;
         }
 
+        public HotReloadBindingSplitPayload this[int value] => new HotReloadBindingSplitPayload { Value = value };
+
         public void Raise(int value)
         {
             _handler?.Invoke(new HotReloadBindingSplitPayload { Value = value });

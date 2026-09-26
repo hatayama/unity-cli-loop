@@ -83,6 +83,60 @@ internal sealed class AddedFieldCatalog : AddedMemberCatalog<AddedFieldBinding>
         return initializers;
     }
 
+    /// <summary>
+    /// One declaration per entry <see cref="ListRewrittenAddedFieldDisplayNames"/> reports, in the
+    /// same order: the store key, the declaring type, the declared type, and staticness.
+    /// </summary>
+    /// <remarks>
+    /// Why the same rewritten set as the names: a field that no emitted body reads is not served
+    /// by the store, so describing it would offer the Editor a field nothing can read back.
+    /// </remarks>
+    public WorkerAddedFieldDeclaration[] ListRewrittenAddedFieldDeclarations(
+        string projectRelativePath,
+        AddedFieldDeclaredTypeNames declaredTypeNames)
+    {
+        List<AddedFieldBinding> bindings = ListSortedBindingsOfFile(_rewrittenAddedFieldKeys, projectRelativePath);
+        WorkerAddedFieldDeclaration[] declarations = new WorkerAddedFieldDeclaration[bindings.Count];
+        for (int index = 0; index < bindings.Count; index++)
+        {
+            declarations[index] = DescribeBinding(bindings[index], declaredTypeNames);
+        }
+
+        return declarations;
+    }
+
+    private static WorkerAddedFieldDeclaration DescribeBinding(
+        AddedFieldBinding binding,
+        AddedFieldDeclaredTypeNames declaredTypeNames)
+    {
+        return new WorkerAddedFieldDeclaration
+        {
+            FieldKey = binding.FieldKey,
+            DeclaringTypeMetadataName = ExtractTypeMetadataName(binding.FieldKey),
+            FieldName = binding.FieldName,
+            DeclaredTypeAssemblyQualifiedName =
+                declaredTypeNames.ToAssemblyQualifiedName(binding.FieldType),
+            IsStatic = binding.IsStatic,
+            HasSerializationAttribute = binding.HasSerializationAttribute
+        };
+    }
+
+    private static string ExtractTypeMetadataName(string fieldKey)
+    {
+        int separatorIndex = fieldKey.IndexOf(
+            TransformWorkerProgramMarker.AddedFieldKeySeparator,
+            StringComparison.Ordinal);
+        Debug.Assert(
+            separatorIndex >= 0,
+            "fieldKey is always built with AddedFieldClassifier.FormatAddedFieldStoreKey / WorkerSyntaxIndex.BuildSyntaxFieldKey.");
+        if (separatorIndex < 0)
+        {
+            return string.Empty;
+        }
+
+        return fieldKey.Substring(0, separatorIndex);
+    }
+
     private string[] ListDisplayNamesOfFile(HashSet<string> fieldKeys, string projectRelativePath)
     {
         List<AddedFieldBinding> bindings = ListSortedBindingsOfFile(fieldKeys, projectRelativePath);

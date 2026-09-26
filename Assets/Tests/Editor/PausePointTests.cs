@@ -2462,23 +2462,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task Enable_WhenLineHasNoSequencePoint_ReturnsResolverErrorAsValidationFailure()
+        public async Task Enable_WhenNoStatementFollowsTheLine_ReturnsResolverErrorAsValidationFailure()
         {
-            // Verifies a line with no sequence point on or after it (deliberately far past the
-            // fixture file's end) surfaces the Resolver's error message as a Success=false
-            // response instead of throwing.
+            // Verifies a line with no sequence point on or after it (the class's closing brace,
+            // followed only by the namespace's) surfaces the Resolver's error message as a
+            // Success=false response instead of throwing. Why not a line past the file's end: that
+            // line is refused before the Resolver runs, so it would not reach this error. Why only
+            // the line phrase: the sentence differs by whether the line was mapped through the
+            // last compiled source, which this test does not pin.
             EnablePausePointTool tool = new();
             JObject parameters = new()
             {
                 ["file"] = FixtureFilePath,
-                ["line"] = 9999,
+                ["line"] = 14,
                 ["timeoutSeconds"] = 30
             };
 
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("No sequence point found on or after line"));
+            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            Assert.That(response.Message, Does.Contain("on or after line 14"));
         }
 
         [Test]

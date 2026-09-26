@@ -24,14 +24,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string HostFileName = "HotReloadBindingSplitHost.cs";
         private const string PayloadFileName = "HotReloadBindingSplitPayload.cs";
+        private const string RegistryFileName = "HotReloadBindingSplitRegistry.cs";
         private const string HostTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadBindingSplitHost";
+        private const string RegistryTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadBindingSplitRegistry";
+        private const string PayloadTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadBindingSplitPayload";
+        private const string NestedRegistryFileName = "HotReloadBindingSplitNestedRegistry.cs";
+        // The metadata form, which is how the worker reports a nested type.
+        private const string NestedRegistryTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadBindingSplitNestedRegistry/Inner";
+        private const string ExtensionsFileName = "HotReloadBindingSplitPayloadExtensions.cs";
         private const string InsertionAnchor = "        public int Handled => _handled;";
         private const string WireMethod =
             "\n\n        public void Wire()\n        {\n            _registry.Register(p => Handle(p));\n        }";
         private const string WireMethodThatAlsoCounts =
             "\n\n        public void Wire()\n        {\n            _registry.Register(p =>\n            {\n"
             + "                _handled++;\n                Handle(p);\n            });\n        }";
+        private const string CallExtensionMethod =
+            "\n\n        public int Twice(HotReloadBindingSplitPayload payload)\n        {\n"
+            + "            return payload.Doubled();\n        }";
+        private const string PeekThroughIndexerMethod =
+            "\n\n        public int Peek()\n        {\n"
+            + "            HotReloadBindingSplitPayload payload = _registry[3];\n            return payload.Value;\n        }";
+        private const string WireWithNullAndTypoMethod =
+            "\n\n        public void Wire()\n        {\n            _registry.Register(null);\n"
+            + "            UndeclaredName();\n        }";
+        private const string WireThroughNestedRegistryMethod =
+            "\n\n        public void Wire()\n        {\n"
+            + "            new HotReloadBindingSplitNestedRegistry.Inner().Register(p => Handle(p));\n        }";
 
         /// <summary>
         /// What: with the host alone in the run, the lambda binds against the compiled payload and
@@ -68,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, "Wire"), Is.Null, "Wire must not be applied.");
             TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
             Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
-            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
         }
 
         /// <summary>
@@ -87,7 +109,173 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, "Wire"), Is.Null, "Wire must not be applied.");
             TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
             Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
-            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
+        }
+
+        /// <summary>
+        /// What: when the added method cannot bind because this run declares the payload from source
+        /// while a compiled API still takes the compiled payload, the skipped row names the compiled
+        /// type whose signature holds the old payload and the file that declares it, and leaves the
+        /// next step to the Editor, which knows whether that file is already in the run.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_NamesTheFileDeclaringTheCompiledSignature()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
+            string text = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(text, Does.Contain("'" + PayloadTypeMetadataName + "'"), text);
+            Assert.That(text, Does.Contain("'" + RegistryTypeMetadataName + "'"), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + RegistryFileName + "'"), text);
+            Assert.That(text, Does.EndWith("so it is skipped."), text);
+        }
+
+        /// <summary>
+        /// What: passing the file that declares the compiled API as well lets the added method bind
+        /// against the payload this run declares, so the method is applied, which is the recovery
+        /// the skipped row recommends.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadAndTheRegistryFiles_AddsTheMethod()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName, RegistryFileName },
+                new[]
+                {
+                    WithMethod(ReadOnDisk(HostFileName), WireMethod),
+                    ReadOnDisk(PayloadFileName),
+                    ReadOnDisk(RegistryFileName)
+                });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertNoSkippedMethodNamed(result, "Wire");
+            TransformWorkerEntryDto entry = FindEntry(result, "Wire");
+            Assert.That(entry, Is.Not.Null, "Missing entry for Wire.\n" + FormatSkipped(result));
+            Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+        }
+
+        /// <summary>
+        /// What: when the compiled API that still takes the compiled payload is a nested type, the
+        /// skipped row names it in its metadata form and still finds the file declaring it, because
+        /// the name the worker sends and the name the compiled assembly is read by must agree.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_NamesTheFileDeclaringANestedCompiledSignature()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireThroughNestedRegistryMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
+            string text = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(text, Does.Contain("'" + NestedRegistryTypeMetadataName + "'"), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + NestedRegistryFileName + "'"), text);
+        }
+
+        /// <summary>
+        /// What: when the compiled type is the receiver of a compiled extension method, which the
+        /// reduced call does not list among its parameters, the skipped row still names the file
+        /// declaring the extension, so a split through the receiver is not missed.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_NamesTheFileDeclaringACompiledExtensionOnThePayload()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), CallExtensionMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Twice");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Twice.\n" + FormatSkipped(result));
+            string text = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + ExtensionsFileName + "'"), text);
+        }
+
+        /// <summary>
+        /// What: a compiled indexer that returns the compiled payload is found as the signature
+        /// holding the split, so the skipped row names the registry and its file.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_NamesTheFileDeclaringACompiledIndexer()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), PeekThroughIndexerMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Peek");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Peek.\n" + FormatSkipped(result));
+            string text = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature), text);
+            Assert.That(text, Does.Contain("'" + RegistryTypeMetadataName + "'"), text);
+            Assert.That(text, Does.Contain("declared in 'Assets/Tests/Editor/HotReload/" + RegistryFileName + "'"), text);
+        }
+
+        /// <summary>
+        /// What: a body that fails only on a typo keeps the plain unbound reason even though it also
+        /// calls a compiled API naming the payload, because that call binds and passing its file
+        /// would not fix the typo.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_KeepsThePlainReasonWhenOnlyATypoFailsToBind()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireWithNullAndTypoMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyUnbound),
+                HotReloadWorkerReasonText.Render(skipped.reason));
+        }
+
+        /// <summary>
+        /// What: in a file the run pulled in as a sibling, an existing body that reaches a member
+        /// the run's own copy of the payload adds, through a compiled API that hands out the
+        /// compiled payload, gets the plain unbound reason rather than a reason telling the reader
+        /// to pass the payload file, which this run already holds.
+        /// </summary>
+        [Test]
+        public async Task Run_ReappliedSiblingReachingACompiledCopyOfARunType_DoesNotNameThatTypeToPass()
+        {
+            TransformWorkerInputDto input = BuildInput(
+                new[] { HostFileName, PayloadFileName },
+                new[]
+                {
+                    ReadOnDisk(HostFileName).Replace(
+                        "_handled += payload.Value;",
+                        "_handled += _registry[3].Tripled();",
+                        StringComparison.Ordinal),
+                    ReadOnDisk(PayloadFileName).Replace(
+                        "        public int Scaled()",
+                        "        public int Tripled()\n        {\n            return Value * 3;\n        }\n\n        public int Scaled()",
+                        StringComparison.Ordinal)
+                });
+            input.sources[0].reappliedSibling = true;
+
+            TransformWorkerClientResult result =
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Handle");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Handle.\n" + FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformSiblingBodyUnbound),
+                HotReloadWorkerReasonText.Render(skipped.reason));
         }
 
         private static string WithMethod(string hostSource, string method)
@@ -149,6 +337,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // project-relative path, with the source on disk as the snapshot the worker diffs against.
         private static async Task<TransformWorkerClientResult> RunAsync(string[] fileNames, string[] editedSources)
         {
+            TransformWorkerInputDto input = BuildInput(fileNames, editedSources);
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+        }
+
+        private static TransformWorkerInputDto BuildInput(string[] fileNames, string[] editedSources)
+        {
             Assert.That(editedSources.Length, Is.EqualTo(fileNames.Length), "One edited source per file.");
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(projectRoot, "Library", "ScriptAssemblies", TestAssemblyName + ".dll");
@@ -168,7 +362,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 };
             }
 
-            TransformWorkerInputDto input = new TransformWorkerInputDto
+            return new TransformWorkerInputDto
             {
                 sources = sources,
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
@@ -178,8 +372,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 excludedMethodKeys = Array.Empty<string>(),
                 excludedAddedMethodKeys = Array.Empty<string>()
             };
-
-            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         private static UnityEditor.Compilation.Assembly FindCompilationAssembly()

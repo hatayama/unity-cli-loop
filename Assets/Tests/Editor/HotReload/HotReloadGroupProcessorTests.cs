@@ -28,6 +28,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string BrokenSourcePath = "Assets/Tests/Editor/HotReload/BrokenNoticeSource.cs";
         private const string HealthySourcePath = "Assets/Tests/Editor/HotReload/HealthyNoticeSource.cs";
         private const string CoverageCallerPath = "Assets/CoverageCaller.cs";
+        private const string CoverageCallerWorkerSourcePath = "/worker-copy/CoverageCaller.cs";
+        private const string CoverageSiblingPath = "Assets/CoverageSibling.cs";
+        private const string CoverageSiblingWorkerSourcePath = "/worker-copy/CoverageSibling.cs";
+        private const string SkippedMethodLabel = "Coverage.Host.Skippable()";
+        private const string FailedMethodLabel = "Coverage.Host.Unpatchable()";
+        private const string FileLevelRowLabel = "(file)";
         private const string ParseErrorText =
             "BrokenNoticeSource.cs(3,1): error CS1022: Type or namespace definition, or end-of-file expected";
 
@@ -459,7 +465,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
                 new[] { CreateAtomicEntry(BrokenSourcePath), brokenEntry },
                 CreateAtomicAttribution(brokenEntry),
-                Array.Empty<TransformWorkerSkippedDto>(),
+                new HotReloadCompileFailureNoteSources(Array.Empty<TransformWorkerSkippedDto>(), Array.Empty<HotReloadRefusedIntroducedType>()),
                 CreateAtomicGroupFilePaths(BrokenSourcePath, HealthySourcePath),
                 new[] { BrokenSourcePath, HealthySourcePath });
 
@@ -484,17 +490,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadGroupFile file = CreateFile(BrokenSourcePath, projectRoot, compilationAssembly);
             file.AddedFieldNames = new[] { "Sample.Host.firstPassField" };
             file.AddedConstNames = new[] { "Sample.Host.FirstPassConst" };
+            file.AddedFieldDeclarations = new[]
+            {
+                CreateDeclarationDto("Sample.Host", "firstPassField", typeof(int), isStatic: false)
+            };
             TransformWorkerFileOutputDto retryFile = new TransformWorkerFileOutputDto
             {
                 projectRelativePath = BrokenSourcePath,
                 addedFieldNames = new[] { "Sample.Host.retryField" },
-                addedConstNames = new[] { "Sample.Host.RetryConst" }
+                addedConstNames = new[] { "Sample.Host.RetryConst" },
+                addedFieldDeclarations = new[]
+                {
+                    CreateDeclarationDto("Sample.Host", "retryField", typeof(string), isStatic: true)
+                }
             };
 
             HotReloadShimFirstCompile.AdoptRetryAddedMemberNames(new[] { file }, new[] { retryFile });
 
             Assert.That(file.AddedFieldNames, Is.EqualTo(new[] { "Sample.Host.retryField" }));
             Assert.That(file.AddedConstNames, Is.EqualTo(new[] { "Sample.Host.RetryConst" }));
+            Assert.That(file.AddedFieldDeclarations.Length, Is.EqualTo(1));
+            Assert.That(file.AddedFieldDeclarations[0].fieldName, Is.EqualTo("retryField"));
+            Assert.That(file.AddedFieldDeclarations[0].isStatic, Is.True);
         }
 
         /// <summary>
@@ -541,6 +558,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
             Assert.That(file.ClearedAddedFieldNames, Is.EqualTo(new[] { "Sample.Host.retryField" }));
+        }
+
+        /// <summary>
+        /// What: the declarations a retry re-classified reach the ledger through the apply, with
+        /// the store key the worker formed, and a nested declaring type is found by the reflection
+        /// spelling the Editor looks it up with.
+        /// </summary>
+        [Test]
+        public async Task ResolveEntriesToPatchAsync_WhenARetryReplacedTheNames_CommitsTheRetryDeclarations()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
+            HotReloadApplyContext context = CreateEmptyEntriesContext(evidence);
+            HotReloadGroupFile file = context.Files[0];
+            file.FileOutput.addedFieldNames = new[] { "Sample.Outer+Inner.workerField" };
+            file.FileOutput.addedFieldDeclarations = new[]
+            {
+                CreateDeclarationDto("Sample.Outer/Inner", "workerField", typeof(int), isStatic: false)
+            };
+            file.AddedFieldNames = new[] { "Sample.Outer+Inner.retryField" };
+            file.AddedFieldDeclarations = new[]
+            {
+                CreateDeclarationDto("Sample.Outer/Inner", "retryField", typeof(string), isStatic: true)
+            };
+
+            HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                HotReloadCompositionRoot.Services.GroupStageCollaborators,
+                context,
+                CreateEmptyGateResult(),
+                CancellationToken.None);
+
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetAddedFieldDeclaration(
+                    "Sample.Outer+Inner",
+                    "retryField",
+                    out HotReloadAddedFieldDeclaration committed),
+                Is.True,
+                "The apply must commit the retry's declarations.");
+            Assert.That(committed.StoreFieldKey, Is.EqualTo("Sample.Outer/Inner::retryField"));
+            Assert.That(
+                committed.DeclaredTypeAssemblyQualifiedName,
+                Is.EqualTo(typeof(string).AssemblyQualifiedName));
+            Assert.That(committed.IsStatic, Is.True);
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetAddedFieldDeclaration(
+                    "Sample.Outer+Inner",
+                    "workerField",
+                    out HotReloadAddedFieldDeclaration _),
+                Is.False,
+                "A first-pass declaration the retry replaced must not survive.");
         }
 
         /// <summary>
@@ -1064,7 +1131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             run.RecordAppliedSourceHashes();
 
             Assert.That(
-                HotReloadCompositionRoot.Services.Domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
                 Is.SameAs(evidence));
         }
 
@@ -1094,8 +1161,351 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             second.RecordAppliedSourceHashes();
 
             Assert.That(
-                HotReloadCompositionRoot.Services.Domain.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(CoverageCallerPath),
                 Is.SameAs(evidence));
+        }
+
+        /// <summary>
+        /// What: a result that ended without a worker hash, such as a worker that produced no file
+        /// output, leaves the file's earlier applied-source record in place, because the run
+        /// touched none of the file's patches.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_FailedResultWithoutWorkerHash_KeepsTheEarlierRecord()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            domain.AppliedSources.RecordAppliedSource(CoverageCallerPath, "earlier-hash", false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+
+            run.Add(
+                CoverageCallerPath,
+                new HotReloadFileProcessResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Failed("(file)", "worker produced no output", CoverageCallerPath)
+                    },
+                    new List<string>(),
+                    patchedCount: 0,
+                    sourceContentSha256: null));
+            run.RecordAppliedSourceHashes();
+
+            Assert.That(domain.AppliedSources.TryGetAppliedSource(CoverageCallerPath), Is.EqualTo(("earlier-hash", false)));
+        }
+
+        /// <summary>
+        /// What: a result the run decides to forget clears the file's applied-source record and
+        /// the membership evidence recorded with it, so no earlier run's record outlives it.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_ResultWithNoRowsOrAddedFields_ClearsTheRecordAndEvidence()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator first = new HotReloadRunAccumulator(
+                domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+            first.Add(CoverageCallerPath, CreateAppliedResult(CreateChangedMembershipEvidence()));
+            first.RecordAppliedSourceHashes();
+            Assert.That(domain.AppliedSources.TryGetAppliedSource(CoverageCallerPath), Is.Not.Null, "Precondition: the first run must record the file.");
+
+            HotReloadRunAccumulator second = new HotReloadRunAccumulator(
+                domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+            second.Add(
+                CoverageCallerPath,
+                new HotReloadFileProcessResult(
+                    new List<HotReloadMethodOutcome>(),
+                    new List<string>(),
+                    patchedCount: 0,
+                    sourceContentSha256: "later-hash"));
+            second.RecordAppliedSourceHashes();
+
+            Assert.That(domain.AppliedSources.TryGetAppliedSource(CoverageCallerPath), Is.Null);
+            Assert.That(domain.AppliedSources.TryGetNewSourceMembershipEvidence(CoverageCallerPath), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a file whose result has Skipped and Failed rows is recorded with those rows, in the
+        /// order the result reports them, and with the path the worker read the file from.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_PartiallyAppliedFile_RecordsItsSkippedAndFailedRows()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator run = CreateRunAccumulator(domain);
+
+            run.Add(
+                CoverageCallerPath,
+                CreateHashedResult(
+                    "partial-hash",
+                    CoverageCallerWorkerSourcePath,
+                    HotReloadMethodOutcome.Skipped(SkippedMethodLabel, "needs a compile", CoverageCallerPath),
+                    HotReloadMethodOutcome.Patched(CallerKey, CoverageCallerPath),
+                    HotReloadMethodOutcome.Failed(FailedMethodLabel, "could not patch", CoverageCallerPath)));
+            run.RecordAppliedSourceHashes();
+
+            HotReloadAppliedSourceRecord record = domain.AppliedSources.FindRecordForRequestedPath(CoverageCallerPath);
+            Assert.That(record, Is.Not.Null);
+            Assert.That(record.Hash, Is.EqualTo("partial-hash"));
+            Assert.That(record.IsFullyApplied, Is.False);
+            Assert.That(record.SourcePath, Is.EqualTo(CoverageCallerWorkerSourcePath));
+            Assert.That(
+                DescribeRows(record.UnappliedRows),
+                Is.EqualTo(new[] { "Skipped " + SkippedMethodLabel, "Failed " + FailedMethodLabel }));
+        }
+
+        /// <summary>
+        /// What: a fully applied file is recorded with no unapplied rows and with the path the
+        /// worker read it from.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_FullyAppliedFile_RecordsNoUnappliedRows()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator run = CreateRunAccumulator(domain);
+
+            run.Add(CoverageCallerPath, CreateAppliedResult(null));
+            run.RecordAppliedSourceHashes();
+
+            HotReloadAppliedSourceRecord record = domain.AppliedSources.FindRecordForRequestedPath(CoverageCallerPath);
+            Assert.That(record, Is.Not.Null);
+            Assert.That(record.IsFullyApplied, Is.True);
+            Assert.That(record.SourcePath, Is.EqualTo(CoverageCallerWorkerSourcePath));
+            Assert.That(record.UnappliedRows, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a later result without a worker hash leaves the earlier record's rows in place with
+        /// its hash, because that run touched none of the file's patches.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_KeptFile_LeavesTheEarlierUnappliedRows()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator first = CreateRunAccumulator(domain);
+            first.Add(
+                CoverageCallerPath,
+                CreateHashedResult(
+                    "partial-hash",
+                    CoverageCallerWorkerSourcePath,
+                    HotReloadMethodOutcome.Skipped(SkippedMethodLabel, "needs a compile", CoverageCallerPath)));
+            first.RecordAppliedSourceHashes();
+
+            HotReloadRunAccumulator second = CreateRunAccumulator(domain);
+            second.Add(
+                CoverageCallerPath,
+                new HotReloadFileProcessResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Failed(FileLevelRowLabel, "worker produced no output", CoverageCallerPath)
+                    },
+                    new List<string>(),
+                    patchedCount: 0,
+                    sourceContentSha256: null));
+            second.RecordAppliedSourceHashes();
+
+            HotReloadAppliedSourceRecord record = domain.AppliedSources.FindRecordForRequestedPath(CoverageCallerPath);
+            Assert.That(record, Is.Not.Null);
+            Assert.That(record.Hash, Is.EqualTo("partial-hash"));
+            Assert.That(DescribeRows(record.UnappliedRows), Is.EqualTo(new[] { "Skipped " + SkippedMethodLabel }));
+        }
+
+        /// <summary>
+        /// What: a later result the run forgets drops the record together with its rows.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_ForgottenFile_DropsTheRecordWithItsRows()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator first = CreateRunAccumulator(domain);
+            first.Add(
+                CoverageCallerPath,
+                CreateHashedResult(
+                    "partial-hash",
+                    CoverageCallerWorkerSourcePath,
+                    HotReloadMethodOutcome.Skipped(SkippedMethodLabel, "needs a compile", CoverageCallerPath)));
+            first.RecordAppliedSourceHashes();
+            Assert.That(
+                domain.AppliedSources.FindRecordForRequestedPath(CoverageCallerPath),
+                Is.Not.Null,
+                "Precondition: the first run must record the file.");
+
+            HotReloadRunAccumulator second = CreateRunAccumulator(domain);
+            second.Add(CoverageCallerPath, CreateHashedResult("later-hash", CoverageCallerWorkerSourcePath));
+            second.RecordAppliedSourceHashes();
+
+            Assert.That(domain.AppliedSources.FindRecordForRequestedPath(CoverageCallerPath), Is.Null);
+        }
+
+        /// <summary>
+        /// What: two files in one run are each recorded with only their own rows and path.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_TwoFiles_KeepsEachFilesOwnRows()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator run = CreateRunAccumulator(domain);
+
+            run.Add(
+                CoverageCallerPath,
+                CreateHashedResult(
+                    "caller-hash",
+                    CoverageCallerWorkerSourcePath,
+                    HotReloadMethodOutcome.Skipped(SkippedMethodLabel, "needs a compile", CoverageCallerPath)));
+            run.Add(
+                CoverageSiblingPath,
+                CreateHashedResult(
+                    "sibling-hash",
+                    CoverageSiblingWorkerSourcePath,
+                    HotReloadMethodOutcome.Failed(FailedMethodLabel, "could not patch", CoverageSiblingPath)));
+            run.RecordAppliedSourceHashes();
+
+            HotReloadAppliedSourceRecord caller = domain.AppliedSources.FindRecordForRequestedPath(CoverageCallerPath);
+            HotReloadAppliedSourceRecord sibling = domain.AppliedSources.FindRecordForRequestedPath(CoverageSiblingPath);
+            Assert.That(caller, Is.Not.Null);
+            Assert.That(sibling, Is.Not.Null);
+            Assert.That(DescribeRows(caller.UnappliedRows), Is.EqualTo(new[] { "Skipped " + SkippedMethodLabel }));
+            Assert.That(caller.SourcePath, Is.EqualTo(CoverageCallerWorkerSourcePath));
+            Assert.That(DescribeRows(sibling.UnappliedRows), Is.EqualTo(new[] { "Failed " + FailedMethodLabel }));
+            Assert.That(sibling.SourcePath, Is.EqualTo(CoverageSiblingWorkerSourcePath));
+        }
+
+        /// <summary>
+        /// What: a hashed result whose only row is the file-level "(file)" failure a group failure
+        /// leaves is recorded with that row as its label reads.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_GroupFailureWithAHash_RecordsTheFileRow()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator run = CreateRunAccumulator(domain);
+
+            run.Add(
+                CoverageCallerPath,
+                CreateHashedResult(
+                    "group-failure-hash",
+                    CoverageCallerWorkerSourcePath,
+                    HotReloadMethodOutcome.Failed(FileLevelRowLabel, "the worker stopped", CoverageCallerPath)));
+            run.RecordAppliedSourceHashes();
+
+            HotReloadAppliedSourceRecord record = domain.AppliedSources.FindRecordForRequestedPath(CoverageCallerPath);
+            Assert.That(record, Is.Not.Null);
+            Assert.That(record.IsFullyApplied, Is.False);
+            Assert.That(DescribeRows(record.UnappliedRows), Is.EqualTo(new[] { "Failed " + FileLevelRowLabel }));
+        }
+
+        /// <summary>
+        /// What: a sibling brought back to retry after a skip that again applies nothing drops the
+        /// file's record together with its rows.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSourceHashes_RetriedSiblingThatAppliedNothing_DropsTheRecordWithItsRows()
+        {
+            HotReloadDomain domain = HotReloadCompositionRoot.Services.Domain;
+            HotReloadRunAccumulator first = CreateRunAccumulator(domain);
+            first.Add(
+                CoverageSiblingPath,
+                CreateHashedResult(
+                    "partial-hash",
+                    CoverageSiblingWorkerSourcePath,
+                    HotReloadMethodOutcome.Skipped(SkippedMethodLabel, "needs a compile", CoverageSiblingPath)));
+            first.RecordAppliedSourceHashes();
+            Assert.That(
+                domain.AppliedSources.FindRecordForRequestedPath(CoverageSiblingPath),
+                Is.Not.Null,
+                "Precondition: the first run must record the file.");
+
+            HotReloadRunAccumulator retry = CreateRunAccumulator(domain);
+            retry.NoteSiblingInclusion(CoverageSiblingPath, HotReloadSiblingInclusionReason.RetryAfterSkip);
+            retry.AddReappliedSibling(
+                CoverageSiblingPath,
+                CreateHashedResult(
+                    "partial-hash",
+                    CoverageSiblingWorkerSourcePath,
+                    HotReloadMethodOutcome.Skipped(SkippedMethodLabel, "needs a compile", CoverageSiblingPath)));
+            retry.RecordAppliedSourceHashes();
+
+            Assert.That(domain.AppliedSources.FindRecordForRequestedPath(CoverageSiblingPath), Is.Null);
+        }
+
+        /// <summary>
+        /// What: the result names as active-patch siblings only the siblings that came back for
+        /// their active changes, while every re-applied sibling stays in ReappliedSiblingPaths.
+        /// </summary>
+        [Test]
+        public void BuildResult_ActivePatchSiblingPaths_ContainsOnlySiblingsIncludedForActiveChanges()
+        {
+            const string activeChangesPath = "Assets/ActiveChangesSibling.cs";
+            const string retryAfterSkipPath = "Assets/RetryAfterSkipSibling.cs";
+            const string companionPath = "Assets/CompanionSibling.cs";
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+            run.NoteSiblingInclusion(activeChangesPath, HotReloadSiblingInclusionReason.ActiveChanges);
+            run.NoteSiblingInclusion(retryAfterSkipPath, HotReloadSiblingInclusionReason.RetryAfterSkip);
+            run.NoteSiblingInclusion(companionPath, HotReloadSiblingInclusionReason.Companion);
+
+            run.AddReappliedSibling(activeChangesPath, CreateEmptyResult());
+            run.AddReappliedSibling(retryAfterSkipPath, CreateEmptyResult());
+            run.AddReappliedSibling(companionPath, CreateEmptyResult());
+            HotReloadOrchestratorResult result = run.BuildResult("correlation-active-patch-siblings");
+
+            Assert.That(
+                result.ReappliedSiblingPaths,
+                Is.EquivalentTo(new[] { activeChangesPath, retryAfterSkipPath, companionPath }));
+            Assert.That(result.ActivePatchSiblingPaths, Is.EquivalentTo(new[] { activeChangesPath }));
+        }
+
+        private static HotReloadRunAccumulator CreateRunAccumulator(HotReloadDomain domain)
+        {
+            return new HotReloadRunAccumulator(
+                domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                autoRefreshHeldAtStart: false);
+        }
+
+        // A result the worker hashed, with the given rows: the shape FinishFileResult builds.
+        private static HotReloadFileProcessResult CreateHashedResult(
+            string sourceContentSha256,
+            string workerSourcePath,
+            params HotReloadMethodOutcome[] outcomes)
+        {
+            return new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome>(outcomes),
+                new List<string>(),
+                patchedCount: 0,
+                sourceContentSha256: sourceContentSha256,
+                workerSourcePath: workerSourcePath);
+        }
+
+        private static string[] DescribeRows(IReadOnlyList<HotReloadUnappliedRow> rows)
+        {
+            string[] described = new string[rows.Count];
+            for (int index = 0; index < rows.Count; index++)
+            {
+                described[index] = rows[index].Kind + " " + rows[index].Label;
+            }
+
+            return described;
+        }
+
+        private static HotReloadFileProcessResult CreateEmptyResult()
+        {
+            return new HotReloadFileProcessResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedCount: 0,
+                sourceContentSha256: null);
         }
 
         // A fully applied single-method result for the caller path: the shape the run stages an
@@ -1108,7 +1518,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<string>(),
                 patchedCount: 1,
                 sourceContentSha256: "applied-source-hash",
-                newSourceMembershipEvidence: newSourceMembershipEvidence);
+                newSourceMembershipEvidence: newSourceMembershipEvidence,
+                workerSourcePath: CoverageCallerWorkerSourcePath);
         }
 
         private static HotReloadGroupCompileResult CreateCompile(params TransformWorkerEntryDto[] entries)
@@ -1154,7 +1565,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 workerOutput,
                 new[] { callerFile, targetFile },
-                null);
+                null,
+                new HotReloadCompileFailureNoteSources(workerOutput.skipped, Array.Empty<HotReloadRefusedIntroducedType>()));
         }
 
         private static HotReloadApplyContext CreateEmptyEntriesContext(
@@ -1180,7 +1592,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 context.WorkerInput,
                 emptyWorkerOutput,
                 context.Files,
-                null);
+                null,
+                new HotReloadCompileFailureNoteSources(emptyWorkerOutput.skipped, Array.Empty<HotReloadRefusedIntroducedType>()));
         }
 
         private static Assembly FindCompilationAssembly()
@@ -1195,6 +1608,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("Compilation assembly was not found.");
             return null;
+        }
+
+        // The worker spells the declaring type of a row the metadata way, so the fixture takes
+        // that spelling and builds the store key from it exactly as the worker does.
+        private static TransformWorkerAddedFieldDeclarationDto CreateDeclarationDto(
+            string declaringTypeMetadataName,
+            string fieldName,
+            Type declaredType,
+            bool isStatic)
+        {
+            return new TransformWorkerAddedFieldDeclarationDto
+            {
+                fieldKey = declaringTypeMetadataName + "::" + fieldName,
+                declaringTypeMetadataName = declaringTypeMetadataName,
+                fieldName = fieldName,
+                declaredTypeAssemblyQualifiedName = declaredType.AssemblyQualifiedName,
+                isStatic = isStatic
+            };
         }
 
         private static HotReloadGroupFile CreateFile(

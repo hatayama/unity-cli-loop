@@ -133,6 +133,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadUnityMessageProxyAttacher(
                         playMode,
                         new HotReloadUnityMessageProxyTypeBuilder()));
+            // Built here rather than in Install: a replacement scope installs the same services
+            // again, and a new ledger each time would forget every value already wired.
+            HotReloadUnityWiredValueResolver wiredValueResolver =
+                new HotReloadUnityWiredValueResolver(new HotReloadSceneObjectIdentityBuilder());
+            HotReloadWiredValuePersistence wiredValuePersistence =
+                new HotReloadWiredValuePersistence(wiredValueResolver);
+            // Its own field port rather than the one Install hands to the store: the port only
+            // wraps the domain, and reading the installed one here would bind a replacement's
+            // refresh to the domain that happened to be installed.
+            HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh =
+                new HotReloadWiredValueRestoreRefresh(
+                    wiredValuePersistence,
+                    wiredValueResolver,
+                    new HotReloadAddedFieldSlotReader(
+                        new HotReloadAddedFieldPort(domain),
+                        domain.AddedFieldValues));
             return new HotReloadServices(
                 domain,
                 harmony,
@@ -155,11 +171,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadSiblingRebindReporter(domain),
                     packageRootCapture,
                     unityMessageForwarding),
-                new HotReloadStatusExecutor(domain, patcher, unityMessageForwarding),
+                new HotReloadStatusExecutor(
+                    domain,
+                    patcher,
+                    unityMessageForwarding,
+                    wiredValuePersistence,
+                    wiredValueRestoreRefresh),
                 packageRootCapture,
                 editorStateSnapshotCapture,
                 new HotReloadChangeDetector(),
-                unityMessageForwarding);
+                unityMessageForwarding,
+                wiredValuePersistence,
+                wiredValueRestoreRefresh);
         }
 
         /// <summary>
@@ -196,6 +219,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadDomain domain = services.Domain;
             HotReloadAddedFieldStore.Current = domain.AddedFieldValues;
+            HotReloadAddedFieldCoordination.ActiveFields = new HotReloadAddedFieldPort(domain);
+            domain.AddedFieldValues.Restorer = services.WiredValuePersistence;
+            HotReloadAddedFieldCoordination.WiredValues = services.WiredValuePersistence;
             HotReloadInvocationRegistry.Current = domain.Invocations;
             HotReloadTranspilerDomainGateway.Current = domain;
             HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames =
@@ -204,7 +230,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => DescribeActiveArtifactReferencePaths(domain);
             HotReloadAddedMemberCoordination.DescribeActiveAddedMemberNames =
                 () => DescribeActiveAddedMemberNames(domain);
-            HotReloadPausePointCoordination.HotReloadSide = new HotReloadPausePointPort(domain);
+            HotReloadPausePointCoordination.HotReloadSide =
+                new HotReloadPausePointPort(
+                    domain,
+                    path => new HotReloadSourceContentHasher().TryComputeContentHashOfFileOrNull(path));
             // Attaching last keeps the invariant across the gap: the resolver only starts
             // answering binds once every gateway already points at the domain behind it.
             domain.IntroducedTypeResolver.Resume();
@@ -216,6 +245,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void ClearWiring()
         {
             HotReloadAddedFieldStore.Current = null;
+            HotReloadAddedFieldCoordination.ActiveFields = null;
+            HotReloadAddedFieldCoordination.WiredValues = null;
             HotReloadInvocationRegistry.Current = null;
             HotReloadTranspilerDomainGateway.Current = null;
             // The sibling tools are told "no domain installed" here too: leaving the port behind

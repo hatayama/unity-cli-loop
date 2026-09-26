@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Reflection;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -18,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         // Any non-empty byte array satisfies a shim generation that no test loads bytes from.
         private static readonly byte[] PlaceholderAssemblyBytes = { 0x4D, 0x5A };
+
+        // Any non-empty hash satisfies a generation whose source no test reads back.
+        private const string PlaceholderSourceContentSha256 = "placeholder-sha256";
 
         internal HotReloadDomain Domain => HotReloadCompositionRoot.Services.Domain;
 
@@ -51,11 +55,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 return generation;
             }
 
+            return BeginShimGenerationFromSource(
+                projectRelativePath,
+                System.IO.Path.GetFullPath(projectRelativePath),
+                PlaceholderSourceContentSha256);
+        }
+
+        /// <summary>
+        /// Starts a shim generation that remembers the given source path and content hash, as an
+        /// apply does with the path the transform worker read.
+        /// </summary>
+        internal HotReloadFileGeneration BeginShimGenerationFromSource(
+            string projectRelativePath,
+            string shimSourcePath,
+            string shimSourceContentSha256)
+        {
             return Domain.BeginGeneration(
                 projectRelativePath,
                 PlaceholderAssemblyBytes,
                 pdbBytes: null,
-                loadedAssembly: typeof(HotReloadDomainTestAccess).Assembly);
+                loadedAssembly: typeof(HotReloadDomainTestAccess).Assembly,
+                shimSourcePath: shimSourcePath,
+                shimSourceContentSha256: shimSourceContentSha256);
         }
 
         internal HotReloadFileGeneration GetOrBeginAddedMemberGeneration(string projectRelativePath)
@@ -79,13 +100,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .RegisterAddedMethod(methodKey, shimMethod, filePath, "Added", "Fixture");
         }
 
-        internal void ReplaceAddedFields(string projectRelativePath, IReadOnlyList<string> addedFieldFullNames)
+        internal void ReplaceAddedFields(
+            string projectRelativePath,
+            IReadOnlyList<string> addedFieldFullNames,
+            IReadOnlyList<HotReloadAddedFieldDeclaration> addedFieldDeclarations = null)
         {
             // Null initializers: these tests pin which fields a type holds, not what a previous
-            // reload initialized them with.
+            // reload initialized them with. Declarations default to none for the same reason: a
+            // test that needs them passes its own rows. No field is marked serialized: the
+            // warning that reads that mark is covered end to end instead.
             GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(
                 addedFieldFullNames,
+                null,
+                addedFieldDeclarations,
                 null);
+        }
+
+        /// <summary>
+        /// Replaces the added fields of one file with serialized ones, as a run whose worker
+        /// marked every declaration with a serialization attribute would.
+        /// </summary>
+        internal void ReplaceSerializedAddedFields(
+            string projectRelativePath,
+            IReadOnlyList<HotReloadSerializedAddedField> serializedFields)
+        {
+            List<string> fullNames = new List<string>();
+            foreach (HotReloadSerializedAddedField field in serializedFields)
+            {
+                fullNames.Add(field.DeclaringTypeName.ToReflectionName().Value + "." + field.FieldName);
+            }
+
+            GetOrBeginAddedMemberGeneration(projectRelativePath).ReplaceAddedFields(
+                fullNames,
+                null,
+                null,
+                serializedFields);
         }
 
         internal void RecordSupersededSignature(

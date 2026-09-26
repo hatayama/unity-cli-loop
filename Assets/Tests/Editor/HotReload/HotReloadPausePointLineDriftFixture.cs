@@ -3,9 +3,9 @@ using System.Runtime.CompilerServices;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Compiled host for the FB9 line-drift repro: three consecutive methods so inserting
-    /// three lines at the file top maps the unpatched method's edited line onto AfterTarget
-    /// in the compiled line map.
+    /// Compiled host for the FB9 line-drift repro: three consecutive methods so that, after inserting
+    /// three lines at the file top, reading the unpatched method's edited line as a compiled
+    /// line number would land on AfterTarget.
     /// </summary>
     public class HotReloadPausePointLineDriftFixture
     {

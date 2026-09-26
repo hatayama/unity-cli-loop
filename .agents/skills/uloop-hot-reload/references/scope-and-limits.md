@@ -78,11 +78,17 @@ writer. An added auto-property without an initializer gets the same check, with 
 that starts `Added auto-property`. Added `const` values are folded into edited bodies as literals,
 like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
-resolved type has any — their values live in the hot-reload shim and are not visible
-to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
-names fail with CS1061). Read them from a patched method body instead. When such a
+resolved type has any — their values live in the hot-reload shim, and a
+`uloop execute-dynamic-code` snippet cannot name them as members (it compiles against
+the compiled assembly, so that fails with CS1061). Read one there with
+`HotReloadAddedFieldWiring.TryReadInstanceField` (`TryReadStaticField` for a static
+field) instead. When such a
 failure quotes the name of an active added member, the diagnostic's `Hint` says so
-rather than leaving the error reading as a typo.
+rather than leaving the error reading as a typo. Naming the field is what fails, not
+reaching it: an `execute-dynamic-code` snippet can still read and write an added field
+by name through the wiring entry point, which is how a value or scene reference gets
+into an added `[SerializeField]` without a compile — see
+[added-field-wiring.md](added-field-wiring.md).
 
 A type introduced in the same reload cannot use added members of a compiled type: its
 artifact is compiled against the compiled assemblies, so such a reference fails with
@@ -103,6 +109,18 @@ add or remove appears as a `Skipped` row. A newly added explicit event, or
 an edit before the first compile snapshot, still reports both accessors.
 Adding a type
 (`class`, `struct`, `enum`, `record`), an event, or an indexer is still out of scope.
+A member added to a compiled enum is out of scope too: it is not folded like an added
+`const`, so every body that names it fails with CS0117, including bodies in the same
+reload. Write the underlying value as a cast (`(MyEnum)3`) or run `uloop compile`.
+While the enum's file is in the reload, an added member that passes the enum to or takes
+it from compiled code or an introduced type is skipped. The `Skipped` row names the step
+for that run (pass a file, leave the enum file out, undo the edit and leave it out, or
+compile), chosen from whether the file was passed, carried in, or already holds patches.
+This holds for a type the reload introduces as well: its compile fails, the failure
+reason says the name is an enum member this reload adds, and the enum-member and
+changed-`const` warnings of the files passed to that reload stay in `Warnings` even though
+that failure stops the file. The drift of a changed sibling file that was not passed is not
+reported on this failure path.
 
 An added property applies unless its shape is listed below. A bodied getter or setter is
 emitted like an added method;
@@ -210,6 +228,9 @@ method's row says which answer it got in `LifecycleNote` (see Output).
   `OnDisable`, `OnDestroy`, the editor-only messages (`Reset`, `OnValidate`,
   `OnDrawGizmos`, `OnDrawGizmosSelected`), and any message declared with a return value or a
   `ref`/`out` parameter. Run `uloop compile` to have the engine dispatch those.
+  When such a message's body is also skipped for a private access with no accessor rewrite,
+  its `Skipped` row names `uloop compile` as the only step: no rewrite of the body would make
+  the engine call it.
 
 The proxies exist only for the running session: nothing is attached outside Play Mode, and a
 compile or a domain reload drops them along with every other patch. Execution order relative
@@ -235,7 +256,7 @@ missing assembly, reflection, or event-driven calls), the note is omitted. Only 
 are counted: a method hot reload added or patched that calls the method already runs the patched
 body, which the note does not see. To see an
 initialization change take effect, run `uloop compile` and restart
-Play Mode — with Domain Reload enabled (the default), a fresh Play entry reloads the
+Play Mode — with Domain Reload enabled (the default for projects created before Unity 6.6), a fresh Play entry reloads the
 domain and drops the patch, so the patched body alone cannot carry the change into the
 next session. Better, keep values you expect to
 tune out of one-shot paths entirely: read them in a body that runs per frame or per event,
@@ -281,7 +302,10 @@ the first compile after installing or updating the package — every editable me
 the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
 to establish the baseline. Files the reload only re-applied as siblings share one
 such line per reason, `N re-applied sibling file(s) ...: <files>`, instead of one
-line each.
+line each. A file with a declaration that hot reload refused to introduce (its
+`Warnings` line says the type requires a compile) gets no such line, because that
+compile also establishes its baseline. This also holds for an existing file that
+gains such a declaration, for example a nested type or a delegate.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor
@@ -300,6 +324,9 @@ delegate type is not visible outside the assembly, and an event added in this ed
 (including one that had custom accessors when the assembly was last compiled).
 Raising through a conditional receiver (`other?.E?.Invoke(x)`) and `nameof(E)` also
 stay `Skipped`.
+Subscribing to an event added in this edit, in any file of the run, is `Skipped`
+too, whether the handler is a method group or a lambda: the compiled assembly has no
+such event for the subscription to bind to until `uloop compile`.
 
 A `Skipped` row never undoes what an earlier reload applied to the same method: that
 patch keeps running, so the method matches neither the compiled assembly nor the
@@ -318,11 +345,13 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates. Neither can ref-returning properties. These limits apply to compiled members; a `ref`/`out` method added in the same reload is reached directly. A compiled private/internal static property can be read, assigned, and compound-assigned |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
+| An added member's body cannot be fully bound in the hot-reload compilation | Hot reload cannot verify a member it cannot bind. A common cause: another file of the same reload, passed or pulled back in because it holds active patches, declares a compiled type from source, while a compiled API the body calls still names the compiled copy (for example, a lambda handed to a compiled `Register(Action<T>)`). The reason then names both types and the file declaring the compiled API. When the called member belongs to a type an earlier reload introduced and its signature was bound to the compiled copy, the reason names the introduced type and that compiled type instead. Either way the `Skipped` row names the step for that run (pass the file declaring the compiled API, leave the file declaring the type out, undo its edit and leave it out, or `uloop compile`), chosen from whether each file was passed, carried in, or already holds patches; a row about an added property's body points to the row of its accessor instead. A file passed this way is brought back by every later reload of the assembly while it stays unchanged, including the reload that re-applies after `--revert-all` or Play entry, until the next successful compile. When the skip deactivated added members an earlier reload applied, the next reload of the assembly retries their unchanged file once, so passing only the declaring file applies them again |
 | Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |
 | Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Skipped; `uloop compile` applies these edits |
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an event added in this edit leave nothing for the shim's Harmony accessor to bind |
 | Method raises or reads a field-like event through a conditional receiver (`other?.E`) | The shim has no name for the conditional receiver to pass to the accessor call |
 | Method names a field-like event inside `nameof` | The shim is a different type and cannot keep the bare event name |
+| Method subscribes (`+=`/`-=`) to an event added in this edit | The shim binds the subscription against the compiled assembly, which has no such event yet |
 
 ## Failed — flips `Success` to `false`
 
@@ -334,9 +363,9 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
 | Source file fails to parse | Per-file `Failed` entry with `Method` = `(file)` carrying the parse errors; nothing from that file is applied, its earlier patches stay active, and `Success` is false |
 | Method signature not found in the loaded assembly | Usually a stale assembly; run `uloop compile`. In-file renames and signature changes are classified as added members before reaching this point |
-| Shim compile error (e.g. the body calls a member that does not exist yet) | The error is attributed to the file it came from: that file reports `Failed` with its own compiler errors (plus the `uloop compile` hint when they indicate a missing member) and the rest of the file is `Skipped`, while the other files of the assembly are recompiled without it and applied. Bodies elsewhere that call an added method whose shim failed to compile are `Skipped` with that reason. When errors cannot be attributed to a file, every file of that assembly reports one `(shim-compile)` entry; if only one method was edited, the failure is attributed to that method's name instead |
+| Shim compile error (e.g. the body calls a member that does not exist yet) | The error is attributed to the file it came from: that file reports `Failed` with its own compiler errors (plus the `uloop compile` hint when they indicate a missing member) and the rest of the file is `Skipped`, while the other files of the assembly are recompiled without it and applied. Bodies elsewhere that call an added method this reload left out — its shim failed to compile, or another method of its file did — are `Skipped` with a reason naming that method; its own row says which. When errors cannot be attributed to a file, every file of that assembly reports one `(shim-compile)` entry; if only one method was edited, the failure is attributed to that method's name instead |
 | Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the rejection reason or the underlying engine error |
 | Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
 | The signature-change gate could not finish the run safely — the retry that skips a gated change failed, or shim-compile isolation dropped an edited caller that had covered a change | Every file of that assembly reports `Method` = `(signature-change-gate)` carrying the specific cause; nothing from those files is applied, because the reload has no retry budget left to split them — fix the failing edit or run `uloop compile`. Files of other assemblies in the same command are unaffected |
 
-A reload applies each file all-or-nothing: when any method in a file fails to compile or validate, nothing from that file is applied and patches from earlier reloads stay active. The other files of the same assembly are still applied, except a body that calls an added method whose own shim failed to compile — that body is `Skipped` until the method compiles. The one exception to all-or-nothing is a Harmony patch-engine failure in the middle of applying a validated file; that run reports itself as partially applied and recommends 'uloop hot-reload --revert-all'. A `Failed` row in `IntroducedTypes` widens the unit from the file to the assembly: type preparation runs once per assembly before any of its method bodies is transformed, so every file sharing that assembly is left unapplied, while files in other assemblies still apply.
+A reload applies each file all-or-nothing: when any method in a file fails to compile or validate, nothing from that file is applied and patches from earlier reloads stay active. The other files of the same assembly are still applied, except a body that calls an added method the reload left out, whether its own shim failed to compile or another method of its file did — that body is `Skipped` until the method applies. The one exception to all-or-nothing is a Harmony patch-engine failure in the middle of applying a validated file; that run reports itself as partially applied and recommends 'uloop hot-reload --revert-all'. A `Failed` row in `IntroducedTypes` widens the unit from the file to the assembly: type preparation runs once per assembly before any of its method bodies is transformed, so every file sharing that assembly is left unapplied, while files in other assemblies still apply.

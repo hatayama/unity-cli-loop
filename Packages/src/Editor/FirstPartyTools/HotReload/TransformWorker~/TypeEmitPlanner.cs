@@ -52,7 +52,9 @@ internal static class TypeEmitPlanner
                 SourceUnit = sourceUnit,
                 TypeDeclaration = typeDeclaration,
                 TypeSymbol = typeSymbol,
-                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
+                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax,
+                TargetAssembly = home.AssemblySymbol,
+                AddedEvents = new AddedEventLookup(home, sourceUnit, semanticModel)
             };
 
             // Why the counterpart is resolved before anything is classified: every stage below
@@ -185,8 +187,7 @@ internal static class TypeEmitPlanner
             semanticModel,
             compiledType,
             home,
-            addedFieldCatalog,
-            declarationDriftWarnings);
+            addedFieldCatalog);
 
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())

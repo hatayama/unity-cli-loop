@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class SourcePausePointPatcherTests
     {
         private const string FixturesDirectory = "Assets/Tests/Editor/SourcePausePointPatcher/Fixtures/";
+        private const string PatchedFixtureFile = "Assets/Tests/Editor/SourcePausePointPatcher/Fixtures/PatchedFixture.cs";
 
         private FakePausePointPauseController _pauseController;
         private HotReloadSidePortScope _hotReloadSideScope;
@@ -725,11 +726,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a hot-reload patched method with no compiled span keeps the existing
-        /// patched-by-hot-reload failure message.
+        /// What: a hot-reload patched method that has no entry in the file's shim lookup is
+        /// refused without an edited body range, pointing at the edited body or 'uloop compile'.
         /// </summary>
         [Test]
-        public void Patch_OnHotReloadedMethod_WithoutCompiledSpan_KeepsExistingMessage()
+        public void Patch_WhenPatchedMethodHasNoEditedSpan_RefusesWithoutARange()
         {
             MethodBase method = typeof(PatcherStaticMethodFixture).GetMethod(nameof(PatcherStaticMethodFixture.Add));
             _hotReloadSideScope.Port.ActiveShimForMethod = _ => method;
@@ -737,6 +738,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
                 "patcher-hot-reload-no-span",
                 BuildSyntheticResolution(method),
+                normalizedFile: PatchedFixtureFile,
                 requestedLine: requestedLine);
 
             Assert.That(result.Success, Is.False);
@@ -747,50 +749,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 result.ErrorMessage,
                 Is.EqualTo(
                     string.Format(
-                        SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
-                        method.DeclaringType.Name,
-                        method.Name,
-                        requestedLine)));
+                        SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalMessageFormat,
+                        requestedLine,
+                        method.DeclaringType.Name + "." + method.Name)));
+            Assert.That(
+                result.Hint,
+                Is.EqualTo(SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction));
         }
 
         /// <summary>
-        /// What: a hot-reload patched method with a compiled span appends that span to the
-        /// patched-by-hot-reload failure message.
+        /// What: a hot-reload patched method whose edited span is in the file's shim lookup is
+        /// refused with that edited body range in both the message and the next action.
         /// </summary>
         [Test]
-        public void Patch_OnHotReloadedMethod_WithCompiledSpan_AppendsSpanSentence()
+        public void Patch_OnHotReloadedMethod_WithEditedSpan_RefusesWithTheEditedBodyRange()
         {
             MethodBase method = typeof(PatcherStaticMethodFixture).GetMethod(nameof(PatcherStaticMethodFixture.Add));
             _hotReloadSideScope.Port.ActiveShimForMethod = _ => method;
             const int requestedLine = 42;
-            const int compiledStart = 10;
-            const int compiledEnd = 20;
+            const int editedStart = 10;
+            const int editedEnd = 20;
+            _hotReloadSideScope.Port.ShimLookupForFile = file => file == PatchedFixtureFile
+                ? new HotReloadShimFileLookup(
+                    Array.Empty<byte>(),
+                    null,
+                    null,
+                    new[] { new HotReloadShimMethodLookup(method, method, true, editedStart, editedEnd) })
+                : null;
             SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
                 "patcher-hot-reload-span",
-                BuildSyntheticResolutionWithMvid(
-                    method,
-                    method.Module.ModuleVersionId.ToString(),
-                    compiledStart,
-                    compiledEnd),
+                BuildSyntheticResolution(method),
+                normalizedFile: PatchedFixtureFile,
                 requestedLine: requestedLine);
 
-            string expectedMessage =
-                string.Format(
-                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
-                    method.DeclaringType.Name,
-                    method.Name,
-                    requestedLine)
-                + string.Format(
-                    SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
-                    method.DeclaringType.Name,
-                    method.Name,
-                    compiledStart,
-                    compiledEnd);
+            string label = method.DeclaringType.Name + "." + method.Name;
             Assert.That(result.Success, Is.False);
             Assert.That(
                 result.FailureReason,
                 Is.EqualTo(SourcePausePointPatchFailureReason.MethodPatchedByHotReload));
-            Assert.That(result.ErrorMessage, Is.EqualTo(expectedMessage));
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedMethodRefusalMessageFormat,
+                        requestedLine,
+                        label,
+                        editedStart,
+                        editedEnd)));
+            Assert.That(
+                result.Hint,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                        requestedLine,
+                        label,
+                        editedStart,
+                        editedEnd)));
         }
 
         // Builds a resolution good enough to reach SourcePausePointPatcher's patchability gate; the
@@ -804,9 +818,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         // exercise the stale-assembly gate without needing a second compiled assembly.
         private static SourcePausePointResolution BuildSyntheticResolutionWithMvid(
             MethodBase method,
-            string mvid,
-            int compiledMethodStartLine = 0,
-            int compiledMethodEndLine = 0)
+            string mvid)
         {
             return new SourcePausePointResolution(
                 method.Module.Assembly.GetName().Name,
@@ -820,8 +832,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SourcePausePointSnapshotTiming.PreLine,
                 1,
                 1,
-                compiledMethodStartLine,
-                compiledMethodEndLine,
+                0,
+                0,
                 Array.Empty<SourcePausePointLocalVariable>(),
                 Array.Empty<SourcePausePointParameter>(),
                 Array.Empty<string>());

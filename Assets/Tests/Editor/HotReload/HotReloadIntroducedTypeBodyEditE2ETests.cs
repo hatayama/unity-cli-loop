@@ -23,6 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
         private const string CallerBodyAnchor = "return host.Value();";
+        private const string HostStoredFieldAnchor = "        private int _stored;";
+        private const string HostTypeFullName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost";
+        private const string AddedHostEventName = "Changed";
         private const string IntroducedTypeSimpleName = "HotReloadBodyEditIntroducedValue";
         private const string IntroducedTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload." + IntroducedTypeSimpleName;
@@ -133,6 +137,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a body of an already introduced type that subscribes to an event the same
+        /// reload adds to a compiled type is skipped with the added-event reason. The introduced
+        /// type is served by the retained assembly, which never holds the compiled type, so the
+        /// event has to be looked up where the compiled type is served.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeBodySubscribesToEventAddedOnCompiledType_SkipsNamingTheEvent()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult first = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducingEdits(hostPath, callerPath));
+                AssertCallerIsPatched(first);
+
+                HotReloadOrchestratorResult second = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateAddedEventSubscriptionEdits(hostPath, callerPath));
+
+                HotReloadMethodOutcome compute = FindIntroducedComputeOutcome(second);
+                Assert.That(compute, Is.Not.Null, "Missing Compute() row.\n" + DescribeOutcomes(second));
+                Assert.That(
+                    compute.Kind,
+                    Is.EqualTo(HotReloadMethodOutcomeKind.Skipped),
+                    DescribeOutcomes(second));
+                Assert.That(
+                    compute.Reason,
+                    Does.Contain(
+                        "Subscribes to the event '" + HostTypeFullName + "." + AddedHostEventName
+                        + "', which this edit adds"),
+                    DescribeOutcomes(second));
+            });
+        }
+
+        /// <summary>
         /// Verifies that restoring an edited body of an already introduced type back to the source the
         /// introducing reload compiled removes the patch the previous reload installed: the type is
         /// still reported AlreadyActive, no body of the introduced type is reported as patched, and a
@@ -180,6 +224,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     IntroducedSeed,
                     "A restored body must leave the retained assembly running its own code again, "
                     + "which means the patch the previous reload installed has to be reverted.");
+            });
+        }
+
+        /// <summary>
+        /// Verifies that a file which only declared an introduced type is not remembered as a
+        /// companion when a reload drops that type while another file of the reload is patched:
+        /// the file had changes of its own, and a companion entry would bring it back into every
+        /// later reload of the assembly after a Play-entry domain reload.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeRemovedWhileAnotherFileIsPatched_DoesNotRecordTheOwnerAsCompanion()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult first = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    CreateIntroducingEdits(hostPath, callerPath));
+                AssertCallerIsPatched(first);
+
+                HotReloadOrchestratorResult second = await RunReloadAsync(
+                    hostPath,
+                    callerPath,
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                            "IntroducedTypeDroppedHost.cs",
+                            File.ReadAllText(hostPath)),
+                        [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                            "IntroducedTypeDroppedCaller.cs",
+                            File.ReadAllText(callerPath).Replace(CallerBodyAnchor, "return host.Value() + 1;"))
+                    });
+
+                Assert.That(
+                    CountFailures(second),
+                    Is.EqualTo(0),
+                    "Precondition: dropping the type must not fail the reload.\n" + DescribeOutcomes(second));
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.CompanionSources.ListPaths(),
+                    Is.Empty,
+                    DescribeOutcomes(second));
             });
         }
 
@@ -726,6 +814,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "IntroducedTypeBodyEditedCaller.cs",
                     CallIntroducedType(File.ReadAllText(callerPath)))
             };
+        }
+
+        // The introduced type's Compute() subscribes to an event this reload adds to the compiled
+        // host. The subscription sits in a lambda because Compute() returns an expression, and the
+        // event check reads every subscription in the body, lambdas included.
+        private static Dictionary<string, string> CreateAddedEventSubscriptionEdits(string hostPath, string callerPath)
+        {
+            string host = File.ReadAllText(hostPath);
+            Assert.That(host, Does.Contain(HostStoredFieldAnchor), "Precondition: host field anchor must exist.");
+            string hostWithEvent = host.Replace(
+                HostStoredFieldAnchor,
+                HostStoredFieldAnchor + "\n\n        public event System.Action<int> " + AddedHostEventName + ";",
+                StringComparison.Ordinal);
+            string subscribingExpression =
+                "new System.Func<int>(() =>\n"
+                + "            {\n"
+                + "                HotReloadCrossFileAddedMemberHost host = new HotReloadCrossFileAddedMemberHost();\n"
+                + "                host." + AddedHostEventName + " += value => { };\n"
+                + "                return _seed;\n"
+                + "            })()";
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeAddedEventHost.cs",
+                    InsertIntroducedType(hostWithEvent, subscribingExpression, NoExtraMembers)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeAddedEventCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        private static HotReloadMethodOutcome FindIntroducedComputeOutcome(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method != null
+                    && outcome.Method.Contains(IntroducedTypeMetadataName + ".Compute()", StringComparison.Ordinal))
+                {
+                    return outcome;
+                }
+            }
+
+            return null;
         }
 
         // Why distinct file names for the same source as the introducing reload: the run has to be

@@ -27,4 +27,7 @@ internal sealed class WorkerSourceInput
     // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
     // read that would crash the whole file under the no-try-catch policy.
     public string SnapshotSource { get; set; }
+
+    // True for a file the run pulled in to re-bind its active patches, not one the caller passed.
+    public bool ReappliedSibling { get; set; }
 }

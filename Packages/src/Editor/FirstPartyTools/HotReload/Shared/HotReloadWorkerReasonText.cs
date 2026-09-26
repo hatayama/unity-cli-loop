@@ -10,14 +10,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static partial class HotReloadWorkerReasonText
     {
-        // The "compile it properly" call to action the skip sentences end with, and the phrase
-        // that introduces a rejected accessor rewrite. They are shared because several sentences
-        // end the same way, not because they carry meaning of their own.
+        // The next steps a sentence can end with, and the phrase that introduces a rejected
+        // accessor rewrite. A template names its next step through EndingWith instead of
+        // concatenating it, so a next-step wording change never touches the sentence bodies.
         private const string CompileCallToAction = "Run 'uloop compile'.";
 
-        private const string CompileCallToActionToAddIt = "Run 'uloop compile' to add it.";
+        // Why each names what the compile adds instead of "it" or "them": a sentence that names a
+        // rewrite before its call to action left readers unsure whether "it" was the member or
+        // the rewrite.
+        private const string CompileCallToActionToAddTheMethod = "Run 'uloop compile' to add the method.";
 
-        private const string CompileCallToActionToAddThem = "Run 'uloop compile' to add them.";
+        private const string CompileCallToActionToAddTheField = "Run 'uloop compile' to add the field.";
+
+        private const string CompileCallToActionToAddTheProperty = "Run 'uloop compile' to add the property.";
+
+        // For a sentence that already names a rewrite that needs no compile: the compile is only
+        // for keeping the code the way it is written, whether or not the rewrite fits.
+        private const string CompileCallToActionToKeepTheCode =
+            "Run 'uloop compile' to keep the code as written.";
+
+        // For a row whose detail is a carried-in skip of the property's accessor: that accessor's
+        // own Skipped row carries the step the Editor chose from the run, and a compile call here
+        // would contradict it when that step needs no compile.
+        private const string AccessorRowNamesTheStep =
+            "The Skipped row for the property's accessor names the step to take.";
 
         private const string AccessorRewriteUnavailableSeparator = " Accessor rewrite unavailable: ";
 
@@ -50,6 +66,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why not string.Format: some sentences quote C# source containing braces, which
                 // a format string would read as a placeholder and reject.
                 text = text.Replace("{" + index + "}", args[index] ?? string.Empty);
+            }
+
+            // The next step belongs to the sentence itself, so it comes before any detail: a
+            // detail explains the refusal, and the next step still reads as the sentence's end.
+            string nextStep = template.NextStepFor(reason.detail);
+            if (nextStep.Length > 0)
+            {
+                text = text + " " + nextStep;
             }
 
             if (reason.detail == null)
@@ -89,7 +113,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static ReasonTemplate Plain(string text, int placeholderCount)
         {
-            return new ReasonTemplate(text, placeholderCount, false, false, string.Empty, string.Empty);
+            return new ReasonTemplate(
+                text, placeholderCount, false, false, string.Empty, string.Empty, string.Empty, string.Empty);
         }
 
         // A reason that reads on its own but appends a detail when it has one.
@@ -99,7 +124,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string detailSeparator,
             string detailSuffix)
         {
-            return new ReasonTemplate(text, placeholderCount, true, false, detailSeparator, detailSuffix);
+            return new ReasonTemplate(
+                text, placeholderCount, true, false, detailSeparator, detailSuffix, string.Empty, string.Empty);
         }
 
         // A reason that is incomplete without its detail.
@@ -109,7 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string detailSeparator,
             string detailSuffix)
         {
-            return new ReasonTemplate(text, placeholderCount, true, true, detailSeparator, detailSuffix);
+            return new ReasonTemplate(
+                text, placeholderCount, true, true, detailSeparator, detailSuffix, string.Empty, string.Empty);
         }
 
         /// <summary>
@@ -123,7 +150,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool allowsDetail,
                 bool requiresDetail,
                 string detailSeparator,
-                string detailSuffix)
+                string detailSuffix,
+                string nextStep,
+                string carriedInDetailNextStep)
             {
                 Text = text;
                 PlaceholderCount = placeholderCount;
@@ -131,6 +160,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RequiresDetail = requiresDetail;
                 DetailSeparator = detailSeparator;
                 DetailSuffix = detailSuffix;
+                NextStep = nextStep;
+                CarriedInDetailNextStep = carriedInDetailNextStep;
             }
 
             internal string Text { get; }
@@ -144,6 +175,72 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             internal string DetailSeparator { get; }
 
             internal string DetailSuffix { get; }
+
+            // The call to action that closes the sentence, placed before any detail; empty when
+            // the sentence names its own next step or needs none.
+            internal string NextStep { get; }
+
+            // Replaces NextStep when the detail is a skip whose step the Editor chooses from the
+            // run; empty when the template has no such replacement.
+            internal string CarriedInDetailNextStep { get; }
+
+            /// <summary>
+            /// The next step that closes the sentence for this detail.
+            /// </summary>
+            internal string NextStepFor(TransformWorkerReasonDto detail)
+            {
+                if (detail == null || CarriedInDetailNextStep.Length == 0)
+                {
+                    return NextStep;
+                }
+
+                bool carriedIn = detail.code == HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature
+                    || detail.code == HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType;
+                return carriedIn ? CarriedInDetailNextStep : NextStep;
+            }
+
+            /// <summary>
+            /// This template with the sentence closed by the given next step.
+            /// </summary>
+            internal ReasonTemplate EndingWith(string nextStep)
+            {
+                if (string.IsNullOrEmpty(nextStep))
+                {
+                    throw new ArgumentException("A next step must not be empty.", nameof(nextStep));
+                }
+
+                return new ReasonTemplate(
+                    Text,
+                    PlaceholderCount,
+                    AllowsDetail,
+                    RequiresDetail,
+                    DetailSeparator,
+                    DetailSuffix,
+                    nextStep,
+                    CarriedInDetailNextStep);
+            }
+
+            /// <summary>
+            /// This template with the next step used instead when the detail is a skip whose step
+            /// the Editor chooses from the run.
+            /// </summary>
+            internal ReasonTemplate EndingWithWhenDetailIsCarriedIn(string nextStep)
+            {
+                if (string.IsNullOrEmpty(nextStep))
+                {
+                    throw new ArgumentException("A next step must not be empty.", nameof(nextStep));
+                }
+
+                return new ReasonTemplate(
+                    Text,
+                    PlaceholderCount,
+                    AllowsDetail,
+                    RequiresDetail,
+                    DetailSeparator,
+                    DetailSuffix,
+                    NextStep,
+                    nextStep);
+            }
         }
     }
 }

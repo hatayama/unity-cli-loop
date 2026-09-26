@@ -20,9 +20,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (result.Outcomes.Count == 0)
             {
-                // A run stopped before it applied anything wrote no row for this file, so the
-                // failed-rebind sentence would send the reader looking for rows never written.
-                return HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat;
+                // Why applied added fields or consts count as re-applied: they write no method
+                // row, and a file whose only change is one of them came back to declare it.
+                // Otherwise a run stopped before it applied anything wrote no row for this file,
+                // so the failed-rebind sentence would send the reader looking for rows never written.
+                return result.AppliedAddedFieldsOrConsts
+                    ? null
+                    : HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat;
             }
 
             if (WasRefusedBeforeChangingAnyPatch(result))
@@ -30,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadConstants.ActiveSiblingRebindRunRefusedWarningFormat;
             }
 
-            bool sawApplied = false;
+            bool sawApplied = result.AppliedAddedFieldsOrConsts;
             bool sawOnlySkipped = true;
             foreach (HotReloadMethodOutcome outcome in result.Outcomes)
             {
@@ -52,6 +56,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return sawOnlySkipped
                 ? HotReloadConstants.ActiveSiblingRebindSkippedOnlyWarningFormat
                 : HotReloadConstants.ActiveSiblingRebindFailedWarningFormat;
+        }
+
+        /// <summary>Whether the reload patched or added anything in the file.</summary>
+        public static bool AppliedAnyChange(HotReloadFileProcessResult result)
+        {
+            Debug.Assert(result != null, "result must not be null.");
+
+            if (result.AppliedAddedFieldsOrConsts)
+            {
+                return true;
+            }
+
+            foreach (HotReloadMethodOutcome outcome in result.Outcomes)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    || outcome.Kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // Why the revert count is checked too: unchanged patches are reverted before the shim

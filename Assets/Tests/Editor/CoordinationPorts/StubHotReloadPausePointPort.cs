@@ -22,10 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public System.Func<string, int, HotReloadAddedMethodAtLine> AddedMethodContainingLine { get; set; }
 
-        public System.Func<string, bool> ActiveHotReloadChangesInFile { get; set; }
-
-        public System.Func<string, string> VerifiedSnapshotSourceForFile { get; set; }
-
         public System.Func<string, string, string> VerifiedSnapshotSource { get; set; }
 
         public System.Func<MethodBase, IReadOnlyList<LocalBuilder>> TransplantLocals { get; set; }
@@ -34,8 +30,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public System.Func<string, IReadOnlyList<string>> AddedFieldsForType { get; set; }
 
+        public System.Func<string, bool> ShimSourceChangedOnDisk { get; set; }
+
         /// <summary>Files answered as introduced-type declarations. Null falls through to <see cref="Inner"/>.</summary>
         public HashSet<string> IntroducedTypeSourceFiles { get; set; }
+
+        public System.Func<string, HotReloadLatestFileReload> LatestReloadOfFile { get; set; }
+
+        public System.Func<string, MethodBase, HotReloadUnappliedRow> UnappliedRowForMethod { get; set; }
 
         public MethodBase GetActiveShimForMethod(MethodBase method)
         {
@@ -58,21 +60,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 : Inner?.FindAddedMethodContainingLine(file, line);
         }
 
-        public bool HasActiveHotReloadChangesInFile(string file)
+        public bool HasShimSourceChangedOnDisk(string file)
         {
-            if (ActiveHotReloadChangesInFile != null)
+            if (ShimSourceChangedOnDisk != null)
             {
-                return ActiveHotReloadChangesInFile(file);
+                return ShimSourceChangedOnDisk(file);
             }
 
-            return Inner != null && Inner.HasActiveHotReloadChangesInFile(file);
-        }
-
-        public string GetVerifiedSnapshotSourceForFile(string projectRelativeFile)
-        {
-            return VerifiedSnapshotSourceForFile != null
-                ? VerifiedSnapshotSourceForFile(projectRelativeFile)
-                : Inner?.GetVerifiedSnapshotSourceForFile(projectRelativeFile);
+            return Inner != null && Inner.HasShimSourceChangedOnDisk(file);
         }
 
         public string GetVerifiedSnapshotSource(string projectRelativeFile, string dllPath)
@@ -114,6 +109,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return Inner != null && Inner.IsIntroducedTypeSourceFile(file);
+        }
+
+        public HotReloadLatestFileReload GetLatestReloadOfFile(string file)
+        {
+            return LatestReloadOfFile != null
+                ? LatestReloadOfFile(file)
+                : Inner?.GetLatestReloadOfFile(file);
+        }
+
+        public HotReloadUnappliedRow FindUnappliedRowForMethod(string file, MethodBase method)
+        {
+            return UnappliedRowForMethod != null
+                ? UnappliedRowForMethod(file, method)
+                : Inner?.FindUnappliedRowForMethod(file, method);
         }
     }
 }

@@ -168,6 +168,7 @@ public static class TransformWorkerProgram
         input.ExcludedAddedMethodKeys ??= Array.Empty<string>();
         input.AssemblySourcePaths ??= Array.Empty<string>();
         input.ChangedSiblingSourcePaths ??= Array.Empty<string>();
+        input.ActiveMethodLabels ??= Array.Empty<string>();
         input.IntroducedTypeArtifacts ??= Array.Empty<WorkerIntroducedTypeArtifact>();
         foreach (WorkerIntroducedTypeArtifact artifact in input.IntroducedTypeArtifacts)
         {

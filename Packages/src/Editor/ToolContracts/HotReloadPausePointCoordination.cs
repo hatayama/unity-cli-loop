@@ -118,4 +118,63 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             NestedOuterTypeName = nestedOuterTypeName;
         }
     }
+
+    /// <summary>
+    /// Whether the latest hot reload of a file skipped a Methods[] row or could not apply it.
+    /// </summary>
+    public enum HotReloadUnappliedRowKind
+    {
+        Skipped,
+        Failed
+    }
+
+    /// <summary>
+    /// One Methods[] row the latest hot reload of a file did not apply: a method, or a file-level
+    /// "(file)" / "(unknown)" row.
+    /// </summary>
+    public sealed class HotReloadUnappliedRow
+    {
+        /// <summary>The row's Methods[].Method string, as the hot reload response shows it.</summary>
+        public string Label { get; }
+
+        public HotReloadUnappliedRowKind Kind { get; }
+
+        public HotReloadUnappliedRow(string label, HotReloadUnappliedRowKind kind)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                throw new System.ArgumentException(
+                    "An unapplied row needs the label hot reload reported for it.",
+                    nameof(label));
+            }
+
+            Label = label;
+            Kind = kind;
+        }
+    }
+
+    /// <summary>
+    /// What the latest hot reload that read a file says about that file now.
+    /// </summary>
+    public sealed class HotReloadLatestFileReload
+    {
+        /// <summary>
+        /// True when the file that reload read now hashes differently from what it read.
+        /// </summary>
+        public bool FileChangedSince { get; }
+
+        /// <summary>The Skipped and Failed rows of that reload, in the order it reported them.</summary>
+        public IReadOnlyList<HotReloadUnappliedRow> UnappliedRows { get; }
+
+        public HotReloadLatestFileReload(bool fileChangedSince, IReadOnlyList<HotReloadUnappliedRow> unappliedRows)
+        {
+            if (unappliedRows == null)
+            {
+                throw new System.ArgumentNullException(nameof(unappliedRows));
+            }
+
+            FileChangedSince = fileChangedSince;
+            UnappliedRows = unappliedRows;
+        }
+    }
 }

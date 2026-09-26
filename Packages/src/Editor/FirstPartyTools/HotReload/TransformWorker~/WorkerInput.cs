@@ -53,4 +53,8 @@ internal sealed class WorkerInput
     // Retained introduced-type assemblies this run may bind against.
     // Null/omitted is treated as empty (nothing is normalized through an artifact).
     public WorkerIntroducedTypeArtifact[] IntroducedTypeArtifacts { get; set; }
+
+    // Labels of the edited files' methods that an earlier reload patched or added and that are
+    // still active. Null/omitted is treated as empty (no method keeps an earlier body).
+    public string[] ActiveMethodLabels { get; set; }
 }

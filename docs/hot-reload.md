@@ -395,7 +395,8 @@ Wire details:
   introduced type from another assembly or through Unity, still requires `uloop compile`
   (`docs/hot-reload-introduced-types.md`). Added members referenced from another assembly or
   from a file that is neither passed to this reload nor already hot-reloaded, and changed
-  field initializers or `const` values — all require `uloop compile`.
+  field initializers or `const` values, and members added to a compiled enum (a body that
+  names one fails with CS0117 even in the same reload) — all require `uloop compile`.
   Added fields, methods, and properties themselves apply, and are visible to the bodies
   edited in any file of the same assembly passed to the same reload — including on a type an
   earlier reload introduced, where they are applied on the artifact that already carries it. An
@@ -426,10 +427,21 @@ Wire details:
   compiled body. The residual limit is a marker whose requested line no longer
   resolves in the code now executing — it is suppressed (`SuppressedByHotReload: true`,
   reason in `SuppressedByHotReloadReason`) rather than cleared, and stays silent until
-  a later patch transition restores the line or `uloop compile` runs. Enabling a new
-  marker on a patched method is rejected with `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` only
-  when the line cannot be mapped onto the patched body.
-  When the compiled line range of the patched method is known, the failure message also reports it, so you can see how far the edited file's line numbers have shifted from the compiled source.
+  a later patch transition restores the line or `uloop compile` runs.
+  Enabling a new marker reads `--line` as a line of the edited file:
+  - A line in a method hot reload has not patched is mapped onto the verified source
+    snapshot of the last compile and armed there. The response reports
+    `LineBasis: EditedFile`, and `ResolvedLine` is the edited-file line.
+  - A line added or changed since the last compile is refused with
+    `PAUSE_POINT_LINE_NOT_COMPILED`. So is a line whose next statement, where the resolver
+    would round to, is uncompiled. Run `uloop hot-reload` or `uloop compile` and retry, or
+    pick an unchanged line.
+  - A line inside a patched method's edited body arms the patched body directly. A line
+    that would round onto the compiled body of a patched method, or whose uncompiled next
+    statement is inside a patched method's edited body, is refused with
+    `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` instead, naming the method's edited line range.
+  - Only when the file has no verified source snapshot is the line armed as a compiled
+    line number, with `LineBasis: LastCompiledSource` and a warning to run `uloop compile`.
 
 ## Open Questions Tracked for Implementation
 

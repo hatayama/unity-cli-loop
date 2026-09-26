@@ -7,8 +7,6 @@ using System.Text.RegularExpressions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
-using UnityEditor.Compilation;
-
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -30,40 +28,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string normalizedInputPath = SourcePausePointPathNormalizer.ToForwardSlashes(projectRelativeFilePath);
 
-            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(normalizedInputPath);
-            if (string.IsNullOrEmpty(rawAssemblyName))
+            SourcePausePointCompiledAssemblyLocation location =
+                SourcePausePointCompiledAssemblyLocator.Locate(projectRelativeFilePath);
+            if (!location.Found)
             {
-                return SourcePausePointResolveResult.Failure(
-                    SourcePausePointResolveFailureReason.ScriptNotInAnyAssembly,
-                    $"'{projectRelativeFilePath}' does not belong to any compiled assembly.");
-            }
-
-            // CompilationPipeline.GetAssemblyNameFromScriptPath returns the TargetAssembly's file name,
-            // which already carries a ".dll" suffix (see Unity's EditorBuildRules.TargetAssembly).
-            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
-
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            string dllPath = Path.Combine(projectRoot, SourcePausePointConstants.ScriptAssembliesRelativeDirectory, assemblyName + SourcePausePointConstants.CompiledAssemblyExtension);
-            string pdbPath = Path.Combine(projectRoot, SourcePausePointConstants.ScriptAssembliesRelativeDirectory, assemblyName + SourcePausePointConstants.DebugSymbolsExtension);
-
-            if (!File.Exists(dllPath))
-            {
-                return SourcePausePointResolveResult.Failure(
-                    SourcePausePointResolveFailureReason.CompiledAssemblyNotFound,
-                    $"Compiled assembly not found at '{dllPath}'. Compile the project first.");
-            }
-
-            if (!File.Exists(pdbPath))
-            {
-                return SourcePausePointResolveResult.Failure(
-                    SourcePausePointResolveFailureReason.SymbolsUnavailable,
-                    $"Debug symbols not found at '{pdbPath}'. Ensure the project uses Debug code optimization.");
+                return SourcePausePointResolveResult.Failure(location.FailureReason, location.FailureMessage);
             }
 
             return ResolveFromCompiledAssembly(
-                assemblyName,
-                dllPath,
-                pdbPath,
+                location.AssemblyName,
+                location.AssemblyPath,
+                location.SymbolsPath,
                 normalizedInputPath,
                 projectRelativeFilePath,
                 line,
@@ -125,7 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     string.Format(
                         SourcePausePointConstants.PostLineAlwaysThrowsMessageFormat,
                         sequencePoint.StartLine,
-                        originalInputPath));
+                        originalInputPath),
+                    statementLine: sequencePoint.StartLine);
             }
 
             List<SourcePausePointLocalVariable> locals = SourcePausePointCaptureEligibility.CollectCapturableLocals(method, scopeOffset);
@@ -303,50 +279,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (startLine, endLine);
         }
 
-        // Why a dedicated API: FindNearbyCompiledMethods does not take methodFilter and cannot
-        // promise the named method's compiled span.
-        internal static IReadOnlyList<SourcePausePointCompiledMethodSpan> FindCompiledMethodSpans(
-            string projectRelativeFilePath,
-            string methodFilter)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
-            if (string.IsNullOrEmpty(methodFilter))
-            {
-                return Array.Empty<SourcePausePointCompiledMethodSpan>();
-            }
-
-            return WithCompiledModuleOrDefault(
-                projectRelativeFilePath,
-                (module, normalizedInputPath) =>
-                    CollectCompiledMethodSpans(module, normalizedInputPath, methodFilter),
-                Array.Empty<SourcePausePointCompiledMethodSpan>());
-        }
-
-        private static IReadOnlyList<SourcePausePointCompiledMethodSpan> CollectCompiledMethodSpans(
-            ModuleDefinition module,
-            string normalizedInputPath,
-            string methodFilter)
-        {
-            List<SourcePausePointCompiledMethodSpan> spans = new List<SourcePausePointCompiledMethodSpan>();
-            foreach (MethodDefinition method in EnumerateMethodsInModule(module))
-            {
-                if (!method.HasBody || !CompiledMethodMatchesFilter(methodFilter, method))
-                {
-                    continue;
-                }
-
-                (int startLine, int endLine) = CollectCompiledMethodSpan(method, normalizedInputPath);
-                if (startLine <= 0 || endLine <= 0)
-                {
-                    continue;
-                }
-
-                spans.Add(new SourcePausePointCompiledMethodSpan(startLine, endLine));
-            }
-
-            return spans;
-        }
-
         /// <summary>
         /// Collects every compiled method span in a file with the display name used in warnings.
         /// </summary>
@@ -404,29 +336,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(read != null, "read must not be null.");
 
             string normalizedInputPath = SourcePausePointPathNormalizer.ToForwardSlashes(projectRelativeFilePath);
-            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(normalizedInputPath);
-            if (string.IsNullOrEmpty(rawAssemblyName))
+            SourcePausePointCompiledAssemblyLocation location =
+                SourcePausePointCompiledAssemblyLocator.Locate(projectRelativeFilePath);
+            if (!location.Found)
             {
                 return fallback;
             }
 
-            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            string dllPath = Path.Combine(
-                projectRoot,
-                SourcePausePointConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + SourcePausePointConstants.CompiledAssemblyExtension);
-            string pdbPath = Path.Combine(
-                projectRoot,
-                SourcePausePointConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + SourcePausePointConstants.DebugSymbolsExtension);
-            if (!File.Exists(dllPath) || !File.Exists(pdbPath))
-            {
-                return fallback;
-            }
-
-            using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using FileStream dllStream = File.Open(location.AssemblyPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using FileStream pdbStream = File.Open(location.SymbolsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             ReaderParameters readerParameters = new ReaderParameters
             {
                 InMemory = true,

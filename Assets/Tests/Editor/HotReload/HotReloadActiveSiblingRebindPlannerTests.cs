@@ -6,12 +6,14 @@ using System.Reflection;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Covers which active files of an assembly a reload pulls back in to rebind against the new
-    /// shim, in particular a declaration file the last compile never listed.
+    /// Covers which files of an assembly a reload pulls back in: active files that rebind against
+    /// the new shim (in particular a declaration file the last compile never listed), files left
+    /// Skipped or Failed, and companion files.
     /// </summary>
     public class HotReloadActiveSiblingRebindPlannerTests
     {
@@ -142,6 +144,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(plan.ChangedSinceApplyPaths, Is.EqualTo(new[] { NewSourcePath }));
         }
 
+        /// <summary>
+        /// What: a file whose last reload left it Skipped or Failed and that holds nothing active
+        /// comes back as a retry, the one candidate source that names such a file.
+        /// </summary>
+        [Test]
+        public void Plan_NotFullyAppliedFileWithNothingActive_IsIncludedAsARetry()
+        {
+            RecordAppliedSourceOnly(CompiledSiblingPath, isFullyApplied: false);
+
+            HotReloadActiveSiblingRebindPlan plan = Plan(new[] { CompiledSiblingPath });
+
+            Assert.That(PathsOf(plan), Is.EqualTo(new[] { CompiledSiblingPath }));
+            Assert.That(plan.FilesToInclude[0].Reason, Is.EqualTo(HotReloadSiblingInclusionReason.RetryAfterSkip));
+        }
+
+        /// <summary>
+        /// What: a companion that holds active changes of its own comes back once, for those
+        /// changes, and its stale companion hash raises no changed-companion warning.
+        /// </summary>
+        [Test]
+        public void Plan_CompanionThatHoldsActiveChanges_IsIncludedOnceForItsChangesWithoutAWarning()
+        {
+            ArrangeAppliedFile(CompiledSiblingPath);
+            _access.Domain.CompanionSources.Record(CompiledSiblingPath, "stale-companion-hash");
+
+            HotReloadActiveSiblingRebindPlan plan = Plan(new[] { CompiledSiblingPath });
+
+            Assert.That(PathsOf(plan), Is.EqualTo(new[] { CompiledSiblingPath }));
+            Assert.That(plan.FilesToInclude[0].Reason, Is.EqualTo(HotReloadSiblingInclusionReason.ActiveChanges));
+            Assert.That(plan.ChangedCompanionPaths, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a companion is brought back while its bytes match the hash it was given at, and
+        /// reported as changed once they differ.
+        /// </summary>
+        [Test]
+        public void Plan_Companion_IsIncludedWhileUnchangedAndReportedOnceChanged()
+        {
+            string workerSourcePath = WriteWorkerSource(CompiledSiblingPath);
+            _access.Domain.CompanionSources.Record(
+                CompiledSiblingPath,
+                new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(workerSourcePath)));
+
+            HotReloadActiveSiblingRebindPlan unchanged = Plan(new[] { CompiledSiblingPath });
+            File.WriteAllText(workerSourcePath, "// edited after it was given\n");
+            HotReloadActiveSiblingRebindPlan changed = Plan(new[] { CompiledSiblingPath });
+
+            Assert.That(PathsOf(unchanged), Is.EqualTo(new[] { CompiledSiblingPath }));
+            Assert.That(unchanged.FilesToInclude[0].Reason, Is.EqualTo(HotReloadSiblingInclusionReason.Companion));
+            Assert.That(PathsOf(changed), Is.Empty);
+            Assert.That(changed.ChangedCompanionPaths, Is.EqualTo(new[] { CompiledSiblingPath }));
+        }
+
         private HotReloadActiveSiblingRebindPlan Plan(string[] assemblySourceFiles)
         {
             return HotReloadActiveSiblingRebindPlanner.Plan(
@@ -177,22 +233,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             RecordAppliedSourceOnly(projectRelativePath);
         }
 
-        private void RecordAppliedSourceOnly(string projectRelativePath)
+        private void RecordAppliedSourceOnly(string projectRelativePath, bool isFullyApplied = true)
+        {
+            string workerSourcePath = WriteWorkerSource(projectRelativePath);
+            _access.Domain.AppliedSources.RecordAppliedSource(
+                projectRelativePath,
+                new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(workerSourcePath)),
+                isFullyApplied,
+                "/worker-copy/Recorded.cs",
+                Array.Empty<HotReloadUnappliedRow>());
+        }
+
+        private string WriteWorkerSource(string projectRelativePath)
         {
             string workerSourcePath = Path.Combine(
                 _temporaryDirectory,
                 Path.GetFileName(projectRelativePath));
             File.WriteAllText(workerSourcePath, "// " + projectRelativePath + "\n");
             _workerSourceByPath[projectRelativePath] = workerSourcePath;
-            _access.Domain.RecordAppliedSource(
-                projectRelativePath,
-                new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(workerSourcePath)),
-                isFullyApplied: true);
+            return workerSourcePath;
         }
 
         private void RecordEvidence(string projectRelativePath, string assemblyName)
         {
-            _access.Domain.RecordNewSourceMembershipEvidence(
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(
                 projectRelativePath,
                 new HotReloadNewSourceMembershipEvidence(
                     projectRelativePath,

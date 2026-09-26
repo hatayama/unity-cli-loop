@@ -13,37 +13,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Why the compiled method spans decide: a file can hold both compiled types and a type
         // hot reload introduced. Only when the file has no compiled method at all is "there is no
-        // compiled line map here" the whole truth; otherwise the general guidance still applies
+        // compiled code here" the whole truth; otherwise the general guidance still applies
         // and the introduced type is one more thing to know about the file.
         internal static PausePointResponse Create(
             EnablePausePointSchema parameters,
             string normalizedFile,
-            bool hasActiveHotReloadPatches,
-            SourcePausePointResolveResult resolveResult,
-            string patchedMethodPdbUnavailableWarning)
+            string lineBasis,
+            SourcePausePointResolveResult resolveResult)
         {
             bool declaresIntroducedType =
                 HotReloadPausePointCoordination.HotReloadSide?.IsIntroducedTypeSourceFile(normalizedFile) == true;
             if (declaresIntroducedType
                 && SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(parameters.File).Count == 0)
             {
-                return CreateIntroducedTypeResolveFailure(
-                    parameters,
-                    patchedMethodPdbUnavailableWarning);
+                return CreateIntroducedTypeResolveFailure(parameters);
             }
 
-            PausePointResolveFailureText failureText = PausePointResolveFailureTextBuilder.Build(
-                parameters.File,
-                parameters.Line,
-                hasActiveHotReloadPatches,
-                resolveResult,
-                patchedMethodPdbUnavailableWarning);
+            // Why no hot-reload branch: a failure in a patched file has the same causes as one in
+            // an unpatched file. Only the line numbers differ, and the line basis already says
+            // which ones the message uses.
+            bool editedFileBasis = lineBasis == PausePointEditedLineResolution.EditedFileLineBasis;
             PausePointResponse response = PausePointFailureResponse.Create(
-                failureText.Message,
+                PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
+                    resolveResult.ErrorMessage,
+                    editedFileBasis
+                        ? SourcePausePointConstants.NearbyCompiledMethodsEditedLinesPrefix
+                        : SourcePausePointConstants.NearbyCompiledMethodsPrefix,
+                    resolveResult.NearbyCompiledMethods),
                 SourcePausePointConstants.ErrorCodeResolveFailed,
-                failureText.RecommendedNextAction);
+                SelectRecommendedNextAction(
+                    resolveResult.FailureReason,
+                    editedFileBasis,
+                    !string.IsNullOrEmpty(parameters.Method)));
             List<string> resolveFailureWarnings = new List<string>();
-            PausePointEnableWarningList.AddIfNotEmpty(resolveFailureWarnings, failureText.Warning);
             PausePointEnableWarningList.AddIfNotEmpty(
                 resolveFailureWarnings,
                 declaresIntroducedType
@@ -55,44 +57,106 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        // Refuses a line inside a method hot reload added. The compiled resolver is not asked,
-        // so there is no resolver sentence to keep.
+        // Why the edited-file basis narrows the no-statement advice: the file was found in a
+        // compiled assembly there, so the path form is not the cause, and a compile helps only
+        // when the wanted statement was added after the last compile. Why a --method clause on
+        // either basis: a --method that names no method in the file fails on every line, so
+        // without it no advice the caller can follow changes the outcome.
+        private static string SelectRecommendedNextAction(
+            SourcePausePointResolveFailureReason reason,
+            bool editedFileBasis,
+            bool methodFiltered)
+        {
+            if (reason == SourcePausePointResolveFailureReason.PostLineAlwaysThrows)
+            {
+                return SourcePausePointConstants.PostLineAlwaysThrowsRecommendedNextAction;
+            }
+
+            if (reason != SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine)
+            {
+                return SourcePausePointConstants.ResolveFailedRecommendedNextAction;
+            }
+
+            string lineAdvice = editedFileBasis
+                ? SourcePausePointConstants.ResolveFailedEditedFileRecommendedNextAction
+                : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
+            return methodFiltered
+                ? SourcePausePointConstants.ResolveFailedMethodFilterNextActionPrefix + lineAdvice
+                : lineAdvice;
+        }
+
+        // Refuses a line whose statement is inside a method hot reload added. The compiled resolver
+        // is not asked, so there is no resolver sentence to keep. addedMethodLine is the line
+        // inside the added method, which differs from the requested line when the requested line
+        // has no statement and the next one is inside the added method.
         internal static PausePointResponse CreateAddedMethodRefusal(
             EnablePausePointSchema parameters,
-            string addedMethodName,
-            bool methodFilterIsAmbiguous)
+            int addedMethodLine,
+            string addedMethodName)
         {
-            return PausePointFailureResponse.Create(
-                string.Format(
+            string message = addedMethodLine == parameters.Line
+                ? string.Format(
                     SourcePausePointConstants.AddedMethodResolveFailureMessageFormat,
                     parameters.Line,
-                    addedMethodName),
+                    addedMethodName)
+                : string.Format(
+                    SourcePausePointConstants.AddedMethodNextStatementResolveFailureMessageFormat,
+                    parameters.Line,
+                    addedMethodLine,
+                    addedMethodName);
+            return PausePointFailureResponse.Create(
+                message,
                 SourcePausePointConstants.ErrorCodeResolveFailed,
-                methodFilterIsAmbiguous
-                    ? SourcePausePointConstants.AmbiguousAddedMethodResolveFailureNextAction
-                    : SourcePausePointConstants.AddedMethodResolveFailureNextAction);
+                SourcePausePointConstants.AddedMethodResolveFailureNextAction);
+        }
+
+        // Refuses a line whose statement, or whose next statement, is inside a method hot reload
+        // patched. Why not LINE_NOT_COMPILED: its next action says to hot-reload and retry, but the
+        // method is already patched, so that retry returns the same refusal. patchedLine is the
+        // line inside the patched method, which differs from the requested line when the
+        // requested line has no statement and the next one is inside the patched method.
+        internal static PausePointResponse CreatePatchedMethodRefusal(
+            EnablePausePointSchema parameters,
+            int patchedLine,
+            PausePointPatchedEditedSpan span)
+        {
+            string message = patchedLine == parameters.Line
+                ? string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalMessageFormat,
+                    parameters.Line,
+                    span.Label,
+                    span.StartLine,
+                    span.EndLine)
+                : string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodNextStatementRefusalMessageFormat,
+                    parameters.Line,
+                    patchedLine,
+                    span.Label,
+                    span.StartLine,
+                    span.EndLine);
+            return PausePointFailureResponse.Create(
+                message,
+                SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload,
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedMethodRefusalNextActionFormat,
+                    parameters.Line,
+                    span.Label,
+                    span.StartLine,
+                    span.EndLine));
         }
 
         // Why the resolver's own sentence is dropped: it names a line and reads as a second,
         // competing reason, so the caller retries with other line numbers instead of hot reloading
-        // the method. The first sentence already covers every line in the file. The pdb warning
-        // travels along because "hot reload it and try again" hides the real cause when the method
-        // the caller means is already patched and its pdb is the part that is missing.
-        private static PausePointResponse CreateIntroducedTypeResolveFailure(
-            EnablePausePointSchema parameters,
-            string patchedMethodPdbUnavailableWarning)
+        // the method. The first sentence already covers every line in the file.
+        private static PausePointResponse CreateIntroducedTypeResolveFailure(EnablePausePointSchema parameters)
         {
             string message = string.Format(
                 SourcePausePointConstants.IntroducedTypeResolveFailureMessageFormat,
                 parameters.File);
-            PausePointResponse response = PausePointFailureResponse.Create(
+            return PausePointFailureResponse.Create(
                 message,
                 SourcePausePointConstants.ErrorCodeResolveFailed,
                 SourcePausePointConstants.IntroducedTypeResolveFailureNextAction);
-            List<string> warnings = new List<string>();
-            PausePointEnableWarningList.AddIfNotEmpty(warnings, patchedMethodPdbUnavailableWarning);
-            PausePointEnableWarningList.Assign(response, warnings);
-            return response;
         }
     }
 

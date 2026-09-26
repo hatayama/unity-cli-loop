@@ -11,18 +11,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string FilePath { get; }
         public string LifecycleNote { get; }
 
+        // The facts Reason was built from when a worker reported it. Null for every other row.
+        public HotReloadWorkerReasonFacts WorkerReason { get; }
+
         private HotReloadMethodOutcome(
             HotReloadMethodOutcomeKind kind,
             string method,
             string reason,
             string filePath,
-            string lifecycleNote)
+            string lifecycleNote,
+            HotReloadWorkerReasonFacts workerReason = null)
         {
             Kind = kind;
             Method = method;
             Reason = reason;
             FilePath = filePath;
             LifecycleNote = lifecycleNote ?? string.Empty;
+            WorkerReason = workerReason;
         }
 
         public static HotReloadMethodOutcome Patched(
@@ -102,7 +107,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public HotReloadMethodOutcome WithLifecycleNote(string lifecycleNote)
         {
-            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote);
+            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote, WorkerReason);
+        }
+
+        public HotReloadMethodOutcome WithReason(string reason)
+        {
+            return new HotReloadMethodOutcome(Kind, Method, reason, FilePath, LifecycleNote, WorkerReason);
+        }
+
+        public HotReloadMethodOutcome WithWorkerReason(HotReloadWorkerReasonFacts workerReason)
+        {
+            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, LifecycleNote, workerReason);
         }
     }
 }

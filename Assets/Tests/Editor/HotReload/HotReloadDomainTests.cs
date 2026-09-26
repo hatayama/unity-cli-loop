@@ -36,6 +36,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string IntroducedOwnerPath = "Assets/DomainIntroduced.cs";
 
+        // A path other than FileOne, the way an override copy differs from the requested file.
+        private const string ShimSourcePath = "/override/DomainFileOne.cs";
+        private const string ShimSourceHash = "generation-sha256";
+
+        // The copy a recorded reload read, and the hash of what it read.
+        private const string RecordedWorkerSourcePath = "/worker-copy/DomainFileOne.cs";
+        private const string RecordedSourceHash = "recorded-sha256";
+
+        // Two recorded paths where the second ends with the first, so a suffix lookup matches both.
+        private const string PlainRecordedPath = "Assets/Fixture/SuffixOwner.cs";
+        private const string NestedRecordedPath = "Packages/sample/Assets/Fixture/SuffixOwner.cs";
+
         private HotReloadDomainTestAccess _access;
 
         private HotReloadDomainTestScope _scope;
@@ -92,6 +104,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Not.Null,
                 "The registered shim method must survive an added-member-only start.");
             Assert.That(_access.Domain.ListActiveAddedMethodKeys(FileOne), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a file whose source still hashes the same as the source its shim generation was
+        /// compiled from is not reported as changed on disk.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_SameHashAsTheGenerationSource_ReturnsFalse()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(FileOne, _ => ShimSourceHash);
+
+            Assert.That(changed, Is.False);
+        }
+
+        /// <summary>
+        /// What: a file whose source now hashes differently from the source its shim generation was
+        /// compiled from is reported as changed on disk.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_DifferentHash_ReturnsTrue()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(FileOne, _ => "edited-sha256");
+
+            Assert.That(changed, Is.True);
+        }
+
+        /// <summary>
+        /// What: the check reads the path the generation's source came from, not the requested
+        /// path, so a reload from an edited copy compares against that copy.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_ReadsTheShimSourcePathNotTheRequestedPath()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+            List<string> readPaths = new List<string>();
+
+            _access.Domain.HasShimSourceChangedOnDisk(
+                FileOne,
+                path =>
+                {
+                    readPaths.Add(path);
+                    return ShimSourceHash;
+                });
+
+            Assert.That(readPaths, Is.EqualTo(new[] { ShimSourcePath }));
+        }
+
+        /// <summary>
+        /// What: a file with no shim generation is never reported as changed, and its source is
+        /// not read.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_FileWithoutShimGeneration_ReturnsFalse()
+        {
+            _access.Domain.BeginAddedMemberOnlyGeneration(FileOne);
+            bool read = false;
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(
+                FileOne,
+                _ =>
+                {
+                    read = true;
+                    return "edited-sha256";
+                });
+
+            Assert.That(changed, Is.False);
+            Assert.That(read, Is.False);
+        }
+
+        /// <summary>
+        /// What: a generation source that cannot be read is not reported as changed.
+        /// </summary>
+        [Test]
+        public void HasShimSourceChangedOnDisk_UnreadableSource_ReturnsFalse()
+        {
+            _access.BeginShimGenerationFromSource(FileOne, ShimSourcePath, ShimSourceHash);
+
+            bool changed = _access.Domain.HasShimSourceChangedOnDisk(FileOne, _ => null);
+
+            Assert.That(changed, Is.False);
         }
 
         /// <summary>
@@ -184,6 +280,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 _access.Domain.GetAddedFieldsForType(NestedReflectionType),
                 Is.EqualTo(new[] { "count" }));
+        }
+
+        /// <summary>
+        /// What: an added field's declaration answers whichever file declared it, and a field no
+        /// file declares answers nothing.
+        /// </summary>
+        [Test]
+        public void TryGetAddedFieldDeclaration_FindsTheDeclaringFilesRow()
+        {
+            HotReloadAddedFieldDeclaration wired = new HotReloadAddedFieldDeclaration(
+                HostType + "::wired",
+                HostType,
+                "wired",
+                typeof(string).AssemblyQualifiedName,
+                isStatic: false);
+            _access.ReplaceAddedFields(FileOne, new[] { HostType + ".alpha" });
+            _access.ReplaceAddedFields(FileTwo, new[] { HostType + ".wired" }, new[] { wired });
+
+            Assert.That(
+                _access.Domain.TryGetAddedFieldDeclaration(
+                    HostType,
+                    "wired",
+                    out HotReloadAddedFieldDeclaration found),
+                Is.True);
+            Assert.That(found.StoreFieldKey, Is.EqualTo(HostType + "::wired"));
+            Assert.That(
+                _access.Domain.TryGetAddedFieldDeclaration(
+                    HostType,
+                    "alpha",
+                    out HotReloadAddedFieldDeclaration _),
+                Is.False);
         }
 
         /// <summary>
@@ -356,18 +483,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void AppliedSource_IsRecordedAndClearedPerFile()
         {
-            _access.Domain.RecordAppliedSource(FileOne, "hash-one", true);
-            _access.Domain.RecordAppliedSource(FileTwo, "hash-two", false);
+            _access.Domain.AppliedSources.RecordAppliedSource(FileOne, "hash-one", true, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
+            _access.Domain.AppliedSources.RecordAppliedSource(FileTwo, "hash-two", false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
 
-            (string Hash, bool IsFullyApplied)? recorded = _access.Domain.TryGetAppliedSource(FileOne);
+            (string Hash, bool IsFullyApplied)? recorded = _access.Domain.AppliedSources.TryGetAppliedSource(FileOne);
             Assert.That(recorded, Is.Not.Null);
             Assert.That(recorded.Value.Hash, Is.EqualTo("hash-one"));
             Assert.That(recorded.Value.IsFullyApplied, Is.True);
 
-            _access.Domain.ClearAppliedSource(FileOne);
+            _access.Domain.AppliedSources.ClearAppliedSource(FileOne);
 
-            Assert.That(_access.Domain.TryGetAppliedSource(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetAppliedSource(FileTwo), Is.Not.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileTwo), Is.Not.Null);
         }
 
         /// <summary>
@@ -380,12 +507,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadNewSourceMembershipEvidence evidence = CreateMembershipEvidence(FileOne);
 
-            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, evidence);
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileOne, evidence);
 
             Assert.That(
-                _access.Domain.TryGetNewSourceMembershipEvidence(FileOne),
+                _access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileOne),
                 Is.SameAs(evidence));
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
         }
 
         /// <summary>
@@ -396,13 +523,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void ClearAppliedSource_DropsTheMembershipEvidenceOfThatFileOnly()
         {
-            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
-            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
 
-            _access.Domain.ClearAppliedSource(FileOne);
+            _access.Domain.AppliedSources.ClearAppliedSource(FileOne);
 
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Not.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileTwo), Is.Not.Null);
         }
 
         /// <summary>
@@ -427,10 +554,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_access.Domain.DescribeAddedFields(), Is.Empty);
             Assert.That(_access.Domain.DescribeAddedMembers(), Is.Empty);
             Assert.That(HotReloadInvocationRegistry.GetCount(AddedMethodKey), Is.EqualTo(0));
-            Assert.That(_access.Domain.TryGetAppliedSource(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetAppliedSource(FileTwo), Is.Null);
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
-            Assert.That(_access.Domain.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileTwo), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileOne), Is.Null);
+            Assert.That(_access.Domain.AppliedSources.TryGetNewSourceMembershipEvidence(FileTwo), Is.Null);
             Assert.That(
                 _access.Domain.TryGetSupersededReplacement(SupersededMethodKey, out string _),
                 Is.False);
@@ -447,10 +574,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _access.ReplaceAddedFields(FileOne, new[] { "DomainHost.count" });
             _access.ReplaceAddedFields(FileTwo, new[] { "DomainHost.label" });
             HotReloadInvocationRegistry.Increment(AddedMethodKey);
-            _access.Domain.RecordAppliedSource(FileOne, "hash", true);
-            _access.Domain.RecordAppliedSource(FileTwo, "other-hash", false);
-            _access.Domain.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
-            _access.Domain.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
+            _access.Domain.AppliedSources.RecordAppliedSource(FileOne, "hash", true, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
+            _access.Domain.AppliedSources.RecordAppliedSource(FileTwo, "other-hash", false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileOne, CreateMembershipEvidence(FileOne));
+            _access.Domain.AppliedSources.RecordNewSourceMembershipEvidence(FileTwo, CreateMembershipEvidence(FileTwo));
             _access.RecordSupersededSignature(FileOne, SupersededMethodKey, "Superseded(int)");
         }
 
@@ -508,7 +635,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: the pause point side is told a project-relative path declares an introduced type,
-        /// so it can explain why that file has no compiled line map instead of failing blankly.
+        /// so it can explain why that file has no compiled source instead of failing blankly.
         /// </summary>
         [Test]
         public void IsIntroducedTypeSourceFile_WithTheOwnerProjectRelativePath_ReturnsTrue()
@@ -572,6 +699,302 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return artifact;
         }
 
+        /// <summary>
+        /// What: an applied-source record needs the path its reload read; an empty one is refused
+        /// before anything is recorded.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSource_EmptySourcePath_ThrowsAndRecordsNothing()
+        {
+            Assert.Throws<ArgumentException>(
+                () => _access.Domain.AppliedSources.RecordAppliedSource(
+                    FileOne,
+                    RecordedSourceHash,
+                    false,
+                    string.Empty,
+                    Array.Empty<HotReloadUnappliedRow>()));
+
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileOne), Is.Null);
+        }
+
+        /// <summary>
+        /// What: an applied-source record needs its row list, even an empty one; null is refused
+        /// before anything is recorded.
+        /// </summary>
+        [Test]
+        public void RecordAppliedSource_NullRows_ThrowsAndRecordsNothing()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => _access.Domain.AppliedSources.RecordAppliedSource(
+                    FileOne,
+                    RecordedSourceHash,
+                    false,
+                    RecordedWorkerSourcePath,
+                    null));
+
+            Assert.That(_access.Domain.AppliedSources.TryGetAppliedSource(FileOne), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a file no reload recorded has no latest reload.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_NoRecord_ReturnsNull()
+        {
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            Assert.That(port.GetLatestReloadOfFile(FileOne), Is.Null);
+        }
+
+        /// <summary>
+        /// What: when the file still hashes as the recorded reload read it, the latest reload says
+        /// the file is unchanged and hands back the rows that reload left unapplied.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_SameContents_ReportsUnchangedWithItsRows()
+        {
+            RecordReloadOfFileOne(new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped));
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            HotReloadLatestFileReload latest = port.GetLatestReloadOfFile(FileOne);
+
+            Assert.That(latest, Is.Not.Null);
+            Assert.That(latest.FileChangedSince, Is.False);
+            Assert.That(latest.UnappliedRows.Count, Is.EqualTo(1));
+            Assert.That(latest.UnappliedRows[0].Label, Is.EqualTo(SkippableLabel()));
+            Assert.That(latest.UnappliedRows[0].Kind, Is.EqualTo(HotReloadUnappliedRowKind.Skipped));
+        }
+
+        /// <summary>
+        /// What: when the file now hashes differently from what the recorded reload read, the
+        /// latest reload says the file changed since.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_ChangedContents_ReportsChanged()
+        {
+            RecordReloadOfFileOne();
+            HotReloadPausePointPort port = CreatePort(_ => "edited-sha256");
+
+            HotReloadLatestFileReload latest = port.GetLatestReloadOfFile(FileOne);
+
+            Assert.That(latest, Is.Not.Null);
+            Assert.That(latest.FileChangedSince, Is.True);
+        }
+
+        /// <summary>
+        /// What: a file whose bytes cannot be read counts as unchanged, the way the shim-source
+        /// check treats it.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_UnreadableFile_ReportsUnchanged()
+        {
+            RecordReloadOfFileOne();
+            HotReloadPausePointPort port = CreatePort(_ => null);
+
+            HotReloadLatestFileReload latest = port.GetLatestReloadOfFile(FileOne);
+
+            Assert.That(latest, Is.Not.Null);
+            Assert.That(latest.FileChangedSince, Is.False);
+        }
+
+        /// <summary>
+        /// What: the check hashes the path the recorded reload read, not the requested path, so a
+        /// reload from an edited copy compares against that copy.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_ReadsThePathTheReloadReadNotTheRequestedPath()
+        {
+            RecordReloadOfFileOne();
+            List<string> readPaths = new List<string>();
+            HotReloadPausePointPort port = CreatePort(path =>
+            {
+                readPaths.Add(path);
+                return RecordedSourceHash;
+            });
+
+            port.GetLatestReloadOfFile(FileOne);
+
+            Assert.That(readPaths, Is.EqualTo(new[] { RecordedWorkerSourcePath }));
+        }
+
+        /// <summary>
+        /// What: an absolute path or one spelled with backslashes finds the record kept under the
+        /// project-relative path.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_AbsoluteOrBackslashPath_FindsTheSameRecord()
+        {
+            RecordReloadOfFileOne(new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped));
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+            string absolutePath = "/project-root/" + FileOne;
+            string backslashPath = FileOne.Replace('/', '\\');
+
+            HotReloadLatestFileReload byAbsolute = port.GetLatestReloadOfFile(absolutePath);
+            HotReloadLatestFileReload byBackslash = port.GetLatestReloadOfFile(backslashPath);
+
+            Assert.That(byAbsolute, Is.Not.Null);
+            Assert.That(byAbsolute.UnappliedRows.Count, Is.EqualTo(1));
+            Assert.That(byBackslash, Is.Not.Null);
+            Assert.That(byBackslash.UnappliedRows.Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a path that ends with two recorded paths names neither of them for sure, so no
+        /// record answers for it rather than the wrong file's.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_PathEndingWithTwoRecordedPaths_ReturnsNull()
+        {
+            RecordReloadOfNestedAndPlainPaths();
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            HotReloadLatestFileReload latest = port.GetLatestReloadOfFile("/project-root/" + NestedRecordedPath);
+
+            Assert.That(latest, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a path that names one recorded path exactly gets that record, even though it also
+        /// ends with another recorded path.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_PathNamingOneRecordExactly_ReturnsThatRecordOverASuffixMatch()
+        {
+            RecordReloadOfNestedAndPlainPaths();
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            HotReloadLatestFileReload latest = port.GetLatestReloadOfFile(NestedRecordedPath);
+
+            Assert.That(latest, Is.Not.Null);
+            Assert.That(latest.UnappliedRows.Count, Is.EqualTo(1));
+            Assert.That(latest.UnappliedRows[0].Label, Is.EqualTo(SkippableLabel()));
+        }
+
+        /// <summary>
+        /// What: an empty path has no latest reload.
+        /// </summary>
+        [Test]
+        public void GetLatestReloadOfFile_EmptyPath_ReturnsNull()
+        {
+            RecordReloadOfFileOne();
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            Assert.That(port.GetLatestReloadOfFile(string.Empty), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a method the latest reload skipped gets that reload's row back.
+        /// </summary>
+        [Test]
+        public void FindUnappliedRowForMethod_SkippedMethod_ReturnsItsRow()
+        {
+            RecordReloadOfFileOne(new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped));
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            HotReloadUnappliedRow row = port.FindUnappliedRowForMethod(FileOne, RowLabelHostMethod(nameof(RowLabelHost.Skippable)));
+
+            Assert.That(row, Is.Not.Null);
+            Assert.That(row.Kind, Is.EqualTo(HotReloadUnappliedRowKind.Skipped));
+        }
+
+        /// <summary>
+        /// What: a method of a nested type finds the row the worker labelled from the Cecil
+        /// metadata name, because both labels spell the nesting as reflection does.
+        /// </summary>
+        [Test]
+        public void FindUnappliedRowForMethod_MethodOfANestedType_MatchesTheWorkerLabel()
+        {
+            string workerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(RowLabelHost.Nested).FullName.Replace('+', '/')),
+                nameof(RowLabelHost.Nested.Ping),
+                new[] { "System.String" },
+                0);
+            RecordReloadOfFileOne(new HotReloadUnappliedRow(workerLabel, HotReloadUnappliedRowKind.Failed));
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+            MethodInfo ping = typeof(RowLabelHost.Nested).GetMethod(nameof(RowLabelHost.Nested.Ping));
+
+            HotReloadUnappliedRow row = port.FindUnappliedRowForMethod(FileOne, ping);
+
+            Assert.That(row, Is.Not.Null);
+            Assert.That(row.Kind, Is.EqualTo(HotReloadUnappliedRowKind.Failed));
+        }
+
+        /// <summary>
+        /// What: a method the latest reload applied gets no row, even while another method of the
+        /// same file has one.
+        /// </summary>
+        [Test]
+        public void FindUnappliedRowForMethod_AppliedMethod_ReturnsNull()
+        {
+            RecordReloadOfFileOne(new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped));
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+            Assert.That(
+                port.FindUnappliedRowForMethod(FileOne, RowLabelHostMethod(nameof(RowLabelHost.Skippable))),
+                Is.Not.Null,
+                "Precondition: the skipped method must find its row.");
+
+            HotReloadUnappliedRow row = port.FindUnappliedRowForMethod(FileOne, RowLabelHostMethod(nameof(RowLabelHost.Applied)));
+
+            Assert.That(row, Is.Null);
+        }
+
+        /// <summary>
+        /// What: once the file changed since the latest reload, that reload's rows no longer
+        /// describe the file, so no row comes back.
+        /// </summary>
+        [Test]
+        public void FindUnappliedRowForMethod_FileChangedSince_ReturnsNull()
+        {
+            RecordReloadOfFileOne(new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped));
+            MethodInfo skippable = RowLabelHostMethod(nameof(RowLabelHost.Skippable));
+            Assert.That(
+                CreatePort(_ => RecordedSourceHash).FindUnappliedRowForMethod(FileOne, skippable),
+                Is.Not.Null,
+                "Precondition: with the recorded bytes the method must find its row.");
+
+            HotReloadUnappliedRow row = CreatePort(_ => "edited-sha256").FindUnappliedRowForMethod(FileOne, skippable);
+
+            Assert.That(row, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a null method gets no row.
+        /// </summary>
+        [Test]
+        public void FindUnappliedRowForMethod_NullMethod_ReturnsNull()
+        {
+            RecordReloadOfFileOne(new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped));
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+
+            Assert.That(port.FindUnappliedRowForMethod(FileOne, null), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a worker row spells a constructed generic parameter type the way Cecil does, so a
+        /// method taking one finds no row; the match is exact and does not convert the spelling.
+        /// </summary>
+        [Test]
+        public void FindUnappliedRowForMethod_MethodWithAConstructedGenericParameter_ReturnsNull()
+        {
+            string workerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(RowLabelHost).FullName.Replace('+', '/')),
+                nameof(RowLabelHost.TakeList),
+                new[] { "System.Collections.Generic.List`1<System.Int32>" },
+                0);
+            RecordReloadOfFileOne(
+                new HotReloadUnappliedRow(workerLabel, HotReloadUnappliedRowKind.Skipped),
+                new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped));
+            HotReloadPausePointPort port = CreatePort(_ => RecordedSourceHash);
+            Assert.That(
+                port.FindUnappliedRowForMethod(FileOne, RowLabelHostMethod(nameof(RowLabelHost.Skippable))),
+                Is.Not.Null,
+                "Precondition: a method without generic parameters must find its row.");
+
+            HotReloadUnappliedRow row = port.FindUnappliedRowForMethod(FileOne, RowLabelHostMethod(nameof(RowLabelHost.TakeList)));
+
+            Assert.That(row, Is.Null);
+        }
+
         // Why a generated name: an artifact assembly is compiled under a name of its own, so a
         // fixture that reused a project assembly's name would not resolve the way production does.
         private static Assembly CreateIntroducedTypeAssembly()
@@ -589,6 +1012,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(row.ProjectRelativePath, Is.EqualTo(expectedPath));
             Assert.That(row.TypeName, Is.EqualTo(expectedType));
             Assert.That(row.FieldName, Is.EqualTo(expectedField));
+        }
+
+        private HotReloadPausePointPort CreatePort(Func<string, string> readSourceContentHashOrNull)
+        {
+            return new HotReloadPausePointPort(_access.Domain, readSourceContentHashOrNull);
+        }
+
+        // Records a partially applied reload of FileOne that read RecordedWorkerSourcePath.
+        private void RecordReloadOfFileOne(params HotReloadUnappliedRow[] rows)
+        {
+            _access.Domain.AppliedSources.RecordAppliedSource(
+                FileOne,
+                RecordedSourceHash,
+                rows.Length == 0,
+                RecordedWorkerSourcePath,
+                rows);
+        }
+
+        // Records PlainRecordedPath with no rows and NestedRecordedPath, which ends with it, with
+        // one Skipped row, so a lookup that returns a record shows which one it found.
+        private void RecordReloadOfNestedAndPlainPaths()
+        {
+            _access.Domain.AppliedSources.RecordAppliedSource(
+                PlainRecordedPath,
+                RecordedSourceHash,
+                true,
+                RecordedWorkerSourcePath,
+                Array.Empty<HotReloadUnappliedRow>());
+            _access.Domain.AppliedSources.RecordAppliedSource(
+                NestedRecordedPath,
+                RecordedSourceHash,
+                false,
+                RecordedWorkerSourcePath,
+                new[] { new HotReloadUnappliedRow(SkippableLabel(), HotReloadUnappliedRowKind.Skipped) });
+        }
+
+        private static string SkippableLabel()
+        {
+            return HotReloadMethodKeys.FormatMethodLabel(RowLabelHostMethod(nameof(RowLabelHost.Skippable)));
+        }
+
+        private static MethodInfo RowLabelHostMethod(string name)
+        {
+            return typeof(RowLabelHost).GetMethod(name);
+        }
+
+        // Methods the port tests label the way hot reload labels a reloaded method.
+        private sealed class RowLabelHost
+        {
+            public void Skippable(int value)
+            {
+            }
+
+            public void Applied()
+            {
+            }
+
+            public void TakeList(List<int> values)
+            {
+            }
+
+            internal sealed class Nested
+            {
+                public void Ping(string text)
+                {
+                }
+            }
         }
 
         private static MethodInfo GetAddedTarget()

@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int patchCandidateRowCountForFile,
             HotReloadSnapshotMissReason snapshotMissReason,
             bool declaresIntroducedType,
+            bool declaresRefusedIntroducedType,
             string projectRelativePath,
             string assemblyName,
             string assemblyResolvePath,
@@ -38,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchCandidateRowCountForFile,
                 snapshotMissReason,
                 declaresIntroducedType,
+                declaresRefusedIntroducedType,
                 projectRelativePath,
                 assemblyName,
                 warnings,
@@ -78,12 +80,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int patchCandidateRowCountForFile,
             HotReloadSnapshotMissReason snapshotMissReason,
             bool declaresIntroducedType,
+            bool declaresRefusedIntroducedType,
             string projectRelativePath,
             string assemblyName,
             List<string> warnings,
             HotReloadSiblingBaselineNotices siblingBaselineNotices)
         {
-            if (snapshotMissReason != HotReloadSnapshotMissReason.None && patchCandidateRowCountForFile >= 1)
+            // Why a refused declaration silences it: the file's type notice already says only a
+            // compile makes that type available, and "patching all methods" beside it reads as if
+            // the file were patched while the compile it needs also establishes the baseline.
+            if (snapshotMissReason != HotReloadSnapshotMissReason.None
+                && patchCandidateRowCountForFile >= 1
+                && !declaresRefusedIntroducedType)
             {
                 HotReloadMissingBaselineKind kind =
                     ChooseMissingBaselineKind(snapshotMissReason, declaresIntroducedType);
@@ -152,9 +160,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 outcomes.Add(
                     HotReloadMethodOutcome.Skipped(
-                        skipped.method ?? "(unknown)",
-                        HotReloadWorkerReasonText.Render(skipped.reason),
-                        assemblyResolvePath));
+                            skipped.method ?? "(unknown)",
+                            HotReloadWorkerReasonText.Render(skipped.reason),
+                            assemblyResolvePath)
+                        .WithWorkerReason(HotReloadWorkerReasonFacts.From(skipped.reason)));
             }
         }
 

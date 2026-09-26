@@ -38,21 +38,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     path,
                     firstFile.ProjectRoot,
                     contentPathOverrideByFile));
-            IReadOnlyList<(string ProjectRelativePath, string WorkerSourcePath,
-                HotReloadNewSourceMembershipEvidence Evidence)> filesToInclude = rebind.FilesToInclude;
+            IReadOnlyList<HotReloadSiblingInclusion> filesToInclude = rebind.FilesToInclude;
             for (int index = 0; index < filesToInclude.Count; index++)
             {
+                HotReloadSiblingInclusion inclusion = filesToInclude[index];
+                run.NoteSiblingInclusion(inclusion.ProjectRelativePath, inclusion.Reason);
                 filesOfGroup.Add(
                     HotReloadGroupFile.ForActiveSibling(
                         firstFile,
-                        filesToInclude[index].ProjectRelativePath,
-                        filesToInclude[index].WorkerSourcePath,
+                        inclusion.ProjectRelativePath,
+                        inclusion.WorkerSourcePath,
                         new HotReloadFileSinks(
                             run.SiblingDerivedWarnings,
                             run.OneShotCallerNoteCandidates,
                             run.DisplayedRemovedMembers),
-                        filesToInclude[index].Evidence,
+                        inclusion.Evidence,
                         run.SiblingBaselineNotices));
+            }
+
+            IReadOnlyList<string> changedCompanionPaths = rebind.ChangedCompanionPaths;
+            for (int index = 0; index < changedCompanionPaths.Count; index++)
+            {
+                run.NoteChangedCompanion(changedCompanionPaths[index]);
             }
 
             AddChangedSinceApplyWarnings(firstFile, rebind);
@@ -61,39 +68,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void AddSiblingRebindResultWarnings(
             List<HotReloadGroupFile> filesOfGroup,
             int inputCount,
-            IReadOnlyList<HotReloadFileProcessResult> groupResults)
+            IReadOnlyList<HotReloadFileProcessResult> groupResults,
+            HotReloadRunAccumulator run)
         {
             Debug.Assert(filesOfGroup != null, "filesOfGroup must not be null.");
             Debug.Assert(groupResults != null, "groupResults must not be null.");
+            Debug.Assert(run != null, "run must not be null.");
             Debug.Assert(
                 groupResults.Count == filesOfGroup.Count,
                 "Rebind warnings need one result per group file.");
             Debug.Assert(groupResults.Count > 0, "A processed group must have a result.");
 
+            List<string> warnings = groupResults[0].Warnings;
             List<string> reappliedPaths = new List<string>();
+            List<string> retriedPaths = new List<string>();
+            List<string> companionPaths = new List<string>();
             for (int position = inputCount; position < filesOfGroup.Count; position++)
             {
                 string path = filesOfGroup[position].ProjectRelativePath;
-                string warningFormat =
-                    HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(groupResults[position]);
-                if (warningFormat == null)
+                HotReloadFileProcessResult result = groupResults[position];
+                switch (run.SiblingInclusionReasonOf(path))
                 {
-                    reappliedPaths.Add(path);
-                    continue;
+                    case HotReloadSiblingInclusionReason.Companion:
+                        AddCompanionResult(path, result, companionPaths);
+                        break;
+                    case HotReloadSiblingInclusionReason.RetryAfterSkip:
+                        AddRetryResult(path, result, retriedPaths, warnings);
+                        break;
+                    default:
+                        AddActiveChangesResult(path, result, reappliedPaths, warnings);
+                        break;
                 }
-
-                groupResults[0].Warnings.Add(string.Format(warningFormat, path));
             }
 
-            if (reappliedPaths.Count > 0)
-            {
-                groupResults[0].Warnings.Add(
-                    string.Format(
-                        HotReloadConstants.ActiveSiblingsRebindWarningFormat,
-                        reappliedPaths.Count,
-                        filesOfGroup[0].AssemblyName,
-                        string.Join(", ", reappliedPaths)));
-            }
+            string assemblyName = filesOfGroup[0].AssemblyName;
+            AddSummary(warnings, HotReloadConstants.ActiveSiblingsRebindWarningFormat, assemblyName, reappliedPaths);
+            AddSummary(warnings, HotReloadConstants.RetriedSiblingsWarningFormat, assemblyName, retriedPaths);
+            AddSummary(warnings, HotReloadConstants.CompanionSiblingsWarningFormat, assemblyName, companionPaths);
         }
 
         // Why changed groups only: a trailing all-deferred plan is not the shim that carries
@@ -127,17 +138,81 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        private static void AddActiveChangesResult(
+            string path,
+            HotReloadFileProcessResult result,
+            List<string> reappliedPaths,
+            List<string> warnings)
+        {
+            string warningFormat = HotReloadSiblingRebindWarningSelector.SelectUnappliedWarningFormat(result);
+            if (warningFormat == null)
+            {
+                reappliedPaths.Add(path);
+                return;
+            }
+
+            warnings.Add(string.Format(warningFormat, path));
+        }
+
+        private static void AddRetryResult(
+            string path,
+            HotReloadFileProcessResult result,
+            List<string> retriedPaths,
+            List<string> warnings)
+        {
+            if (HotReloadSiblingRebindWarningSelector.AppliedAnyChange(result))
+            {
+                retriedPaths.Add(path);
+                return;
+            }
+
+            warnings.Add(string.Format(HotReloadConstants.RetriedSiblingNotAppliedWarningFormat, path));
+        }
+
+        // Why a companion with rows is left to its rows: it had nothing to apply, so a row means
+        // the whole group was refused, which the passed files' rows already explain.
+        private static void AddCompanionResult(
+            string path,
+            HotReloadFileProcessResult result,
+            List<string> companionPaths)
+        {
+            if (result.Outcomes.Count == 0)
+            {
+                companionPaths.Add(path);
+            }
+        }
+
+        private static void AddSummary(
+            List<string> warnings,
+            string format,
+            string assemblyName,
+            List<string> paths)
+        {
+            if (paths.Count == 0)
+            {
+                return;
+            }
+
+            warnings.Add(string.Format(format, paths.Count, assemblyName, string.Join(", ", paths)));
+        }
+
         private void AddChangedSinceApplyWarnings(
             HotReloadGroupFile firstFile,
             HotReloadActiveSiblingRebindPlan rebind)
         {
-            IReadOnlyList<string> changedSinceApplyPaths = rebind.ChangedSinceApplyPaths;
-            for (int index = 0; index < changedSinceApplyPaths.Count; index++)
+            AddChangedWarnings(firstFile, HotReloadConstants.ActiveSiblingChangedSinceApplyWarningFormat, rebind.ChangedSinceApplyPaths);
+            AddChangedWarnings(firstFile, HotReloadConstants.RetrySiblingChangedSinceSkipWarningFormat, rebind.ChangedSinceSkipPaths);
+            AddChangedWarnings(firstFile, HotReloadConstants.CompanionSiblingChangedWarningFormat, rebind.ChangedCompanionPaths);
+        }
+
+        private static void AddChangedWarnings(
+            HotReloadGroupFile firstFile,
+            string format,
+            IReadOnlyList<string> changedPaths)
+        {
+            for (int index = 0; index < changedPaths.Count; index++)
             {
-                firstFile.Sinks.Warnings.Add(
-                    string.Format(
-                        HotReloadConstants.ActiveSiblingChangedSinceApplyWarningFormat,
-                        changedSinceApplyPaths[index]));
+                firstFile.Sinks.Warnings.Add(string.Format(format, changedPaths[index]));
             }
         }
     }

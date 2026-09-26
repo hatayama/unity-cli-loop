@@ -19,13 +19,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "so this type was not introduced. Fix the failed file and rerun.";
 
         // Why this has to be spelled out: an introduced type compiles against the compiled
-        // assemblies on disk, so a member hot reload added earlier is genuinely absent there. The
-        // bare compiler error reads as a typo and sends the reader looking for one.
+        // assemblies on disk and the retained artifacts, so a member hot reload added, in this
+        // reload or an earlier one, is genuinely absent there. The bare compiler error reads as a
+        // typo and sends the reader looking for one. Why worded as a condition: only the name is
+        // matched, so a missing member of another type can share it. Why splitting is ruled out:
+        // reloading the addition first still leaves it outside both, which is the obvious retry.
         private const string AddedMemberInvisibleHint =
-            "One or more of the missing members were added by hot reload (Added rows) and are not "
-            + "visible to the compilation of an introduced type, which compiles against the "
-            + "compiled assemblies only. Run 'uloop compile' to make the added members compiled, "
-            + "then rerun.";
+            "One or more of the missing members share a name with a hot reload addition, from this "
+            + "reload or an earlier one. If the missing member is that addition, an introduced type "
+            + "cannot see it: it compiles against the compiled assemblies and earlier introduced "
+            + "types only, so reloading the addition first does not help. Run 'uloop compile' to "
+            + "make the added members compiled, then rerun.";
+
+        // Why it points at the warning: the enum-member warning of the same run already carries
+        // the cast that avoids the member, and repeating the value here would need the enum too.
+        private const string AddedEnumMemberInvisibleHint =
+            "One or more of the missing members share a name with an enum member this reload adds "
+            + "to a compiled enum. Hot reload cannot add an enum member, so no compilation sees it "
+            + "until 'uloop compile'. Write the underlying value as the cast the enum-member warning "
+            + "in Warnings shows, or run 'uloop compile' to add the member, then rerun.";
 
         private const string MissingMemberErrorCode = "CS1061:";
 
@@ -41,8 +53,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadIntroducedTypeCompilerResult compileResult,
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
             string targetAssemblyName,
-            IReadOnlyCollection<string> activeAddedMemberNames)
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames)
         {
+            if (addedMemberNames == null)
+            {
+                throw new ArgumentNullException(nameof(addedMemberNames));
+            }
+
             List<HotReloadIntroducedTypeOutcome> rows = new List<HotReloadIntroducedTypeOutcome>();
 
             // Why one unattributed row: without a diagnostic the failure belongs to the batch and
@@ -68,14 +85,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 messagesByOwner,
                 emittedOwners,
                 targetAssemblyName,
-                activeAddedMemberNames,
+                addedMemberNames,
                 rows);
             AppendUnknownOwnerRows(
                 ownerOrder,
                 messagesByOwner,
                 emittedOwners,
                 targetAssemblyName,
-                activeAddedMemberNames,
+                addedMemberNames,
                 rows);
             if (unattributed.Count > 0)
             {
@@ -123,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> messagesByOwner,
             HashSet<string> emittedOwners,
             string targetAssemblyName,
-            IReadOnlyCollection<string> activeAddedMemberNames,
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames,
             List<HotReloadIntroducedTypeOutcome> rows)
         {
             foreach (HotReloadIntroducedTypeDescriptor descriptor in descriptors)
@@ -151,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     descriptor.MetadataName.Value,
                     targetAssemblyName,
                     owner,
-                    BuildReason(messages, activeAddedMemberNames)));
+                    BuildReason(messages, addedMemberNames)));
             }
         }
 
@@ -162,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> messagesByOwner,
             HashSet<string> emittedOwners,
             string targetAssemblyName,
-            IReadOnlyCollection<string> activeAddedMemberNames,
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames,
             List<HotReloadIntroducedTypeOutcome> rows)
         {
             foreach (string owner in ownerOrder)
@@ -176,28 +193,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     string.Empty,
                     targetAssemblyName,
                     owner,
-                    BuildReason(messagesByOwner[owner], activeAddedMemberNames)));
+                    BuildReason(messagesByOwner[owner], addedMemberNames)));
             }
         }
 
         private static string BuildReason(
             List<string> messages,
-            IReadOnlyCollection<string> activeAddedMemberNames)
+            HotReloadIntroducedTypeAddedMemberNames addedMemberNames)
         {
             string reason = ReasonPrefix + string.Join("; ", messages);
-            if (!MentionsAnActiveAddedMember(messages, activeAddedMemberNames))
+            // Why a separate check: Members never holds an enum member, so without it a CS0117 on
+            // an added enum member would stay the bare compiler error.
+            if (MentionsAddedEnumMember(messages, addedMemberNames.EnumMembers))
             {
-                return reason;
+                return reason + " " + AddedEnumMemberInvisibleHint;
             }
 
-            return reason + " " + AddedMemberInvisibleHint;
+            if (MentionsAnyOf(messages, addedMemberNames.Members))
+            {
+                return reason + " " + AddedMemberInvisibleHint;
+            }
+
+            return reason;
         }
 
-        private static bool MentionsAnActiveAddedMember(
+        private static bool MentionsAnyOf(
             List<string> messages,
-            IReadOnlyCollection<string> activeAddedMemberNames)
+            IReadOnlyCollection<string> names)
         {
-            if (activeAddedMemberNames == null || activeAddedMemberNames.Count == 0)
+            if (names.Count == 0)
             {
                 return false;
             }
@@ -209,8 +233,66 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string member = FindSecondQuotedToken(message, searchStart);
-                if (member != null && Contains(activeAddedMemberNames, member))
+                string member = FindQuotedToken(message, searchStart, 1);
+                if (member != null && Contains(names, member))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Why CS0117 only and the type as well: an enum member is reached through the enum type
+        // alone, and a CS1061 or a CS0117 on another type that shares the member name is missing
+        // for another reason, so the enum hint would send the reader the wrong way.
+        private static bool MentionsAddedEnumMember(
+            List<string> messages,
+            IReadOnlyCollection<string> qualifiedEnumMembers)
+        {
+            if (qualifiedEnumMembers.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (string message in messages)
+            {
+                int codeIndex = message.IndexOf(MissingStaticMemberErrorCode, StringComparison.Ordinal);
+                if (codeIndex < 0)
+                {
+                    continue;
+                }
+
+                string typeName = FindQuotedToken(message, codeIndex + MissingStaticMemberErrorCode.Length, 0);
+                string member = FindQuotedToken(message, codeIndex + MissingStaticMemberErrorCode.Length, 1);
+                if (typeName != null && member != null && NamesEnumMember(qualifiedEnumMembers, typeName, member))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Why a suffix match on the type: the compiler prints the enum as the source spells it,
+        // often without its namespace, while the worker sends the fully qualified display name.
+        private static bool NamesEnumMember(
+            IReadOnlyCollection<string> qualifiedEnumMembers,
+            string typeName,
+            string member)
+        {
+            foreach (string qualified in qualifiedEnumMembers)
+            {
+                int lastDot = qualified.LastIndexOf('.');
+                if (lastDot <= 0
+                    || !string.Equals(qualified.Substring(lastDot + 1), member, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string enumName = qualified.Substring(0, lastDot);
+                if (string.Equals(enumName, typeName, StringComparison.Ordinal)
+                    || enumName.EndsWith("." + typeName, StringComparison.Ordinal))
                 {
                     return true;
                 }
@@ -238,35 +320,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        // The missing member is the second quoted token of these diagnostics; the first one names
-        // the type that does not hold it.
-        private static string FindSecondQuotedToken(string message, int searchStart)
+        // In these diagnostics the first quoted token names the type that does not hold the member
+        // and the second names the missing member.
+        private static string FindQuotedToken(string message, int searchStart, int tokenIndex)
         {
-            int firstOpen = message.IndexOf('\'', searchStart);
-            if (firstOpen < 0)
+            int open = message.IndexOf('\'', searchStart);
+            for (int skipped = 0; open >= 0; skipped++)
             {
-                return null;
+                int close = message.IndexOf('\'', open + 1);
+                if (close < 0)
+                {
+                    return null;
+                }
+
+                if (skipped == tokenIndex)
+                {
+                    return message.Substring(open + 1, close - open - 1);
+                }
+
+                open = message.IndexOf('\'', close + 1);
             }
 
-            int firstClose = message.IndexOf('\'', firstOpen + 1);
-            if (firstClose < 0)
-            {
-                return null;
-            }
-
-            int secondOpen = message.IndexOf('\'', firstClose + 1);
-            if (secondOpen < 0)
-            {
-                return null;
-            }
-
-            int secondClose = message.IndexOf('\'', secondOpen + 1);
-            if (secondClose < 0)
-            {
-                return null;
-            }
-
-            return message.Substring(secondOpen + 1, secondClose - secondOpen - 1);
+            return null;
         }
 
         private static bool Contains(IReadOnlyCollection<string> names, string member)

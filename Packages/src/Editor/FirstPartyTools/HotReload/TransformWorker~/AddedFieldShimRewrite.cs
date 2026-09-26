@@ -106,7 +106,7 @@ internal sealed class AddedFieldShimRewrite
 
         SyntaxKind binaryKind = ShimBodyRewriter.GetCompoundAssignmentBinaryKind(node.Kind());
         ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
-        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
+        ExpressionSyntax combined = CombineCompoundOperands(binaryKind, getCall, visitedRight);
         return CreateAddedFieldSet(
                 binding,
                 receiver,
@@ -146,6 +146,22 @@ internal sealed class AddedFieldShimRewrite
 
         return node is PostfixUnaryExpressionSyntax postfix
             && postfix.IsKind(SyntaxKind.PostDecrementExpression);
+    }
+
+    // Why the right operand is always parenthesized: the shim is emitted as text and parsed
+    // again, and a node tree does not print the parentheses its shape implies. A right side that
+    // binds looser than the operator (a lambda, a conditional, an assignment) would otherwise
+    // reparse as a syntax error, or as a conditional over the partial sum that silently computes
+    // a different value. Parenthesizing unconditionally avoids reimplementing C# precedence.
+    internal static ExpressionSyntax CombineCompoundOperands(
+        SyntaxKind binaryKind,
+        ExpressionSyntax getCall,
+        ExpressionSyntax right)
+    {
+        return SyntaxFactory.BinaryExpression(
+            binaryKind,
+            getCall,
+            SyntaxFactory.ParenthesizedExpression(right));
     }
 
     // Why cast: C# compound assignment and ++/-- apply a conversion back to the assigned type
@@ -229,11 +245,27 @@ internal sealed class AddedFieldShimRewrite
             return SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression);
         }
 
-        ExpressionSyntax cloned = SyntaxFactory.ParseExpression(binding.Initializer.ToString());
+        ExpressionSyntax cloned = SyntaxFactory.ParseExpression(ToStandaloneInitializerText(binding));
         return SyntaxFactory.ParenthesizedLambdaExpression(
                 SyntaxFactory.ParameterList(),
                 cloned)
             .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
+    }
+
+    // Why an array creation: '= { 1, 2 }' is only valid beside an array declaration, and as a
+    // lambda body it parses as a statement block. The declared type carries the rank of every
+    // dimension, so a jagged or rectangular initializer keeps its nested rows as they are. Only
+    // the emitted text changes: the recorded initializer stays the one the source spells.
+    private static string ToStandaloneInitializerText(AddedFieldBinding binding)
+    {
+        string initializerText = binding.Initializer.ToString();
+        if (!binding.Initializer.IsKind(SyntaxKind.ArrayInitializerExpression)
+            || !(binding.FieldType is IArrayTypeSymbol arrayType))
+        {
+            return initializerText;
+        }
+
+        return "new " + arrayType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + " " + initializerText;
     }
 
     internal static InvocationExpressionSyntax CreateAddedFieldStoreInvocation(

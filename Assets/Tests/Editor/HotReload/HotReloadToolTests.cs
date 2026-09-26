@@ -1039,6 +1039,170 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: one compile-resolvable warning plus a deferred hold warning counts both lines
+        /// but does not append the single-compile resolution sentence, because the hold line
+        /// is not a warning a compile clears.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_OneCompileWarningPlusDeferredHold_OmitsSingleCompileSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(false, false, true));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            AssertTwoWarningsWithoutSingleCompileSentence(response);
+        }
+
+        /// <summary>
+        /// What: one compile-resolvable warning plus a blocked scene Refresh warning counts both
+        /// lines but does not append the single-compile resolution sentence.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_OneCompileWarningPlusSceneRefreshHold_OmitsSingleCompileSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(
+                    true,
+                    false,
+                    false,
+                    HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Does.Contain(HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+            AssertTwoWarningsWithoutSingleCompileSentence(response);
+        }
+
+        /// <summary>
+        /// What: a retargeted pause-point warning beside two compile-resolvable warnings keeps
+        /// the single-compile resolution sentence off, because a compile does not clear it.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RetargetedPausePointBesideTwoCompileWarnings_OmitsSingleCompileSentence()
+        {
+            UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
+            try
+            {
+                const string id = "Assets/Scripts/A.cs:10";
+                UloopPausePointRegistry.Enable(id, 30);
+                UloopPausePointRegistry.SetResolvedLine(id, 12, "return value;");
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "compile warning one", "compile warning two" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    retargetedPausePointIds: new List<string> { id });
+
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+                Assert.That(response.Warnings, Has.Count.EqualTo(3));
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            }
+            finally
+            {
+                UloopPausePointRegistry.ResetForTests();
+            }
+        }
+
+        /// <summary>
+        /// What: a pause-point line-drift warning beside two compile-resolvable warnings keeps
+        /// the single-compile resolution sentence off.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_RetargetLineDriftBesideTwoCompileWarnings_OmitsSingleCompileSentence()
+        {
+            PausePointSidePortScope pausePointScope = new PausePointSidePortScope();
+            pausePointScope.Port.RetargetLineDriftWarnings = () =>
+                new List<(string, string, string)>
+                {
+                    ("Assets/Scripts/A.cs:10", "return a;", "return a + 1;")
+                };
+            try
+            {
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                    CreatePatchedResultWithTwoCompileWarnings());
+
+                Assert.That(response.Warnings, Has.Count.EqualTo(3));
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            }
+            finally
+            {
+                pausePointScope.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// What: an expired-not-retargeted pause-point warning beside two compile-resolvable
+        /// warnings keeps the single-compile resolution sentence off.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_ExpiredNotRetargetedBesideTwoCompileWarnings_OmitsSingleCompileSentence()
+        {
+            PausePointSidePortScope pausePointScope = new PausePointSidePortScope();
+            pausePointScope.Port.ExpiredNotRetargetedMarkerIds = () =>
+                new List<string> { "Assets/Scripts/A.cs:10" };
+            try
+            {
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                    CreatePatchedResultWithTwoCompileWarnings());
+
+                Assert.That(response.Warnings, Has.Count.EqualTo(3));
+                Assert.That(
+                    response.Message,
+                    Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            }
+            finally
+            {
+                pausePointScope.Dispose();
+            }
+        }
+
+        private static HotReloadOrchestratorResult CreatePatchedResultWithTwoCompileWarnings()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one", "compile warning two" },
+                patchedTotal: 1,
+                activePatchTotal: 1);
+        }
+
+        private static void AssertTwoWarningsWithoutSingleCompileSentence(HotReloadResponse response)
+        {
+            Assert.That(response.Warnings, Has.Count.EqualTo(2));
+            Assert.That(response.Message, Does.Contain("2 warning(s). See Warnings."));
+            Assert.That(
+                response.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
         /// What: --status Sync warnings for a deferred release and a blocked scene Refresh
         /// appear on the response.
         /// </summary>
@@ -1518,7 +1682,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: every apply-message branch appends the warning-count suffix when Warnings is
-        /// non-empty, and the applied branch mentions Skipped before that suffix.
+        /// non-empty, the applied branch mentions Skipped before that suffix, and a Skipped
+        /// method row keeps the single-compile resolution sentence off.
         /// </summary>
         [Test]
         public void BuildApplyResponse_WithWarnings_AppendsWarningCountOnEveryBranch()
@@ -1580,8 +1745,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedOnly.Message,
                 Is.EqualTo(
                     HotReloadConstants.RequestedFilesAllSkippedMessage
-                    + " 2 warning(s). See Warnings. "
-                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+                    + " 2 warning(s). See Warnings."));
 
             HotReloadResponse applied = HotReloadTool.BuildApplyResponse(
                 new HotReloadOrchestratorResult(
@@ -1613,8 +1777,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 appliedWithSkipped.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1. "
-                    + "3 warning(s). See Warnings. "
-                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+                    + "3 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: a Failed method row beside two orchestrator warnings keeps the single-compile
+        /// resolution sentence off, because that method has to be fixed before the agent goes on.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_FailedMethodBesideTwoOrchestratorWarnings_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs"),
+                        HotReloadMethodOutcome.Failed("Type.Broken", "reason", "Assets/A.cs")
+                    },
+                    new List<string> { "warn-a", "warn-b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+
+            Assert.That(response.Message, Does.Contain("2 warning(s). See Warnings."));
+            Assert.That(
+                response.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
 
         /// <summary>
@@ -1640,6 +1827,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
                     + "2 warning(s). See Warnings. "
                     + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
+        /// What: a run whose warnings include a type notice saying the type requires a compile does
+        /// not say that none of the warnings has to be cleared before continuing.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WarningsIncludeTypeNotice_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "Assets/A.cs: notice", "warn-b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    introducedTypeNoticeCount: 1));
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "2 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: a run that refused a type declaration does not say that none of its warnings has to
+        /// be cleared before continuing, because the refused type exists only after a compile.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WarningsBesideFailedType_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "warn-a", "warn-b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    introducedTypes: new List<HotReloadIntroducedTypeOutcome>
+                    {
+                        HotReloadIntroducedTypeOutcome.Failed(
+                            "Example.RefusedType",
+                            "SomeAssembly",
+                            "Assets/B.cs",
+                            "refused")
+                    }));
+
+            Assert.That(response.Message, Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            Assert.That(response.Message, Does.Contain("2 warning(s). See Warnings."));
         }
 
         /// <summary>
@@ -1734,6 +1975,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     activePatchTotal: 1));
             Assert.That(withoutFields.AddedFields, Is.Not.Null);
             Assert.That(withoutFields.AddedFields, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: the response asks to wire again exactly the added fields a domain reload had
+        /// discarded and this run added back, and names no other added field.
+        /// </summary>
+        [Test]
+        public void Build_RewireFields_WarnsToWireOnlyThoseFieldsAgain()
+        {
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreateResultWithAddedFields(),
+                Array.Empty<string>(),
+                new[] { "Ns.Host.Speed" },
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
+                isPlaying: false,
+                isPaused: false);
+
+            string warning = response.Warnings.FirstOrDefault(
+                entry => entry.Contains(RewireAfterDomainReloadWarningMarker));
+            Assert.That(warning, Is.Not.Null, string.Join(" | ", response.Warnings));
+            Assert.That(warning, Does.Contain("Ns.Host.Speed"));
+            Assert.That(warning, Does.Not.Contain("Ns.Other.Count"));
+        }
+
+        /// <summary>
+        /// What: a run that added back no field a domain reload discarded does not ask to wire
+        /// added fields again, because nothing was wired into them before.
+        /// </summary>
+        [Test]
+        public void Build_NoRewireField_DoesNotWarnToWireAgain()
+        {
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreateResultWithAddedFields(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
+                isPlaying: false,
+                isPaused: false);
+
+            Assert.That(
+                response.Warnings.Any(entry => entry.Contains(RewireAfterDomainReloadWarningMarker)),
+                Is.False,
+                string.Join(" | ", response.Warnings));
+        }
+
+        /// <summary>
+        /// What: the rewire warning suppresses the single-compile resolution sentence, because a
+        /// compile does not bring wired values back, while the same result without a field to
+        /// wire again keeps that sentence.
+        /// </summary>
+        [Test]
+        public void Build_RewireWarningBesideTwoOrchestratorWarnings_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse withRewire = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreatePatchedResultWithTwoWarningsAndAddedField(),
+                Array.Empty<string>(),
+                new[] { "Ns.Host.Speed" },
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
+                isPlaying: false,
+                isPaused: false);
+            HotReloadResponse withoutRewire = HotReloadApplyResponseBuilder.Build(
+                HotReloadCompositionRoot.Services,
+                CreatePatchedResultWithTwoWarningsAndAddedField(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
+                isPlaying: false,
+                isPaused: false);
+
+            Assert.That(
+                withRewire.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            Assert.That(withRewire.Message, Does.Contain("3 warning(s). See Warnings."));
+            Assert.That(
+                withoutRewire.Message,
+                Does.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        private const string RewireAfterDomainReloadWarningMarker = "wire them again";
+
+        private static HotReloadOrchestratorResult CreatePatchedResultWithTwoWarningsAndAddedField()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Ns.Host.Tick()", "Assets/Host.cs")
+                },
+                new List<string> { "warn-a", "warn-b" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                addedFields: new[] { "Ns.Host.Speed" });
+        }
+
+        private static HotReloadOrchestratorResult CreateResultWithAddedFields()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Added("Ns.Host.Tick()", "Assets/Host.cs"),
+                    HotReloadMethodOutcome.Added("Ns.Other.Run()", "Assets/Other.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 2,
+                addedFields: new[] { "Ns.Host.Speed", "Ns.Other.Count" });
         }
 
         /// <summary>
@@ -2256,8 +2605,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.StartWith(
                     string.Format(
                         HotReloadConstants.AlreadyActiveIntroducedTypesOnlyApplyMessageFormat,
-                        1)));
+                        1)
+                    + " Skipped: 1."));
             Assert.That(response.RecommendedNextAction, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a run that introduced a type and patched no method still counts the methods it
+        /// skipped, so its message does not read as if nothing else was edited.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_IntroducedTypeBesideSkippedMethods_CountsTheSkippedMethods()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.First", "reason", "Assets/Requested.cs"),
+                        HotReloadMethodOutcome.Skipped("T.Second", "reason", "Assets/Requested.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    introducedTypes: new[]
+                    {
+                        HotReloadIntroducedTypeOutcome.Introduced(
+                            "Example.Introduced",
+                            "IntroducedAssembly",
+                            "Assets/Requested.cs")
+                    }));
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    string.Format(HotReloadConstants.IntroducedTypesOnlyApplyMessageFormat, 1)
+                    + " Skipped: 2."));
         }
 
         /// <summary>
@@ -2275,7 +2657,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: false,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("Requested"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2298,7 +2681,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
             Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
@@ -2321,7 +2705,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(
                 response.RecommendedNextAction,
@@ -2344,7 +2729,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: true);
+                compileRefusedDuringPlay: true,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("HeldForPlayMode"));
             Assert.That(response.RecommendedNextAction, Does.StartWith(nextActionBefore));
@@ -2367,7 +2753,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.on,
                 isPlaying: true,
-                compileRefusedDuringPlay: true);
+                compileRefusedDuringPlay: true,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("BlockedByPlayModeSetting"));
             Assert.That(
@@ -2390,7 +2777,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateSkippedResult(),
                 HotReloadCompileOnSkip.off,
                 isPlaying: false,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("Disabled"));
             Assert.That(response.RecommendedNextAction, Is.EqualTo(nextActionBefore));
@@ -2417,9 +2805,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 HotReloadCompileOnSkip.auto,
                 isPlaying: true,
-                compileRefusedDuringPlay: false);
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: NoActivePatchSiblings());
 
             Assert.That(response.CompileFallback, Is.EqualTo("NotNeeded"));
+        }
+
+        /// <summary>
+        /// What: in Edit Mode, a run whose only Skipped rows belong to a sibling pulled in to
+        /// re-apply its earlier changes asks for no compile, because every edit the run was passed
+        /// applied and a compile would drop the patches that are active.
+        /// </summary>
+        [Test]
+        public void ApplyCompileFallbackDecision_OnlySiblingRowsSkippedInEditMode_ReportsNotNeeded()
+        {
+            const string siblingPath = "Assets/Sibling.cs";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.N()", "reason", siblingPath)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { siblingPath });
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            HotReloadTool.ApplyCompileFallbackDecision(
+                response,
+                result,
+                HotReloadCompileOnSkip.auto,
+                isPlaying: false,
+                compileRefusedDuringPlay: false,
+                activePatchSiblingFiles: new HotReloadReappliedSiblingFiles(new[] { siblingPath }, path => path));
+
+            Assert.That(response.CompileFallback, Is.EqualTo("NotNeeded"));
+        }
+
+        /// <summary>
+        /// What: the single-compile sentence stays in the Message when the only Skipped row
+        /// belongs to a sibling re-applied for its active changes, and is left off when the same
+        /// sibling came back for another reason, whose Skipped row is an edit still waiting.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_OnlyActivePatchSiblingRowSkipped_KeepsTheSingleCompileSentence()
+        {
+            const string siblingPath = "Assets/Sibling.cs";
+
+            HotReloadResponse activePatchSibling = HotReloadTool.BuildApplyResponse(
+                CreateSiblingSkippedResultWithTwoWarnings(siblingPath, new[] { siblingPath }));
+            HotReloadResponse retriedSibling = HotReloadTool.BuildApplyResponse(
+                CreateSiblingSkippedResultWithTwoWarnings(siblingPath, Array.Empty<string>()));
+
+            Assert.That(
+                activePatchSibling.Message,
+                Does.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+            Assert.That(
+                retriedSibling.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
 
         /// <summary>
@@ -2461,6 +2905,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // One skipped method: the smallest run that leaves a requested edit unapplied.
+        private static HotReloadReappliedSiblingFiles NoActivePatchSiblings()
+        {
+            return new HotReloadReappliedSiblingFiles(Array.Empty<string>(), path => path);
+        }
+
+        // A run that applied the requested file, pulled in one sibling whose method was Skipped,
+        // and carries two warnings a compile clears, so only the unapplied-edit rule decides the
+        // single-compile sentence.
+        private static HotReloadOrchestratorResult CreateSiblingSkippedResultWithTwoWarnings(
+            string siblingPath,
+            IReadOnlyList<string> activePatchSiblingPaths)
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Requested.M()", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.N()", "reason", siblingPath)
+                },
+                new List<string> { "warn-a", "warn-b" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                reappliedSiblingPaths: new[] { siblingPath },
+                activePatchSiblingPaths: activePatchSiblingPaths);
+        }
+
         private static HotReloadOrchestratorResult CreateSkippedResult()
         {
             return new HotReloadOrchestratorResult(

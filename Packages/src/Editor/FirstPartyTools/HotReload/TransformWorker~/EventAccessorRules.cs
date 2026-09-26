@@ -24,17 +24,26 @@ internal static class EventAccessorRules
 {
     /// <summary>
     /// What: the skip reason for a body's event uses, or null when every use is either a
-    /// subscription (+= / -=) or rewritable through the backing field.
+    /// subscription (+= / -=) to an event the compiled assembly already has, or rewritable
+    /// through the backing field.
     /// </summary>
     internal static WorkerReason EvaluateEventUseSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
-        INamedTypeSymbol compiledType)
+        INamedTypeSymbol compiledType,
+        AddedEventLookup addedEvents)
     {
         foreach (EventUse use in EnumerateEventUses(bodyNode, semanticModel))
         {
             if (use.IsSubscription)
             {
+                if (addedEvents.IsAddedInThisEdit(use.EventSymbol))
+                {
+                    return WorkerReason.Of(
+                        HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
+                        use.EventSymbol.ContainingType.ToDisplayString() + "." + use.EventSymbol.Name);
+                }
+
                 continue;
             }
 
@@ -98,6 +107,31 @@ internal static class EventAccessorRules
     {
         return assignment.IsKind(SyntaxKind.AddAssignmentExpression)
             || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
+    }
+
+    /// <summary>Whether the expression is the handler removed by a '-=' assignment.</summary>
+    internal static bool IsUnsubscribeOperand(ExpressionSyntax operand)
+    {
+        // Why parentheses and one cast are looked past: '-= (Handler)' and '-= (Action)Handler'
+        // still remove the delegate the method group converts to.
+        SyntaxNode unwrapped = operand;
+        while (unwrapped.Parent is ParenthesizedExpressionSyntax parenthesized)
+        {
+            unwrapped = parenthesized;
+        }
+
+        if (unwrapped.Parent is CastExpressionSyntax cast && cast.Expression == unwrapped)
+        {
+            unwrapped = cast;
+            while (unwrapped.Parent is ParenthesizedExpressionSyntax outer)
+            {
+                unwrapped = outer;
+            }
+        }
+
+        return unwrapped.Parent is AssignmentExpressionSyntax assignment
+            && assignment.Right == unwrapped
+            && assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
     }
 
     private static bool IsPassedByRef(SyntaxNode eventUseNode)

@@ -5,6 +5,7 @@ using System.Text;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -116,43 +117,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // whole replacement domain, and the applied source ledger is part of that domain.
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
                 ActivateIntroducedTypeFor(existingScriptPath);
 
                 ResolveExistingScript("introduced-type-active");
 
                 Assert.That(
-                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
+                    HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetAppliedSource(existingScriptPath),
                     Is.Not.Null);
             }
         }
 
         /// <summary>
-        /// An assembly without an introduced type still runs the unchanged-source short-circuit,
-        /// which clears a ledger entry that no longer matches the file.
+        /// An assembly without an introduced type still runs the unchanged-source short-circuit:
+        /// a non-baseline entry for the same bytes is reported as a re-apply, and the entry is left
+        /// in place because the short-circuit only reads the ledger.
         /// </summary>
         [Test]
-        public void ResolvePatchTarget_WhenAssemblyOwnsNoIntroducedType_RunsTheShortCircuit()
+        public void ResolvePatchTarget_WhenAssemblyOwnsNoIntroducedType_RunsTheShortCircuitWithoutChangingTheLedger()
+        {
+            string existingScriptPath = ExistingScriptPath;
+            string currentHash = new HotReloadSourceContentHasher().ComputeContentHash(
+                System.IO.File.ReadAllBytes(System.IO.Path.GetFullPath(existingScriptPath)));
+
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, currentHash, false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
+
+                HotReloadPatchTargetResolution resolution = ResolveExistingScript("introduced-type-absent");
+
+                Assert.That(
+                    resolution.UnchangedDecision,
+                    Is.EqualTo(HotReloadUnchangedSourceDecision.ReapplyNonBaseline));
+                Assert.That(
+                    HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetAppliedSource(existingScriptPath),
+                    Is.EqualTo((currentHash, false)));
+            }
+        }
+
+        /// <summary>
+        /// An entry that no longer matches the file survives the unchanged-source short-circuit,
+        /// so only the run's result for the file decides what replaces it.
+        /// </summary>
+        [Test]
+        public void ResolvePatchTarget_WhenLedgerEntryNoLongerMatches_LeavesTheEntryForTheRunToReplace()
         {
             string existingScriptPath = ExistingScriptPath;
 
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
-                HotReloadCompositionRoot.Services.Domain.RecordAppliedSource(existingScriptPath, "stale-hash", true);
+                HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
 
-                ResolveExistingScript("introduced-type-absent");
+                HotReloadPatchTargetResolution resolution = ResolveExistingScript("ledger-entry-stale");
 
+                Assert.That(resolution.UnchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
                 Assert.That(
-                    HotReloadCompositionRoot.Services.Domain.TryGetAppliedSource(existingScriptPath),
-                    Is.Null);
+                    HotReloadCompositionRoot.Services.Domain.AppliedSources.TryGetAppliedSource(existingScriptPath),
+                    Is.EqualTo(("stale-hash", true)));
             }
         }
 
-        private static void ResolveExistingScript(string correlationId)
+        private static HotReloadPatchTargetResolution ResolveExistingScript(string correlationId)
         {
             using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
                 new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(false, false, false)));
-            HotReloadPatchTargetSupport.ResolvePatchTarget(
+            return HotReloadPatchTargetSupport.ResolvePatchTarget(
                 HotReloadCompositionRoot.Services.Domain,
                 HotReloadCompositionRoot.Services.PackageRootCapture,
                 HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,

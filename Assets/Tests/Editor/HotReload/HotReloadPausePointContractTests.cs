@@ -716,11 +716,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: Patching via synthetic resolution onto a hot-reload patched method still
-        /// returns MethodPatchedByHotReload and mentions the requested line in the message.
+        /// What: Patching via synthetic resolution onto a hot-reload patched method whose shim was
+        /// registered without an edited span returns MethodPatchedByHotReload with the refusal
+        /// that names no line range, since a 0-0 range would send the caller to a line that does
+        /// not exist.
         /// </summary>
         [Test]
-        public void Patch_OnHotReloadedMethod_ReturnsMethodPatchedByHotReload()
+        public void Patch_OnHotReloadedMethod_ReturnsMethodPatchedByHotReloadWithoutARangeWhenTheShimHasNoEditedSpan()
         {
             MethodInfo original = AccessTools.Method(
                 typeof(HotReloadPausePointContractFixture),
@@ -737,7 +739,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
                 "contract-reject-on-patched",
                 BuildSyntheticResolution(original, instructionIndex: 5000),
-                normalizedFile: "Assets/Tests/Editor/HotReload/HotReloadPausePointContractFixture.cs",
+                normalizedFile: "Assets/Tests/Fixture.cs",
                 requestedLine: requestedLine);
 
             Assert.That(result.Success, Is.False);
@@ -748,66 +750,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.ErrorMessage,
                 Is.EqualTo(
                     string.Format(
-                        SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
-                        nameof(HotReloadPausePointContractFixture),
-                        nameof(HotReloadPausePointContractFixture.ReplaceableCompute),
-                        requestedLine)));
+                        SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalMessageFormat,
+                        requestedLine,
+                        nameof(HotReloadPausePointContractFixture) + "."
+                        + nameof(HotReloadPausePointContractFixture.ReplaceableCompute))));
             Assert.That(
                 result.Hint,
-                Is.EqualTo(SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction));
-        }
-
-        /// <summary>
-        /// What: a synthetic resolution with a compiled method span appends that span to the
-        /// patched-by-hot-reload failure message.
-        /// </summary>
-        [Test]
-        public void Patch_OnHotReloadedMethod_WithCompiledSpan_AppendsSpanSentence()
-        {
-            MethodInfo original = AccessTools.Method(
-                typeof(HotReloadPausePointContractFixture),
-                nameof(HotReloadPausePointContractFixture.ReplaceableCompute));
-            MethodInfo shim = AccessTools.Method(
-                typeof(HotReloadPausePointContractShims),
-                nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
-
-            Assert.That(
-                new HotReloadDomainTestAccess().ApplyPatch(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
-                Is.True);
-
-            const int requestedLine = 42;
-            const int compiledStart = 10;
-            const int compiledEnd = 20;
-            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
-                "contract-reject-on-patched-span",
-                BuildSyntheticResolution(
-                    original,
-                    instructionIndex: 5000,
-                    compiledMethodStartLine: compiledStart,
-                    compiledMethodEndLine: compiledEnd),
-                normalizedFile: "Assets/Tests/Editor/HotReload/HotReloadPausePointContractFixture.cs",
-                requestedLine: requestedLine);
-
-            string expectedMessage =
-                string.Format(
-                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
-                    nameof(HotReloadPausePointContractFixture),
-                    nameof(HotReloadPausePointContractFixture.ReplaceableCompute),
-                    requestedLine)
-                + string.Format(
-                    SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
-                    nameof(HotReloadPausePointContractFixture),
-                    nameof(HotReloadPausePointContractFixture.ReplaceableCompute),
-                    compiledStart,
-                    compiledEnd);
-            Assert.That(result.Success, Is.False);
-            Assert.That(
-                result.FailureReason,
-                Is.EqualTo(SourcePausePointPatchFailureReason.MethodPatchedByHotReload));
-            Assert.That(result.ErrorMessage, Is.EqualTo(expectedMessage));
-            Assert.That(
-                result.Hint,
-                Is.EqualTo(SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction));
+                Is.EqualTo(SourcePausePointConstants.HotReloadPatchedMethodWithoutSpanRefusalNextAction));
         }
 
         /// <summary>
@@ -979,9 +928,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static SourcePausePointResolution BuildSyntheticResolution(
             MethodBase method,
-            int instructionIndex,
-            int compiledMethodStartLine = 0,
-            int compiledMethodEndLine = 0)
+            int instructionIndex)
         {
             return new SourcePausePointResolution(
                 method.Module.Assembly.GetName().Name,
@@ -995,8 +942,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 SourcePausePointSnapshotTiming.PreLine,
                 1,
                 1,
-                compiledMethodStartLine,
-                compiledMethodEndLine,
+                0,
+                0,
                 Array.Empty<SourcePausePointLocalVariable>(),
                 Array.Empty<SourcePausePointParameter>(),
                 Array.Empty<string>());

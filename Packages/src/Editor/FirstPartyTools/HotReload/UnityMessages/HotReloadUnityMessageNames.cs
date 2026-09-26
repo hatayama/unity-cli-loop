@@ -54,22 +54,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "OnAnimatorIK"
         };
 
-        // Why these stay out: the first four are lifecycle messages whose proxy timing does not
-        // match the target's own (a proxy is attached and destroyed on its own schedule, so its
-        // Awake/OnEnable/OnDisable/OnDestroy would fire at moments the target never sees), and
-        // the last four are editor-only messages that run outside Play Mode, where no proxy exists.
-        private static readonly HashSet<string> NotForwardedNames = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "Awake",
-            "OnEnable",
-            "OnDisable",
-            "OnDestroy",
-            "Reset",
-            "OnValidate",
-            "OnDrawGizmos",
-            "OnDrawGizmosSelected"
-        };
-
         // Why only the per-frame messages are gated: Unity stops delivering them to a component
         // the moment it is disabled, and the proxy is a separate component that stays enabled, so
         // forwarding them unconditionally would keep a disabled target ticking every frame. The
@@ -99,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Whether Unity's message dispatch knows this name at all.</summary>
         internal static bool IsKnownMessage(string methodName)
         {
-            return IsForwarded(methodName) || (methodName != null && NotForwardedNames.Contains(methodName));
+            return IsForwarded(methodName) || HotReloadNotForwardedUnityMessageNames.Contains(methodName);
         }
     }
 }

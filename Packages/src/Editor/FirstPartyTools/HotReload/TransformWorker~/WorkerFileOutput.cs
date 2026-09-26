@@ -41,11 +41,35 @@ internal sealed class WorkerFileOutput
     // empty when the field is declared without one.
     public string[] AddedFieldInitializers { get; set; }
 
+    // One entry per AddedFieldNames entry, in the same order: the store key, the declaring type,
+    // the declared type and staticness of that field.
+    public WorkerAddedFieldDeclaration[] AddedFieldDeclarations { get; set; }
+
     public string[] AddedConstNames { get; set; }
+
+    // Transform run: members this source adds to a compiled enum, each as "<enum C# display
+    // name>.<member>". Hot reload never adds an enum member, so a file whose only edit is one of
+    // these must not be recorded as a companion; the Editor reads this to keep it out of the
+    // ledger. Empty from the prepare run, which reports PlannedAddedEnumMemberNames instead.
+    public string[] AddedEnumMemberNames { get; set; }
 
     public WorkerIntroducedType[] IntroducedTypes { get; set; }
 
     public WorkerReason[] IntroducedTypeDiagnostics { get; set; }
 
     public WorkerIntroducedTypeReuse[] IntroducedTypeReuses { get; set; }
+
+    // Prepare run only: names of members this source declares on a compiled or retained type
+    // that the type does not hold yet. Empty from the transform run.
+    public string[] PlannedAddedMemberNames { get; set; }
+
+    // Prepare run only: members this source adds to a compiled enum, each as "<enum C# display
+    // name>.<member>" so the Editor can match the type of a CS0117 too. Kept apart from
+    // PlannedAddedMemberNames because hot reload cannot add an enum member at all, so a failed
+    // introduced-type compilation has to point at the enum-member warning instead.
+    public string[] PlannedAddedEnumMemberNames { get; set; }
+
+    // Prepare run only: the const and enum-member drift warnings of this source. The transform
+    // run reports them itself, so the Editor surfaces these only when the run stops before it.
+    public string[] PreparedDeclarationDriftWarnings { get; set; }
 }

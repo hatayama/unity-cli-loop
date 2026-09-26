@@ -44,6 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadIntroducedTypeOutcome> alreadyActiveTypes =
                 CollectAlreadyActiveTypes(prepareResult.Output);
             List<HotReloadIntroducedTypeNotice> notices = CollectNotices(prepareResult.Output);
+            Dictionary<string, string[]> declarationDriftWarnings =
+                CollectDeclarationDriftWarnings(prepareResult.Output);
             List<HotReloadIntroducedTypeOutcome> refusedDeclarations = CollectRedefinedTypeFailures(
                 prepareResult.Output,
                 transformInput.targetAssemblyName);
@@ -52,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadIntroducedTypePreparationResult.TypeFailures(
                     refusedDeclarations,
                     alreadyActiveTypes,
-                    notices);
+                    notices,
+                    declarationDriftWarnings);
             }
 
             List<HotReloadIntroducedTypeDescriptor> descriptors = CollectDescriptors(prepareResult.Output);
@@ -68,7 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadIntroducedTypePreparationResult.TypeFailures(
                     doubleDeclarations,
                     alreadyActiveTypes,
-                    notices);
+                    notices,
+                    declarationDriftWarnings);
             }
 
             HotReloadIntroducedTypeArtifactPaths paths =
@@ -90,11 +94,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         compileResult,
                         descriptors,
                         transformInput.targetAssemblyName,
-                        HotReloadActiveAddedMemberNames.Collect(
-                            collaborators.Domain.DescribeAddedMembers(),
-                            collaborators.Domain.DescribeAddedFields())),
+                        CollectAddedMemberNames(collaborators.Domain, prepareResult.Output)),
                     alreadyActiveTypes,
-                    notices);
+                    notices,
+                    declarationDriftWarnings);
             }
 
             return HotReloadIntroducedTypePreparationResult.WithPrepared(
@@ -103,6 +106,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     CollectOwnerSourceHashes(prepareResult.Output, descriptors)),
                 alreadyActiveTypes,
                 notices);
+        }
+
+        private static Dictionary<string, string[]> CollectDeclarationDriftWarnings(TransformWorkerOutputDto output)
+        {
+            Dictionary<string, string[]> warningsByOwner = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                if (file.preparedDeclarationDriftWarnings.Length > 0)
+                {
+                    warningsByOwner[file.projectRelativePath] = file.preparedDeclarationDriftWarnings;
+                }
+            }
+
+            return warningsByOwner;
+        }
+
+        // Why this reload's additions as well: the introduced-type compilation runs before the
+        // transform run records them, and it cannot see them any more than an earlier reload's.
+        private static HotReloadIntroducedTypeAddedMemberNames CollectAddedMemberNames(
+            HotReloadDomain domain,
+            TransformWorkerOutputDto output)
+        {
+            HashSet<string> names = HotReloadActiveAddedMemberNames.Collect(
+                domain.DescribeAddedMembers(),
+                domain.DescribeAddedFields());
+            HashSet<string> enumMemberNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                names.UnionWith(file.plannedAddedMemberNames);
+                enumMemberNames.UnionWith(file.plannedAddedEnumMemberNames);
+            }
+
+            return new HotReloadIntroducedTypeAddedMemberNames(names, enumMemberNames);
         }
 
         // Why the active artifacts as well: a declaration this run introduces may name a type an
@@ -187,7 +223,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     notices.Add(
                         new HotReloadIntroducedTypeNotice(
                             file.projectRelativePath,
-                            HotReloadWorkerReasonText.Render(diagnostic)));
+                            HotReloadWorkerReasonText.Render(diagnostic),
+                            !HotReloadIntroducedTypeFailureCodes.IsRunScoped(diagnostic.code),
+                            HotReloadIntroducedTypeFailureCodes.FindRefusedTypeMetadataName(
+                                diagnostic.code,
+                                diagnostic.args)));
                 }
             }
 

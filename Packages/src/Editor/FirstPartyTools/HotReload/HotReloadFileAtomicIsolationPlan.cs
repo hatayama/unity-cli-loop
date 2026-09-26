@@ -67,12 +67,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static HotReloadFileAtomicIsolationPlan Build(
             TransformWorkerEntryDto[] entries,
             HotReloadShimErrorAttribution.ShimCompileErrorAttribution attribution,
-            TransformWorkerSkippedDto[] skipped,
+            HotReloadCompileFailureNoteSources noteSources,
             HotReloadGroupFilePaths groupFilePaths,
             IReadOnlyCollection<string> groupPaths)
         {
             Debug.Assert(entries != null, "entries must not be null.");
             Debug.Assert(attribution != null, "attribution must not be null.");
+            Debug.Assert(noteSources != null, "noteSources must not be null.");
             Debug.Assert(groupFilePaths != null, "groupFilePaths must not be null.");
             Debug.Assert(groupPaths != null && groupPaths.Count > 0, "A group must hold a file.");
 
@@ -80,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool allFilesFailed = failedFiles.Count >= groupPaths.Count;
             Dictionary<string, List<HotReloadMethodOutcome>> failedOutcomesByFile = BuildFailedOutcomesByFile(
                 attribution,
-                skipped,
+                noteSources,
                 groupFilePaths);
             if (allFilesFailed)
             {
@@ -176,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static Dictionary<string, List<HotReloadMethodOutcome>> BuildFailedOutcomesByFile(
             HotReloadShimErrorAttribution.ShimCompileErrorAttribution attribution,
-            TransformWorkerSkippedDto[] skipped,
+            HotReloadCompileFailureNoteSources noteSources,
             HotReloadGroupFilePaths groupFilePaths)
         {
             Dictionary<string, List<HotReloadMethodOutcome>> failedOutcomesByFile =
@@ -196,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         HotReloadSkippedMemberCompileNote.AppendNotes(
                             HotReloadShimCompiler.ComposeShimCompileFailureMessage(entryErrorMessages),
                             entryErrorMessages,
-                            skipped),
+                            noteSources),
                         groupFilePaths.ResolveAssemblyResolvePath(failedEntry.sourceProjectRelativePath)));
             }
 

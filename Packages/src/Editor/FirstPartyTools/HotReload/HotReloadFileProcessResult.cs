@@ -24,14 +24,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int RevertedUnchangedCount { get; }
         public string[] AddedFieldNames { get; }
         public string[] AddedConstNames { get; }
+
+        /// <summary>
+        /// Members this file adds to a compiled enum. Hot reload never applies them, so they do
+        /// not count as an applied change.
+        /// </summary>
+        public string[] AddedEnumMemberNames { get; }
         public string SourceContentSha256 { get; }
+
+        /// <summary>
+        /// The full path the transform worker read the file from; set on every result that carries
+        /// <see cref="SourceContentSha256"/>, so an applied-source record can say what it hashed.
+        /// </summary>
+        public string WorkerSourcePath { get; }
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
+
+        /// <summary>
+        /// Whether the run applied an added field or const of this file, which writes no method
+        /// row yet is a change the file brought to the run.
+        /// </summary>
+        public bool AppliedAddedFieldsOrConsts => AddedFieldNames.Length > 0 || AddedConstNames.Length > 0;
 
         /// <summary>
         /// What proved this file belongs to the assembly it was patched into, for a file the
         /// last compile did not list. Null for every file the compiler already accounts for.
         /// </summary>
         public HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence { get; }
+
+        /// <summary>How many of Warnings are type notices that say their type needs a compile.</summary>
+        public int IntroducedTypeNoticeCount { get; }
 
         public HotReloadFileProcessResult(
             List<HotReloadMethodOutcome> outcomes,
@@ -47,7 +68,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] addedConstNames = null,
             int revertedUnchangedCount = 0,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
-            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null,
+            int introducedTypeNoticeCount = 0,
+            string[] addedEnumMemberNames = null,
+            string workerSourcePath = null)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -64,6 +88,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RevertedUnchangedCount = revertedUnchangedCount;
             IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             NewSourceMembershipEvidence = newSourceMembershipEvidence;
+            IntroducedTypeNoticeCount = introducedTypeNoticeCount;
+            AddedEnumMemberNames = addedEnumMemberNames ?? Array.Empty<string>();
+            WorkerSourcePath = workerSourcePath;
         }
     }
 }

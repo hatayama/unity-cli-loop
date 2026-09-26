@@ -48,6 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "the compiled assembly has no backing field yet. Use uloop compile.",
                     0));
             templates.Add(
+                HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
+                Plain(
+                    "Subscribes to the event '{0}', which this edit adds; the compiled assembly has no "
+                    + "such event yet, so the subscription cannot bind until 'uloop compile'.",
+                    1));
+            templates.Add(
                 HotReloadWorkerReasonCode.EventNameof,
                 Plain(
                     "Methods that name a field-like event inside nameof are skipped; the shim is a different "
@@ -89,7 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     1));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape,
-                Plain("inaccessible property increment/decrement has no accessor rewrite shape.", 0));
+                // Why name the rewrite: the accessor rewrite already handles the same write as a
+                // plain or compound assignment statement, so that edit applies without a compile.
+                Plain(
+                    "inaccessible property increment/decrement has no accessor rewrite shape; write it "
+                    + "as a statement 'X += 1' or 'X = X + 1', which the accessor rewrite handles.",
+                    0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorMethodReturnTypeUnresolved,
                 Plain(
@@ -193,7 +204,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
                 Plain(
-                    "inaccessible method group '{0}' (non-invocation) has no accessor rewrite shape.",
+                    "inaccessible method group '{0}' (non-invocation) has no accessor rewrite shape. "
+                    + "A call is rewritten, so wrapping the method group in a lambda that calls "
+                    + "it{1} keeps hot reloading.",
+                    2));
+            // Why no lambda is offered: a lambda on the right of '-=' is a new delegate, so the
+            // rewrite would compile and silently leave the original handler subscribed.
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape,
+                Plain(
+                    "inaccessible method group '{0}' on the right of '-=' has no accessor rewrite shape, "
+                    + "and wrapping it in a lambda would remove a different delegate and leave the handler "
+                    + "subscribed.",
                     1));
         }
     }

@@ -282,7 +282,8 @@ internal static class OrdinaryMethodQueue
                 methodBodyNode,
                 semanticModel,
                 typeState.CompiledType,
-                typeState.AddedMemberAccess);
+                typeState.AddedMemberAccess,
+                typeState.AddedEvents);
         if (isAddedMethod && decision.SkipReason == null)
         {
             decision = MethodTransformDecider.DecideAddedMethodAccessors(
@@ -291,7 +292,22 @@ internal static class OrdinaryMethodQueue
                 methodBodyNode,
                 semanticModel,
                 decision,
-                typeState.AddedMemberAccess);
+                typeState.AddedMemberAccess,
+                typeState.SourceUnit.ArtifactMap,
+                typeState.TargetAssembly,
+                typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
+        }
+
+        if (!isAddedMethod && decision.SkipReason == null && typeState.SourceUnit.Input.ReappliedSibling)
+        {
+            WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
+                semanticModel,
+                methodBodyNode,
+                typeState.TargetAssembly);
+            if (siblingSkip != null)
+            {
+                decision = MethodTransformDecision.Skip(siblingSkip);
+            }
         }
 
         return decision;

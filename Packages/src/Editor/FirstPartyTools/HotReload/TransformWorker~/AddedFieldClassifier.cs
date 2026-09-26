@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -18,8 +17,7 @@ internal static class AddedFieldClassifier
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
         WorkerTypeHome home,
-        AddedFieldCatalog addedFieldCatalog,
-        List<string> declarationDriftWarnings)
+        AddedFieldCatalog addedFieldCatalog)
     {
         foreach (FieldDeclarationSyntax fieldDeclaration in typeState.TypeDeclaration.Members
             .OfType<FieldDeclarationSyntax>())
@@ -46,7 +44,6 @@ internal static class AddedFieldClassifier
                     variable,
                     fieldSymbol,
                     addedFieldCatalog,
-                    declarationDriftWarnings,
                     fieldMatch);
             }
         }
@@ -60,7 +57,6 @@ internal static class AddedFieldClassifier
         VariableDeclaratorSyntax variable,
         IFieldSymbol fieldSymbol,
         AddedFieldCatalog addedFieldCatalog,
-        List<string> declarationDriftWarnings,
         CompiledFieldMatch fieldMatch)
     {
         string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldSymbol.Name);
@@ -69,16 +65,6 @@ internal static class AddedFieldClassifier
             fieldSymbol.Name);
         addedFieldCatalog.MarkClassifiedAdded(fieldKey);
         addedFieldCatalog.AddAddedSyntaxKey(syntaxKey);
-
-        if (!CompiledMemberMatcher.IsCompiledFieldDeclarationChange(fieldMatch)
-            && AddedFieldSkipEvaluator.FieldHasSerializationAttribute(fieldDeclaration))
-        {
-            declarationDriftWarnings.Add(
-                string.Format(
-                    CultureInfo.InvariantCulture,
-                    AddedFieldSkipReasons.SerializeWarningFormat,
-                    fieldSymbol.Name));
-        }
 
         AddedFieldBinding binding = new AddedFieldBinding
         {
@@ -89,6 +75,7 @@ internal static class AddedFieldClassifier
             FieldType = fieldSymbol.Type,
             IsStatic = fieldSymbol.IsStatic,
             IsConst = fieldSymbol.IsConst,
+            HasSerializationAttribute = AddedFieldSkipEvaluator.FieldHasSerializationAttribute(fieldDeclaration),
             ConstantValue = fieldSymbol.HasConstantValue ? fieldSymbol.ConstantValue : null,
             Initializer = variable.Initializer != null ? variable.Initializer.Value : null
         };
@@ -159,7 +146,7 @@ internal static class AddedFieldClassifier
             binding.Initializer,
             sourceUnit,
             out ITypeSymbol unresolvedStoreType);
-        return DescribeStoreAvailability(availability, unresolvedStoreType);
+        return DescribeStoreAvailability(availability, unresolvedStoreType, fieldSymbol.Name);
     }
 
     /// <summary>
@@ -213,7 +200,8 @@ internal static class AddedFieldClassifier
     /// <summary>Words a store outcome as the skip reason an added field reports.</summary>
     private static WorkerReason DescribeStoreAvailability(
         AddedFieldStoreAvailability availability,
-        ITypeSymbol unresolvedType)
+        ITypeSymbol unresolvedType,
+        string fieldName)
     {
         switch (availability)
         {
@@ -228,7 +216,9 @@ internal static class AddedFieldClassifier
             case AddedFieldStoreAvailability.ValueTypeNotExternallyVisible:
                 return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldFieldTypeNotExternallyVisible);
             default:
-                return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic);
+                return WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic,
+                    fieldName);
         }
     }
 

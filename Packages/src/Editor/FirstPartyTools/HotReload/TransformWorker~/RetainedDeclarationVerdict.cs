@@ -11,12 +11,14 @@ internal sealed class RetainedDeclarationVerdict
         BaseTypeDeclarationSyntax declaration,
         string metadataName,
         IntroducedTypeFingerprintMatch match,
-        WorkerIntroducedTypeArtifactType record)
+        WorkerIntroducedTypeArtifactType record,
+        bool holdsOnlyAppliedChanges)
     {
         Declaration = declaration;
         MetadataName = metadataName;
         Match = match;
         Record = record;
+        HoldsOnlyAppliedChanges = holdsOnlyAppliedChanges;
     }
 
     internal BaseTypeDeclarationSyntax Declaration { get; }
@@ -30,4 +32,8 @@ internal sealed class RetainedDeclarationVerdict
     // The record the declaration was compared against, which is where the identity of the
     // original assembly the retained one stands in for comes from.
     internal WorkerIntroducedTypeArtifactType Record { get; }
+
+    // True when the source is the one the last reload applied in full: whatever differs from the
+    // record is what earlier reloads added or edited, and this reload changes nothing of it.
+    internal bool HoldsOnlyAppliedChanges { get; }
 }

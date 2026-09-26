@@ -44,6 +44,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // resolved really is the assembly the record claims before it normalizes anything through
         // it. Null/omitted is treated as empty.
         public TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts;
+
+        // Labels (see HotReloadMethodKeys.FormatMethodLabel) of the edited files' methods that an
+        // earlier reload patched or added and that are still active when this run starts. A
+        // skipped writer among them may still assign an added field through that earlier body, so
+        // the skipped-writer warning does not claim the default value. Null/omitted is treated as
+        // empty (no earlier patch or added method).
+        public string[] activeMethodLabels;
     }
 
     /// <summary>
@@ -62,6 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Types this artifact holds, with the original identity each one must normalize back to.
         public TransformWorkerIntroducedTypeArtifactTypeDto[] types;
+
+        // True for the artifact this run prepared from its new files. Its types are introduced by
+        // this reload, so a refusal must not describe them as retained by an earlier one.
+        public bool preparedByThisRun;
     }
 
     /// <summary>
@@ -84,6 +95,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Fingerprint the retained type was planned with. A declaration may only be removed from
         // the tree the transform binds against when the source still produces this value.
         public string declarationFingerprint;
+
+        // Hash of the owner file as the last reload applied it, set only when that reload applied
+        // the whole file. Null otherwise. A source with the same hash holds no change of its own,
+        // only what earlier reloads already applied.
+        public string ownerAppliedSourceHash;
     }
 
     /// <summary>
@@ -103,6 +119,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
         // read that would crash the whole file under the no-try-catch policy.
         public string snapshotSource;
+
+        // True for a file the run pulled in to re-bind its active patches, not one the caller
+        // passed. An older worker ignores it, which only keeps today's Failed rows for such files.
+        public bool reappliedSibling;
     }
 
     /// <summary>
@@ -142,9 +162,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // did not report them, and the run compares nothing.
         public string[] addedFieldInitializers;
 
+        // One entry per addedFieldNames entry, in the same order: everything an added field has to
+        // be named and type-checked by outside a shim. A shorter row means the worker did not
+        // report them, and no added field of this file can be validated.
+        public TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations;
+
         // Source-level names of added consts folded into edited bodies as literals.
         // Null/omitted deserializes as empty after client coalesce.
         public string[] addedConstNames;
+
+        // Transform run: members this source adds to a compiled enum, as "<enum>.<member>".
+        // Null/omitted deserializes as empty after client coalesce.
+        public string[] addedEnumMemberNames;
 
         public TransformWorkerIntroducedTypeDto[] introducedTypes;
 
@@ -154,6 +183,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly for them. Reported so a reload can name the types it bound from an active
         // artifact; introducing them again is what the transform refuses.
         public TransformWorkerIntroducedTypeReuseDto[] introducedTypeReuses;
+
+        // Prepare run only: names of members the file declares on a compiled or retained type
+        // that the type does not hold yet, so a failed introduced-type compilation can tell a
+        // member this reload adds from a typo. Null/omitted deserializes as empty.
+        public string[] plannedAddedMemberNames;
+
+        // Prepare run only: members the file adds to a compiled enum, which hot reload cannot
+        // add, each as "<enum C# display name>.<member>" so a failed introduced-type compilation
+        // can match both the type and the member of a CS0117 before pointing at the enum-member
+        // warning. Null/omitted deserializes as empty.
+        public string[] plannedAddedEnumMemberNames;
+
+        // Prepare run only: the file's const and enum-member drift warnings, surfaced when the
+        // run stops before the transform run reports them. Null/omitted deserializes as empty.
+        public string[] preparedDeclarationDriftWarnings;
+    }
+
+    /// <summary>
+    /// One added field, described well enough to validate a value written into the store from
+    /// outside a shim.
+    /// </summary>
+    [Serializable]
+    internal sealed class TransformWorkerAddedFieldDeclarationDto
+    {
+        // The key the shims pass to the added-field store; nested types use '/'.
+        public string fieldKey;
+
+        // The declaring type as the key spells it; nested types use '/'.
+        public string declaringTypeMetadataName;
+
+        public string fieldName;
+
+        // Assembly-qualified name of the field's declared type. Empty when the worker could not
+        // name the type, which is what stops a caller from wiring it.
+        public string declaredTypeAssemblyQualifiedName;
+
+        public bool isStatic;
+
+        // Whether the declaration carries SerializeField, SerializeReference or
+        // FormerlySerializedAs, which Unity cannot honor for a field it never compiled.
+        public bool hasSerializationAttribute;
     }
 
     /// <summary>
@@ -321,6 +391,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The fragment a composed reason ends with, such as the reason an accessor rewrite was
         // unavailable. Null when the code does not compose.
         public TransformWorkerReasonDto detail;
+
+        // Metadata names of the compiled types the sentence names, for the Editor to resolve to the
+        // files that declare them before the sentence is worded. Null when the reason names none.
+        public string[] typeMetadataNames;
+
+        // Project-relative forward-slash paths of the files declaring the typeMetadataNames types.
+        // The worker fills it for a type only its compilation can place, such as the source copy
+        // an introduced type's signature now differs from; otherwise the Editor fills it from the
+        // compiled assembly's debug data. A type neither can place is left out. Null until one of
+        // them resolves the types, and for a reason that names none.
+        public string[] declaringFiles;
     }
 
     [Serializable]

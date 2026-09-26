@@ -6,8 +6,8 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Lists the owner files of introduced types Play entry discarded that are still on disk, for
-    /// an omitted --files run to select again.
+    /// Lists the owner files of introduced types Play entry discarded, or whose later additions
+    /// revert-all dropped, that are still on disk, for an omitted --files run to select again.
     /// </summary>
     internal static class HotReloadDroppedIntroducedSourceFiles
     {

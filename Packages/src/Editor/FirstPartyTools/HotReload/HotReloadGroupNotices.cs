@@ -118,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patchCandidateRowCount,
                     file.SnapshotMissReason,
                     file.DeclaresIntroducedType,
+                    file.DeclaresRefusedIntroducedType,
                     file.ProjectRelativePath,
                     file.AssemblyName,
                     file.AssemblyResolvePath,

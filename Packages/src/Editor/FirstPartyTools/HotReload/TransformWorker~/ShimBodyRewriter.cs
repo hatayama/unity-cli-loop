@@ -450,6 +450,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
+        TypeSyntax qualifiedNestedType = NestedTypeNameQualifier.QualifyOrNull(node, symbol);
+        if (qualifiedNestedType != null)
+        {
+            return qualifiedNestedType;
+        }
+
         SyntaxNode addedFieldRead = HarmonyAccessors.TryRewriteUnownedAddedFieldRead(node, symbol);
         if (addedFieldRead != null)
         {

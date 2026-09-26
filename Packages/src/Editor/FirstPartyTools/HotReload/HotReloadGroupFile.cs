@@ -80,6 +80,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // null for a file the caller passed, which keeps one warning per file.
         internal HotReloadSiblingBaselineNotices SiblingBaselineNotices { get; private set; }
 
+        // Only ForActiveSibling sets the notices, so they mark a file the run pulled in itself.
+        internal bool ReappliedSibling => SiblingBaselineNotices != null;
+
         // The path the caller asked to reload, used as the outcome file path.
         internal string AssemblyResolvePath { get; }
 
@@ -117,6 +120,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // every file and would answer no to a question the preparation already answered.
         internal bool DeclaresIntroducedType { get; set; }
 
+        // Set when a type notice names this file: it declares a type hot reload refused to
+        // introduce. Why apart from DeclaresIntroducedType: that one's warning calls the missing
+        // baseline expected, while here the notice already says the file needs a compile.
+        internal bool DeclaresRefusedIntroducedType { get; set; }
+
         // Patch labels already active for this file when the group's apply started. Snapshotted
         // because a run mutates the ledgers between files.
         internal HashSet<string> SnapshotLabels { get; set; }
@@ -144,6 +152,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // The initializer text of each AddedFieldNames entry, in the same order.
         internal string[] AddedFieldInitializers { get; set; }
+
+        // What each added field of this file declares: its store key, declaring type, declared
+        // type and staticness. Resolved by the same stage that produced AddedFieldNames.
+        internal TransformWorkerAddedFieldDeclarationDto[] AddedFieldDeclarations { get; set; }
 
         internal string[] AddedConstNames { get; set; }
 

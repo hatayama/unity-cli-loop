@@ -154,6 +154,15 @@ pause points are removed automatically on `clear-pause-point`/`ClearAll` and are
 script compile or domain reload unless enabled with `--persist`, which re-arms them after the
 reload.
 
+### Line basis
+
+The `LineBasis` field of a successful source pause point enable, naming the coordinates
+`--line` was resolved in. `EditedFile` means the line was read as a line of the file on disk
+(mapped onto the verified source snapshot, or inside a hot-reload patched body), so
+`ResolvedLine` matches the editor. `LastCompiledSource` means the file had no verified source
+snapshot, so `--line` was used as a compiled line number and may not match the editor. See
+`docs/adr/0008-pause-point-line-is-edited-file-line.md`.
+
 ### Captured variable
 
 One local, parameter, or `this` instance field snapshotted at the moment execution reaches
@@ -181,7 +190,9 @@ method into a static shim, compiles that shim against publicized references, loa
 shim assembly, and transplants the shim IL into the original method via a Harmony
 transpiler (`io.github.hatayama.uloop.hot-reload`). Patches are static Editor state and
 disappear on domain reload by design; a later `uloop compile` converges to the same
-source behavior.
+source behavior. Hot reload targets Play entry without a domain reload; with Domain Reload
+enabled on Play entry it only announces the loss and brings changes back on a re-apply. See
+`docs/adr/0009-hot-reload-targets-play-mode-without-domain-reload.md`.
 
 ### Source snapshot
 

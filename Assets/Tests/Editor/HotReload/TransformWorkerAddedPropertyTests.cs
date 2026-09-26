@@ -31,65 +31,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string PropertyPatternReason =
             "Property patterns that match an added property are skipped; a pattern member name cannot "
-            + "be replaced by an accessor shim call. Run 'uloop compile' to add it.";
+            + "be replaced by an accessor shim call. Run 'uloop compile' to add the property.";
 
         private const string GenericHostReason =
             "Added properties on generic types are skipped; one accessor identity and one store entry "
-            + "cannot stand for every closed instantiation. Run 'uloop compile' to add them.";
+            + "cannot stand for every closed instantiation. Run 'uloop compile' to add the property.";
 
         private const string ExistingCallerOriginal =
             "        public int ExistingCaller(int value)\n        {\n            return value;\n        }";
 
         private const string VirtualOrAbstractReason =
             "Added virtual, override, abstract, or interface properties are skipped; the loaded type has no vtable slot. "
-            + "Run 'uloop compile' to add them.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string InitAccessorReason =
             "Added properties with init accessors are skipped; the shim cannot preserve initialization-only assignment. "
-            + "Run 'uloop compile' to add them.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string CompoundAssignmentReason =
             "Compound assignment, increment, and decrement of an added property are skipped; the accessor shim cannot preserve the operation. "
             + "Rewrite it as a plain assignment statement ('X = X + 1;') to keep hot reloading. "
-            + "Run 'uloop compile' to add it.";
+            + "Run 'uloop compile' to keep the code as written.";
 
         private const string ConsumedWriteReason =
             "The value of an assignment to an added property is consumed; the setter shim returns void. "
-            + "Run 'uloop compile' to add it.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string NameofReferenceReason =
             "References to added properties inside nameof are skipped; the member does not exist in the compiled assembly. "
-            + "Run 'uloop compile' to add it.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string ObjectInitializerReason =
             "Object initializers that assign added properties are skipped; the setter shim cannot rewrite the initializer. "
-            + "Run 'uloop compile' to add it.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string RefOutInReason =
-            "Added properties cannot be passed by ref, out, or in. Run 'uloop compile' to add them.";
+            "Added properties cannot be passed by ref, out, or in. Run 'uloop compile' to add the property.";
 
         private const string SetOnlyReason =
             "Added properties with only a setter are skipped; the shim requires a getter identity. "
-            + "Run 'uloop compile' to add them.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string StructHostReason =
             "Added properties on struct types are skipped; the shim requires a reference-type instance. "
-            + "Run 'uloop compile' to add them.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string CompiledMemberKindChangedReason =
             "Property 'PublicSeed' is declared as a field or an event in the compiled assembly. "
             + "Run 'uloop compile'.";
 
         private const string InitializerNotEmittableReason =
-            "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add it.";
+            "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add the property.";
 
         private const string ConditionalAccessReason =
             "Conditional access to added properties is skipped; there is no rewrite shape. "
-            + "Run 'uloop compile' to add it.";
+            + "Run 'uloop compile' to add the property.";
 
         private const string DeconstructionTargetReason =
             "Deconstruction assignment to an added property is skipped; the setter shim cannot stand as a "
-            + "deconstruction target. Run 'uloop compile' to add it.";
+            + "deconstruction target. Run 'uloop compile' to add the property.";
 
         private const string HostStoreKeyPrefix =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost::";
@@ -220,6 +220,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
                 Is.EqualTo(CompoundAssignmentReason));
             Assert.That(FindEntry(result, "get_Stored"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// An added method incrementing a private-set property added in the same reload gets the
+        /// added-property reason, which names only 'X = X + 1;', not the accessor-rewrite reason,
+        /// whose 'X += 1' is itself skipped for an added property.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedMethodIncrementingAnAddedPrivateSetProperty_NamesOnlyThePlainAssignment()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyIncrementInAddedMethod.cs",
+                "public int AddedCounter { get; private set; }\n\n"
+                + "        public void AddedBumpCounter()\n        {\n            AddedCounter++;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "AddedBumpCounter");
+            Assert.That(reason, Does.Contain("('X = X + 1;')"), FormatSkipped(result.Output.skipped));
+            Assert.That(reason, Does.Not.Contain("'X += 1'"));
         }
 
         /// <summary>
@@ -378,7 +397,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Excluding an added accessor removes its shim and skips callers that depend on it.
+        /// Excluding an added accessor removes its shim and skips callers that depend on it, with a
+        /// reason that names the property and points at the accessor's own row.
         /// </summary>
         [Test]
         public async Task Isolation_ExcludedAddedAccessorKey_DropsAccessorShimAndSkipsCaller()
@@ -394,11 +414,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, "get_Doubled"), Is.Null);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
             string callerReason = FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
-            Assert.That(callerReason, Does.Contain("Uses an added property that hot reload cannot emit."));
-
-            // The exclusion records this very sentence as the property's own unavailable reason,
-            // so composing it onto itself would say the same thing twice.
-            Assert.That(callerReason, Does.Not.Contain("The property body was refused because: "));
+            Assert.That(
+                callerReason,
+                Is.EqualTo(
+                    "Uses an added property that hot reload cannot emit. Run 'uloop compile'. "
+                    + "The property body was refused because: Added property 'Doubled' is left out of "
+                    + "this reload because one of its accessors was. The Failed or Skipped row that "
+                    + "names that accessor gives the reason; fix it and rerun."));
         }
 
         /// <summary>

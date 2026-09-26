@@ -12,6 +12,14 @@ internal sealed class WorkerReason
     // The fragment a composed reason ends with. Null when the code does not compose.
     public WorkerReason Detail { get; set; }
 
+    // Metadata names of the compiled types the sentence names, which only the Editor can resolve
+    // to their files. Null when the reason names none.
+    public string[] TypeMetadataNames { get; set; }
+
+    // Project-relative paths of the run's files that declare those types, for a reason whose
+    // types only this process can resolve to files. Null when the Editor resolves them instead.
+    public string[] DeclaringFiles { get; set; }
+
     internal static WorkerReason Of(HotReloadWorkerReasonCode code, params string[] args)
     {
         return new WorkerReason
@@ -24,6 +32,21 @@ internal sealed class WorkerReason
     internal static WorkerReason Composite(HotReloadWorkerReasonCode code, WorkerReason detail)
     {
         return new WorkerReason { Code = code, Detail = detail };
+    }
+
+    // A reason whose sentence names compiled types the Editor still has to resolve to files. The
+    // Editor appends the sentence's last value from those files, so args leave it out.
+    internal static WorkerReason NamingCompiledTypes(
+        HotReloadWorkerReasonCode code,
+        string[] typeMetadataNames,
+        params string[] args)
+    {
+        return new WorkerReason
+        {
+            Code = code,
+            Args = args,
+            TypeMetadataNames = typeMetadataNames
+        };
     }
 
     // The same as Composite for a sentence that also substitutes values of its own. It is a

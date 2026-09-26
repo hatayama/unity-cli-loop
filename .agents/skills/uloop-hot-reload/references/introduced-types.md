@@ -19,6 +19,10 @@ continues, and `Warnings` carries `<file>: <reason>: <type>` where the reason is
 `Unsupported introduced type requires a compile` ·
 `Nested type requires a compile` · `Nested declaration inside an introduced type requires a compile`
 
+When an edited body in the same run names a refused type, its shim compile fails with CS0246,
+CS0234, or CS0426, or with CS0103 or CS0117 when the body reads a static member of it. That `Failed` row's `Reason` then ends with a note that quotes the refusal
+and says `uloop compile` clears it.
+
 Three conditions produce a `Failed` row in `IntroducedTypes` instead, and a `Failed` row makes
 `Success` false and leaves every file that shares an assembly with the refused declaration
 unapplied — no method body of those files is patched in that run, files in other assemblies still
@@ -65,10 +69,26 @@ type. Editing it in the same reload (a method body change is enough) lets both b
 edit, so the run applies; passing its file without editing it changes nothing. Otherwise run
 `uloop compile`.
 
+The same split refuses a change to an introduced type when a new file in the same reload
+introduces a type naming it in its signatures: the new type is compiled against the loaded
+definition before the edit is applied. The refusal names the new type as introduced by this
+reload, next to any retained type that also names the changed one. Reload in two steps: first
+without the change, which introduces the new type, then the change together with an edit of every
+type the refusal names (a method body change is enough). Editing only the retained type in the
+same reload does not help while the new type is still being introduced.
+
+The two steps do not apply when the changed type's file holds only what earlier reloads already
+applied and this reload changes nothing in it, for example when the file comes back in only
+because the new file uses it. The new type is still compiled against the definition the first
+reload loaded, so no order of reloads joins the two, and the refusal says so: run `uloop compile`,
+or name the type only inside method bodies of the new type rather than in its signatures. When a
+retained type also names it in its signatures, the refusal names that type too, and moving the
+use into the new type's bodies works only if the same reload also edits the retained type.
+
 `--revert-all` reverts patches and added members but cannot unload an introduced type; the
 response says how many stayed. Auto Refresh stays held while any introduced type is active —
 `uloop compile` always releases it, `--revert-all` only when no introduced type remains.
-With Domain Reload enabled on Play entry (the default), entering Play Mode reloads the domain and
+With Domain Reload enabled on Play entry (the default for projects created before Unity 6.6), entering Play Mode reloads the domain and
 discards the types with the patches; they are counted in `DroppedByPlayModeEntryCount` until a
 later apply re-introduces them. With Enter Play Mode Options set to disable Domain Reload, the
 active changes and the introduced types survive Play entry and nothing is recorded as dropped.
@@ -88,9 +108,12 @@ passed to this reload nor already hot-reloaded; anything
 that reaches the type through Unity (serialization, `[SerializeField]`, Inspector,
 `AddComponent`, `CreateInstance`, message discovery); a method body edit of an introduced
 struct, which is `Skipped` like any struct method; a call to a member an earlier or the same
-reload *added* to a compiled type (an `Added` row), because introduced types compile against the
-compiled assemblies and retained artifacts only, so the compile fails naming the missing member;
-and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
+reload *added* to a compiled type or to an earlier introduced type, because introduced types
+compile against the compiled assemblies and retained artifacts only, so the compile fails naming
+the missing member and says a hot reload addition shares its name (reloading the addition first
+does not help); an added method that passes a type declared from source in this reload to a
+member of an earlier introduced type whose signature was bound to the compiled copy, which is
+`Skipped` naming both types; and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
 the exception: every active artifact is referenced by that compilation, so the snippet can name an
 introduced type directly by its full name. When such a snippet still fails on the name, the
 diagnostic's `Hint` names the type and how to spell it.

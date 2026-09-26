@@ -42,17 +42,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 Plain(
-                    "Struct (value type) methods are skipped; byref instance transplant is unverified.",
+                    "Struct (value type) methods are skipped; byref instance transplant is unverified. "
+                    + "Leave the struct's methods as they are and put the new logic at the call site or in a "
+                    + "non-struct helper, or run 'uloop compile' to change the struct.",
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType,
                 Plain(
-                    "Generic methods and methods inside generic types cannot be safely patched with Harmony. "
-                    + CompileCallToAction,
-                    0));
+                    "Generic methods and methods inside generic types cannot be safely patched with Harmony.",
+                    0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 Plain("Explicit interface implementations are skipped.", 0));
+            // Why {2} is not a worker value: it is the file that declares the compiled type,
+            // which only the Editor resolves, and TransformWorkerCompiledTypeFileCompleter appends it.
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformSiblingBodyBindsCompiledType,
+                Plain(
+                    "This file was brought back to re-bind its active patches, but this method's body no "
+                    + "longer binds here ({0}): it uses a member of {1} that this reload was not given the "
+                    + "source of. Any earlier patch of this method stays active. Pass {2} to --files "
+                    + "together with this file, or run 'uloop compile'.",
+                    3));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformSiblingBodyUnbound,
+                Plain(
+                    "This file was brought back to re-bind its active patches, but this method's body no "
+                    + "longer binds here ({0}), so it is skipped rather than failed; any earlier patch of it "
+                    + "stays active. Pass the file that declares the missing name to --files together with "
+                    + "this file, or run 'uloop compile'.",
+                    1));
         }
     }
 }

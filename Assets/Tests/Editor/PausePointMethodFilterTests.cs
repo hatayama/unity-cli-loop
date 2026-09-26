@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 using NUnit.Framework;
 
@@ -19,6 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private const string AddedScopeFixtureFile =
             "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/AddedMethodScopeFixture.cs";
+
+        // A statement inside CompiledMethodSpanFixture.Target.
+        private const int TargetStatementLine = 9;
+
+        // Names no method of the span fixture, so every line of that file fails to resolve.
+        private const string UnknownMethodName = "NoSuchMethod";
 
         // Inside AddedMethodScopeOwner.Advance, the only compiled method of that type.
         private const int OwnerAdvanceStatementLine = 9;
@@ -67,7 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: --method that has no sequence point on or after the line fails instead of
-        /// arming a neighboring method, and the message lists nearby compiled spans.
+        /// arming a neighboring method, and the message names the method and the line of the file
+        /// on disk and lists nearby compiled spans in those lines.
         /// </summary>
         [Test]
         public void Enable_WhenMethodFilterDoesNotMatch_FailsInsteadOfArmingNeighbor()
@@ -75,40 +83,113 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SourcePausePointResolveResult otherMethod = SourcePausePointResolver.Resolve(SpanFixtureFile, 16);
             Assert.That(otherMethod.Success, Is.True, otherMethod.ErrorMessage);
 
-            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
-                File = SpanFixtureFile,
-                Line = 16,
-                Method = "Target",
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.SingleShot
-            });
+                // Why the file's own text as the snapshot: the map is then the identity, so the
+                // compiled span lines above are also the expected edited-file lines.
+                string fixtureSource = File.ReadAllText(
+                    Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), SpanFixtureFile));
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
 
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-            Assert.That(response.ResolvedMethod, Is.EqualTo(string.Empty));
-            string expectedMessage =
-                string.Format(
-                    SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
-                    "Target",
-                    16)
-                + SourcePausePointConstants.NearbyCompiledMethodsPrefix
-                + string.Format(
-                    SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
-                    "CompiledMethodSpanFixture.OtherMethod",
-                    otherMethod.Resolution.CompiledMethodStartLine,
-                    otherMethod.Resolution.CompiledMethodEndLine)
-                + ".";
-            Assert.That(response.Message, Is.EqualTo(expectedMessage));
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = SpanFixtureFile,
+                    Line = 16,
+                    Method = "Target",
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(response.ResolvedMethod, Is.EqualTo(string.Empty));
+                string expectedMessage =
+                    string.Format(
+                        SourcePausePointConstants.ResolveFailedNoMethodNamedInEditedFileMessageFormat,
+                        "Target",
+                        16,
+                        SpanFixtureFile)
+                    + SourcePausePointConstants.NearbyCompiledMethodsEditedLinesPrefix
+                    + string.Format(
+                        SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
+                        "CompiledMethodSpanFixture.OtherMethod",
+                        otherMethod.Resolution.CompiledMethodStartLine,
+                        otherMethod.Resolution.CompiledMethodEndLine)
+                    + ".";
+                Assert.That(response.Message, Is.EqualTo(expectedMessage));
+            }
         }
 
         /// <summary>
-        /// What: a line that also falls inside an added method's edited range arms the compiled
-        /// method --method names when that method's last compiled span holds the line, because the
-        /// caller passed a last-compiled-source line as the resolve failure told them to.
+        /// What: with a verified snapshot, --method that names no method in the file gets a next
+        /// action that asks to fix or drop --method before the edited-file line advice, because no
+        /// other --line and no compile would change that failure.
         /// </summary>
         [Test]
-        public void Enable_WhenTheMethodCompiledSpanHoldsALineInsideAnAddedMethod_ArmsTheCompiledMethod()
+        public void Enable_WhenMethodFilterNamesNoMethodInTheFile_AsksToCheckTheMethodFilterFirst()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                string fixtureSource = File.ReadAllText(
+                    Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), SpanFixtureFile));
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => fixtureSource;
+
+                PausePointResponse response = EnableInSpanFixtureWithUnknownMethod();
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.Message,
+                    Does.StartWith(string.Format(
+                        SourcePausePointConstants.ResolveFailedNoMethodNamedInEditedFileMessageFormat,
+                        UnknownMethodName,
+                        TargetStatementLine,
+                        SpanFixtureFile)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        SourcePausePointConstants.ResolveFailedMethodFilterNextActionPrefix
+                        + SourcePausePointConstants.ResolveFailedEditedFileRecommendedNextAction));
+            }
+        }
+
+        /// <summary>
+        /// What: without a verified snapshot, --method that names no method in the file gets the same
+        /// --method clause before the compiled-line advice, so the fallback path cannot send the
+        /// caller into the same failure either.
+        /// </summary>
+        [Test]
+        public void Enable_WhenMethodFilterNamesNoMethodWithoutAVerifiedSnapshot_AsksToCheckTheMethodFilterFirst()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => null;
+
+                PausePointResponse response = EnableInSpanFixtureWithUnknownMethod();
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    response.Message,
+                    Does.StartWith(string.Format(
+                        SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
+                        UnknownMethodName,
+                        TargetStatementLine)));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(
+                        SourcePausePointConstants.ResolveFailedMethodFilterNextActionPrefix
+                        + SourcePausePointConstants.ResolveFailedRecommendedNextAction));
+            }
+        }
+
+        /// <summary>
+        /// What: a line inside an added method is refused as an added method even when --method
+        /// names a compiled method whose last compiled span holds the same line number, because
+        /// --line is an edited-file line and that edited line holds added code.
+        /// </summary>
+        [Test]
+        public void Enable_WhenMethodNamesACompiledMethodButLineIsInsideAnAddedMethod_RefusesAsAddedMethod()
         {
             SourcePausePointResolveResult expected =
                 SourcePausePointResolver.Resolve(AddedScopeFixtureFile, HelperStepStatementLine, "Step");
@@ -124,10 +205,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
 
-                Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
-                Assert.That(response.ResolvedMethod, Is.EqualTo(expected.Resolution.MethodDisplayName));
-                Assert.That(response.ResolvedLine, Is.EqualTo(HelperStepStatementLine));
-                Assert.That(response.LineBasis, Is.EqualTo("LastCompiledSource"));
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, "Ns.Owner.AddedStep()");
+            }
+        }
+
+        /// <summary>
+        /// What: a line inside an added method is refused as an added method even when the file
+        /// has no verified snapshot, because the added-method check runs before the resolver
+        /// chooses between the line map and the compiled-line fallback.
+        /// </summary>
+        [Test]
+        public void Enable_WhenLineIsInsideAnAddedMethodAndNoSnapshotExists_StillRefusesAsAddedMethod()
+        {
+            using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
+            {
+                scope.Port.VerifiedSnapshotSource = (file, dllPath) => null;
+                scope.Port.ShimLookupForFile = file => null;
+                scope.Port.AddedMethodContainingLine = (file, line) =>
+                    line == HelperStepStatementLine
+                        ? new HotReloadAddedMethodAtLine("Ns.Owner.AddedStep()", "AddedStep", "Owner", null)
+                        : null;
+
+                PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
+
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, "Ns.Owner.AddedStep()");
             }
         }
 
@@ -181,11 +282,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// What: an edited line of an added Owner.Step whose number falls inside the compiled
-        /// Helper.Step span is refused under a bare --method Step, because that filter names both
-        /// methods, and the next action says to pass --method as Type.Method.
+        /// Helper.Step span is refused as an added method under a bare --method Step, with the
+        /// plain added-method next action instead of a Type.Method disambiguation hint.
         /// </summary>
         [Test]
-        public void Enable_WhenTheMethodAlsoNamesTheAddedMethodHoldingTheLine_RefusesAsAmbiguous()
+        public void Enable_WhenBareMethodNamesBothTwins_RefusesAsAddedMethodWithoutAmbiguityWording()
         {
             using (HotReloadSidePortScope scope = new HotReloadSidePortScope())
             {
@@ -195,26 +296,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, "Step");
 
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(
-                    response.Message,
-                    Does.StartWith(
-                        "Line " + HelperStepStatementLine + " is inside '" + AddedOwnerStepLabel
-                        + "', which hot reload added"));
-                Assert.That(
-                    response.RecommendedNextAction,
-                    Is.EqualTo(SourcePausePointConstants.AmbiguousAddedMethodResolveFailureNextAction));
-                Assert.That(response.RecommendedNextAction, Does.Contain("Type.Method"));
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, AddedOwnerStepLabel);
             }
         }
 
         /// <summary>
-        /// What: the same line arms the compiled Helper.Step when --method names it with its type,
-        /// because that filter no longer names the added Owner.Step.
+        /// What: the same line is still refused as the added Owner.Step when --method names the
+        /// compiled Helper.Step with its type, because the edited line belongs to the added method
+        /// whatever compiled method the filter names.
         /// </summary>
         [Test]
-        public void Enable_WhenATypedMethodNamesOnlyTheCompiledMethod_ArmsBesideASameNamedAddedMethod()
+        public void Enable_WhenQualifiedMethodNamesTheCompiledTwin_StillRefusesAsAddedMethod()
         {
             const string typedFilter = "AddedMethodScopeHelper.Step";
             SourcePausePointResolveResult expected =
@@ -229,53 +321,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 PausePointResponse response = EnableInAddedScopeFixture(HelperStepStatementLine, typedFilter);
 
-                Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
-                Assert.That(response.ResolvedMethod, Is.EqualTo(expected.Resolution.MethodDisplayName));
-                Assert.That(response.ResolvedLine, Is.EqualTo(HelperStepStatementLine));
-                Assert.That(response.LineBasis, Is.EqualTo("LastCompiledSource"));
+                AssertRefusedAsAddedMethod(response, HelperStepStatementLine, AddedOwnerStepLabel);
             }
-        }
-
-        /// <summary>
-        /// What: the added-method side of the filter check uses the declaring type's own short
-        /// name for a nested type, as the compiled resolver does, so Inner.Step names an added
-        /// Outer/Inner.Step and Outer.Step does not.
-        /// </summary>
-        [Test]
-        public void AddedMethodScope_NestedAddedMethod_MatchesItsOwnTypeShortNameOnly()
-        {
-            HotReloadAddedMethodAtLine nested = new HotReloadAddedMethodAtLine(
-                "Ns.Outer/Inner.Step(System.Int32)",
-                "Step",
-                "Inner",
-                "Outer");
-
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Step", nested), Is.True);
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Inner.Step", nested), Is.True);
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Outer.Step", nested), Is.False);
-            Assert.That(PausePointAddedMethodScope.MethodFilterAlsoNamesAddedMethod("Advance", nested), Is.False);
-        }
-
-        /// <summary>
-        /// What: the span holding the requested line is the one that decides, and a resolved line
-        /// is accepted only while it stays inside that span.
-        /// </summary>
-        [Test]
-        public void AddedMethodScope_AcceptsOnlyTheSpanHoldingTheLineAndResolvedLinesInsideIt()
-        {
-            SourcePausePointCompiledMethodSpan first = new SourcePausePointCompiledMethodSpan(5, 8);
-            SourcePausePointCompiledMethodSpan second = new SourcePausePointCompiledMethodSpan(12, 15);
-            SourcePausePointCompiledMethodSpan[] spans = { first, second };
-
-            Assert.That(PausePointAddedMethodScope.FindSpanContainingLineOrNull(spans, 13), Is.SameAs(second));
-            Assert.That(PausePointAddedMethodScope.FindSpanContainingLineOrNull(spans, 10), Is.Null);
-            Assert.That(PausePointAddedMethodScope.FindSpanContainingLineOrNull(spans, 5), Is.SameAs(first));
-            Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 15), Is.True);
-            Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 16), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsLineInsideSpan(second, 11), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(null, 99), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 15), Is.False);
-            Assert.That(PausePointAddedMethodScope.IsResolvedLineOutsideScopeSpan(second, 16), Is.True);
         }
 
         // An added Owner.Step(int) whose edited lines overlap the compiled Helper.Step span.
@@ -309,6 +356,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(SourcePausePointConstants.AddedMethodResolveFailureNextAction));
+        }
+
+        private static PausePointResponse EnableInSpanFixtureWithUnknownMethod()
+        {
+            return new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = SpanFixtureFile,
+                Line = TargetStatementLine,
+                Method = UnknownMethodName,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

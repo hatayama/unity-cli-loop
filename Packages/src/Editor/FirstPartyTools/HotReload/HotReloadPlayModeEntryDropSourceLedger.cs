@@ -11,6 +11,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// domain reload, so an omitted --files run can select those files again after the in-memory
     /// registry that knew them is gone.
     /// </summary>
+    /// <remarks>
+    /// Revert-all writes here too, despite the name: it records the owner files of the introduced
+    /// types it leaves loaded, because the revert drops what later reloads added to them and a
+    /// file that was never compiled is not otherwise selected again.
+    /// </remarks>
     internal static class HotReloadPlayModeEntryDropSourceLedger
     {
         internal const char FieldSeparator = '\t';
@@ -44,6 +49,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SessionState.SetString(HotReloadConstants.PlayModeEntryDropSourcesSessionStateKey, string.Empty);
         }
 
+        public static IReadOnlyList<string> GetIdentities()
+        {
+            SortedSet<string> identities = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (string line in ReadLines())
+            {
+                identities.Add(SplitLine(line)[0]);
+            }
+
+            return new List<string>(identities);
+        }
+
         // A file stays listed while any of the types it declares is still recorded as discarded.
         public static IReadOnlyList<string> GetProjectRelativePaths()
         {
@@ -64,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (parts.Length != 2)
             {
                 throw new InvalidOperationException(
-                    "A Play-entry dropped source line must hold one identity and one path: " + line);
+                    "A dropped introduced-type source line must hold one identity and one path: " + line);
             }
 
             return parts;

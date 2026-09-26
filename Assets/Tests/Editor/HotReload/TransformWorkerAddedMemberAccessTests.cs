@@ -29,9 +29,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostCloseMarker =
             "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }";
 
+        // Why the Behaviour's member as the anchor: the host close marker belongs to the plain
+        // host class, and members added there would not land on the MonoBehaviour.
+        private const string BehaviourExistingTick =
+            "        public void ExistingTick()\n        {\n        }";
+
         private const string RefReturningPropertyNoShape = "inaccessible ref-returning properties have no accessor rewrite shape";
         private const string RefOutInNotRewritten = "inaccessible method calls with ref/out/in parameters are not rewritten";
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
+        private const string PropertyIncrementNoShape = "inaccessible property increment/decrement has no accessor rewrite shape";
 
         /// <summary>
         /// What: an added method that reads an added private static property is added, not
@@ -247,6 +253,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method that captures a compiled private method as a method group is
+        /// skipped with a reason naming the lambda rewrite, and that rewrite - a lambda calling the
+        /// same method - is added.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompiledPrivateMethodGroupWrappedInALambda_IsAddedAsTheReasonSays()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedCaptureGroup()\n        {\n"
+                + "            Func<int> read = PrivateCall;\n            return read();\n        }\n\n"
+                + "        public int AddedCaptureLambda()\n        {\n"
+                + "            Func<int> read = () => PrivateCall();\n            return read();\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string groupReason = FindSkipReason(result, "AddedCaptureGroup");
+            Assert.That(groupReason, Does.Contain("method group 'PrivateCall' (non-invocation)"));
+            Assert.That(
+                groupReason,
+                Does.Contain("wrapping the method group in a lambda that calls it"));
+            AssertAddedAndNotSkipped(result, "AddedCaptureLambda");
+        }
+
+        /// <summary>
+        /// What: the lambda the method-group reason offers takes as many parameters as the method,
+        /// so it compiles as written: none, one without parentheses, and two in parentheses.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompiledPrivateMethodGroup_ReasonLambdaMatchesTheParameterCount()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedCaptureNone()\n        {\n"
+                + "            Func<int> read = PrivateCall;\n            return read();\n        }\n\n"
+                + "        public int AddedCaptureOne()\n        {\n"
+                + "            Func<int, int> add = PrivateAddSeed;\n            return add(1);\n        }\n\n"
+                + "        public int AddedCaptureTwo()\n        {\n"
+                + "            Func<int, int, int> sum = PrivateSumWithSeed;\n            return sum(1, 2);\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, "AddedCaptureNone"),
+                Does.Contain("(such as '() => PrivateCall()')"));
+            string oneReason = FindSkipReason(result, "AddedCaptureOne");
+            Assert.That(oneReason, Does.Contain("(such as 'a => PrivateAddSeed(a)')"));
+            Assert.That(oneReason, Does.Not.Contain("(a, b)"));
+            Assert.That(
+                FindSkipReason(result, "AddedCaptureTwo"),
+                Does.Contain("(such as '(a, b) => PrivateSumWithSeed(a, b)')"));
+        }
+
+        /// <summary>
+        /// What: a method group whose method has an out parameter gets the reason without an
+        /// example lambda, because a lambda for it needs the modifier and an explicit type.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_CompiledPrivateMethodGroupWithOutParameter_ReasonOffersNoExample()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public bool AddedCaptureOut()\n        {\n"
+                + "            SeedReader read = TryReadPrivateSeed;\n            return read(out int value);\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "AddedCaptureOut");
+            Assert.That(reason, Does.Contain("method group 'TryReadPrivateSeed' (non-invocation)"));
+            Assert.That(reason, Does.Contain("a lambda that calls it keeps hot reloading."));
+            Assert.That(reason, Does.Not.Contain("such as"));
+        }
+
+        /// <summary>
         /// What: an added method that reads a compiled private static property is added, and the
         /// shim calls the getter delegate with no receiver argument.
         /// </summary>
@@ -287,7 +361,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertAddedAndNotSkipped(result, "AddedBumpCompiledStatic");
             Assert.That(
                 result.Output.shimSource,
-                Does.Match(@"__P_set_PrivateStaticCounter\(\(int\)\(__P_get_PrivateStaticCounter\(\)\s*\+\s*value\)\)"),
+                Does.Match(@"__P_set_PrivateStaticCounter\(\(int\)\(__P_get_PrivateStaticCounter\(\)\s*\+\s*\(value\)\)\)"),
+                result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: an added method that increments a compiled private static property is skipped, and
+        /// its reason names the assignment statements that the accessor rewrite handles.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_IncrementingACompiledPrivateStaticProperty_IsSkippedNamingTheAssignmentRewrite()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedIncrementCompiledStatic()\n        {\n            PrivateStaticCounter++;\n        }");
+
+            AssertHasSkip(result, "AddedIncrementCompiledStatic", PropertyIncrementNoShape);
+            AssertHasSkip(result, "AddedIncrementCompiledStatic", "'X += 1' or 'X = X + 1'");
+        }
+
+        /// <summary>
+        /// What: the same increment written as the plain assignment statement the increment skip
+        /// reason suggests is added, and the shim sets the property from its getter result.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_IncrementWrittenAsAnAssignmentOfACompiledPrivateStaticProperty_IsAdded()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedAssignIncrementCompiledStatic()\n        {\n"
+                + "            PrivateStaticCounter = PrivateStaticCounter + 1;\n        }");
+
+            AssertAddedAndNotSkipped(result, "AddedAssignIncrementCompiledStatic");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Match(@"__P_set_PrivateStaticCounter\(__P_get_PrivateStaticCounter\(\)\s*\+\s*1\)"),
                 result.Output.shimSource);
         }
 
@@ -304,7 +410,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertAddedAndNotSkipped(result, "AddedBumpCompiledStaticByte");
             Assert.That(
                 result.Output.shimSource,
-                Does.Match(@"__P_set_PrivateStaticByteCounter\(\(byte\)\(__P_get_PrivateStaticByteCounter\(\)\s*\+\s*1\)\)"),
+                Does.Match(@"__P_set_PrivateStaticByteCounter\(\(byte\)\(__P_get_PrivateStaticByteCounter\(\)\s*\+\s*\(1\)\)\)"),
                 result.Output.shimSource);
         }
 
@@ -321,7 +427,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertAddedAndNotSkipped(result, "AddedBumpCompiledByte");
             Assert.That(
                 result.Output.shimSource,
-                Does.Match(@"__P_set_PrivateByteCounter\(__uloopInstance,\s*\(byte\)\(__P_get_PrivateByteCounter\(__uloopInstance\)\s*\+\s*1\)\)"),
+                Does.Match(@"__P_set_PrivateByteCounter\(__uloopInstance,\s*\(byte\)\(__P_get_PrivateByteCounter\(__uloopInstance\)\s*\+\s*\(1\)\)\)"),
                 result.Output.shimSource);
         }
 
@@ -405,6 +511,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, "AddedUsesTryBase"), Is.Null);
         }
 
+        /// <summary>
+        /// What: an added OnEnable on a MonoBehaviour whose body has no accessor rewrite names
+        /// 'uloop compile' as the only step, because no rewrite of the body would make the
+        /// engine call a message hot reload does not forward.
+        /// </summary>
+        [Test]
+        public async Task AddedNotForwardedUnityMessage_WithoutAccessorShape_PointsOnlyToCompile()
+        {
+            TransformWorkerClientResult result = await RunBehaviourWithAddedMembersAsync(
+                "private void OnEnable()\n        {\n"
+                + "            System.Action handler = AddedHandler;\n            handler();\n        }\n\n"
+                + "        private void AddedHandler()\n        {\n        }");
+
+            AssertHasSkip(result, "OnEnable", "uloop compile");
+            Assert.That(FindSkipReason(result, "OnEnable"), Does.Not.Contain("lambda"));
+        }
+
+        /// <summary>
+        /// What: a method group on the right of '-=' is not offered the lambda rewrite, because a
+        /// lambda there is a different delegate and would leave the handler subscribed.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_UnsubscribingAMethodGroup_DoesNotSuggestALambda()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public void AddedDetach()\n        {\n            PrivateChanged -= AddedHandler;\n        }\n\n"
+                + "        private void AddedHandler()\n        {\n        }");
+
+            AssertHasSkip(result, "AddedDetach", "'-='");
+            Assert.That(FindSkipReason(result, "AddedDetach"), Does.Not.Contain("=> AddedHandler"));
+            Assert.That(FindSkipReason(result, "AddedDetach"), Does.Not.Contain("keeps hot reloading"));
+        }
+
         private static void AssertAddedAndNotSkipped(TransformWorkerClientResult result, string methodNameFragment)
         {
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -435,6 +574,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = WithHostMembers(onDisk, extraMembers);
             return await RunWorkerOnSourceAsync(
                 WriteEdited("HostWithAddedMemberAccess.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunBehaviourWithAddedMembersAsync(string extraMembers)
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            Assert.That(onDisk, Does.Contain(BehaviourExistingTick));
+            string edited = onDisk.Replace(
+                BehaviourExistingTick,
+                BehaviourExistingTick + "\n\n        " + extraMembers,
+                StringComparison.Ordinal);
+            return await RunWorkerOnSourceAsync(
+                WriteEdited("BehaviourWithAddedMembers.cs", edited),
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
         }

@@ -13,12 +13,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// The hot-reload state of one Unity domain: every file generation currently applied, and the
-    /// source hash each file was last applied from. It is the only way in to a file generation.
+    /// source hash each file was last applied from (<see cref="AppliedSources"/>). It is the only
+    /// way in to a file generation.
     /// </summary>
     /// <remarks>
-    /// Why the applied-source records live here rather than on a generation: a file is probed for
-    /// an unchanged re-apply before anything of it is applied, so the record has to outlive — and
-    /// exist without — a generation of that file.
     /// Why nothing here is persisted: a Domain Reload drops the Harmony patches and the shim
     /// assemblies at the same time, so a hash that survived it would short-circuit a reload whose
     /// patches are already gone.
@@ -28,21 +26,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, HotReloadFileGeneration> _generationsByPath =
             new Dictionary<string, HotReloadFileGeneration>(StringComparer.Ordinal);
 
-        private readonly Dictionary<string, (string Hash, bool IsFullyApplied)> _appliedSourceByPath =
-            new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
-
-        // Why it is keyed by the platform's path comparer rather than Ordinal: a file absent from
-        // the compiled source list is looked up again from a later run's spelling of the path,
-        // which on Windows can differ in case only.
-        private readonly Dictionary<string, HotReloadNewSourceMembershipEvidence> _newSourceMembershipEvidenceByPath =
-            new Dictionary<string, HotReloadNewSourceMembershipEvidence>(
-                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
-
-        // Why the last displayed set is kept per file rather than derived from the worker output:
-        // the removed members of a run are recomputed from scratch every time, so nothing in a
-        // single run can tell a set the previous run already reported from one it never did.
-        private readonly Dictionary<string, HashSet<string>> _displayedRemovedMembersByPath =
-            new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        // The identity keys of the serialized added fields the last run left active. Why the whole
+        // active set and not an append-only history: a field that stops being active (removed,
+        // attribute dropped, file reverted) is new again when it comes back, and the reader
+        // should hear about it.
+        private readonly HashSet<string> _reportedSerializedAddedFields =
+            new HashSet<string>(StringComparer.Ordinal);
 
         internal HotReloadDomain(
             HotReloadIntroducedTypeRegistry introducedTypes,
@@ -69,6 +58,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>How many times each patched body of this domain has run.</summary>
         internal HotReloadInvocationCounts Invocations { get; } = new HotReloadInvocationCounts();
+
+        /// <summary>
+        /// The unchanged files earlier reloads were given beside what they applied. Kept across a
+        /// revert-all and restored across a Domain Reload from SessionState, unlike every other
+        /// store here, because the next reload of those patches needs them exactly as much.
+        /// </summary>
+        internal HotReloadCompanionSourceLedger CompanionSources { get; } = new HotReloadCompanionSourceLedger();
+
+        /// <summary>The source each file was last applied from; emptied by a revert-all.</summary>
+        internal HotReloadAppliedSourceLedger AppliedSources { get; } = new HotReloadAppliedSourceLedger();
+
+        internal HotReloadDisplayedRemovedMemberLedger DisplayedRemovedMembers { get; } =
+            new HotReloadDisplayedRemovedMemberLedger();
 
         /// <summary>
         /// Where the types of <paramref name="assemblyName"/> live for this domain: the artifact
@@ -112,10 +114,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             byte[] assemblyBytes,
             byte[] pdbBytes,
-            Assembly loadedAssembly)
+            Assembly loadedAssembly,
+            string shimSourcePath,
+            string shimSourceContentSha256)
         {
             HotReloadFileGeneration generation = GetOrCreateGeneration(projectRelativePath);
-            generation.BeginShimGeneration(assemblyBytes, pdbBytes, loadedAssembly);
+            generation.BeginShimGeneration(
+                assemblyBytes, pdbBytes, loadedAssembly, shimSourcePath, shimSourceContentSha256);
             generation.BeginAddedMemberGeneration();
             return generation;
         }
@@ -252,12 +257,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths;
         }
 
+        // Why added fields count here but not in AddedMemberCount: a field lives only in its file's
+        // edited source, so a later reload that reads it needs the file back, while the active
+        // change counts behind --status and the Auto Refresh hold track methods only.
         internal IReadOnlyList<string> ListPathsWithActiveAddedMembers()
         {
             List<string> paths = new List<string>();
             foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
             {
-                if (pair.Value.AddedMemberCount > 0)
+                if (pair.Value.AddedMemberCount > 0 || pair.Value.HasAddedFields)
                 {
                     paths.Add(pair.Key);
                 }
@@ -300,22 +308,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
             HotReloadFileGeneration generation = FindGeneration(projectRelativePath);
             return generation != null && generation.IsActiveMember(methodKey);
-        }
-
-        /// <summary>
-        /// Answers whether the last run that reported removed members for one file reported
-        /// exactly this set, without changing the record.
-        /// </summary>
-        internal bool IsSameAsLastDisplayedRemovedMembers(
-            string projectRelativePath,
-            IReadOnlyList<string> displayedNames)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
-
-            return displayedNames.Count > 0
-                && _displayedRemovedMembersByPath.TryGetValue(projectRelativePath, out HashSet<string> lastDisplayed)
-                && lastDisplayed.SetEquals(displayedNames);
         }
 
         /// <summary>
@@ -431,6 +423,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return names;
         }
 
+        /// <summary>
+        /// The row describing one added field of <paramref name="typeName"/>, searched across every
+        /// file's generation. The type may be spelled either way a nested type is spelled.
+        /// </summary>
+        internal bool TryGetAddedFieldDeclaration(
+            string typeName,
+            string fieldName,
+            out HotReloadAddedFieldDeclaration declaration)
+        {
+            declaration = null;
+            if (string.IsNullOrEmpty(typeName) || string.IsNullOrEmpty(fieldName))
+            {
+                return false;
+            }
+
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                if (pair.Value.TryGetAddedFieldDeclaration(typeName, fieldName, out declaration))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>Every live added-field row: file path, then type, then field, all ordinal.</summary>
         internal IReadOnlyList<HotReloadAddedFieldDescription> DescribeAddedFields()
         {
@@ -493,104 +511,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return FindGenerationForRequestedPath(requestedPath)?.FindAddedMethodContainingLine(line);
         }
 
-        internal bool HasActiveHotReloadChangesInFile(string requestedPath)
-        {
-            return FindGenerationForRequestedPath(requestedPath)?.HasActiveHotReloadChanges == true;
-        }
-
-        internal string LoadVerifiedSnapshotSourceForFile(string requestedPath)
-        {
-            return FindGenerationForRequestedPath(requestedPath)?.LoadVerifiedSnapshotSource();
-        }
-
-        // Why the flag: a non-baseline entry (Skipped or Failed in the last run) must not
-        // short-circuit; it exists only so an identical reload can explain why it re-applies.
-        internal void RecordAppliedSource(
-            string projectRelativePath,
-            string sourceContentSha256,
-            bool isFullyApplied)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(!string.IsNullOrEmpty(sourceContentSha256), "sourceContentSha256 must not be empty.");
-
-            _appliedSourceByPath[projectRelativePath] = (sourceContentSha256, isFullyApplied);
-        }
-
-        internal (string Hash, bool IsFullyApplied)? TryGetAppliedSource(string projectRelativePath)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-
-            if (!_appliedSourceByPath.TryGetValue(
-                    projectRelativePath,
-                    out (string Hash, bool IsFullyApplied) entry))
-            {
-                return null;
-            }
-
-            return entry;
-        }
-
-        // Why the evidence is kept per file rather than recomputed: a file outside the last
-        // compiled source list has no assembly Unity vouches for, so the only thing that can say
-        // it still belongs to the assembly it was applied into is what the first reload verified.
-        internal void RecordNewSourceMembershipEvidence(
-            string projectRelativePath,
-            HotReloadNewSourceMembershipEvidence evidence)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(evidence != null, "evidence must not be null.");
-
-            _newSourceMembershipEvidenceByPath[projectRelativePath] = evidence;
-        }
-
-        internal HotReloadNewSourceMembershipEvidence TryGetNewSourceMembershipEvidence(string projectRelativePath)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-
-            if (!_newSourceMembershipEvidenceByPath.TryGetValue(
-                    projectRelativePath,
-                    out HotReloadNewSourceMembershipEvidence evidence))
-            {
-                return null;
-            }
-
-            return evidence;
-        }
-
         /// <summary>
-        /// Takes the removed-member names a run is about to report for one file and answers
-        /// whether the last run that reported any for it reported exactly the same set. An empty
-        /// set drops the record, so a run that reports nothing is not a gap inside a continuation.
+        /// Whether the source the file's shim generation was compiled from now hashes differently,
+        /// read through <paramref name="readContentHashOrNull"/> so the check needs no real file.
+        /// False when there is no shim generation or the source cannot be read.
         /// </summary>
-        internal bool RecordDisplayedRemovedMembers(
-            string projectRelativePath,
-            IReadOnlyList<string> displayedNames)
+        internal bool HasShimSourceChangedOnDisk(string requestedPath, Func<string, string> readContentHashOrNull)
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(displayedNames != null, "displayedNames must not be null.");
+            Debug.Assert(readContentHashOrNull != null, "readContentHashOrNull must not be null.");
 
-            if (displayedNames.Count == 0)
+            HotReloadFileGeneration generation = FindGenerationForRequestedPath(requestedPath);
+            if (generation == null || !generation.HasShimGeneration)
             {
-                _displayedRemovedMembersByPath.Remove(projectRelativePath);
                 return false;
             }
 
-            HashSet<string> displayed = new HashSet<string>(displayedNames, StringComparer.Ordinal);
-            bool isSameAsLastDisplayed =
-                _displayedRemovedMembersByPath.TryGetValue(projectRelativePath, out HashSet<string> lastDisplayed)
-                && lastDisplayed.SetEquals(displayed);
-            _displayedRemovedMembersByPath[projectRelativePath] = displayed;
-            return isSameAsLastDisplayed;
+            string currentHash = readContentHashOrNull(generation.ShimSourcePath);
+            return currentHash != null && generation.HasShimSourceChangedFrom(currentHash);
         }
 
-        // Why the evidence is dropped here rather than through its own method: it only means
-        // anything alongside the applied record, so the two share one lifetime.
-        internal void ClearAppliedSource(string projectRelativePath)
+        /// <summary>
+        /// The display names of the active added fields declared with a serialization attribute
+        /// that no earlier run has reported, sorted ordinal; the active set becomes the new record.
+        /// Two fields that read the same in C# are both listed.
+        /// </summary>
+        /// <remarks>
+        /// Why the owner path is part of the key rather than the assembly name: a generation knows
+        /// its file and not its assembly, and a file belongs to exactly one assembly, so the path
+        /// tells apart two assemblies that declare the same type and field names.
+        /// </remarks>
+        internal IReadOnlyList<string> TakeUnreportedSerializedAddedFields()
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            HashSet<string> activeKeys = new HashSet<string>(StringComparer.Ordinal);
+            List<string> unreported = new List<string>();
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                foreach (HotReloadSerializedAddedField field in pair.Value.SerializedAddedFields)
+                {
+                    string key = field.ToIdentityKey(pair.Key);
+                    if (activeKeys.Add(key) && !_reportedSerializedAddedFields.Contains(key))
+                    {
+                        unreported.Add(field.ToDisplayName());
+                    }
+                }
+            }
 
-            _appliedSourceByPath.Remove(projectRelativePath);
-            _newSourceMembershipEvidenceByPath.Remove(projectRelativePath);
+            unreported.Sort(StringComparer.Ordinal);
+            _reportedSerializedAddedFields.Clear();
+            _reportedSerializedAddedFields.UnionWith(activeKeys);
+            return unreported;
         }
 
         /// <summary>
@@ -606,8 +575,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Why HotReloadIntroducedTypeRegistry is not emptied: an introduced type's identity is
         /// fixed until the next Domain Reload, so a revert cannot drop it
         /// (docs/hot-reload-introduced-types.md).
+        /// Why CompanionSources is not emptied: the files it names are what a reload applying the
+        /// reverted changes again has to be given, and nothing reverted changed them.
         /// Why HotReloadPlayModeEntryDropLedger is not emptied: it lives on SessionState, and
-        /// HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll clears it through NotifyRevertAll.
+        /// HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll clears it through
+        /// NotifyRevertAll, which then records the owner files of the introduced types this method
+        /// leaves loaded.
         /// </remarks>
         internal IReadOnlyList<MethodBase> RevertAll()
         {
@@ -618,9 +591,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _generationsByPath.Clear();
-            _appliedSourceByPath.Clear();
-            _newSourceMembershipEvidenceByPath.Clear();
-            _displayedRemovedMembersByPath.Clear();
+            AppliedSources.Clear();
+            DisplayedRemovedMembers.Clear();
+            _reportedSerializedAddedFields.Clear();
             AddedFieldValues.Clear();
             Invocations.Clear();
             return revertedMethods;

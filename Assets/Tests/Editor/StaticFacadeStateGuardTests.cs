@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/Common/Overlay/OverlayCanvasFactory.cs",
             "Packages/src/Editor/FirstPartyTools/Common/InputSystem/InputStateChangeApplier.cs",
             "Packages/src/Editor/ToolContracts/MainThreadSwitcher.cs",
+            "Packages/src/Editor/ToolContracts/MainThreadWaitObservation.cs",
             "Packages/src/Editor/ToolContracts/VibeLogger.cs",
             "Packages/src/Editor/Application/UnityCliLoopServerApplicationService.cs",
             "Packages/src/Editor/Domain/UnityCliLoopSessionFlagsFacade.cs",

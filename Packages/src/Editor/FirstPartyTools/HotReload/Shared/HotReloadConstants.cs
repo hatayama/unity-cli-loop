@@ -41,14 +41,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Editor/FirstPartyTools/HotReload/TransformWorker~";
 
         // Package-relative sources compiled into the worker in addition to the tilde directory.
-        // Why: the resident-mode line protocol, the introduced-type fingerprint and the reason
-        // code the worker reports are shared verbatim between the Editor host and the worker so
-        // the two ends cannot drift apart.
+        // Why: the resident-mode line protocol, the introduced-type fingerprint, the reason code
+        // the worker reports and the Unity messages hot reload does not forward are shared
+        // verbatim between the Editor host and the worker so the two ends cannot drift apart.
         public static readonly string[] WorkerSharedSourcePackageRelativePaths =
         {
             "Editor/FirstPartyTools/HotReload/Shared/TransformWorkerServeProtocol.cs",
             "Editor/FirstPartyTools/HotReload/Shared/HotReloadIntroducedTypeFingerprint.cs",
-            "Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonCode.cs"
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonCode.cs",
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadNotForwardedUnityMessageNames.cs"
         };
 
         public const string WorkerDllFileName = "worker.dll";
@@ -76,9 +77,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly group are applied through that group's shim assembly.
         public const string NewMemberCompileHint =
             "Added members declared in the edited files of the same assembly are applied through "
-            + "the shim assembly. Members referenced from other assemblies, or from files that are "
-            + "neither passed to this reload nor already hot-reloaded, still require a real compile "
-            + "(uloop compile).";
+            + "the shim assembly. A member that another assembly declares, one declared in a file "
+            + "outside this reload that no earlier reload applied, or a kind hot reload cannot add "
+            + "(such as an added enum member) still requires a real compile (uloop compile).";
 
         public const string ActiveSiblingsRebindWarningFormat =
             "Also re-applied {0} unchanged file(s) with active patches in assembly '{1}' so their "
@@ -87,6 +88,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ActiveSiblingChangedSinceApplyWarningFormat =
             "'{0}' has active patches but its source changed since they were applied, so it was "
             + "not re-applied; pass it to hot-reload to update it.";
+
+        // Format: retried file count, assembly name, comma-separated paths. Why apart from the
+        // re-applied summary: these files held no active patch, so "so their patches bind" would
+        // misstate why they came back.
+        public const string RetriedSiblingsWarningFormat =
+            "Also retried {0} unchanged file(s) in assembly '{1}' that an earlier reload left Skipped "
+            + "or Failed, and this reload applied them: {2}.";
+
+        // Why the reader is told it will not come back: the retry is a single one, so a reload
+        // that fixes the reason elsewhere has to pass this file again for it to apply.
+        public const string RetriedSiblingNotAppliedWarningFormat =
+            "'{0}' was retried because an earlier reload left it Skipped or Failed, but this reload "
+            + "did not apply it either; see its rows for the reasons. It is not retried again, so "
+            + "pass it to hot-reload once the reason is fixed.";
+
+        public const string RetrySiblingChangedSinceSkipWarningFormat =
+            "'{0}' was left Skipped or Failed by an earlier reload and its source changed since, so "
+            + "it was not retried; pass it to hot-reload to apply it.";
+
+        // Format: companion file count, assembly name, comma-separated paths.
+        public const string CompanionSiblingsWarningFormat =
+            "Also brought back {0} unchanged file(s) in assembly '{1}' that an earlier reload was "
+            + "given beside its changes, so this reload binds the same way: {2}.";
+
+        public const string CompanionSiblingChangedWarningFormat =
+            "'{0}' was given to an earlier reload beside its changes, but its source changed since, "
+            + "so it was not brought back and is no longer remembered; pass it to hot-reload again if "
+            + "an added member needs it to bind.";
 
         // Why a second wording: the failed-rebind sentence sends the reader to the sibling's own
         // rows, and a reload that stopped before re-applying anything wrote none. Pointing at
@@ -129,6 +158,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
         // are not Failed (the compile error was in the added body) and must not stay silent.
+        // The caller of an added method the isolation retry left out, whose row may be Failed (its
+        // own shim failed) or Skipped (another method of its file failed). Why not the sentence
+        // above: that one points at a Failed row, which a Skipped callee does not have.
+        public const string UnappliedAddedMethodCallerSkipReasonFormat =
+            "Calls the added method '{0}', which this reload did not apply; the caller was left unpatched. "
+            + "That method's own row gives the reason: fix its compile error when it Failed, or the failure "
+            + "elsewhere in its file when it was Skipped, and reload again, or run 'uloop compile'.";
+
         public const string IsolatedAddedMethodCallerSkipReason =
             "Calls an added method whose shim failed to compile; the caller was left unpatched. "
             + "Fix the compile error in the added method (see the Failed row in this response) and reload again, or run 'uloop compile'.";
@@ -165,12 +202,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This run deactivated previously active added members: {0}. They are no longer registered, but patches this run left active may still reach their previous shim bodies. Edit and reload again to re-apply them, or run 'uloop compile'.";
 
         // Why a separate sentence for the members this run skipped: the ordinary wording invites
-        // another reload, and another reload of the same shape skips them again. What has to
-        // change first is the shape their Methods[] reason names.
+        // an edit to them, while what has to change first is what their Methods[] reason names,
+        // often in another file. The next reload of the assembly retries the unchanged file once
+        // by itself, so the reader only has to pass the file the reason names.
         public const string DeactivatedSkippedPatchesWarningFormat =
             "This run deactivated previously active patches by skipping them: {0}. They reverted to the "
-            + "compiled behavior, and reloading the same shape skips them again; change what their "
-            + "Methods[].Reason names and reload, or run 'uloop compile'.";
+            + "compiled behavior. The next reload of this assembly retries their file once while it stays "
+            + "unchanged, so change what their Methods[].Reason names and reload, or run 'uloop compile'.";
 
         // Why this is reported at all: a skip that leaves an earlier patch active produces no
         // Skipped-versus-compiled difference the reader can see. The method keeps running the
@@ -185,8 +223,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string DeactivatedSkippedAddedMembersWarningFormat =
             "This run deactivated previously active added members by skipping them: {0}. They are no longer "
             + "registered, but patches this run left active may still reach their previous shim bodies. "
-            + "Reloading the same shape skips them again; change what their Methods[].Reason names and "
-            + "reload, or run 'uloop compile'.";
+            + "The next reload of this assembly retries their file once while it stays unchanged, so "
+            + "change what their Methods[].Reason names and reload, or run 'uloop compile'.";
 
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/RemovedMemberKinds.cs.
@@ -218,6 +256,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
 
+        // Why one line naming Type.field: two types can gain a field of the same name, and the
+        // recipe file is named because the reader has no other way to find it.
+        public const string SerializedAddedFieldWarningFormat =
+            "Added field(s) with a serialization attribute will not appear in the Inspector or "
+            + "serialize until 'uloop compile': {0}. To put a value in one now, follow "
+            + "references/added-field-wiring.md in the uloop-hot-reload skill.";
+
+        // Why name the fields: a domain reload (a compile, or entering Play Mode with Domain
+        // Reload enabled) or a revert dropped the values an earlier run wired into them, and
+        // nothing else in the response says the wiring has to be done again. Why conditional: the
+        // wired-value ledger lives in the domain that reload replaced, so nothing is left that
+        // records whether a value was ever wired. A scene reload without a domain reload keeps
+        // the ledger and restores the values; WiredValueNotRestoredWarningFormat names the ones
+        // it could not.
+        public const string RewireAfterDomainReloadWarningFormat =
+            "If values were wired into these added fields before the last domain reload or revert, "
+            + "they are gone; wire them again before code that reads them runs: {0}.";
+
+        // Why name each one: the ledger brings wired values back after a scene reload without a
+        // domain reload, so a value that did not come back is the exception the caller has to act
+        // on; each item's reason says what brings it back. Each item reads
+        // "{Type.field} on {host}: {reason}".
+        public const string WiredValueNotRestoredWarningFormat =
+            "Wired added-field value(s) did not come back after the scene reload: {0}.";
+
+        // Why a pause and not only "wire them": while Play Mode runs, a frame can read an added
+        // field before the caller wires it, and the reader then fails every frame until it is
+        // wired. Pausing first was measured to avoid that.
+        public const string PauseBeforeWiringDuringPlayWarning =
+            "Play Mode is running, so code that reads these added fields may already have run with "
+            + "them unset (for example a NullReferenceException every frame). Pause Play Mode "
+            + "('uloop control-play-mode --action Pause'), wire them, then resume "
+            + "('uloop control-play-mode --action Play'); to wire them before any read next time, "
+            + "pause before the hot reload.";
+
+        // Why at the revert already: the revert drops the declarations and their values, and the
+        // re-apply that brings the fields back is the step a reader would otherwise not connect
+        // to rewiring.
+        public const string RevertDroppedAddedFieldValuesWarningFormat =
+            "This revert dropped {0} added field(s) and any values wired into them; after the next "
+            + "hot reload adds them again, wire them again before code that reads them runs: {1}.";
+
         // Why a warning rather than a re-run of the initializer: a stored value cannot be told
         // apart from one the edited code assigned, so re-running would overwrite live state. The
         // run reports the mismatch instead, because nothing else in the response shows it.
@@ -243,6 +323,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // compile error as the root cause.
         public const string SkippedMemberCompileFailureNoteFormat =
             "'{0}' was skipped by this hot reload run, which is why this compile failed: {1}";
+
+        // Why a separate note for types: CS0246/CS0234 only say the type is missing, while the
+        // source still declares it. The type was refused by this run, so only a compile adds it.
+        public const string RefusedIntroducedTypeCompileFailureNoteFormat =
+            "'{0}' was refused by this hot reload run ({1}), which is why this compile failed; run 'uloop compile'.";
 
         // Wire value for TransformWorkerEntryDto.patchKind when the worker rewrote inaccessible
         // accesses into accessor delegates.
@@ -382,6 +467,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ActiveIntroducedTypesRevertAllHoldNote =
             " Auto Refresh stays held for them; run 'uloop compile' to release it.";
 
+        // Format: how many method outcomes of this run were Skipped.
+        public const string SkippedCountApplyMessageSuffixFormat = " Skipped: {0}.";
+
         // Format: how many types this run introduced.
         public const string IntroducedTypesOnlyApplyMessageFormat =
             "Hot reload introduced {0} type(s); no method body needed patching.";
@@ -440,10 +528,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string MultiWarningSingleCompileResolutionMessage =
             "A single 'uloop compile' clears all of them at once when you want them gone; none of them has to be cleared before you keep working.";
-
-        // Format: continuing file count, then comma-separated project-relative paths (ordinal).
-        public const string ContinuingLineShiftWarningFormat =
-            "Continuing from earlier runs: {0} file(s) still differ in line count from the last compiled source ({1}). 'enable-pause-point --line' targeting caveats from the earlier warning still apply; pass --method together with --line to pin the target.";
 
         // Format: project-relative path of the source that matched a non-baseline ledger entry.
         public const string UnchangedSourceNonBaselineWarningFormat =
@@ -539,13 +623,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // compile'", and during play that is the one thing --compile-on-skip auto declined to do,
         // so the reader has to be told the choice was theirs and how to make it.
         public const string CompileFallbackHeldForPlayModeRecommendedNextAction =
-            "No compile ran because the Editor is in Play Mode and a compile would stop the Play session; rerun with --compile-on-skip on to compile anyway.";
+            "Before compiling, do any fix that Methods[].Reason or IntroducedTypes[].Reason names without a compile. No compile ran because the Editor is in Play Mode and a compile would stop the Play session; rerun with --compile-on-skip on to compile anyway.";
 
         // The same Stop step the compile tool recommends when it refuses to compile during play
         // (CompileErrorNextActionsConstants.PlayModeStopNextAction); restated here because a tool
         // may not reference another tool's assembly.
         public const string CompileFallbackRefusedDuringPlayRecommendedNextAction =
-            "No compile ran because the Editor is in Play Mode and Unity's 'Script Changes While Playing' is set to 'Recompile After Finished Playing'. Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.";
+            "Before compiling, do any fix that Methods[].Reason or IntroducedTypes[].Reason names without a compile. No compile ran because the Editor is in Play Mode and Unity's 'Script Changes While Playing' is set to 'Recompile After Finished Playing'. Run 'uloop control-play-mode --action Stop' to leave Play Mode, then rerun 'uloop compile'.";
 
         // Unity's EditorPrefs entry behind "Script Changes While Playing", and its value for
         // "Recompile After Finished Playing", under which the compile tool refuses to run during
@@ -555,7 +639,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const int ScriptCompilationDuringPlayRecompileAfterFinishedPlaying = 1;
 
         public const string RequestedFilesAllSkippedRecommendedNextAction =
-            "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings).";
+            "Each Skipped row's Methods[].Reason names what to change (a file to pass with --files, an initializer to drop, a shape hot reload can patch; see Warnings); do that and rerun. Run 'uloop compile' to apply the Skipped edits as they are instead.";
 
         // Why one sentence in one place: the same rule has to reach the caller from the skill, the
         // docs, and every selection response, and two wordings of it read as two rules.
@@ -579,15 +663,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             " New files that have never been compiled are not selected automatically.";
 
         // Opens the selection message of an omitted --files run that found no changed file but
-        // still selects files Play entry discarded.
+        // still selects the files of introduced types Play entry or revert-all dropped.
         public const string DefaultSelectionNoChangedFilesPrefix =
             "--files was omitted; no file changed since the last compile.";
 
         // Format: {0} = count, {1} = comma-separated project-relative paths of the owner files of
-        // introduced types that the Play-entry domain reload discarded.
+        // introduced types that the Play-entry domain reload discarded, or whose later additions
+        // revert-all dropped. The wording names both, because the ledger does not say which.
         public const string DefaultSelectionReselectedDroppedFilesFormat =
-            " {0} new file(s) that hot reload had introduced before the Play Mode domain reload "
-            + "discarded them were selected again: {1}.";
+            " {0} new file(s) declaring a type hot reload introduced were selected again, because "
+            + "entering Play Mode or 'uloop hot-reload --revert-all' dropped what earlier reloads had "
+            + "applied from them: {1}.";
 
         // Replaces DefaultSelectionNewFilesNote when discarded new files were selected, so the
         // note does not read as if those files were left out too.
@@ -601,9 +687,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIdentities";
 
         // SessionState key for the owner files of introduced types discarded by the Play-entry
-        // domain reload, one "identity<TAB>project-relative path" line per type.
+        // domain reload, or left loaded by revert-all with their later additions dropped, one
+        // "identity<TAB>project-relative path" line per type.
         public const string PlayModeEntryDropSourcesSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIntroducedSources";
+
+        // SessionState key for the added fields whose wired values a domain reload discarded, one
+        // "Type.field" display name per line, as the apply response lists added fields.
+        public const string RewireFieldsSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.rewireAddedFields";
+
+        // SessionState key for the unchanged files earlier reloads were given beside what they
+        // applied, one "project-relative path<TAB>hash" line per file, so a Play-entry domain
+        // reload does not forget them.
+        public const string CompanionSourcesSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.companionSources";
 
         // Format: remaining discarded identity count. Used only when --status active count is 0.
         public const string PlayModeEntryDropStatusMessageFormat =

@@ -103,11 +103,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a run without a failure whose requested files were all Skipped recommends a
-        /// compile, because nothing the caller asked for is live.
+        /// What: a run without a failure whose requested files were all Skipped first points at
+        /// the fix each Skipped row's Reason names, and offers a compile only as the alternative,
+        /// because a Reason can name a fix that needs no compile.
         /// </summary>
         [Test]
-        public void Resolve_NoFailureButEveryRequestedMethodSkipped_RecommendsACompile()
+        public void Resolve_NoFailureButEveryRequestedMethodSkipped_RecommendsTheReasonFixBeforeACompile()
         {
             string action = HotReloadRecommendedNextAction.Resolve(
                 hasFailure: false,
@@ -119,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 action,
                 Is.EqualTo(
-                    "Run 'uloop compile' to apply the Skipped edits, or change them into the shapes hot reload can patch (see Warnings)."));
+                    "Each Skipped row's Methods[].Reason names what to change (a file to pass with --files, an initializer to drop, a shape hot reload can patch; see Warnings); do that and rerun. Run 'uloop compile' to apply the Skipped edits as they are instead."));
         }
     }
 }

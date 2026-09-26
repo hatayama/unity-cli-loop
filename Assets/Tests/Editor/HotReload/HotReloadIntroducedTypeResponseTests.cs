@@ -323,7 +323,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "IntroducedTypeAbsentCaller.cs",
                         EditTheCallerBody(File.ReadAllText(callerPath))),
                     CancellationToken.None);
-                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
 
                 Assert.That(response.IntroducedTypes.Count, Is.EqualTo(0));
                 Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(0));
@@ -350,7 +350,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "IntroducedTypeAndBodyHost.cs",
                     EditTheScaledBody(InsertIntroducedType(File.ReadAllText(hostPath)))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
         }
 
         private static HotReloadIntroducedTypeOutcome CreateInjectedTypeFailure()
@@ -410,7 +410,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "RetainedTypeOnlyCaller.cs",
                     EditTheCallerBody(File.ReadAllText(callerPath))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
         }
 
         // The production pipeline with the preparation reporting one retained declaration and the
@@ -515,7 +515,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "IntroducedTypeNoticeHost.cs",
                         InsertUnintroducibleDeclaration(File.ReadAllText(hostPath))),
                     CancellationToken.None);
-                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
 
                 Assert.That(
                     response.Success,
@@ -534,6 +534,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     FindWarning(response, "requires a compile"),
                     Does.Contain(HostFileName),
                     "The warning must name the file that declares it.");
+                Assert.That(
+                    result.IntroducedTypeNoticeCount,
+                    Is.EqualTo(1),
+                    "The run must count the notice so the response knows a compile is still required.");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a file without a verified snapshot that declares a type this stage cannot
+        /// introduce gets the notice and no missing-baseline warning, because the notice already
+        /// asks for a compile and "patching all methods" would read as if the file were patched.
+        /// </summary>
+        [Test]
+        public async Task Build_DeclarationCannotBeIntroducedInAFileWithoutABaseline_AddsNoMissingBaselineWarning()
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            using (HotReloadVerifiedSnapshotHideScope.Hide(HostProjectRelativePath))
+            {
+                string hostPath = FixturePath(HostFileName);
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { hostPath },
+                    HotReloadTestSourceWriter.WriteEditedSource(
+                        "IntroducedTypeNoticeHostWithoutBaseline.cs",
+                        InsertUnintroducibleDeclaration(File.ReadAllText(hostPath))),
+                    CancellationToken.None);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
+
+                Assert.That(
+                    FindWarning(response, "requires a compile"),
+                    Is.Not.Null,
+                    "Precondition: the run must report the notice. " + string.Join(" | ", response.Warnings));
+                Assert.That(
+                    FindWarning(response, "patching all methods"),
+                    Is.Null,
+                    "The notice already asks for a compile, so the file gets no missing-baseline "
+                        + "warning. " + string.Join(" | ", response.Warnings));
             }
         }
 
@@ -638,7 +674,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             {
                                 new HotReloadIntroducedTypeNotice(
                                     "Assets/Example.cs",
-                                    InjectedNoticeText)
+                                    InjectedNoticeText,
+                                    namesDeclaration: true,
+                                    refusedTypeMetadataName: null)
                             }))))
                 {
                     HotReloadResponse response = await RunAgainstTheHostAsync();
@@ -711,7 +749,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "IntroducedTypeFailureHost.cs",
                     InsertIntroducedType(File.ReadAllText(hostPath))),
                 CancellationToken.None);
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
         }
 
         private static int CountTypeRows(HotReloadResponse response, string kind)
@@ -768,7 +806,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindFailureReason(result),
                 Is.Null,
                 "Precondition: a reload that only introduces a type must not fail a method.");
-            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null);
+            return HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
         }
 
         private static string FindFailureReason(HotReloadOrchestratorResult result)
@@ -835,7 +873,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                     HotReloadCompositionRoot.Services,
                     result,
-                    null);
+                    null,
+                    Array.Empty<string>(),
+                    Array.Empty<HotReloadWiredValueRestoreFailure>(),
+                    isPlaying: false,
+                    isPaused: false);
 
                 Assert.That(
                     response.Message,
@@ -856,6 +898,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string HostFileName = "HotReloadCrossFileAddedMemberHost.cs";
+
+        private const string HostProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/" + HostFileName;
 
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
 

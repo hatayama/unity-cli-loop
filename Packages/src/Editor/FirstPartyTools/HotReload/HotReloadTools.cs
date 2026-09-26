@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool Status { get; set; }
 
         /// <summary>
-        /// When the apply run leaves edits unapplied (Skipped or Failed methods, Failed type declarations), whether the CLI runs a compile in the same command: auto (default) does so in Edit Mode only and never stops a Play session, on always unless Unity holds compiles until Play ends, off never. Ignored by --status and --revert-all.
+        /// When the apply run leaves edits unapplied (Skipped or Failed methods, Failed type declarations; Skipped rows of a sibling pulled in to re-apply its active patches do not count, its Failed rows do), whether the CLI runs a compile in the same command: auto (default) does so in Edit Mode only and never stops a Play session, on always unless Unity holds compiles until Play ends, off never. Ignored by --status and --revert-all.
         /// </summary>
         public HotReloadCompileOnSkip CompileOnSkip { get; set; } = HotReloadCompileOnSkip.auto;
     }
@@ -145,6 +145,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int DroppedByPlayModeEntryCount { get; set; }
 
         /// <summary>
+        /// On --status, how many wired added-field values came back to the objects the last scene
+        /// reload built in place of their hosts. Omitted when zero.
+        /// </summary>
+        public int RestoredWiredValueCount { get; set; }
+
+        /// <summary>
+        /// On --status, the wired added-field values the last scene reload could not restore.
+        /// Omitted when empty.
+        /// </summary>
+        public IReadOnlyList<HotReloadUnrestoredWiredValue> UnrestoredWiredValues { get; set; } =
+            Array.Empty<HotReloadUnrestoredWiredValue>();
+
+        /// <summary>
         /// True while Auto Refresh is held because at least one hot-reload patch is active.
         /// </summary>
         public bool AutoRefreshHeld { get; set; }
@@ -178,6 +191,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeDroppedByPlayModeEntryCount()
         {
             return DroppedByPlayModeEntryCount > 0;
+        }
+
+        public bool ShouldSerializeRestoredWiredValueCount()
+        {
+            return RestoredWiredValueCount > 0;
+        }
+
+        public bool ShouldSerializeUnrestoredWiredValues()
+        {
+            return UnrestoredWiredValues != null && UnrestoredWiredValues.Count > 0;
         }
     }
 
@@ -237,7 +260,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
                 parameters.Files,
                 services.ChangeDetector.Detect,
-                HotReloadDroppedIntroducedSourceFiles.ListExistingOnDisk());
+                HotReloadDroppedIntroducedSourceFiles.ListExistingOnDisk(),
+                path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(services.PackageRootCapture, path));
             if (selection.ValidationFailure != null)
             {
                 return CreateValidationFailure(services, selection.ValidationFailure);
@@ -248,23 +272,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
                 result.Methods,
-                result.IntroducedTypes);
+                result.IntroducedTypes,
+                result.AddedFields);
+            HotReloadCompanionSourceSessionStore.Save(services.Domain.CompanionSources);
+            // Refreshed for the same reason --status refreshes, and only after the switch above:
+            // resolving a host reads the loaded scenes, which only the main thread may do.
+            services.WiredValueRestoreRefresh.Run();
+            // Why taken here and handed to Build: taking empties the unreported list, so only the
+            // apply a caller runs may take it, not every path that builds an apply response.
+            IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues =
+                services.WiredValuePersistence.TakeUnreportedFailures();
 
+            // Play Mode state and the Play Mode compile setting are read here because the switch
+            // above put this path on the main thread. isPlaying is read once so the response and
+            // the compile fallback decide from the same state.
+            bool isPlaying = EditorApplication.isPlaying;
             HotReloadResponse response = HotReloadApplyResponseBuilder.Build(
                 services,
                 result,
-                selection.ScanLimitWarnings);
-            // isPlaying and the Play Mode compile setting are read here because the switch above
-            // put this path on the main thread.
+                selection.ScanLimitWarnings,
+                rewireFields,
+                unrestoredWiredValues,
+                isPlaying,
+                EditorApplication.isPaused);
             ApplyCompileFallbackDecision(
                 response,
                 result,
                 parameters.CompileOnSkip,
-                EditorApplication.isPlaying,
+                isPlaying,
                 EditorPrefs.GetInt(HotReloadConstants.ScriptCompilationDuringPlayEditorPrefsKey, 0)
-                    == HotReloadConstants.ScriptCompilationDuringPlayRecompileAfterFinishedPlaying);
+                    == HotReloadConstants.ScriptCompilationDuringPlayRecompileAfterFinishedPlaying,
+                HotReloadReappliedSiblingFiles.ForActivePatches(
+                    result,
+                    path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
+                        services.PackageRootCapture,
+                        path)));
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
             {
                 response.Message = selection.SelectionMessage + " " + response.Message;
@@ -309,7 +353,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadApplyResponseBuilder.Build(
                 HotReloadCompositionRoot.Services,
                 result,
-                additionalWarnings);
+                additionalWarnings,
+                Array.Empty<string>(),
+                Array.Empty<HotReloadWiredValueRestoreFailure>(),
+                isPlaying: false,
+                isPaused: false);
         }
 
         // Records the compile-fallback decision on an apply response. isPlaying and
@@ -320,11 +368,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorResult result,
             HotReloadCompileOnSkip option,
             bool isPlaying,
-            bool compileRefusedDuringPlay)
+            bool compileRefusedDuringPlay,
+            HotReloadReappliedSiblingFiles activePatchSiblingFiles)
         {
             HotReloadCompileFallbackDecision decision = HotReloadCompileFallbackDecider.Decide(
                 option,
-                HotReloadCompileFallbackDecider.HasUnappliedEdit(result),
+                HotReloadCompileFallbackDecider.HasUnappliedEdit(result, activePatchSiblingFiles),
                 isPlaying,
                 compileRefusedDuringPlay);
             response.CompileFallback = decision.ToString();

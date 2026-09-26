@@ -73,11 +73,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 firstFile.Sinks.SiblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
             }
 
-            TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan);
+            TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan, _domain);
             workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
                 _domain.IntroducedTypes,
                 workerInput.targetAssemblyName,
-                workerInput.targetAssemblyMvid).ToArray();
+                workerInput.targetAssemblyMvid,
+                FindFullyAppliedSourceHash).ToArray();
             HotReloadIntroducedTypePreparationResult preparation = await _dependencies
                 .PrepareIntroducedTypes(files, workerInput, ct)
                 .ConfigureAwait(false);
@@ -98,6 +99,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (preparation.Failures.Count > 0)
                 {
                     HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.Failures);
+                    // Why here: the transform run that reports these for a run that continues
+                    // never runs, and an added enum member is a likely cause of the refusal.
+                    HotReloadIntroducedTypeOutcomeSink.AppendDeclarationDriftWarnings(
+                        files,
+                        preparation.DeclarationDriftWarnings);
                 }
                 else
                 {
@@ -107,9 +113,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes =
+                HotReloadRefusedIntroducedType.CollectFrom(preparation.Notices);
             if (preparation.Prepared == null)
             {
-                return await TransformAndApplyGroupAsync(files, workerInput, null, correlationId, ct)
+                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, correlationId, ct)
                     .ConfigureAwait(false);
             }
 
@@ -117,8 +125,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 files,
                 workerInput,
                 preparation.Prepared,
+                refusedTypes,
                 correlationId,
                 ct).ConfigureAwait(false);
+        }
+
+        // Why only a fully applied file: a run that skipped or failed part of the file records the
+        // same hash, so equal bytes would not mean every change in them is loaded. Why the worker
+        // compares and not this side: it reads the file again in its own process, and only its
+        // hash says which bytes it compiled.
+        private string FindFullyAppliedSourceHash(string projectRelativePath)
+        {
+            (string Hash, bool IsFullyApplied)? applied = _domain.AppliedSources.TryGetAppliedSource(projectRelativePath);
+            return applied != null && applied.Value.IsFullyApplied ? applied.Value.Hash : null;
         }
 
         /// <summary>
@@ -129,6 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
             HotReloadPreparedIntroducedTypes prepared,
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             string correlationId,
             CancellationToken ct)
         {
@@ -136,7 +156,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadIntroducedTypeRegistry registry = _domain.IntroducedTypes;
             List<TransformWorkerIntroducedTypeArtifactDto> records =
                 new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
-            records.Add(HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact));
+            TransformWorkerIntroducedTypeArtifactDto preparedRecord =
+                HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact);
+            preparedRecord.preparedByThisRun = true;
+            records.Add(preparedRecord);
             workerInput.introducedTypeArtifacts = records.ToArray();
 
             // The scope answers binds for the prepared assembly while nothing has activated it, so
@@ -149,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // the membership again, so registering anywhere the finally does not cover
                     // would leave the run's membership behind when the scope itself throws.
                     registry.RegisterPrepared(artifact);
-                    return await TransformAndApplyGroupAsync(files, workerInput, prepared, correlationId, ct)
+                    return await TransformAndApplyGroupAsync(files, workerInput, prepared, refusedTypes, correlationId, ct)
                         .ConfigureAwait(false);
                 }
                 finally
@@ -165,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
             HotReloadPreparedIntroducedTypes prepared,
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             string correlationId,
             CancellationToken ct)
         {
@@ -222,7 +246,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerInput,
                 workerOutput,
                 files,
-                prepared);
+                prepared,
+                new HotReloadCompileFailureNoteSources(workerOutput.skipped, refusedTypes));
             HotReloadGroupGateAndCompileResult gateAndCompile = await _dependencies
                 .GateAndCompile(context, ct)
                 .ConfigureAwait(false);
@@ -425,7 +450,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static TransformWorkerInputDto BuildWorkerInput(
             IReadOnlyList<HotReloadGroupFile> files,
-            HotReloadChangedSiblingScanResult siblingScan)
+            HotReloadChangedSiblingScanResult siblingScan,
+            HotReloadDomain domain)
         {
             HotReloadGroupFile firstFile = files[0];
             TransformWorkerSourceDto[] sources = new TransformWorkerSourceDto[files.Count];
@@ -436,7 +462,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     sourcePath = Path.GetFullPath(file.WorkerSourcePath),
                     projectRelativePath = file.ProjectRelativePath,
-                    snapshotSource = file.SnapshotSource
+                    snapshotSource = file.SnapshotSource,
+                    reappliedSibling = file.ReappliedSibling
                 };
             }
 
@@ -456,8 +483,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(
                     firstFile.ProjectRoot,
                     firstFile.CompilationAssembly.sourceFiles),
-                changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths
+                changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths,
+                activeMethodLabels = CollectActiveMethodLabels(files, domain)
             };
+        }
+
+        // Why added members too: a skipped method keeps running the body an earlier reload
+        // patched into it, and a skipped added member is deactivated but stays reachable, because
+        // a patch this run leaves active can still call its earlier shim body. Either way the
+        // skipped writer may still assign the field. Both lists hold display labels, which is
+        // the form the worker's skipped rows use.
+        private static string[] CollectActiveMethodLabels(
+            IReadOnlyList<HotReloadGroupFile> files,
+            HotReloadDomain domain)
+        {
+            List<string> labels = new List<string>();
+            foreach (HotReloadGroupFile file in files)
+            {
+                labels.AddRange(domain.ListActiveMethodKeys(file.ProjectRelativePath));
+                labels.AddRange(domain.ListActiveAddedMethodKeys(file.ProjectRelativePath));
+            }
+
+            return labels.ToArray();
         }
 
         private static List<string> CollectProjectRelativePaths(IReadOnlyList<HotReloadGroupFile> files)

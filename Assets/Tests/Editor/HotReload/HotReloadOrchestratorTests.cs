@@ -54,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string UnavailableAddedCallSkipReason(string calledMethodDisplayName)
         {
             return "Calls the added method '" + calledMethodDisplayName
-                + "', which hot reload cannot emit. Run 'uloop compile'.";
+                + "', which this reload skipped; the Skipped row for that member names the fix. "
+                + "Apply it and rerun; run 'uloop compile' only if that row asks for it.";
         }
 
         // Mirrors the MethodTransformGenericMethodOrType template in
@@ -1553,6 +1554,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an enum member added in the same reload as a body that names it fails that body
+        /// with CS0117, and the warning says the member is not folded and names the cast rewrite
+        /// instead of claiming this run needs no compile.
+        /// </summary>
+        [Test]
+        public async Task Run_EnumMemberAddedWithReferencingBody_FailsAndWarnsWithCastRewrite()
+        {
+            using (MutateSiblingEnumToAddMemberAndUseIt())
+            {
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { ResolveSiblingEnumDefinitionsPath(), ResolveSiblingEnumUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertHasFailed(result, "ReadSiblingEnum");
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(ExpectedSiblingEnumMemberWarning),
+                    "Expected the added-enum-member warning.\n" + string.Join("\n", result.Warnings));
+                Assert.That(
+                    result.Warnings,
+                    Has.None.Contains("leave that file out of --files"),
+                    "The step for a skipped member belongs to its Skipped row, so the warning must not "
+                    + "name one.\n" + string.Join("\n", result.Warnings));
+                Assert.That(
+                    result.Warnings,
+                    Has.None.Contains("needs no compile"),
+                    "An added enum member must not be reported as needing no compile.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
+        /// What: an enum member added in a file that is left out of the reload is still warned
+        /// about with the cast rewrite, but without the advice to leave the enum file out of
+        /// --files, because that file is already out of this reload.
+        /// </summary>
+        [Test]
+        public async Task Run_EnumMemberAddedInFileOutsideReload_WarnsWithoutLeaveOutAdvice()
+        {
+            using (MutateSiblingEnumToAddMemberAndUseIt())
+            {
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { ResolveSiblingEnumUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(ExpectedSiblingEnumMemberWarning),
+                    "Expected the added-enum-member warning from the file outside the reload.\n"
+                    + string.Join("\n", result.Warnings));
+                Assert.That(
+                    result.Warnings,
+                    Has.None.Contains("leave that file out of --files"),
+                    "The enum file is already outside the reload, so the warning must not tell the "
+                    + "user to leave it out.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
         /// What: passing the holder first, then the referencing file, still emits the sibling
         /// const-drift warning once (reversed input order of the holder+user case).
         /// </summary>
@@ -2356,7 +2419,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "    }\n"
                 + "}\n");
 
-            using (HideVerifiedSnapshot(projectRelativePath))
+            using (HotReloadVerifiedSnapshotHideScope.Hide(projectRelativePath))
             {
                 HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { fixturePath },
@@ -2390,7 +2453,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
-            using (HideVerifiedSnapshot(projectRelativePath))
+            using (HotReloadVerifiedSnapshotHideScope.Hide(projectRelativePath))
             {
                 HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                     new[] { fixturePath },
@@ -3245,7 +3308,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 workerOutput,
                 new[] { file },
-                null);
+                null,
+                new HotReloadCompileFailureNoteSources(workerOutput.skipped, Array.Empty<HotReloadRefusedIntroducedType>()));
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(
@@ -3580,6 +3644,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: '+=' with a conditional right-hand side on a compiled private static property
+        /// adds the whole conditional's value through the property accessors.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_PrivateStaticPropertyCompoundWithConditional_AddsTheWholeConditional()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedWriteStaticPropertyConditional();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedWriteStaticPropertyConditional()\n        {\n"
+                + "            int step = 3;\n"
+                + "            StaticWritableValue = 5;\n"
+                + "            StaticWritableValue += step > 0 ? step : 0;\n"
+                + "            return StaticWritableValue;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            host.ResetStaticWritable();
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedPrivateStaticPropertyCompoundConditional.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedWriteStaticPropertyConditional");
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(8));
+            Assert.That(host.ReadStaticWritable(), Is.EqualTo(8));
+            host.ResetStaticWritable();
+        }
+
+        /// <summary>
         /// What: an existing patched method that reads a private static field through a
         /// closure (pre-existing delegation path) is Patched and returns the compiled value.
         /// </summary>
@@ -3790,6 +3890,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
             AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
 
+            // Why here and not only in a ledger unit test: this is the only path that proves the
+            // apply hands the worker's declarations to the ledger. Replacing them with an empty
+            // set anywhere between the worker output and the commit leaves this assertion failing.
+            string fixtureTypeName = typeof(HotReloadAddedFieldApplyFixture).FullName;
+            Assert.That(
+                HotReloadCompositionRoot.Services.Domain.TryGetAddedFieldDeclaration(
+                    fixtureTypeName,
+                    "AddedCount",
+                    out HotReloadAddedFieldDeclaration appliedDeclaration),
+                Is.True,
+                "The apply must leave the added field's declaration in the ledger.");
+            Assert.That(appliedDeclaration.StoreFieldKey, Is.EqualTo(fixtureTypeName + "::AddedCount"));
+            Assert.That(
+                Type.GetType(appliedDeclaration.DeclaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(int)),
+                appliedDeclaration.DeclaredTypeAssemblyQualifiedName);
+            Assert.That(appliedDeclaration.IsStatic, Is.False);
+
             HotReloadAddedFieldApplyFixture firstHost = new HotReloadAddedFieldApplyFixture();
             HotReloadAddedFieldApplyFixture secondHost = new HotReloadAddedFieldApplyFixture();
             firstHost.WriteAdded(10);
@@ -3806,6 +3924,185 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAlreadyActive(second, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
             Assert.That(firstHost.ReadAdded(), Is.EqualTo(10));
             Assert.That(secondHost.ReadAdded(), Is.EqualTo(20));
+        }
+
+        /// <summary>
+        /// What: '+=' with a lambda right-hand side on an added delegate field is patched and
+        /// the reader invokes the combined delegate.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldCompoundAssignment_LambdaRightHandSide_Applies()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithAddedFieldAccessedAs(
+                onDisk,
+                "public System.Func<int> AddedFunc;",
+                "AddedFunc == null ? -1 : AddedFunc()",
+                "AddedFunc += () => value;");
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldCompoundLambda.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            host.WriteAdded(7);
+            Assert.That(host.ReadAdded(), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: '+=' with a conditional right-hand side on an added field adds the whole
+        /// conditional's value, not the value of a conditional over the partial sum.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldCompoundAssignment_ConditionalRightHandSide_AddsTheWholeConditional()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithAddedFieldAccessedAs(
+                onDisk,
+                "public int AddedCount;",
+                "AddedCount",
+                "AddedCount += value > 0 ? value : 0;");
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldCompoundConditional.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            host.WriteAdded(5);
+            host.WriteAdded(5);
+            Assert.That(host.ReadAdded(), Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: the validated wiring entry point writes a value into a really applied added
+        /// field, the patched reader returns it, and a field name no reload added is refused.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedField_ValidatedWiringReachesThePatchedReader()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+
+            HotReloadOrchestratorResult applied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldWiringE2E.cs", WithAddedFieldAccesses(onDisk)),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(applied);
+            AssertHasPatched(applied, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            Assert.That(
+                HotReloadAddedFieldWiring.TryReadInstanceField(host, "AddedCount", out object beforeWiring),
+                Is.False,
+                "Nothing has stored a value for this instance yet.");
+            Assert.That(beforeWiring, Is.Null);
+
+            HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 33);
+
+            Assert.That(host.ReadAdded(), Is.EqualTo(33), "The patched reader must see the wired value.");
+            Assert.That(
+                HotReloadAddedFieldWiring.TryReadInstanceField(host, "AddedCount", out object afterWiring),
+                Is.True);
+            Assert.That(afterWiring, Is.EqualTo(33));
+
+            // A misspelling reaches the real ledger, so the refusal names the field that is there.
+            InvalidOperationException unknownField = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCoun", 1));
+            Assert.That(unknownField.Message, Does.Contain("AddedCount"));
+
+            // The declared type comes from the worker, so a value the reader would reject is
+            // refused here and the wired value stays.
+            Assert.Throws<ArgumentException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 33L));
+            Assert.That(host.ReadAdded(), Is.EqualTo(33));
+
+            // Reverting drops the generation that declared the field, so the wiring has nothing
+            // left to write into and says so rather than storing a value nothing reads.
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            InvalidOperationException afterRevert = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetInstanceField(host, "AddedCount", 1));
+            Assert.That(afterRevert.Message, Does.Contain("no active added fields"));
+        }
+
+        /// <summary>
+        /// What: an added field whose declared type is declared in another file passed to the
+        /// same reload can be wired, and the patched reader sees the wired reference.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldOfTypeFromAnotherRequestedFile_IsWiredAndRead()
+        {
+            string e2ePath = ResolveE2EFixturePath();
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string applyEdited = WithAddedSiblingTypedPeer(File.ReadAllText(applyPath));
+
+            HotReloadOrchestratorResult applied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { e2ePath, applyPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [applyPath] = WriteEditedSource("AddedPeerFromRequestedFile.cs", applyEdited)
+                });
+            AssertNoFileLevelFailure(applied);
+            AssertHasPatched(applied, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+
+            AssertWiredPeerReachesThePatchedReader();
+        }
+
+        /// <summary>
+        /// What: an added field whose declared type is declared in a file an earlier reload made
+        /// active can be wired when only the field's own file is requested, because that earlier
+        /// file is pulled back into the reload as a sibling and bound from source again.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldOfTypeFromReappliedSiblingFile_IsWiredAndRead()
+        {
+            string e2ePath = ResolveE2EFixturePath();
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string siblingEditedPath = WriteEditedSource(
+                "PeerTypeSiblingActive.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 1;\n        }"));
+            HotReloadOrchestratorResult siblingApplied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { e2ePath },
+                siblingEditedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(siblingApplied);
+            AssertHasPatched(siblingApplied, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            // The sibling is re-applied only while its text still matches what was applied, so
+            // the second run reads it from the same edited copy.
+            HotReloadOrchestratorResult applied = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { applyPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [applyPath] = WriteEditedSource(
+                        "AddedPeerFromSibling.cs",
+                        WithAddedSiblingTypedPeer(File.ReadAllText(applyPath))),
+                    [e2ePath] = siblingEditedPath
+                });
+            AssertNoFileLevelFailure(applied);
+            AssertHasPatched(applied, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(
+                applied.ReappliedSiblingPaths,
+                Has.Some.EndsWith("HotReloadE2EFixtures.cs"),
+                "The declaring file must reach the worker as a re-applied sibling for this case to exist.");
+
+            AssertWiredPeerReachesThePatchedReader();
         }
 
         /// <summary>
@@ -4292,8 +4589,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: after an added method applies, a later run whose added body does not bind is
         /// refused by the worker before any shim is compiled: the added method and its caller are
         /// Skipped with the worker's reasons, nothing fails, and the run deactivates the earlier
-        /// AddedPing registration with one warning naming it and telling the reader that another
-        /// reload of the same shape skips it again. A third run with the body fixed
+        /// AddedPing registration with one warning naming it and telling the reader to change what
+        /// the skip reason names before reloading. A third run with the body fixed
         /// registers AddedPing again and the caller returns the new value.
         /// </summary>
         [Test]
@@ -4569,7 +4866,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: after an added method applies, a later run that skips it as virtual while
         /// still patching an unrelated method warns with the added method's label and the
-        /// wording that says another reload of the same shape skips it again.
+        /// wording that says to change what the skip reason names before reloading.
         /// </summary>
         [Test]
         public async Task Run_VirtualAddedMethodAfterSuccess_WarnsDeactivatedPatches()
@@ -5176,6 +5473,174 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the only writer of an added auto-property is skipped but an earlier reload
+        /// patched it and that patch still assigns the property, the skipped-writer warning names
+        /// the earlier patch instead of claiming the property keeps its default value. Also pins
+        /// that the Editor's active-patch labels match the worker's skipped-row labels: with
+        /// different forms the warning would fall back to the default-value wording.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedWriterWithEarlierPatch_WarningNamesTheEarlierPatch()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            const string targetOriginal =
+                "        public int Target(int value)\n        {\n            return value;\n        }";
+            const string unrelatedOriginal =
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }";
+            const string readingUnrelated =
+                "        public int Unrelated(int value)\n        {\n            return AddedCount + value;\n        }\n\n"
+                + "        public int AddedCount { get; private set; }";
+            string firstEdit = onDisk
+                .Replace(
+                    targetOriginal,
+                    "        public int Target(int value)\n        {\n            AddedCount = value;\n"
+                    + "            return value;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
+            Assert.That(firstEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedWriterEarlierPatch1.cs", firstEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeExternalHost.Target));
+
+            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
+            // sees this writer as skipped while the first run's patch stays what runs.
+            string secondEdit = onDisk
+                .Replace(
+                    targetOriginal,
+                    "        public int Target(int value)\n        {\n            AddedCount = value;\n"
+                    + "            return value + base.GetHashCode() * 0;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedWriterEarlierPatch2.cs", secondEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(
+                FindSkippedReason(second, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Is.Not.Null,
+                FormatOutcomes(second));
+
+            // The first run's Target patch still assigns the property the applied reader reads.
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            host.Target(7);
+            Assert.That(host.Unrelated(0), Is.EqualTo(7));
+
+            string targetLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeExternalHost).FullName),
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                new[] { "System.Int32" },
+                0);
+            List<string> writerWarnings = new List<string>();
+            foreach (string warning in second.Warnings)
+            {
+                if (warning.Contains("'AddedCount'", StringComparison.Ordinal))
+                {
+                    writerWarnings.Add(warning);
+                }
+            }
+
+            string allWarnings = "Warnings were:\n" + string.Join("\n", second.Warnings);
+            Assert.That(writerWarnings, Has.Count.EqualTo(1), allWarnings);
+            Assert.That(writerWarnings[0], Does.Contain("an earlier hot reload applied " + targetLabel), allWarnings);
+            Assert.That(
+                writerWarnings[0],
+                Does.Not.Contain("reads it; the property keeps its default value"),
+                allWarnings);
+        }
+
+        /// <summary>
+        /// What: when the only writer of an added field is an added method that an earlier
+        /// reload added and this reload skips, the skipped-writer warning names that earlier
+        /// added method instead of claiming the field keeps its default value, because the
+        /// earlier patch of its caller still reaches the earlier shim body.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedAddedWriterWithEarlierAdd_WarningNamesTheEarlierAddedMethod()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            const string targetOriginal =
+                "        public int Target(int value)\n        {\n            return value;\n        }";
+            const string unrelatedOriginal =
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }";
+            const string callingWriter =
+                "        public int Target(int value)\n        {\n            AddedWriter(value);\n"
+                + "            return value;\n        }";
+            const string readingUnrelated =
+                "        public int Unrelated(int value)\n        {\n            return AddedCount + value;\n        }\n\n"
+                + "        public int AddedCount;";
+            string firstEdit = onDisk
+                .Replace(
+                    targetOriginal,
+                    callingWriter + "\n\n"
+                    + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                    + "        public void AddedWriter(int value)\n        {\n            AddedCount = value;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
+            Assert.That(firstEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedAddedWriterEarlierAdd1.cs", firstEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasAdded(first, "AddedWriter");
+
+            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
+            // sees this writer as skipped while the first run's added body stays reachable.
+            string secondEdit = onDisk
+                .Replace(
+                    targetOriginal,
+                    callingWriter + "\n\n"
+                    + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                    + "        public void AddedWriter(int value)\n        {\n"
+                    + "            AddedCount = value + base.GetHashCode() * 0;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SkippedAddedWriterEarlierAdd2.cs", secondEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(FindSkippedReason(second, "AddedWriter"), Is.Not.Null, FormatOutcomes(second));
+
+            // The first run's Target patch still calls the first run's AddedWriter body.
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            host.Target(7);
+            Assert.That(host.Unrelated(0), Is.EqualTo(7));
+
+            string writerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeExternalHost).FullName),
+                "AddedWriter",
+                new[] { "System.Int32" },
+                0);
+            List<string> writerWarnings = new List<string>();
+            foreach (string warning in second.Warnings)
+            {
+                if (warning.Contains("'AddedCount'", StringComparison.Ordinal))
+                {
+                    writerWarnings.Add(warning);
+                }
+            }
+
+            string allWarnings = "Warnings were:\n" + string.Join("\n", second.Warnings);
+            Assert.That(writerWarnings, Has.Count.EqualTo(1), allWarnings);
+            Assert.That(writerWarnings[0], Does.Contain("an earlier hot reload applied " + writerLabel), allWarnings);
+            Assert.That(
+                writerWarnings[0],
+                Does.Not.Contain("reads it; the field keeps its default value"),
+                allWarnings);
+        }
+
+        /// <summary>
         /// What: a gated return-type change does not record the skipped replacement as superseded.
         /// </summary>
         [Test]
@@ -5397,8 +5862,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: shim-compile-failure isolation rewrites a two-hop UnavailableAddedCall chain
-        /// to IsolatedAddedMethodCallerSkipReason.
+        /// What: shim-compile-failure isolation rewrites a two-hop UnavailableAddedCall chain to the
+        /// unapplied-callee reason, each row still naming the added method it calls.
         /// </summary>
         [Test]
         public void CollectRetryOnlySkippedOutcomes_ShimCompileFailure_RewritesTwoHopIndirectCallers()
@@ -5439,8 +5904,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Host::Broken()" });
 
             Assert.That(outcomes.Count, Is.EqualTo(2));
-            Assert.That(outcomes[0].Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
-            Assert.That(outcomes[1].Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+            Assert.That(
+                outcomes[0].Reason,
+                Is.EqualTo(string.Format(HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat, "Host.Broken()")));
+            Assert.That(
+                outcomes[1].Reason,
+                Is.EqualTo(string.Format(HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat, "Host.Mid()")));
         }
 
         /// <summary>
@@ -6695,7 +7164,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a signature-change gate retry that excludes an added replacement and its
         /// direct added caller still reports the transitive caller as Skipped with
-        /// UnavailableAddedCall, while an independent edited method still patches.
+        /// UnavailableAddedCall, while an independent edited method still patches. The added
+        /// method the transitive caller names has a Skipped row of its own in the same response,
+        /// and so does the gated replacement, which is the row the chained reason points at.
         /// </summary>
         [Test]
         public async Task Run_SignatureChangeGateRetry_ReportsTransitiveCallerOfExcludedAddedMethodAsSkipped()
@@ -6735,6 +7206,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     UnavailableAddedCallSkipReason(
                         typeof(HotReloadSignatureChangeExternalHost).FullName + ".AddedBridge(int)")));
+            Assert.That(
+                FindSkippedReason(result, "AddedBridge"),
+                Does.StartWith("Calls a method whose signature change was not applied"),
+                FormatOutcomes(result));
+            Assert.That(
+                FindSkippedReason(result, nameof(HotReloadSignatureChangeExternalHost.Target)),
+                Does.StartWith("The return type of '"),
+                FormatOutcomes(result));
             AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
         }
 
@@ -7700,16 +8179,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // initializer, which is what makes the initializer of an already added field observable.
         private static string WithAddedFieldDeclaredAs(string onDisk, string declaration)
         {
+            return WithAddedFieldAccessedAs(onDisk, declaration, "AddedCount", "AddedCount = value;");
+        }
+
+        // The reader and writer bodies are parameters so a test can vary the field's type and
+        // the shape of the write, which is where the shim rewrite of an added field differs.
+        private static string WithAddedFieldAccessedAs(
+            string onDisk,
+            string declaration,
+            string readExpression,
+            string writeStatement)
+        {
             return onDisk.Replace(
                 "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n        }",
                 "        " + declaration + "\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
-                + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
+                + "        public int ReadAdded()\n        {\n            return " + readExpression + ";\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
-                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
+                + "        public void WriteAdded(int value)\n        {\n            " + writeStatement + "\n        }",
                 StringComparison.Ordinal);
+        }
+
+        // The declared type lives in HotReloadE2EFixtures.cs, so the field's type is bound from
+        // source only when that file is part of the same reload.
+        private static string WithAddedSiblingTypedPeer(string onDisk)
+        {
+            string edited = onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }",
+                "        public HotReloadE2ESibling AddedPeer;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AddedPeer == null ? -1 : AddedPeer.Value;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static void AssertWiredPeerReachesThePatchedReader()
+        {
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            Assert.That(host.ReadAdded(), Is.EqualTo(-1), "The added field starts unwired.");
+
+            HotReloadAddedFieldWiring.SetInstanceField(host, "AddedPeer", new HotReloadE2ESibling { Value = 42 });
+
+            Assert.That(host.ReadAdded(), Is.EqualTo(42), "The patched reader must see the wired reference.");
         }
 
         private static string WithAddedFieldAndConstAccesses(string onDisk)
@@ -8022,6 +8536,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new FileRestoreScope(new[] { path }, new[] { original });
         }
 
+        private static string ResolveSiblingEnumDefinitionsPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSiblingEnumDefinitions.cs");
+            Assert.That(File.Exists(path), Is.True, "Sibling enum fixture missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSiblingEnumUserPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSiblingEnumUser.cs");
+            Assert.That(File.Exists(path), Is.True, "Sibling enum user fixture missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private const string ExpectedSiblingEnumMemberWarning =
+            "enum member io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum.Third exists only in the edited source, not in the compiled assembly. Hot reload does not fold an added enum member into patched bodies, so every body that names it fails shim compilation (CS0117), including bodies in this reload's files. Write the underlying value as a cast instead ('(io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingEnum)3'; ToString() then prints the number, not the name), or run 'uloop compile' to add the member.";
+
+        private static IDisposable MutateSiblingEnumToAddMemberAndUseIt()
+        {
+            string definitionsPath = ResolveSiblingEnumDefinitionsPath();
+            string userPath = ResolveSiblingEnumUserPath();
+            string originalDefinitions = File.ReadAllText(definitionsPath);
+            string originalUser = File.ReadAllText(userPath);
+            string compiledMember = "Second = 2";
+            string compiledUse = "(int)HotReloadSiblingEnum.Second";
+            Assert.That(
+                originalDefinitions.Contains(compiledMember) && originalUser.Contains(compiledUse),
+                Is.True,
+                "Precondition: compiled sibling enum fixtures must still be on disk.");
+            EditorApplication.LockReloadAssemblies();
+            File.WriteAllText(
+                definitionsPath,
+                originalDefinitions.Replace(compiledMember, compiledMember + ",\n        Third = 3"));
+            File.WriteAllText(
+                userPath,
+                originalUser.Replace(compiledUse, "(int)HotReloadSiblingEnum.Third"));
+            return new FileRestoreScope(
+                new[] { definitionsPath, userPath },
+                new[] { originalDefinitions, originalUser });
+        }
+
         private static IDisposable TouchSmallestSiblingsWithTrailingComment(
             string editedAbsolutePath,
             int siblingCount)
@@ -8183,80 +8748,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 Directory.Move(_hiddenDirectory, _originalDirectory);
-            }
-        }
-
-        /// <summary>
-        /// Temporarily moves a verified snapshot aside so LoadVerifiedSnapshotSource returns null.
-        /// Restores the file on dispose.
-        /// </summary>
-        private static IDisposable HideVerifiedSnapshot(string projectRelativePath)
-        {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                "UnityCLILoop.Tests.Editor.HotReload"
-                + HotReloadConstants.CompiledAssemblyExtension);
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
-            string snapshotFileName =
-                HotReloadSourceSnapshotter.HashProjectRelativePath(
-                    projectRelativePath.Replace('\\', '/')) + ".cs";
-            string snapshotPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                "UnityCLILoop.Tests.Editor.HotReload-" + mvid,
-                snapshotFileName);
-            Assert.That(
-                File.Exists(snapshotPath),
-                Is.True,
-                "Precondition: verified snapshot must exist to hide: " + snapshotPath);
-            // Why LoadVerifiedSnapshotSource (not File.Exists alone): a stale/checksum-invalid
-            // snapshot file already yields null, so hiding it would not change the precondition.
-            Assert.That(
-                HotReloadSourceBaseline.LoadVerifiedSnapshotSource(projectRelativePath, targetDllPath),
-                Is.Not.Null,
-                "Precondition: snapshot must be loadable before hide: " + projectRelativePath);
-
-            string hiddenPath = snapshotPath + ".hidden-for-test";
-            if (File.Exists(hiddenPath))
-            {
-                File.Delete(hiddenPath);
-            }
-
-            File.Move(snapshotPath, hiddenPath);
-            return new SnapshotHideScope(snapshotPath, hiddenPath);
-        }
-
-        private sealed class SnapshotHideScope : IDisposable
-        {
-            private readonly string _snapshotPath;
-            private readonly string _hiddenPath;
-            private bool _disposed;
-
-            public SnapshotHideScope(string snapshotPath, string hiddenPath)
-            {
-                _snapshotPath = snapshotPath;
-                _hiddenPath = hiddenPath;
-            }
-
-            public void Dispose()
-            {
-                if (_disposed)
-                {
-                    return;
-                }
-
-                _disposed = true;
-                if (File.Exists(_hiddenPath))
-                {
-                    if (File.Exists(_snapshotPath))
-                    {
-                        File.Delete(_snapshotPath);
-                    }
-
-                    File.Move(_hiddenPath, _snapshotPath);
-                }
             }
         }
 

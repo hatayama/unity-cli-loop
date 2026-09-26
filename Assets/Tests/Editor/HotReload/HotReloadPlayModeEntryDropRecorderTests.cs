@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -47,34 +48,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: only ExitingEditMode with domain reload and at least one identity records.
+        /// What: only ExitingEditMode with domain reload and at least one active change (a
+        /// discardable identity or an added field) records.
         /// </summary>
         [Test]
-        public void ShouldRecord_RequiresExitingEditModeEnabledReloadAndIdentities()
+        public void ShouldRecord_RequiresExitingEditModeEnabledReloadAndActiveChanges()
         {
             Assert.That(
                 HotReloadPlayModeEntryDropRecorder.ShouldRecord(
                     PlayModeStateChange.ExitingEditMode,
                     isDomainReloadDisabledOnEnterPlayMode: false,
-                    activeIdentityCount: 2),
+                    activeChangeCount: 2),
                 Is.True);
             Assert.That(
                 HotReloadPlayModeEntryDropRecorder.ShouldRecord(
                     PlayModeStateChange.EnteredPlayMode,
                     isDomainReloadDisabledOnEnterPlayMode: false,
-                    activeIdentityCount: 2),
+                    activeChangeCount: 2),
                 Is.False);
             Assert.That(
                 HotReloadPlayModeEntryDropRecorder.ShouldRecord(
                     PlayModeStateChange.ExitingEditMode,
                     isDomainReloadDisabledOnEnterPlayMode: true,
-                    activeIdentityCount: 2),
+                    activeChangeCount: 2),
                 Is.False);
             Assert.That(
                 HotReloadPlayModeEntryDropRecorder.ShouldRecord(
                     PlayModeStateChange.ExitingEditMode,
                     isDomainReloadDisabledOnEnterPlayMode: false,
-                    activeIdentityCount: 0),
+                    activeChangeCount: 0),
                 Is.False);
         }
 
@@ -123,7 +125,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadMethodOutcome.Failed("Type.Failed()", "reason", "Assets/A.cs"),
                     HotReloadMethodOutcome.Skipped("Type.Skipped()", "reason", "Assets/A.cs")
                 },
-                new List<HotReloadIntroducedTypeOutcome>());
+                new List<HotReloadIntroducedTypeOutcome>(),
+                Array.Empty<string>());
 
             Assert.That(
                 HotReloadPlayModeEntryDropLedger.GetIdentities(),
@@ -138,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadPlayModeEntryDropLedger.Record(new[] { "Type.A()" });
 
-            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new HotReloadPlayModeEntryDropSource[0], Array.Empty<string>());
 
             Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
         }
@@ -157,6 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 PlayModeStateChange.ExitingEditMode,
                 new[] { "Type.Active()" },
                 Array.Empty<HotReloadPlayModeEntryDropSource>(),
+                Array.Empty<string>(),
                 isDomainReloadDisabledOnEnterPlayMode: false);
 
             Assert.That(
@@ -167,6 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 PlayModeStateChange.EnteredEditMode,
                 new[] { "Type.Active()" },
                 Array.Empty<HotReloadPlayModeEntryDropSource>(),
+                Array.Empty<string>(),
                 isDomainReloadDisabledOnEnterPlayMode: false);
 
             Assert.That(
@@ -183,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 PlayModeStateChange.ExitingEditMode,
                 new[] { "Type.Active()", IntroducedIdentityA },
                 new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                Array.Empty<string>(),
                 isDomainReloadDisabledOnEnterPlayMode: false);
 
             Assert.That(
@@ -204,17 +210,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 PlayModeStateChange.ExitingEditMode,
                 new[] { IntroducedIdentityA },
                 new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                Array.Empty<string>(),
                 isDomainReloadDisabledOnEnterPlayMode: false);
 
             HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
                 PlayModeStateChange.EnteredEditMode,
                 new[] { IntroducedIdentityA },
                 new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                Array.Empty<string>(),
                 isDomainReloadDisabledOnEnterPlayMode: false);
 
             Assert.That(
                 HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
                 Is.EqualTo(new[] { "Assets/Older.cs" }));
+        }
+
+        /// <summary>
+        /// What: a cancelled Play entry keeps an owner file revert-all recorded for a type it left
+        /// loaded, even though Play entry recorded the same type again, and leaves the identity
+        /// ledger empty. The revert's row is not the cancelled entry's to take back, and losing it
+        /// would leave the next omitted --files run without the file its callers need.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenPlayEntryAfterRevertAllIsCancelled_KeepsTheRevertsOwnerFile()
+        {
+            HotReloadPlayModeEntryDropSource stillLoaded =
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/StillLoaded.cs");
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new[] { stillLoaded }, Array.Empty<string>());
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { stillLoaded },
+                Array.Empty<string>(),
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.EnteredEditMode,
+                new[] { IntroducedIdentityA },
+                new[] { stillLoaded },
+                Array.Empty<string>(),
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/StillLoaded.cs" }));
+            Assert.That(HotReloadPlayModeEntryDropLedger.GetIdentities(), Is.Empty);
         }
 
         /// <summary>
@@ -248,7 +288,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "Assets/T2.cs",
                         bodyEdited: false),
                     HotReloadIntroducedTypeOutcome.Failed("Fixture.T3", "Fixture.Assembly", "Assets/T3.cs", "reason")
-                });
+                },
+                Array.Empty<string>());
 
             Assert.That(
                 HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
@@ -275,9 +316,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs")
             });
 
-            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new HotReloadPlayModeEntryDropSource[0], Array.Empty<string>());
 
             Assert.That(HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: revert-all replaces every recorded owner file with the owner files of the types it
+        /// leaves loaded, and records no identity for them. A revert drops what later reloads added
+        /// to those types, so an omitted --files run has to select their files again; the identity
+        /// ledger only reports what Play entry discarded, which a revert did not.
+        /// </summary>
+        [Test]
+        public void NotifyRevertAll_RecordsOnlyTheOwnerFilesOfTypesThatStayLoaded()
+        {
+            HotReloadPlayModeEntryDropLedger.Record(new[] { IntroducedIdentityA });
+            HotReloadPlayModeEntryDropSourceLedger.Record(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Earlier.cs")
+            });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new[]
+            {
+                new HotReloadPlayModeEntryDropSource(IntroducedIdentityB, "Assets/StillLoaded.cs")
+            }, Array.Empty<string>());
+
+            Assert.That(
+                HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(),
+                Is.EqualTo(new[] { "Assets/StillLoaded.cs" }));
+            Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -290,6 +357,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 PlayModeStateChange.ExitingEditMode,
                 new[] { IntroducedIdentityA },
                 new[] { new HotReloadPlayModeEntryDropSource(IntroducedIdentityA, "Assets/Introduced.cs") },
+                Array.Empty<string>(),
                 isDomainReloadDisabledOnEnterPlayMode: true);
 
             Assert.That(HotReloadPlayModeEntryDropSourceLedger.GetProjectRelativePaths(), Is.Empty);
@@ -339,7 +407,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "The patched method must still be collected next to the type.");
 
                     IReadOnlyList<HotReloadPlayModeEntryDropSource> sources =
-                        HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources();
+                        HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources(
+                            HotReloadCompositionRoot.Services.Domain);
 
                     Assert.That(sources.Count, Is.EqualTo(1), "The introduced type must offer its owner file.");
                     Assert.That(
@@ -369,6 +438,249 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the patches and added members inside each type introduced into a compiled file
+        /// are recorded under that type, while those of the compiled type beside them stay rows
+        /// of their own, and every change is still one row. Two introduced types share the file
+        /// and the artifact, so only the type name can tell their changes apart.
+        /// </summary>
+        [Test]
+        public async Task CollectActiveIdentities_ChangesInsideTypesIntroducedIntoACompiledFile_AreRecordedUnderEachType()
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                try
+                {
+                    await RunIntroducingTwoTypesAsync();
+                    HotReloadOrchestratorResult second = await RunEditingAndAddingOnEveryTypeAsync();
+
+                    Assert.That(
+                        second.IntroducedTypes.Select(outcome => outcome.Kind),
+                        Is.EqualTo(new[]
+                        {
+                            HotReloadIntroducedTypeOutcomeKind.AlreadyActive,
+                            HotReloadIntroducedTypeOutcomeKind.AlreadyActive
+                        }),
+                        "Precondition: the second run must keep both types the first one introduced.");
+                    List<string> expected = ExpectRowsOfAppliedChanges(second);
+                    Assert.That(
+                        expected.Count,
+                        Is.EqualTo(8),
+                        "Precondition: the second run must patch and add on every type in the file.\n"
+                        + string.Join("\n", second.Methods.Select(outcome => outcome.Kind + " " + outcome.Method)));
+
+                    IReadOnlyList<string> identities = HotReloadPlayModeEntryDropRecorder.CollectActiveIdentities();
+
+                    Assert.That(
+                        identities,
+                        Is.EquivalentTo(expected),
+                        "A change inside an introduced type must be recorded under that type and no "
+                        + "other, and a change of the compiled type in the same file under none.");
+                    Assert.That(
+                        identities.Count,
+                        Is.EqualTo(HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal),
+                        "Every change must stay one row, so the count still matches what Play entry warns it discards.");
+                }
+                finally
+                {
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: the next apply after a revert-all names the added fields the revert dropped, and
+        /// not a field it adds for the first time.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_AfterRevertAll_ReturnsTheFieldsTheRevertDropped()
+        {
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                new HotReloadPlayModeEntryDropSource[0],
+                new[] { "Ns.Host.speed" });
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Host.speed", "Ns.Host.fresh" });
+
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Host.speed" }));
+        }
+
+        /// <summary>
+        /// What: a field a Play entry recorded before a revert-all is still named by the next
+        /// apply, because the revert does not bring back the value that entry discarded.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_AfterRevertAll_StillReturnsAFieldAnEarlierPlayEntryRecorded()
+        {
+            HotReloadRewireLedger.Record(new[] { "Ns.Host.older" });
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                new HotReloadPlayModeEntryDropSource[0],
+                new[] { "Ns.Host.speed" });
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Host.older", "Ns.Host.speed" });
+
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Host.older", "Ns.Host.speed" }));
+        }
+
+        /// <summary>
+        /// What: a second revert-all in a row, which drops nothing, keeps the fields the first one
+        /// dropped for the next apply.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_AfterTwoRevertAllsInARow_ReturnsTheFieldsTheFirstDropped()
+        {
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                new HotReloadPlayModeEntryDropSource[0],
+                new[] { "Ns.Host.speed" });
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                new HotReloadPlayModeEntryDropSource[0],
+                Array.Empty<string>());
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Host.speed" });
+
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Host.speed" }));
+        }
+
+        /// <summary>
+        /// What: a revert-all that drops added fields says which ones and that values wired into
+        /// them are gone, records them for the next apply, and does not claim it had nothing to
+        /// revert when the fields were all it dropped.
+        /// </summary>
+        [Test]
+        public void ExecuteRevertAll_WithAddedFields_WarnsThatWiredValuesAreDropped()
+        {
+            new HotReloadDomainTestAccess().ReplaceAddedFields(
+                "Assets/RevertHost.cs",
+                new[] { "Ns.Host.speed", "Ns.Outer+Inner.count" });
+
+            HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
+
+            Assert.That(
+                response.Warnings,
+                Does.Contain(
+                    string.Format(
+                        HotReloadConstants.RevertDroppedAddedFieldValuesWarningFormat,
+                        2,
+                        "Ns.Host.speed, Ns.Outer+Inner.count")));
+            Assert.That(
+                HotReloadRewireLedger.GetFields(),
+                Is.EqualTo(new[] { "Ns.Host.speed", "Ns.Outer+Inner.count" }));
+            Assert.That(response.Message, Does.Not.Contain("No active hot-reload changes to revert."));
+            Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a revert-all with no added field adds no dropped-field warning.
+        /// </summary>
+        [Test]
+        public void ExecuteRevertAll_WithoutAddedFields_DoesNotWarnAboutWiredValues()
+        {
+            HotReloadResponse response = HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
+
+            Assert.That(
+                response.Warnings.Any(warning => warning.Contains("added field(s)")),
+                Is.False,
+                string.Join(" | ", response.Warnings));
+        }
+
+        /// <summary>
+        /// What: through the tool entry, a field added by one apply and dropped by revert-all is
+        /// named by the next apply as a field to wire again, in words that cover the revert.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ReapplyAfterRevertAll_WarnsToWireTheDroppedFieldAgain()
+        {
+            string hostPath = FixturePath(HostFileName);
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RevertRewireHost.cs",
+                InsertAddedField(File.ReadAllText(hostPath)));
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                try
+                {
+                    IHotReloadOrchestrator productionOrchestrator = HotReloadCompositionRoot.Services.Orchestrator;
+                    using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                        new HotReloadStubOrchestrator(
+                            (files, ct) => productionOrchestrator.RunAsync(files, editedPath, ct)));
+                    HotReloadResponse adding = await ExecuteApplyAsync(hostPath);
+                    Assert.That(
+                        adding.AddedFields,
+                        Does.Contain(AddedFieldDisplayName),
+                        "Precondition: the first run had to add the field. " + adding.Message);
+
+                    HotReloadCompositionRoot.Services.StatusExecutor.ExecuteRevertAll();
+                    HotReloadResponse reapplied = await ExecuteApplyAsync(hostPath);
+
+                    string warning = reapplied.Warnings.FirstOrDefault(entry => entry.Contains("wire them again"));
+                    Assert.That(warning, Is.Not.Null, string.Join(" | ", reapplied.Warnings));
+                    Assert.That(warning, Does.Contain(AddedFieldDisplayName));
+                    Assert.That(warning, Does.Contain("domain reload or revert"));
+                }
+                finally
+                {
+                    // The patch belongs to the replacement domain, which the outer TearDown revert
+                    // no longer sees.
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: through the tool entry, the first apply after a scene reload names a wired value
+        /// that could not be restored, the next apply does not name it again, and --status still
+        /// reports it.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ApplyAfterAFailedWiredValueRestore_NamesItOnceAndStatusKeepsIt()
+        {
+            const string host = "scene:Harness|path:Host[0]|component:Ns.Host|index:0";
+            const string expectedRow = "Ns.Host.target on " + host + ": the object is gone";
+            string hostPath = FixturePath(HostFileName);
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "WiredValueRestoreWarningHost.cs",
+                InsertAddedField(File.ReadAllText(hostPath)));
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                try
+                {
+                    IHotReloadOrchestrator productionOrchestrator = HotReloadCompositionRoot.Services.Orchestrator;
+                    using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                        new HotReloadStubOrchestrator(
+                            (files, ct) => productionOrchestrator.RunAsync(files, editedPath, ct)));
+                    HotReloadCompositionRoot.Services.WiredValuePersistence.Report.AddFailure(
+                        host, "Ns.Host::target", "the object is gone");
+
+                    HotReloadResponse first = await ExecuteApplyAsync(hostPath);
+                    HotReloadResponse second = await ExecuteApplyAsync(hostPath);
+                    HotReloadResponse status = await ExecuteStatusAsync();
+
+                    string warning = first.Warnings.FirstOrDefault(
+                        entry => entry.Contains("Wired added-field value(s)"));
+                    Assert.That(warning, Is.Not.Null, string.Join(" | ", first.Warnings));
+                    Assert.That(warning, Does.Contain(expectedRow));
+                    Assert.That(
+                        second.Warnings.Any(entry => entry.Contains("Wired added-field value(s)")),
+                        Is.False,
+                        string.Join(" | ", second.Warnings));
+                    Assert.That(status.Warnings, Has.Some.Contains(expectedRow));
+                }
+                finally
+                {
+                    // The patch belongs to the replacement domain, which the outer TearDown revert
+                    // no longer sees.
+                    HotReloadCompositionRoot.Services.Patcher.RevertAll();
+                }
+            }
+        }
+
+        /// <summary>
         /// What: an apply removes the types it introduced or found already active from the
         /// leftover set and keeps the one it failed to introduce.
         /// </summary>
@@ -392,12 +704,236 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "Assets/A.cs",
                         bodyEdited: false),
                     HotReloadIntroducedTypeOutcome.Failed("Fixture.T3", "Fixture.Assembly", "Assets/A.cs", "reason")
-                });
+                },
+                Array.Empty<string>());
 
             Assert.That(
                 HotReloadPlayModeEntryDropLedger.GetIdentities(),
                 Is.EquivalentTo(new[] { failedIdentity, "Type.Kept()" }),
                 "A type the apply could not introduce is still lost, so its record stays.");
+        }
+
+        /// <summary>
+        /// What: an apply that introduces a type again, or finds it still active, also removes
+        /// the patches and added members Play entry recorded inside that type, while the ones
+        /// recorded inside a type it failed to introduce stay with that type.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_TypeBroughtBack_RemovesTheChangesRecordedInsideIt()
+        {
+            string introducedIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1");
+            string alreadyActiveIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T2");
+            string failedIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T3");
+            string patchInsideFailed =
+                HotReloadPlayModeEntryDropIdentity.ForMemberOfType(failedIdentity, "Fixture.T3.Patched()");
+            HotReloadPlayModeEntryDropLedger.Record(
+                new[]
+                {
+                    introducedIdentity,
+                    HotReloadPlayModeEntryDropIdentity.ForMemberOfType(introducedIdentity, "Fixture.T1.Patched()"),
+                    HotReloadPlayModeEntryDropIdentity.ForMemberOfType(introducedIdentity, "Fixture.T1.Added()"),
+                    alreadyActiveIdentity,
+                    HotReloadPlayModeEntryDropIdentity.ForMemberOfType(alreadyActiveIdentity, "Fixture.T2.Added()"),
+                    failedIdentity,
+                    patchInsideFailed,
+                    "Fixture.Compiled.Patched()"
+                });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>
+                {
+                    HotReloadIntroducedTypeOutcome.Introduced("Fixture.T1", "Fixture.Assembly", "Assets/A.cs"),
+                    HotReloadIntroducedTypeOutcome.AlreadyActive(
+                        "Fixture.T2",
+                        "Fixture.Assembly",
+                        "Assets/A.cs",
+                        bodyEdited: false),
+                    HotReloadIntroducedTypeOutcome.Failed("Fixture.T3", "Fixture.Assembly", "Assets/A.cs", "reason")
+                },
+                Array.Empty<string>());
+
+            Assert.That(
+                HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                Is.EquivalentTo(new[] { failedIdentity, patchInsideFailed, "Fixture.Compiled.Patched()" }),
+                "A type introduced again declares the patched bodies and added members it carried, "
+                + "so they come back with it; a type that failed brings nothing back.");
+        }
+
+        /// <summary>
+        /// What: bringing a type back removes only the changes recorded inside that type, not
+        /// those inside a type whose name starts with the same text or a type of the same name
+        /// in another assembly.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_TypeBroughtBack_KeepsTheChangesRecordedInsideOtherTypes()
+        {
+            string introducedIdentity = HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1");
+            string insideLongerName = HotReloadPlayModeEntryDropIdentity.ForMemberOfType(
+                HotReloadPlayModeEntryDropIdentity.ForType("Fixture.Assembly", "Fixture.T1Other"),
+                "Fixture.T1Other.Patched()");
+            string insideOtherAssembly = HotReloadPlayModeEntryDropIdentity.ForMemberOfType(
+                HotReloadPlayModeEntryDropIdentity.ForType("Other.Assembly", "Fixture.T1"),
+                "Fixture.T1.Patched()");
+            HotReloadPlayModeEntryDropLedger.Record(
+                new[] { introducedIdentity, insideLongerName, insideOtherAssembly });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>
+                {
+                    HotReloadIntroducedTypeOutcome.Introduced("Fixture.T1", "Fixture.Assembly", "Assets/A.cs")
+                },
+                Array.Empty<string>());
+
+            Assert.That(
+                HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                Is.EquivalentTo(new[] { insideLongerName, insideOtherAssembly }),
+                "Only the type the apply brought back may take its recorded changes along.");
+        }
+
+        /// <summary>
+        /// What: an apply returns only the added fields a domain reload had discarded, not one it
+        /// adds for the first time, and takes the returned ones off the rewire ledger so the next
+        /// apply does not ask again.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_ReturnsOnlyAddedFieldsTheRewireLedgerHeld()
+        {
+            HotReloadRewireLedger.Record(new[] { "Ns.Host.speed", "Ns.Other.count" });
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Host.speed", "Ns.Host.fresh" });
+
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Host.speed" }));
+            Assert.That(HotReloadRewireLedger.GetFields(), Is.EqualTo(new[] { "Ns.Other.count" }));
+        }
+
+        /// <summary>
+        /// What: a field of the same type under another name is not returned. The warning names
+        /// fields, so a match on the declaring type alone would name one that never held a value.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_SameTypeOtherFieldName_IsNotReturned()
+        {
+            HotReloadRewireLedger.Record(new[] { "Ns.Host.speed" });
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome> { HotReloadMethodOutcome.Patched("Ns.Host.Tick()", "Assets/A.cs") },
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Host.fresh" });
+
+            Assert.That(rewireFields, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a field added to a nested type is recorded from the domain at Play entry and
+        /// matched by the next apply's display name, because both spell the nested type with '+'.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_NestedTypeFieldRecordedAtPlayEntry_IsReturned()
+        {
+            new HotReloadDomainTestAccess().ReplaceAddedFields("Assets/Nested.cs", new[] { "Ns.Outer+Inner.count" });
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                Array.Empty<string>(),
+                Array.Empty<HotReloadPlayModeEntryDropSource>(),
+                HotReloadPlayModeEntryDropRecorder.CollectActiveAddedFields(HotReloadCompositionRoot.Services.Domain),
+                isDomainReloadDisabledOnEnterPlayMode: false);
+            HotReloadPlayModeEntryDropRecorder.ResetPendingForTesting();
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Outer+Inner.count" });
+
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Outer+Inner.count" }));
+        }
+
+        /// <summary>
+        /// What: a field added to a generic type keeps its arity marker from the domain at Play
+        /// entry through to the next apply's display name, so the two still match.
+        /// </summary>
+        [Test]
+        public void NotifyApplyRecovered_GenericTypeFieldRecordedAtPlayEntry_IsReturned()
+        {
+            new HotReloadDomainTestAccess().ReplaceAddedFields("Assets/Generic.cs", new[] { "Ns.Box`1.count" });
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                Array.Empty<string>(),
+                Array.Empty<HotReloadPlayModeEntryDropSource>(),
+                HotReloadPlayModeEntryDropRecorder.CollectActiveAddedFields(HotReloadCompositionRoot.Services.Domain),
+                isDomainReloadDisabledOnEnterPlayMode: false);
+            HotReloadPlayModeEntryDropRecorder.ResetPendingForTesting();
+
+            IReadOnlyList<string> rewireFields = HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadIntroducedTypeOutcome>(),
+                new[] { "Ns.Box`1.count" });
+
+            Assert.That(rewireFields, Is.EqualTo(new[] { "Ns.Box`1.count" }));
+        }
+
+        /// <summary>
+        /// What: a Play entry that discards only added fields records them for rewiring and leaves
+        /// the identity ledger, which --status counts as discarded changes, empty.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_FieldsOnly_RecordsRewireFieldsButNoIdentity()
+        {
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                Array.Empty<string>(),
+                Array.Empty<HotReloadPlayModeEntryDropSource>(),
+                new[] { "Ns.Host.speed" },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(HotReloadRewireLedger.GetFields(), Is.EqualTo(new[] { "Ns.Host.speed" }));
+            Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a cancelled Play entry takes back the fields it just recorded and keeps one an
+        /// earlier entry recorded, whose value is still gone.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenPlayEntryIsCancelledInTheSameDomain_RemovesOnlyPendingRewireFields()
+        {
+            HotReloadRewireLedger.Record(new[] { "Ns.Host.older" });
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                Array.Empty<string>(),
+                Array.Empty<HotReloadPlayModeEntryDropSource>(),
+                new[] { "Ns.Host.older", "Ns.Host.speed" },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.EnteredEditMode,
+                Array.Empty<string>(),
+                Array.Empty<HotReloadPlayModeEntryDropSource>(),
+                new[] { "Ns.Host.older", "Ns.Host.speed" },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(HotReloadRewireLedger.GetFields(), Is.EqualTo(new[] { "Ns.Host.older" }));
+        }
+
+        /// <summary>
+        /// What: a successful compile clears the rewire ledger, because no later apply re-adds a
+        /// field the compiled assembly now declares, while a revert-all keeps the fields already
+        /// recorded, because it does not bring back the values they lost.
+        /// </summary>
+        [Test]
+        public void NotifyCompilationFinishedClearsRewireFieldsAndNotifyRevertAllKeepsThem()
+        {
+            HotReloadRewireLedger.Record(new[] { "Ns.Host.speed" });
+            HotReloadPlayModeEntryDropRecorder.NotifyCompilationFinished(0);
+            Assert.That(HotReloadRewireLedger.GetFields(), Is.Empty, "compile");
+
+            HotReloadRewireLedger.Record(new[] { "Ns.Host.speed" });
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(new HotReloadPlayModeEntryDropSource[0], Array.Empty<string>());
+            Assert.That(HotReloadRewireLedger.GetFields(), Is.EqualTo(new[] { "Ns.Host.speed" }), "revert-all");
         }
 
         /// <summary>
@@ -418,7 +954,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadPlayModeEntryDropRecorder.ShouldRecord(
                         PlayModeStateChange.ExitingEditMode,
                         isDomainReloadDisabledOnEnterPlayMode: false,
-                        activeIdentityCount: identities.Count),
+                        activeChangeCount: identities.Count),
                     Is.False);
             }
         }
@@ -477,6 +1013,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return response;
         }
 
+        private static async Task<HotReloadResponse> ExecuteStatusAsync()
+        {
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                CancellationToken.None);
+            HotReloadResponse response = baseResponse as HotReloadResponse;
+            Assert.That(response, Is.Not.Null);
+            return response;
+        }
+
         private static async Task<HotReloadOrchestratorResult> RunPatchingABodyAndIntroducingATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
@@ -488,22 +1035,131 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
         }
 
+        private static async Task<HotReloadOrchestratorResult> RunIntroducingTwoTypesAsync()
+        {
+            string hostPath = FixturePath(HostFileName);
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "PlayModeEntryDropIdentityHostTwoTypes.cs",
+                    EditTheScaledBody(
+                        InsertIntroducedTypeDeclaration(
+                            InsertIntroducedTypeDeclaration(
+                                File.ReadAllText(hostPath),
+                                IntroducedValueSimpleName,
+                                IntroducedReadValue,
+                                string.Empty),
+                            IntroducedOtherSimpleName,
+                            IntroducedReadValue,
+                            string.Empty))),
+                CancellationToken.None);
+        }
+
+        // Why every type is edited and given a member: the one file then holds a patch and an
+        // added member inside each introduced type and on the compiled one, which is what the
+        // recording has to tell apart.
+        private static async Task<HotReloadOrchestratorResult> RunEditingAndAddingOnEveryTypeAsync()
+        {
+            string hostPath = FixturePath(HostFileName);
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "PlayModeEntryDropIdentityHostEveryType.cs",
+                    InsertHostAddedMethod(
+                        EditTheScaledBody(
+                            InsertIntroducedTypeDeclaration(
+                                InsertIntroducedTypeDeclaration(
+                                    File.ReadAllText(hostPath),
+                                    IntroducedValueSimpleName,
+                                    EditedIntroducedReadValue,
+                                    IntroducedAddedMember),
+                                IntroducedOtherSimpleName,
+                                EditedIntroducedReadValue,
+                                IntroducedAddedMember)))),
+                CancellationToken.None);
+        }
+
+        // Why the owner is found by the name prefix here: the fixture's types are top-level and
+        // neither name starts with the other, so the test can say where each row belongs without
+        // the domain query under test.
+        private static List<string> ExpectRowsOfAppliedChanges(HotReloadOrchestratorResult result)
+        {
+            List<string> expected = new List<string>();
+            Dictionary<string, string> typeIdentityByPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (HotReloadIntroducedTypeOutcome type in result.IntroducedTypes)
+            {
+                string typeIdentity = HotReloadPlayModeEntryDropIdentity.ForType(type.OriginalAssemblyName, type.MetadataName);
+                expected.Add(typeIdentity);
+                typeIdentityByPrefix.Add(type.MetadataName + ".", typeIdentity);
+            }
+
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Patched
+                    && outcome.Kind != HotReloadMethodOutcomeKind.Added)
+                {
+                    continue;
+                }
+
+                string owner = typeIdentityByPrefix
+                    .Where(pair => outcome.Method.StartsWith(pair.Key, StringComparison.Ordinal))
+                    .Select(pair => pair.Value)
+                    .FirstOrDefault();
+                expected.Add(owner == null ? outcome.Method : HotReloadPlayModeEntryDropIdentity.ForMemberOfType(owner, outcome.Method));
+            }
+
+            return expected;
+        }
+
+        private static string InsertHostAddedMethod(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostBodyAnchor), "Precondition: host body anchor must exist.");
+            return hostSource.Replace(
+                HostBodyAnchor,
+                HostBodyAnchor + "\n        public int HostAdded()\n        {\n            return 2;\n        }\n",
+                StringComparison.Ordinal);
+        }
+
         private static string EditTheScaledBody(string hostSource)
         {
             Assert.That(hostSource, Does.Contain(ScaledBodyAnchor), "Precondition: scaled body anchor must exist.");
             return hostSource.Replace(ScaledBodyAnchor, "return factor * 5;", StringComparison.Ordinal);
         }
 
+        private static string InsertAddedField(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostBodyAnchor), "Precondition: host body anchor must exist.");
+            Assert.That(hostSource, Does.Contain(ScaledBodyAnchor), "Precondition: scaled body anchor must exist.");
+            // Why the body reads the field too: an edit that only declares a field patches no
+            // method, so the run would report the file unchanged.
+            return hostSource
+                .Replace(
+                    HostBodyAnchor,
+                    HostBodyAnchor + "\n        private int revertRewireCount;\n",
+                    StringComparison.Ordinal)
+                .Replace(ScaledBodyAnchor, "return factor + revertRewireCount;", StringComparison.Ordinal);
+        }
+
         private static string InsertIntroducedType(string hostSource)
+        {
+            return InsertIntroducedTypeDeclaration(hostSource, IntroducedValueSimpleName, IntroducedReadValue, string.Empty);
+        }
+
+        private static string InsertIntroducedTypeDeclaration(
+            string hostSource,
+            string simpleName,
+            int readValue,
+            string extraMembers)
         {
             Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
             string introduced =
-                "    public sealed class HotReloadPlayModeEntryDropIntroducedValue\n"
+                "    public sealed class " + simpleName + "\n"
                 + "    {\n"
                 + "        public int Read()\n"
                 + "        {\n"
-                + "            return 13;\n"
+                + "            return " + readValue.ToString() + ";\n"
                 + "        }\n"
+                + extraMembers
                 + "    }\n"
                 + "\n";
             return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
@@ -525,8 +1181,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string HostFileName = "HotReloadCrossFileAddedMemberHost.cs";
 
+        private const string IntroducedValueSimpleName = "HotReloadPlayModeEntryDropIntroducedValue";
+
+        private const string IntroducedOtherSimpleName = "HotReloadPlayModeEntryDropIntroducedOther";
+
+        private const int IntroducedReadValue = 13;
+
+        private const int EditedIntroducedReadValue = 14;
+
+        private const string IntroducedAddedMember =
+            "\n        public int ReadTwice()\n        {\n            return Read() * 2;\n        }\n";
+
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
 
         private const string ScaledBodyAnchor = "return factor;";
+
+        private const string HostBodyAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost\n    {";
+
+        private const string AddedFieldDisplayName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost.revertRewireCount";
     }
 }

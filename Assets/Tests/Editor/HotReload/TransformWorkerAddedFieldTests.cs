@@ -24,6 +24,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
 
+        private const string ApplyFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadAddedFieldApplyFixture.cs";
+
         private const string HostCloseMarker =
             "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }";
 
@@ -222,6 +225,224 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.files[0].addedFieldNames, Is.EqualTo(new[] { expectedName }));
+        }
+
+        /// <summary>
+        /// What: every rewritten added field is described with the store key its shims use, its
+        /// declaring type, its field name, staticness, and a declared type name reflection
+        /// resolves, in the same order as addedFieldNames.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFields_DescribeStoreKeyDeclaredTypeAndStaticness()
+        {
+            string hostTypeName = typeof(HotReloadAddedMemberHost).FullName;
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public static int AddedTotal;\n        public UnityEngine.GameObject AddedWired;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedTotal + (AddedWired == null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldDeclarationsDescribed.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto fileOutput = result.Output.files[0];
+            Assert.That(
+                fileOutput.addedFieldNames,
+                Is.EqualTo(new[] { hostTypeName + ".AddedTotal", hostTypeName + ".AddedWired" }));
+            Assert.That(fileOutput.addedFieldDeclarations, Is.Not.Null);
+            Assert.That(fileOutput.addedFieldDeclarations.Length, Is.EqualTo(2));
+
+            TransformWorkerAddedFieldDeclarationDto staticField = fileOutput.addedFieldDeclarations[0];
+            Assert.That(staticField.fieldName, Is.EqualTo("AddedTotal"));
+            Assert.That(staticField.declaringTypeMetadataName, Is.EqualTo(hostTypeName));
+            Assert.That(staticField.fieldKey, Is.EqualTo(hostTypeName + "::AddedTotal"));
+            Assert.That(staticField.isStatic, Is.True);
+            Assert.That(
+                Type.GetType(staticField.declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(int)),
+                staticField.declaredTypeAssemblyQualifiedName);
+
+            TransformWorkerAddedFieldDeclarationDto instanceField = fileOutput.addedFieldDeclarations[1];
+            Assert.That(instanceField.fieldName, Is.EqualTo("AddedWired"));
+            Assert.That(instanceField.fieldKey, Is.EqualTo(hostTypeName + "::AddedWired"));
+            Assert.That(instanceField.isStatic, Is.False);
+            Assert.That(
+                Type.GetType(instanceField.declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(GameObject)),
+                instanceField.declaredTypeAssemblyQualifiedName);
+        }
+
+        /// <summary>
+        /// What: the declaration of an added field on a nested type keeps the metadata spelling
+        /// ('/') in both its store key and its declaring type name, so nothing has to rebuild the
+        /// key the shims read.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFieldOnNestedType_DescribesTheMetadataFormStoreKey()
+        {
+            string nestedMetadataName =
+                typeof(HotReloadAddedMemberHost.NestedAddedFieldHost).FullName.Replace('+', '/');
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "            public int ExistingNested()\n            {\n                return 1;\n            }",
+                "            public int AddedNested;\n\n"
+                + "            public int ExistingNested()\n            {\n                return AddedNested;\n            }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedNestedFieldDeclaration.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(1));
+            Assert.That(nestedMetadataName, Does.Contain("/"));
+            Assert.That(declarations[0].declaringTypeMetadataName, Is.EqualTo(nestedMetadataName));
+            Assert.That(declarations[0].fieldKey, Is.EqualTo(nestedMetadataName + "::AddedNested"));
+        }
+
+        /// <summary>
+        /// What: a field whose declared type reflection cannot name is described with an empty
+        /// declared type name, which is the answer a caller has to fail closed on rather than
+        /// resolving some other type under the same name.
+        /// </summary>
+        /// <remarks>
+        /// Why dynamic and not an open type parameter: a method on a generic type is skipped with
+        /// MethodTransformGenericMethodOrType, so a type-parameter-typed field never reaches the
+        /// rewritten set. dynamic is the unnameable declared type this path does reach.
+        /// </remarks>
+        [Test]
+        public async Task Classify_AddedFieldOfUnnameableType_LeavesTheDeclaredTypeNameEmpty()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public dynamic AddedDyn;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedDyn is null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedUnnameableFieldDeclaration.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(1));
+            Assert.That(declarations[0].fieldName, Is.EqualTo("AddedDyn"));
+            Assert.That(declarations[0].declaredTypeAssemblyQualifiedName, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a generic and an array declared type are named so reflection resolves them, which
+        /// is the boundary a caller wiring a value has to stay inside.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedGenericAndArrayFields_NameDeclaredTypesReflectionResolves()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public System.Collections.Generic.List<int> AddedItems;\n"
+                + "        public UnityEngine.GameObject[] AddedTargets;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedItems == null ? 0 : AddedItems.Count)\n"
+                + "                + (AddedTargets == null ? 0 : AddedTargets.Length) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedGenericAndArrayFieldDeclarations.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(2));
+            Assert.That(
+                Type.GetType(declarations[0].declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(List<int>)),
+                declarations[0].declaredTypeAssemblyQualifiedName);
+            Assert.That(
+                Type.GetType(declarations[1].declaredTypeAssemblyQualifiedName),
+                Is.EqualTo(typeof(GameObject[])),
+                declarations[1].declaredTypeAssemblyQualifiedName);
+        }
+
+        /// <summary>
+        /// What: an added field whose declared type is declared in the reloaded source itself —
+        /// directly, as an array element, as a generic argument, or as a nested type — is named
+        /// with the assembly that type is compiled into, not the worker's own compilation.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFieldsOfTypesDeclaredInTheReloadedSource_NameTheCompiledAssembly()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public HotReloadAddedMemberHost AddedPeer;\n"
+                + "        public HotReloadAddedMemberHost[] AddedPeers;\n"
+                + "        public System.Collections.Generic.List<HotReloadAddedMemberHost> AddedPeerList;\n"
+                + "        public NestedAddedFieldHost AddedNestedPeer;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedPeer == null ? 0 : 1) + (AddedPeers == null ? 0 : AddedPeers.Length)\n"
+                + "                + (AddedPeerList == null ? 0 : AddedPeerList.Count)\n"
+                + "                + (AddedNestedPeer == null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedSourceDeclaredTypeFieldDeclarations.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations;
+            Assert.That(declarations.Length, Is.EqualTo(4));
+            AssertDeclaredType(declarations, "AddedNestedPeer", typeof(HotReloadAddedMemberHost.NestedAddedFieldHost));
+            AssertDeclaredType(declarations, "AddedPeer", typeof(HotReloadAddedMemberHost));
+            AssertDeclaredType(declarations, "AddedPeerList", typeof(List<HotReloadAddedMemberHost>));
+            AssertDeclaredType(declarations, "AddedPeers", typeof(HotReloadAddedMemberHost[]));
+        }
+
+        /// <summary>
+        /// What: an added field whose declared type lives in another file of the same reload is
+        /// named with the assembly that file is compiled into, because that file is bound from
+        /// source in the worker's compilation just like the edited one.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFieldOfTypeDeclaredInAnotherReloadedFile_NamesTheCompiledAssembly()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public HotReloadAddedFieldApplyFixture AddedApplyPeer;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (AddedApplyPeer == null ? 0 : 1) + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedOtherFileTypeFieldDeclaration.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk,
+                siblingProjectRelativePath: ApplyFixtureProjectRelativePath);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto hostOutput = FindFileOutput(result, HostProjectRelativePath);
+            AssertDeclaredType(
+                hostOutput.addedFieldDeclarations,
+                "AddedApplyPeer",
+                typeof(HotReloadAddedFieldApplyFixture));
         }
 
         /// <summary>
@@ -463,7 +684,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
             Assert.That(slice, Does.Contain("GetOrInit<"));
             Assert.That(slice, Does.Contain("Set<"));
-            Assert.That(slice, Does.Contain("+ value"));
+            Assert.That(slice, Does.Contain("+ (value)"));
             Assert.That(slice, Does.Contain("+ 1"));
         }
 
@@ -508,7 +729,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an added field initializer that touches a host instance member skips, including
-        /// private fields, because the static shim lambda cannot bind those names.
+        /// private fields, because the static shim lambda cannot bind those names, and the
+        /// reason names the added field.
         /// </summary>
         [Test]
         public async Task Skip_PrivateInitializer_UsesLiteralOrExternalStaticReason()
@@ -527,6 +749,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "Drop the initializer");
+            AssertHasSkip(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                "Added field 'AddedFromPrivate' has an initializer");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
         }
 
@@ -1398,18 +1624,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a [SerializeField] added field still rewrites to the store and emits an
-        /// Inspector/serialization warning.
+        /// What: a [SerializeField] added field still rewrites to the store, and the worker marks
+        /// its declaration row instead of warning, so the Editor can name it only once it is
+        /// active; a plain added field beside it stays unmarked.
         /// </summary>
         [Test]
-        public async Task Warning_SerializeField_StillRewrites()
+        public async Task SerializeField_StillRewritesAndMarksTheDeclaration()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
-            string edited = WithHostMembers(onDisk, "[SerializeField] public int AddedSerialized;");
+            string edited = WithHostMembers(
+                onDisk,
+                "[SerializeField] public int AddedSerialized;\n        public int AddedPlain;");
             edited = edited.Replace(
                 ExistingCallerOriginal,
                 "        public int ExistingCaller(int value)\n        {\n"
-                + "            AddedSerialized = value;\n            return AddedSerialized;\n        }",
+                + "            AddedSerialized = value;\n            AddedPlain = value;\n"
+                + "            return AddedSerialized + AddedPlain;\n        }",
                 StringComparison.Ordinal);
 
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
@@ -1424,18 +1654,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Contain("HotReloadAddedFieldStore"));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
 
-            bool foundWarning = false;
-            foreach (string warning in result.Output.files[0].declarationDriftWarnings)
+            Assert.That(FindDeclaration(result, "AddedSerialized").hasSerializationAttribute, Is.True);
+            Assert.That(FindDeclaration(result, "AddedPlain").hasSerializationAttribute, Is.False);
+            // The worker cannot know whether the file will apply, so a warning worded here would
+            // name a field a failed or skipped file never made active.
+            AssertHasNoAddedFieldSerializeWarning(result);
+        }
+
+        private static TransformWorkerAddedFieldDeclarationDto FindDeclaration(
+            TransformWorkerClientResult result,
+            string fieldName)
+        {
+            foreach (TransformWorkerAddedFieldDeclarationDto declaration in result.Output.files[0].addedFieldDeclarations)
             {
-                if (warning != null
-                    && warning.Contains("AddedSerialized")
-                    && warning.Contains("Inspector"))
+                if (declaration.fieldName == fieldName)
                 {
-                    foundWarning = true;
+                    return declaration;
                 }
             }
 
-            Assert.That(foundWarning, Is.True, "SerializeField added fields must warn about Inspector visibility.");
+            Assert.Fail("Expected an added-field declaration row for " + fieldName + ".");
+            return null;
         }
 
         /// <summary>
@@ -1828,6 +2067,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingFail)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
             AssertHasNoAddedFieldSerializeWarning(result);
+            AssertNoSerializedDeclarationRow(result);
         }
 
         private static async Task AssertCompiledMemberKindChangeSkipsTouchingMethodsAsync(
@@ -1870,6 +2110,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, nameof(HotReloadFieldKindChangeFixture.WriteKind)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
             AssertHasNoAddedFieldSerializeWarning(result);
+            AssertNoSerializedDeclarationRow(result);
         }
 
         private static async Task AssertCompiledPropertyOrEventWarningAsync(
@@ -1959,10 +2200,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        private static void AssertDeclaredType(
+            TransformWorkerAddedFieldDeclarationDto[] declarations,
+            string fieldName,
+            Type expectedType)
+        {
+            Assert.That(declarations, Is.Not.Null);
+            foreach (TransformWorkerAddedFieldDeclarationDto declaration in declarations)
+            {
+                if (declaration.fieldName != fieldName)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    Type.GetType(declaration.declaredTypeAssemblyQualifiedName),
+                    Is.EqualTo(expectedType),
+                    declaration.declaredTypeAssemblyQualifiedName);
+                return;
+            }
+
+            Assert.Fail("No declaration for added field '" + fieldName + "'.");
+        }
+
+        private static TransformWorkerFileOutputDto FindFileOutput(
+            TransformWorkerClientResult result,
+            string projectRelativePath)
+        {
+            foreach (TransformWorkerFileOutputDto fileOutput in result.Output.files)
+            {
+                if (fileOutput.projectRelativePath == projectRelativePath)
+                {
+                    return fileOutput;
+                }
+            }
+
+            Assert.Fail("No file output for " + projectRelativePath + ".");
+            return null;
+        }
+
+        // Why an optional unchanged sibling: a type declared in another file of the same reload is
+        // bound from that file's source, which is the case a single-source run never reaches.
         private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
             string sourcePath,
             string projectRelativePath,
-            string snapshotSource = null)
+            string snapshotSource = null,
+            string siblingProjectRelativePath = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -1984,17 +2267,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(compilationAssembly, Is.Not.Null, "CompilationPipeline assembly not found.");
 
+            List<TransformWorkerSourceDto> sources = new List<TransformWorkerSourceDto>
+            {
+                new TransformWorkerSourceDto
+                {
+                    sourcePath = sourcePath,
+                    projectRelativePath = projectRelativePath,
+                    snapshotSource = snapshotSource
+                }
+            };
+            if (siblingProjectRelativePath != null)
+            {
+                string siblingPath = Path.Combine(projectRoot, siblingProjectRelativePath);
+                sources.Add(new TransformWorkerSourceDto
+                {
+                    sourcePath = siblingPath,
+                    projectRelativePath = siblingProjectRelativePath,
+                    snapshotSource = File.ReadAllText(siblingPath)
+                });
+            }
+
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = sourcePath,
-                        projectRelativePath = projectRelativePath,
-                        snapshotSource = snapshotSource
-                    }
-                },
+                sources = sources.ToArray(),
+                targetAssemblyName = TestAssemblyName,
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = BuildAbsoluteReferencePaths(
                     compilationAssembly.allReferences,
@@ -2141,10 +2437,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (warning != null && warning.Contains("will not appear in the Inspector"))
                 {
                     Assert.Fail(
-                        "Declaration-changed compiled fields must not emit the added-field "
-                        + "Inspector warning. Warnings="
+                        "The worker must not word the added-field Inspector warning. Warnings="
                         + string.Join("\n", result.Output.files[0].declarationDriftWarnings));
                 }
+            }
+        }
+
+        // The Editor names a serialized added field only from these rows, so a field refused for a
+        // changed compiled declaration must not reach them marked serialized.
+        private static void AssertNoSerializedDeclarationRow(TransformWorkerClientResult result)
+        {
+            TransformWorkerAddedFieldDeclarationDto[] declarations =
+                result.Output.files[0].addedFieldDeclarations ?? Array.Empty<TransformWorkerAddedFieldDeclarationDto>();
+            foreach (TransformWorkerAddedFieldDeclarationDto declaration in declarations)
+            {
+                Assert.That(
+                    declaration.hasSerializationAttribute,
+                    Is.False,
+                    "A refused field must not reach the Editor as a serialized added field: "
+                    + declaration.fieldKey);
             }
         }
 

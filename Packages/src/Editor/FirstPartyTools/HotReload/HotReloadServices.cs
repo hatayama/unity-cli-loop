@@ -23,7 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadPackageRootCapture packageRootCapture,
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             IHotReloadChangeDetector changeDetector,
-            HotReloadUnityMessageForwarding unityMessageForwarding)
+            HotReloadUnityMessageForwarding unityMessageForwarding,
+            HotReloadWiredValuePersistence wiredValuePersistence,
+            HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(harmony != null, "harmony must not be null.");
@@ -43,6 +45,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(changeDetector != null, "changeDetector must not be null.");
             Debug.Assert(
                 unityMessageForwarding != null, "unityMessageForwarding must not be null.");
+            Debug.Assert(wiredValuePersistence != null, "wiredValuePersistence must not be null.");
+            Debug.Assert(
+                wiredValueRestoreRefresh != null, "wiredValueRestoreRefresh must not be null.");
             Domain = domain;
             Harmony = harmony;
             Patcher = patcher;
@@ -58,6 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EditorStateSnapshotCapture = editorStateSnapshotCapture;
             ChangeDetector = changeDetector;
             UnityMessageForwarding = unityMessageForwarding;
+            WiredValuePersistence = wiredValuePersistence;
+            WiredValueRestoreRefresh = wiredValueRestoreRefresh;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -98,6 +105,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadUnityMessageForwarding UnityMessageForwarding { get; }
 
         /// <summary>
+        /// Remembers values wired into added fields so a scene reload's new instances get them back.
+        /// </summary>
+        internal HotReloadWiredValuePersistence WiredValuePersistence { get; }
+
+        /// <summary>
+        /// Re-reads the wired values whose host is back at its place, so a response reports what
+        /// holds now rather than what the last read of each field left behind.
+        /// </summary>
+        internal HotReloadWiredValueRestoreRefresh WiredValueRestoreRefresh { get; }
+
+        /// <summary>
         /// A copy that runs <paramref name="orchestrator"/> instead of this one, sharing every
         /// other collaborator — including the domain, so installing the copy neither takes the
         /// resolver over nor disposes anything when it is put back.
@@ -119,7 +137,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PackageRootCapture,
                 EditorStateSnapshotCapture,
                 ChangeDetector,
-                UnityMessageForwarding);
+                UnityMessageForwarding,
+                WiredValuePersistence,
+                WiredValueRestoreRefresh);
         }
 
         /// <summary>
@@ -143,7 +163,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PackageRootCapture,
                 EditorStateSnapshotCapture,
                 changeDetector,
-                UnityMessageForwarding);
+                UnityMessageForwarding,
+                WiredValuePersistence,
+                WiredValueRestoreRefresh);
         }
     }
 }

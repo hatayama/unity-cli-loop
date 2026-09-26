@@ -50,6 +50,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // group that ends unapplied still carries the rows the commit boundary wrote.
         internal List<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
+        // How many of Warnings are type notices, each saying its type needs a compile. Why counted
+        // apart from the text: the response must not tell a run holding one that no warning has to
+        // be cleared, and matching warning text would break with any rewording.
+        internal int IntroducedTypeNoticeCount { get; set; }
+
         // Shared across the whole run so sibling-derived text can be deduped once at the end.
         internal List<string> SiblingDerivedWarnings { get; }
 

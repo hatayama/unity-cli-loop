@@ -71,26 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPausePointCoordination.HotReloadSide?.GetActiveShimForMethod(method) != null;
             if (patchedByHotReload)
             {
-                string typeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
-                string errorMessage = string.Format(
-                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
-                    typeName,
-                    method.Name,
-                    requestedLine);
-                if (resolution.CompiledMethodStartLine > 0 && resolution.CompiledMethodEndLine > 0)
-                {
-                    errorMessage += string.Format(
-                        SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
-                        typeName,
-                        method.Name,
-                        resolution.CompiledMethodStartLine,
-                        resolution.CompiledMethodEndLine);
-                }
-
-                return SourcePausePointPatchResult.Failure(
-                    SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
-                    errorMessage,
-                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction);
+                return SourcePausePointHotReloadRefusal.Build(method, normalizedFile, requestedLine);
             }
 
             MethodBase logicalOwner = logicalOwnerOverride ?? method;

@@ -21,12 +21,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedMethodType = "FileGenerationFixture";
         private const string OtherAddedMethodKey = "FileGenerationFixture.OtherAddedMember()";
         private const string HostType = "Ns.Host";
-        private const string CompiledAssemblyPath = "<PROJECT_ROOT>/Library/ScriptAssemblies/Fixture.dll";
         private const string NestedCecilType = "Ns.Outer/Inner";
         private const string NestedReflectionType = "Ns.Outer+Inner";
 
         // Any non-empty byte array satisfies a shim generation no test loads bytes from.
         private static readonly byte[] PlaceholderAssemblyBytes = { 0x4D, 0x5A };
+
+        // A source path and hash no test reads back.
+        private const string PlaceholderShimSourcePath = "/placeholder/Source.cs";
+        private const string PlaceholderShimSourceContentSha256 = "placeholder-sha256";
 
         /// <summary>
         /// What: a fresh generation reports neither a shim nor an added-member generation, so a
@@ -163,77 +166,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a generation with only added methods of a compiled type still names the compiled
-        /// assembly its verified snapshot is keyed on, so the compiled line map stays reachable
-        /// for a file whose reload added methods but patched none.
-        /// </summary>
-        [Test]
-        public void FindCompiledAssemblyLocation_AddedMethodsOfACompiledType_ReportTheirCompiledAssembly()
-        {
-            HotReloadFileGeneration generation = CreateGeneration();
-            generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(
-                AddedMethodKey,
-                GetAddedTarget(),
-                FixtureProjectRelativePath,
-                "AddedMember",
-                AddedMethodType,
-                compiledAssemblyPath: CompiledAssemblyPath);
-
-            Assert.That(generation.BuildShimLookup(), Is.Null);
-            Assert.That(generation.FindCompiledAssemblyLocation(), Is.EqualTo(CompiledAssemblyPath));
-            Assert.That(generation.HasActiveHotReloadChanges, Is.True);
-        }
-
-        /// <summary>
-        /// What: added methods that name no compiled assembly (an introduced type) leave the
-        /// generation without one, so such a file is never treated as having a compiled line map,
-        /// and a new added-member generation forgets the assembly the previous one named.
-        /// </summary>
-        [Test]
-        public void FindCompiledAssemblyLocation_AddedMethodsWithoutACompiledAssembly_ReportNone()
-        {
-            HotReloadFileGeneration generation = CreateGeneration();
-            generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-
-            Assert.That(generation.FindCompiledAssemblyLocation(), Is.Null);
-            Assert.That(generation.HasActiveHotReloadChanges, Is.True);
-
-            generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(
-                OtherAddedMethodKey,
-                GetAddedTarget(),
-                FixtureProjectRelativePath,
-                "AddedMember",
-                AddedMethodType,
-                compiledAssemblyPath: CompiledAssemblyPath);
-            generation.BeginAddedMemberGeneration();
-
-            Assert.That(generation.FindCompiledAssemblyLocation(), Is.Null);
-            Assert.That(generation.HasActiveHotReloadChanges, Is.False);
-        }
-
-        /// <summary>
-        /// What: a generation reports active hot reload changes only while it holds a live patch or
-        /// an added method, so a shim registered without a committed patch does not count.
-        /// </summary>
-        [Test]
-        public void HasActiveHotReloadChanges_CountsLivePatchesAndAddedMethodsOnly()
-        {
-            HotReloadFileGeneration generation = CreateGeneration();
-            BeginShimGeneration(generation);
-            RegisterShim(generation);
-
-            Assert.That(generation.HasActiveHotReloadChanges, Is.False);
-
-            generation.BeginPatch(GetShimTarget(), GetAddedTarget());
-            generation.CommitPatch(GetShimTarget());
-
-            Assert.That(generation.HasActiveHotReloadChanges, Is.True);
-        }
-
-        /// <summary>
         /// What: an added method registered without a source range never claims a line, so a
         /// missing range cannot blame an unrelated line on an added method.
         /// </summary>
@@ -274,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
             generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null, null);
 
             generation.BeginAddedMemberGeneration();
 
@@ -425,8 +357,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" }, null);
-            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".oldField", HostType + ".keptField" }, null, null, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".keptField", HostType + ".newField" }, null, null, null);
 
             Assert.That(
                 CollectFields(generation, HostType),
@@ -445,7 +377,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             generation.BeginAddedMemberGeneration();
             generation.ReplaceAddedFields(
                 new[] { HostType + ".changed", HostType + ".stable", HostType + ".dropped" },
-                new[] { "1", "2", "3" });
+                new[] { "1", "2", "3" },
+                null,
+                null);
 
             List<string> changed = new List<string>();
             generation.CollectAddedFieldsWithChangedInitializer(
@@ -465,7 +399,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, new[] { "1" });
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, new[] { "1" }, null, null);
 
             List<string> changed = new List<string>();
             generation.CollectAddedFieldsWithChangedInitializer(
@@ -484,9 +418,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null);
+            generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null, null);
 
-            generation.ReplaceAddedFields(Array.Empty<string>(), null);
+            generation.ReplaceAddedFields(Array.Empty<string>(), null, null, null);
 
             Assert.That(CollectFields(generation, HostType), Is.Empty);
             Assert.That(DescribeFields(generation), Is.Empty);
@@ -501,7 +435,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" }, null);
+            generation.ReplaceAddedFields(new[] { NestedCecilType + ".count" }, null, null, null);
 
             Assert.That(
                 CollectFields(generation, NestedReflectionType),
@@ -512,6 +446,96 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(described[0].TypeName, Is.EqualTo(NestedReflectionType));
             Assert.That(described[0].FieldName, Is.EqualTo("count"));
             Assert.That(described[0].ProjectRelativePath, Is.EqualTo(FixtureProjectRelativePath));
+        }
+
+        /// <summary>
+        /// What: an added field's declaration is retrievable by its declaring type and field name
+        /// with the store key the worker formed, and a field this generation does not hold is not.
+        /// </summary>
+        [Test]
+        public void ReplaceAddedFields_KeepsDeclarationsLookedUpByTypeAndFieldName()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(
+                new[] { HostType + ".wired" },
+                null,
+                new[] { CreateDeclaration(HostType, "wired", typeof(string), isStatic: false) },
+                null);
+
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(
+                    HostType,
+                    "wired",
+                    out HotReloadAddedFieldDeclaration declaration),
+                Is.True);
+            Assert.That(declaration.StoreFieldKey, Is.EqualTo(HostType + "::wired"));
+            Assert.That(declaration.DeclaredTypeAssemblyQualifiedName,
+                Is.EqualTo(typeof(string).AssemblyQualifiedName));
+            Assert.That(declaration.IsStatic, Is.False);
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(HostType, "missing", out HotReloadAddedFieldDeclaration _),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: replacing the added fields drops the declarations of the fields the new set
+        /// omits, so a stale declaration cannot outlive the field it described.
+        /// </summary>
+        [Test]
+        public void ReplaceAddedFields_DropsDeclarationsTheNewSetOmits()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(
+                new[] { HostType + ".dropped" },
+                null,
+                new[] { CreateDeclaration(HostType, "dropped", typeof(int), isStatic: true) },
+                null);
+
+            generation.ReplaceAddedFields(
+                new[] { HostType + ".kept" },
+                null,
+                new[] { CreateDeclaration(HostType, "kept", typeof(int), isStatic: true) },
+                null);
+
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(HostType, "dropped", out HotReloadAddedFieldDeclaration _),
+                Is.False);
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(HostType, "kept", out HotReloadAddedFieldDeclaration _),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: the declaration of a field on a nested type is found whether the caller spells
+        /// the type the Cecil way or the reflection way.
+        /// </summary>
+        [Test]
+        public void AddedFieldDeclarations_NestedType_AreFoundByEitherNameForm()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            generation.ReplaceAddedFields(
+                new[] { NestedCecilType + ".count" },
+                null,
+                new[] { CreateDeclaration(NestedReflectionType, "count", typeof(int), isStatic: false) },
+                null);
+
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(
+                    NestedReflectionType,
+                    "count",
+                    out HotReloadAddedFieldDeclaration byReflectionName),
+                Is.True);
+            Assert.That(byReflectionName.DeclaringTypeName, Is.EqualTo(NestedReflectionType));
+            Assert.That(
+                generation.TryGetAddedFieldDeclaration(
+                    NestedCecilType,
+                    "count",
+                    out HotReloadAddedFieldDeclaration byCecilName),
+                Is.True);
+            Assert.That(byCecilName.StoreFieldKey, Is.EqualTo(NestedCecilType + "::count"));
         }
 
         /// <summary>
@@ -578,12 +602,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadFileGeneration(FixtureProjectRelativePath);
         }
 
+        // The store key spells nested types the metadata way, which is what the worker forms and
+        // the Editor carries unchanged, so the fixture builds it from the type name it was given.
+        private static HotReloadAddedFieldDeclaration CreateDeclaration(
+            string declaringTypeName,
+            string fieldName,
+            Type declaredType,
+            bool isStatic)
+        {
+            return new HotReloadAddedFieldDeclaration(
+                declaringTypeName.Replace('+', '/') + "::" + fieldName,
+                declaringTypeName,
+                fieldName,
+                declaredType.AssemblyQualifiedName,
+                isStatic);
+        }
+
         private static void BeginShimGeneration(HotReloadFileGeneration generation)
         {
             generation.BeginShimGeneration(
                 PlaceholderAssemblyBytes,
                 null,
-                typeof(HotReloadFileGenerationTests).Assembly);
+                typeof(HotReloadFileGenerationTests).Assembly,
+                PlaceholderShimSourcePath,
+                PlaceholderShimSourceContentSha256);
         }
 
         private static void RegisterShim(HotReloadFileGeneration generation)

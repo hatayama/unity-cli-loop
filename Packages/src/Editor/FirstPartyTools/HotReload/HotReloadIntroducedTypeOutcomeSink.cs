@@ -49,6 +49,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     string.IsNullOrEmpty(notice.OwnerProjectRelativePath)
                         ? notice.Text
                         : notice.OwnerProjectRelativePath + ": " + notice.Text);
+                carrier.Sinks.IntroducedTypeNoticeCount++;
+                // Why only when the carrier is the named file: an unattributed notice travels on the
+                // first file of the group without being about it. Why only a declaration notice: a
+                // run-scoped one lands on every parsed file, including files that declare no type.
+                if (notice.NamesDeclaration
+                    && string.Equals(carrier.ProjectRelativePath, notice.OwnerProjectRelativePath, StringComparison.Ordinal))
+                {
+                    carrier.DeclaresRefusedIntroducedType = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Appends each file's const and enum-member drift warnings to that file's warnings, for a
+        /// run whose introduced-type preparation refused it before the transform run could.
+        /// </summary>
+        internal static void AppendDeclarationDriftWarnings(
+            IReadOnlyList<HotReloadGroupFile> files,
+            IReadOnlyDictionary<string, string[]> warningsByOwner)
+        {
+            foreach (KeyValuePair<string, string[]> owner in warningsByOwner)
+            {
+                FindCarrier(files, owner.Key).Sinks.Warnings.AddRange(owner.Value);
             }
         }
 

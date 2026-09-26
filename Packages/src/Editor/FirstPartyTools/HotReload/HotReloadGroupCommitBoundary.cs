@@ -163,7 +163,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         + "' has no transform hash, so its staleness cannot be verified.";
                 }
 
-                string currentHash = TryComputeCurrentHash(file.WorkerSourcePath);
+                string currentHash =
+                    new HotReloadSourceContentHasher().TryComputeContentHashOfFileOrNull(file.WorkerSourcePath);
                 if (currentHash == null)
                 {
                     return "The request source '" + file.ProjectRelativePath
@@ -196,25 +197,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return hashesByPath;
-        }
-
-        // Why a failed read is drift rather than a throw: the file can be deleted or locked by an
-        // external editor between the transform run and this instant, which is the very window
-        // these checks exist for.
-        private static string TryComputeCurrentHash(string sourcePath)
-        {
-            try
-            {
-                return new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(sourcePath));
-            }
-            catch (IOException)
-            {
-                return null;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return null;
-            }
         }
     }
 }

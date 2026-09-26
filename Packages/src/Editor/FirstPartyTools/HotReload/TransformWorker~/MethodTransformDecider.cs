@@ -27,7 +27,8 @@ internal static class MethodTransformDecider
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
-        AddedMemberAccessLookup addedMemberAccess)
+        AddedMemberAccessLookup addedMemberAccess,
+        AddedEventLookup addedEvents)
     {
         WorkerReason hardSkip = EvaluateHardSkipReason(
             typeDeclaration,
@@ -52,7 +53,8 @@ internal static class MethodTransformDecider
         WorkerReason eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
             bodyNode,
             semanticModel,
-            compiledType);
+            compiledType,
+            addedEvents);
         if (eventUseReason != null)
         {
             return MethodTransformDecision.Skip(eventUseReason);
@@ -232,6 +234,57 @@ internal static class MethodTransformDecider
         return bodies;
     }
 
+    // Why name the compiled types: when the body fails because a compiled API still takes the
+    // compiled copy of a type this run declares, passing the API's file as well is a recovery
+    // short of a compile, and only the declaring types tell the reader which file that is.
+    private static WorkerReason DescribeUnboundBody(
+        SemanticModel semanticModel,
+        SyntaxNode methodBodyNode,
+        Diagnostic bindingError,
+        IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly,
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
+    {
+        string diagnosticText = bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture);
+        CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(
+            semanticModel,
+            methodBodyNode,
+            AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode),
+            artifactMap,
+            targetAssembly,
+            projectRelativePathsByBindingTree);
+        // Checked first: a compile clears this split and any other one, while the advice to
+        // pass a file would leave this one in place.
+        if (split.ArtifactHostMetadataNames.Count > 0)
+        {
+            WorkerReason artifactBoundReason = WorkerReason.NamingCompiledTypes(
+                HotReloadWorkerReasonCode.AddedMethodCallsIntroducedMemberBoundToCompiledType,
+                split.ArtifactBoundTypeMetadataNames.ToArray(),
+                diagnosticText,
+                QuoteNames(split.ArtifactHostMetadataNames),
+                QuoteNames(split.ArtifactBoundTypeMetadataNames));
+            artifactBoundReason.DeclaringFiles = split.ArtifactBoundDeclaringFiles.ToArray();
+            return artifactBoundReason;
+        }
+
+        if (split.DeclaringTypeMetadataNames.Count == 0)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodBodyUnbound, diagnosticText);
+        }
+
+        return WorkerReason.NamingCompiledTypes(
+            HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
+            split.DeclaringTypeMetadataNames.ToArray(),
+            diagnosticText,
+            QuoteNames(split.SplitTypeMetadataNames),
+            QuoteNames(split.DeclaringTypeMetadataNames));
+    }
+
+    private static string QuoteNames(List<string> names)
+    {
+        return "'" + string.Join("', '", names) + "'";
+    }
+
     // Why a second plan pass: DecideMethodTransform only sets UsesDelegation for
     // async/iterator/closure bodies. An ordinary added method JIT-compiles in the
     // shim assembly, so inaccessible compiled members must take the same accessor
@@ -242,7 +295,10 @@ internal static class MethodTransformDecider
         SyntaxNode methodBodyNode,
         SemanticModel semanticModel,
         MethodTransformDecision current,
-        AddedMemberAccessLookup addedMemberAccess)
+        AddedMemberAccessLookup addedMemberAccess,
+        IntroducedTypeArtifactMap artifactMap,
+        IAssemblySymbol targetAssembly,
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
     {
         // Checked before the delegation path: a closure that binds one private access still takes
         // that path, and an unbound call beside it would reach the shim unrewritten.
@@ -250,9 +306,13 @@ internal static class MethodTransformDecider
         if (bindingError != null)
         {
             return MethodTransformDecision.Skip(
-                WorkerReason.Of(
-                    HotReloadWorkerReasonCode.AddedMethodBodyUnbound,
-                    bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture)));
+                DescribeUnboundBody(
+                    semanticModel,
+                    methodBodyNode,
+                    bindingError,
+                    artifactMap,
+                    targetAssembly,
+                    projectRelativePathsByBindingTree));
         }
 
         if (current.UsesDelegation)
@@ -275,13 +335,32 @@ internal static class MethodTransformDecider
                 out WorkerReason accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
-                WorkerReason.Composite(
-                    HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite,
-                    accessorRejectReason));
+                DescribeAccessorPlanFailure(methodSymbol, typeSymbol, accessorRejectReason));
         }
 
         bool usesDelegation = feasibilityPlan.Entries.Count > 0;
         return MethodTransformDecision.AddedMethod(usesDelegation);
+    }
+
+    private static WorkerReason DescribeAccessorPlanFailure(
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol,
+        WorkerReason accessorRejectReason)
+    {
+        // Why the accessor hint is dropped for these messages: hot reload never forwards them, so
+        // no rewrite of the body would make the engine call the method, and following the hint
+        // would only spend a reload on an added method nothing invokes.
+        if (ShimMethodEmitter.IsUnityEngineMonoBehaviourDerived(typeSymbol)
+            && HotReloadNotForwardedUnityMessageNames.Contains(methodSymbol.Name))
+        {
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedMethodNotForwardedUnityMessageNeedsCompile,
+                methodSymbol.Name);
+        }
+
+        return WorkerReason.Composite(
+            HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite,
+            accessorRejectReason);
     }
 
     internal static WorkerReason EvaluateAddedMethodSkipReason(

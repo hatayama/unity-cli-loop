@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.EditorIsolatedAddedMethodCaller,
-                Plain(HotReloadConstants.IsolatedAddedMethodCallerSkipReason, 0));
+                Plain(HotReloadConstants.UnappliedAddedMethodCallerSkipReasonFormat, 1));
         }
     }
 }

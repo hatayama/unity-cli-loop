@@ -25,6 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // resolver subscribes to AppDomain.AssemblyResolve when it is built, and that
             // subscription is lost on every domain reload.
             HotReloadCompositionRoot.Initialize();
+            // Why right after the services exist: a reload after Play entry has to see the
+            // companions the reloads before it were given, and nothing else can name them.
+            HotReloadCompanionSourceSessionStore.Load(HotReloadCompositionRoot.Services.Domain.CompanionSources);
             // Why here and not in a static constructor of the counting side: a static constructor
             // runs when something first touches that type, which a domain that only introduced a
             // type may never do, and the tools that warn about a domain reload would then read a
@@ -37,10 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPlayModeEntryDropRecorder.GetServices = () => HotReloadCompositionRoot.Services;
             HotReloadUnityMessageForwardingEditorHooks.GetForwarding =
                 () => HotReloadCompositionRoot.Services.UnityMessageForwarding;
+            HotReloadWiredValueEditorHooks.GetPersistence =
+                () => HotReloadCompositionRoot.Services.WiredValuePersistence;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();
             HotReloadUnityMessageForwardingEditorHooks.Initialize();
+            HotReloadWiredValueEditorHooks.Initialize();
             TransformWorkerHostLifecycle.RegisterForEditorStartup();
         }
     }

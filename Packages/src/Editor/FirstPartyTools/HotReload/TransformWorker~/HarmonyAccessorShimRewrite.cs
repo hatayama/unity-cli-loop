@@ -144,7 +144,7 @@ internal sealed class HarmonyAccessorShimRewrite
             getter.DelegateFieldName,
             BuildPropertyAccessorArguments(visitedReceiver));
         SyntaxKind binaryKind = ShimBodyRewriter.GetCompoundAssignmentBinaryKind(node.Kind());
-        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
+        ExpressionSyntax combined = AddedFieldShimRewrite.CombineCompoundOperands(binaryKind, getCall, visitedRight);
         return CreateDelegateInvocation(
                 setter.DelegateFieldName,
                 BuildPropertyAccessorArguments(

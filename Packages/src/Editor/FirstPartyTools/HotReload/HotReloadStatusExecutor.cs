@@ -14,29 +14,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadDomain _domain;
         private readonly HotReloadPatcher _patcher;
         private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
+        private readonly HotReloadWiredValuePersistence _wiredValuePersistence;
+        private readonly HotReloadWiredValueRestoreRefresh _restoreRefresh;
 
         internal HotReloadStatusExecutor(
             HotReloadDomain domain,
             HotReloadPatcher patcher,
-            HotReloadUnityMessageForwarding unityMessageForwarding)
+            HotReloadUnityMessageForwarding unityMessageForwarding,
+            HotReloadWiredValuePersistence wiredValuePersistence,
+            HotReloadWiredValueRestoreRefresh restoreRefresh)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
             Debug.Assert(
                 unityMessageForwarding != null, "unityMessageForwarding must not be null.");
+            Debug.Assert(wiredValuePersistence != null, "wiredValuePersistence must not be null.");
+            Debug.Assert(restoreRefresh != null, "restoreRefresh must not be null.");
             _domain = domain;
             _patcher = patcher;
             _unityMessageForwarding = unityMessageForwarding;
+            _wiredValuePersistence = wiredValuePersistence;
+            _restoreRefresh = restoreRefresh;
         }
 
         public HotReloadResponse ExecuteRevertAll()
         {
             int clearedCount = _patcher.ActiveChangeCount;
+            // Read before the revert, which empties the domain's added fields.
+            IReadOnlyList<string> droppedAddedFields =
+                HotReloadPlayModeEntryDropRecorder.CollectActiveAddedFields(_domain);
             _patcher.RevertAll();
+            // The fields the wired values belong to are gone, so a later reload that adds them
+            // again starts from their initializers rather than from a value wired before.
+            _wiredValuePersistence.Clear();
             // The added methods are gone with the revert, so the proxies that forward Unity
             // messages into them come off in the same step rather than at the next update tick.
             _unityMessageForwarding.Clear();
-            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+            // Read after the revert, so the ledger lists the types it left loaded rather than the
+            // state it reverted.
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll(
+                HotReloadPlayModeEntryDropRecorder.CollectActiveIntroducedSources(_domain),
+                droppedAddedFields);
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
             List<string> warnings = new List<string>();
@@ -46,6 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 hold.SceneRefreshWarning);
+            HotReloadRewireAfterDomainReloadWarning.AppendRevertDropped(warnings, droppedAddedFields);
             // Why one snapshot: the total and the sentence that names it must agree, and a second
             // read could answer after another reload activated a type.
             HotReloadActiveChangeSnapshot snapshot = _domain.CountActiveChanges();
@@ -60,8 +79,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // types stayed loaded could not tell which ones a revert left behind.
                 IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(_domain),
                 ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
+                // Why the dropped fields count here but not in ClearedCount: a generation can hold
+                // added fields alone, and a revert that dropped them did revert something.
                 Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
-                    clearedCount == 0
+                    clearedCount == 0 && droppedAddedFields.Count == 0
                         ? "No active hot-reload changes to revert."
                         : "Reverted all active hot-reload changes.",
                     snapshot.IntroducedTypeCount,
@@ -147,6 +168,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 hold.SceneRefreshWarning);
+            // A value is otherwise restored only when game code next reads its field, so without
+            // this a host put back at its place kept its host-missing row for the whole session.
+            _restoreRefresh.Run();
+            (int restoredWiredValueCount, IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues) =
+                _wiredValuePersistence.ReadReport();
+            HotReloadWiredValueRestoreWarning.Append(warnings, unrestoredWiredValues);
             return new HotReloadResponse
             {
                 Success = true,
@@ -158,7 +185,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AddedFieldTotal = addedFields.Count,
                 AutoRefreshHeld = hold.Held,
                 Message = message,
-                DroppedByPlayModeEntryCount = droppedCount
+                DroppedByPlayModeEntryCount = droppedCount,
+                RestoredWiredValueCount = restoredWiredValueCount,
+                UnrestoredWiredValues = HotReloadWiredValueRestoreWarning.BuildRows(unrestoredWiredValues)
             };
         }
 

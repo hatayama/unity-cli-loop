@@ -10,6 +10,7 @@ internal static class AccessorReadRegistrar
         ISymbol symbol,
         AccessorPlan plan,
         AddedMemberAccessLookup addedMemberAccess,
+        bool unsubscribeOperand,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -43,8 +44,14 @@ internal static class AccessorReadRegistrar
         if (symbol is IMethodSymbol methodSymbol
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape, methodSymbol.Name);
+            // Why no lambda example on the right of '-=': a lambda there is a new delegate that
+            // was never subscribed, so the rewrite would compile and leave the handler attached.
+            rejectReason = unsubscribeOperand
+                ? WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape, methodSymbol.Name)
+                : WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
+                    methodSymbol.Name,
+                    MethodGroupLambdaExample.BuildSuffix(methodSymbol));
             return false;
         }
 

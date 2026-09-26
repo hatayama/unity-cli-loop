@@ -94,6 +94,13 @@ internal sealed class WorkerSourceUnit
     public IReadOnlyList<WorkerRetainedBodyEditType> RunRetainedBodyEditTypes { get; set; } =
         new WorkerRetainedBodyEditType[0];
 
+    // The project-relative path of every binding tree of the run, so a symbol this unit's model
+    // binds to another file of the run can be named by that file's path. SyntaxTree.FilePath is
+    // no substitute: it can be a temporary copy of the file. Empty until the transform
+    // compilation is built.
+    public IReadOnlyDictionary<SyntaxTree, string> RunProjectRelativePathsByBindingTree { get; set; } =
+        new Dictionary<SyntaxTree, string>();
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 
 using UnityEngine;
@@ -50,11 +51,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.ProjectRelativePath,
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
-                compileResult.Assembly);
+                compileResult.Assembly,
+                Path.GetFullPath(file.WorkerSourcePath),
+                file.FileOutput.sourceContentSha256);
             CommitAddedFieldsForFile(
                 file.ProjectRelativePath,
                 file.AddedFieldNames,
-                file.AddedFieldInitializers);
+                file.AddedFieldInitializers,
+                file.AddedFieldDeclarations);
             AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
             List<string> inlineRiskMethodLabels = new List<string>();
             List<string> unforwardedUnityMessageLabels = new List<string>();
@@ -113,6 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] addedFieldNames = file.AddedFieldNames ?? file.FileOutput.addedFieldNames;
             string[] addedFieldInitializers =
                 file.AddedFieldInitializers ?? file.FileOutput.addedFieldInitializers;
+            TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations =
+                file.AddedFieldDeclarations ?? file.FileOutput.addedFieldDeclarations;
             List<string> initializerChangedFields = CollectInitializerChangedAddedFields(
                 file.ProjectRelativePath,
                 addedFieldNames,
@@ -121,7 +127,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CommitAddedFieldsForFile(
                 file.ProjectRelativePath,
                 addedFieldNames,
-                addedFieldInitializers);
+                addedFieldInitializers,
+                addedFieldDeclarations);
             AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
             // Why recorded: a file that only declares an added member has no entry of its own,
             // yet a sibling file's applied body uses that field, so the run must report it.
@@ -150,11 +157,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void CommitAddedFieldsForFile(
             string projectRelativePath,
             string[] addedFieldNames,
-            string[] addedFieldInitializers)
+            string[] addedFieldInitializers,
+            TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations)
         {
             _domain.FindGeneration(projectRelativePath)?.ReplaceAddedFields(
                 addedFieldNames ?? Array.Empty<string>(),
-                addedFieldInitializers);
+                addedFieldInitializers,
+                HotReloadAddedFieldDeclarationConversion.FromWorkerRows(addedFieldDeclarations),
+                HotReloadAddedFieldDeclarationConversion.ListSerializedFields(addedFieldDeclarations));
         }
 
         // The fields a previous reload already added and this run declares with a different
@@ -217,7 +227,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sourceContentSha256: file.FileOutput != null ? file.FileOutput.sourceContentSha256 : null,
                 revertedUnchangedCount: file.RevertedUnchangedCount,
                 introducedTypes: sinks.IntroducedTypes,
-                newSourceMembershipEvidence: file.NewSourceMembershipEvidence);
+                newSourceMembershipEvidence: file.NewSourceMembershipEvidence,
+                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount,
+                addedEnumMemberNames: file.FileOutput != null ? file.FileOutput.addedEnumMemberNames : null,
+                workerSourcePath: Path.GetFullPath(file.WorkerSourcePath));
         }
 
         /// <summary>
@@ -277,7 +290,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 addedConstNames: applied ? file.AddedConstNames : null,
                 revertedUnchangedCount: file.RevertedUnchangedCount,
                 introducedTypes: sinks.IntroducedTypes,
-                newSourceMembershipEvidence: file.NewSourceMembershipEvidence);
+                newSourceMembershipEvidence: file.NewSourceMembershipEvidence,
+                introducedTypeNoticeCount: sinks.IntroducedTypeNoticeCount,
+                addedEnumMemberNames: file.FileOutput != null ? file.FileOutput.addedEnumMemberNames : null,
+                workerSourcePath: Path.GetFullPath(file.WorkerSourcePath));
         }
 
         private int ApplyResolvedEntries(
@@ -393,8 +409,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolved.Entry.methodName,
                     resolved.Entry.typeMetadataName,
                     resolved.Entry.sourceStartLine,
-                    resolved.Entry.sourceEndLine,
-                    resolved.CompiledAssemblyPath);
+                    resolved.Entry.sourceEndLine);
                 return HotReloadMethodOutcome.Added(
                     resolved.MethodLabel,
                     resolved.FilePath,

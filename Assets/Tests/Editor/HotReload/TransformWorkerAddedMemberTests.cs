@@ -172,6 +172,141 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the receiver check turns an expression-bodied added method into a block, and the
+        /// return statement it becomes still maps to the source line of the expression, not to a
+        /// line the '{' and the check pushed it to.
+        /// </summary>
+        [Test]
+        public async Task Emit_ExpressionBodiedAddedInstanceMethod_ReturnMapsToTheExpressionLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedArrow() =>\n            42;");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithExpressionBodiedAddedMethod.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedArrow"), Is.Not.Null);
+
+            string shimSource = result.Output.shimSource;
+            int returnIndex = shimSource.IndexOf("return 42;", StringComparison.Ordinal);
+            Assert.That(returnIndex, Is.GreaterThan(0), shimSource);
+            int directiveIndex = shimSource.LastIndexOf("#line ", returnIndex, StringComparison.Ordinal);
+            Assert.That(directiveIndex, Is.GreaterThanOrEqualTo(0), shimSource);
+            int directiveEnd = shimSource.IndexOf('\n', directiveIndex);
+            Assert.That(
+                shimSource.Substring(directiveIndex, directiveEnd - directiveIndex),
+                Is.EqualTo("#line " + FindLineNumberContaining(edited, "42;") + " \"" + HostProjectRelativePath + "\""),
+                shimSource);
+            Assert.That(
+                shimSource.Substring(directiveEnd, returnIndex - directiveEnd).Trim(),
+                Is.Empty,
+                "The directive must sit right before the return statement.\n" + shimSource);
+        }
+
+        /// <summary>
+        /// What: the receiver check inserted at the top of a block-bodied added instance method
+        /// maps to the method's declaration line, so a null receiver's stack frame points there
+        /// rather than at a line the enclosing mapping happens to reach.
+        /// </summary>
+        [Test]
+        public async Task Emit_BlockBodiedAddedInstanceMethod_ReceiverCheckMapsToTheDeclarationLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedBlock(int value)\n        {\n            int doubled = value * 2;\n"
+                + "            return doubled;\n        }");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithBlockBodiedAddedMethod.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedBlock"), Is.Not.Null);
+
+            string shimSource = result.Output.shimSource;
+            int guardIndex = shimSource.IndexOf(
+                "throw new global::System.NullReferenceException",
+                StringComparison.Ordinal);
+            Assert.That(guardIndex, Is.GreaterThan(0), shimSource);
+            int guardLineStart = shimSource.LastIndexOf('\n', guardIndex) + 1;
+            int directiveIndex = shimSource.LastIndexOf("#line ", guardIndex, StringComparison.Ordinal);
+            Assert.That(directiveIndex, Is.GreaterThanOrEqualTo(0), shimSource);
+            int directiveEnd = shimSource.IndexOf('\n', directiveIndex);
+            Assert.That(
+                shimSource.Substring(directiveIndex, directiveEnd - directiveIndex),
+                Is.EqualTo(
+                    "#line " + FindLineNumberContaining(edited, "public int AddedBlock(")
+                    + " \"" + HostProjectRelativePath + "\""),
+                shimSource);
+            Assert.That(
+                shimSource.Substring(directiveEnd, guardLineStart - directiveEnd).Trim(),
+                Is.Empty,
+                "The directive must sit right before the receiver check.\n" + shimSource);
+        }
+
+        /// <summary>
+        /// What: the receiver check of an added property whose whole body is an arrow maps to the
+        /// property's declaration line, so a null receiver's getter frame points there rather than
+        /// at the generated file's own line count.
+        /// </summary>
+        [Test]
+        public async Task Emit_PropertyLevelArrowAddedInstanceProperty_ReceiverCheckMapsToTheDeclarationLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedArrowProperty => 7;");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithPropertyLevelArrowProperty.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_AddedArrowProperty"), Is.Not.Null);
+
+            AssertReceiverCheckMapsTo(result.Output.shimSource, FindLineNumberContaining(edited, "AddedArrowProperty =>"));
+        }
+
+        /// <summary>
+        /// What: the receiver check of an added property whose getter accessor is an arrow maps to
+        /// the accessor's line, the arrow that accessor carries rather than the property's.
+        /// </summary>
+        [Test]
+        public async Task Emit_AccessorLevelArrowAddedInstanceProperty_ReceiverCheckMapsToTheAccessorLine()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedAccessorArrow\n        {\n            get => 8;\n        }");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("HostWithAccessorLevelArrowProperty.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_AddedAccessorArrow"), Is.Not.Null);
+
+            AssertReceiverCheckMapsTo(result.Output.shimSource, FindLineNumberContaining(edited, "get => 8;"));
+        }
+
+        private static void AssertReceiverCheckMapsTo(string shimSource, int expectedLine)
+        {
+            int guardIndex = shimSource.IndexOf(
+                "throw new global::System.NullReferenceException",
+                StringComparison.Ordinal);
+            Assert.That(guardIndex, Is.GreaterThan(0), shimSource);
+            int guardLineStart = shimSource.LastIndexOf('\n', guardIndex) + 1;
+            int directiveIndex = shimSource.LastIndexOf("#line ", guardIndex, StringComparison.Ordinal);
+            Assert.That(directiveIndex, Is.GreaterThanOrEqualTo(0), shimSource);
+            int directiveEnd = shimSource.IndexOf('\n', directiveIndex);
+            Assert.That(
+                shimSource.Substring(directiveIndex, directiveEnd - directiveIndex),
+                Is.EqualTo("#line " + expectedLine + " \"" + HostProjectRelativePath + "\""),
+                shimSource);
+            Assert.That(
+                shimSource.Substring(directiveEnd, guardLineStart - directiveEnd).Trim(),
+                Is.Empty,
+                "The directive must sit right before the receiver check's throw.\n" + shimSource);
+        }
+
+        /// <summary>
         /// What: implicit-this, explicit-this, receiver-expression, and static added-method calls
         /// plus mutual and recursive added-method calls are rewritten to the shim static form.
         /// </summary>
@@ -395,11 +530,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "AddedMaybe",
                 "Added methods whose bodies access private/internal members");
             AssertHasSkip(result, "AddedMaybe", "Accessor rewrite unavailable:");
-            AssertHasSkip(result, "AddedMaybe", "Run 'uloop compile'.");
+            AssertHasSkip(result, "AddedMaybe", "Run 'uloop compile' to keep the code as written.");
             string skipReason = FindSkipReason(result, "AddedMaybe");
             Assert.That(skipReason, Is.Not.Null);
             int unavailableIndex = skipReason.IndexOf("Accessor rewrite unavailable:", StringComparison.Ordinal);
-            int compileIndex = skipReason.IndexOf("Run 'uloop compile'.", StringComparison.Ordinal);
+            int compileIndex = skipReason.IndexOf("Run 'uloop compile' to keep the code as written.", StringComparison.Ordinal);
             Assert.That(unavailableIndex, Is.GreaterThan(-1));
             Assert.That(compileIndex, Is.GreaterThan(unavailableIndex));
             Assert.That(FindEntry(result, "AddedMaybe"), Is.Null);
@@ -803,7 +938,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 excludedAddedMethodKeys: new[] { addedKey });
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "AddedPing"), Is.Null, "Excluded added method must not emit.");
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "cannot emit");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "which this reload skipped");
         }
 
         /// <summary>
@@ -868,7 +1003,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "AddedVirtual", "vtable slot");
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "cannot emit");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "which this reload skipped");
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue), "method group");
             Assert.That(FindEntry(result, "AddedStatic"), Is.Not.Null);
         }
@@ -2017,6 +2152,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("Unbalanced shim method: " + shimMethodName);
             return string.Empty;
+        }
+
+        private static int FindLineNumberContaining(string source, string fragment)
+        {
+            string[] lines = source.Replace("\r\n", "\n").Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                if (lines[index].Contains(fragment, StringComparison.Ordinal))
+                {
+                    return index + 1;
+                }
+            }
+
+            Assert.Fail("Fragment missing: " + fragment);
+            return -1;
         }
 
         private static string WriteEdited(string fileName, string contents)

@@ -13,10 +13,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class TransformWorkerOutputInterpreter
     {
         private readonly TransformWorkerOutputValidator _validator;
+        private readonly TransformWorkerCompiledTypeFileCompleter _compiledTypeFileCompleter;
 
-        internal TransformWorkerOutputInterpreter(TransformWorkerOutputValidator validator)
+        internal TransformWorkerOutputInterpreter(
+            TransformWorkerOutputValidator validator,
+            TransformWorkerCompiledTypeFileCompleter compiledTypeFileCompleter)
         {
             _validator = validator;
+            _compiledTypeFileCompleter = compiledTypeFileCompleter;
         }
 
         /// <summary>
@@ -83,6 +87,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TransformWorkerClientResult.Failure(homeAssemblyError);
             }
 
+            // Why last: only a validated document reaches a reader, and every reason that names
+            // compiled types must carry its files before any caller words it.
+            _compiledTypeFileCompleter.Complete(input, output);
             return TransformWorkerClientResult.SuccessResult(output);
         }
 
@@ -112,10 +119,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
                 fileOutput.addedFieldNames ??= Array.Empty<string>();
                 fileOutput.addedFieldInitializers ??= Array.Empty<string>();
+                fileOutput.addedFieldDeclarations ??=
+                    Array.Empty<TransformWorkerAddedFieldDeclarationDto>();
                 fileOutput.addedConstNames ??= Array.Empty<string>();
+                fileOutput.addedEnumMemberNames ??= Array.Empty<string>();
                 fileOutput.introducedTypes ??= Array.Empty<TransformWorkerIntroducedTypeDto>();
                 fileOutput.introducedTypeDiagnostics ??= Array.Empty<TransformWorkerReasonDto>();
                 fileOutput.introducedTypeReuses ??= Array.Empty<TransformWorkerIntroducedTypeReuseDto>();
+                fileOutput.plannedAddedMemberNames ??= Array.Empty<string>();
+                fileOutput.plannedAddedEnumMemberNames ??= Array.Empty<string>();
+                fileOutput.preparedDeclarationDriftWarnings ??= Array.Empty<string>();
             }
 
             foreach (TransformWorkerEntryDto entry in output.entries)

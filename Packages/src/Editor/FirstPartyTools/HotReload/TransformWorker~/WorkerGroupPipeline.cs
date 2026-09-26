@@ -98,9 +98,16 @@ internal static class WorkerGroupPipeline
             syntaxTrees: bindingTrees,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        Dictionary<SyntaxTree, string> projectRelativePathsByBindingTree = new Dictionary<SyntaxTree, string>();
+        foreach (WorkerSourceUnit transformUnit in transformUnits)
+        {
+            projectRelativePathsByBindingTree[transformUnit.BindingSyntaxTree] = transformUnit.Input.ProjectRelativePath;
+        }
+
         foreach (WorkerSourceUnit unit in transformUnits)
         {
             unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
+            unit.RunProjectRelativePathsByBindingTree = projectRelativePathsByBindingTree;
         }
 
         WorkerTypeHome home = new WorkerTypeHome(
@@ -187,6 +194,8 @@ internal static class WorkerGroupPipeline
             assemblyGlobalUsings,
             shimNames);
 
+        HashSet<string> activeLabels =
+            new HashSet<string>(input.ActiveMethodLabels, StringComparer.Ordinal);
         foreach (WorkerSourceUnit unit in transformUnits)
         {
             // Why registered here and not where the type is planned: planning is a separate
@@ -205,7 +214,8 @@ internal static class WorkerGroupPipeline
                 allTypeEmitStates,
                 addedFieldCatalog,
                 addedPropertyCatalog,
-                skipped);
+                skipped,
+                activeLabels);
         }
 
         return BuildWorkerOutput(
@@ -215,7 +225,27 @@ internal static class WorkerGroupPipeline
             skipped,
             unchangedMethods,
             siblingConstDriftWarnings,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            CreateDeclaredTypeNames(compilation, home, transformUnits),
+            home);
+    }
+
+    // Every unit of a run holds the same run-wide retained records and artifact map, so any one
+    // of them answers for the group. A run with no transformable unit has neither.
+    private static AddedFieldDeclaredTypeNames CreateDeclaredTypeNames(
+        CSharpCompilation compilation,
+        WorkerTypeHome home,
+        List<WorkerSourceUnit> transformUnits)
+    {
+        if (transformUnits.Count == 0)
+        {
+            return new AddedFieldDeclaredTypeNames(
+                compilation.Assembly, home, new WorkerRetainedBodyEditType[0], IntroducedTypeArtifactMap.Empty);
+        }
+
+        WorkerSourceUnit anyUnit = transformUnits[0];
+        return new AddedFieldDeclaredTypeNames(
+            compilation.Assembly, home, anyUnit.RunRetainedBodyEditTypes, anyUnit.ArtifactMap);
     }
 
     // Keeps only the units a transform may read. A unit with parse errors is dropped: Roslyn's
@@ -373,7 +403,9 @@ internal static class WorkerGroupPipeline
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
         List<string> siblingConstDriftWarnings,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedFieldDeclaredTypeNames declaredTypeNames,
+        WorkerTypeHome home)
     {
         bool hasAccessorDelegates = false;
         foreach (ShimTypeBuilder shimType in shimTypes)
@@ -389,7 +421,7 @@ internal static class WorkerGroupPipeline
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         for (int index = 0; index < units.Count; index++)
         {
-            files[index] = BuildFileOutput(units[index], addedFieldCatalog);
+            files[index] = BuildFileOutput(units[index], addedFieldCatalog, declaredTypeNames, home);
         }
 
         return new WorkerOutput
@@ -405,7 +437,11 @@ internal static class WorkerGroupPipeline
         };
     }
 
-    private static WorkerFileOutput BuildFileOutput(WorkerSourceUnit unit, AddedFieldCatalog addedFieldCatalog)
+    private static WorkerFileOutput BuildFileOutput(
+        WorkerSourceUnit unit,
+        AddedFieldCatalog addedFieldCatalog,
+        AddedFieldDeclaredTypeNames declaredTypeNames,
+        WorkerTypeHome home)
     {
         string projectRelativePath = unit.Input.ProjectRelativePath;
         return new WorkerFileOutput
@@ -422,10 +458,20 @@ internal static class WorkerGroupPipeline
             AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(projectRelativePath),
             AddedFieldInitializers =
                 addedFieldCatalog.ListRewrittenAddedFieldInitializers(projectRelativePath),
+            AddedFieldDeclarations =
+                addedFieldCatalog.ListRewrittenAddedFieldDeclarations(projectRelativePath, declaredTypeNames),
             AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
+            // Why only a transform unit: a unit that failed to load or parse has no semantic model,
+            // and the model answers only for BindingRoot, never Root.
+            AddedEnumMemberNames = unit.SemanticModel == null
+                ? Array.Empty<string>()
+                : PlannedAddedMemberNames.CollectCompiledEnumMembers(unit.BindingRoot, unit.SemanticModel, home),
             IntroducedTypes = unit.IntroducedTypes.ToArray(),
             IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
-            IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray()
+            IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray(),
+            PlannedAddedMemberNames = Array.Empty<string>(),
+            PlannedAddedEnumMemberNames = Array.Empty<string>(),
+            PreparedDeclarationDriftWarnings = Array.Empty<string>()
         };
     }
 }

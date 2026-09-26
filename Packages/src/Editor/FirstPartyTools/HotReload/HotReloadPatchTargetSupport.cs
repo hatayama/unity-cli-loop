@@ -138,10 +138,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            // Why the call is skipped rather than its result discarded: the short-circuit clears
-            // the applied-source ledger on its miss paths. A type this domain introduced lives in
-            // an artifact assembly whose owner declaration still has to be verified, so an
-            // unchanged source must reach that verification with its ledger entry intact.
+            // Why the call is skipped for an assembly that owns an introduced type: an unchanged
+            // source there still has to reach group processing, which verifies the introduced
+            // types' declarations and reports their IntroducedTypes rows. Protecting the
+            // applied-source record is not the reason; the short-circuit only reads it.
             HotReloadUnchangedSourceDecision unchangedDecision = HotReloadUnchangedSourceDecision.NotUnchanged;
             if (!domain.IntroducedTypes.HasActiveTypesForOriginalAssembly(assemblyName))
             {

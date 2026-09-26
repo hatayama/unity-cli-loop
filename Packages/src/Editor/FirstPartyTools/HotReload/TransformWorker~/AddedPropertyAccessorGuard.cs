@@ -144,7 +144,8 @@ internal static class AddedPropertyAccessorGuard
             bodyNode,
             typeState.SourceUnit.SemanticModel,
             typeState.CompiledType,
-            addedMemberAccess: null);
+            addedMemberAccess: null,
+            typeState.AddedEvents);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;
@@ -156,7 +157,10 @@ internal static class AddedPropertyAccessorGuard
             bodyNode,
             typeState.SourceUnit.SemanticModel,
             decision,
-            addedMemberAccess: null);
+            addedMemberAccess: null,
+            typeState.SourceUnit.ArtifactMap,
+            typeState.TargetAssembly,
+            typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

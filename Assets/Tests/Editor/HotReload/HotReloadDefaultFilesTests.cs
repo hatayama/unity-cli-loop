@@ -175,8 +175,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response.Message,
                 Is.EqualTo(
                     "--files was omitted; 2 changed file(s) since the last compile were selected: "
-                    + "Assets/Changed1.cs, Assets/Changed2.cs. 1 new file(s) that hot reload had introduced "
-                    + "before the Play Mode domain reload discarded them were selected again: "
+                    + "Assets/Changed1.cs, Assets/Changed2.cs. 1 new file(s) declaring a type hot reload "
+                    + "introduced were selected again, because entering Play Mode or 'uloop hot-reload "
+                    + "--revert-all' dropped what earlier reloads had applied from them: "
                     + ExistingDroppedSourcePath + "."
                     + " Other new files that have never been compiled are not selected automatically. "
                     + AppliedMessageTail));
@@ -224,9 +225,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "--files was omitted; no file changed since the last compile. 1 new file(s) that hot "
-                    + "reload had introduced before the Play Mode domain reload discarded them were selected "
-                    + "again: " + ExistingDroppedSourcePath + "."
+                    "--files was omitted; no file changed since the last compile. 1 new file(s) declaring "
+                    + "a type hot reload introduced were selected again, because entering Play Mode or "
+                    + "'uloop hot-reload --revert-all' dropped what earlier reloads had applied from them: "
+                    + ExistingDroppedSourcePath + "."
                     + " Other new files that have never been compiled are not selected automatically. "
                     + AppliedMessageTail));
         }
@@ -267,6 +269,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await ExecuteAsync(new JObject { ["Files"] = new JArray("Assets/Explicit.cs") });
 
             Assert.That(appliedFiles, Is.EqualTo(new[] { "Assets/Explicit.cs" }));
+        }
+
+        /// <summary>
+        /// What: a script listed twice in --files reaches the run once, as the first raw entry, and
+        /// the response message starts with the sentence saying so.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilesListAScriptTwice_RunsItOnceAndSaysSo()
+        {
+            using IDisposable detectorScope = BeginChangedFiles("Assets/Changed1.cs");
+            List<string> appliedFiles = new List<string>();
+            using IDisposable orchestratorScope = BeginRecordingOrchestrator(appliedFiles);
+
+            HotReloadResponse response = await ExecuteAsync(
+                new JObject { ["Files"] = new JArray("./Assets/Explicit.cs", "Assets/Explicit.cs") });
+
+            Assert.That(appliedFiles, Is.EqualTo(new[] { "./Assets/Explicit.cs" }));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "--files listed 'Assets/Explicit.cs' 2 times; it was processed once. "
+                    + AppliedMessageTail));
         }
 
         /// <summary>

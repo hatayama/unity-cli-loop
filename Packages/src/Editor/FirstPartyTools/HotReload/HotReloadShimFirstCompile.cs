@@ -141,6 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.GroupFilePaths,
                 context.CorrelationId,
                 introducedTypeArtifactHomes,
+                context.CompileFailureNoteSources,
                 ct).ConfigureAwait(false);
             if (isolation == null)
             {
@@ -187,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadSkippedMemberCompileNote.AppendNotes(
                     compileResult.ErrorMessage,
                     fallbackErrorMessages,
-                    context.WorkerOutput.skipped));
+                    context.CompileFailureNoteSources));
         }
 
         private static HotReloadGroupCompileResult ResolveIsolatedEntriesToPatch(
@@ -247,6 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 file.AddedFieldNames = file.FileOutput.addedFieldNames;
                 file.AddedFieldInitializers = file.FileOutput.addedFieldInitializers;
+                file.AddedFieldDeclarations = file.FileOutput.addedFieldDeclarations;
                 file.AddedConstNames = file.FileOutput.addedConstNames;
             }
         }
@@ -288,6 +290,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransformWorkerFileOutputDto retryFile = retryFilesByPath[file.ProjectRelativePath];
                 file.AddedFieldNames = retryFile.addedFieldNames;
                 file.AddedFieldInitializers = retryFile.addedFieldInitializers;
+                file.AddedFieldDeclarations = retryFile.addedFieldDeclarations;
                 file.AddedConstNames = retryFile.addedConstNames;
             }
         }

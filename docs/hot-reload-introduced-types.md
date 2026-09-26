@@ -48,7 +48,7 @@ nothing from them is applied, while files in other assemblies still apply.
 
 | Condition | `Reason` |
 |---|---|
-| The declaration of a type this domain already introduced has changed in a way the artifact cannot be brought up to | `Changed introduced type requires a compile: <type> Declaration differences: <parts>.` — the differences name the fingerprint parts that stopped matching, and are omitted when the comparison only knows the type name. `removed:<member>` and `declaration:<member>` name a member the artifact holds that the source no longer declares the same way; `added:<member>` names one the source gained; `header` is the type's own declaration (accessibility, kind, base list, type parameters), `defines` the preprocessor symbols the file was read with, and `order` the declared order of the members. `added:` keys are applied rather than refused when every added member is an ordinary method, field or property and nothing else about the declaration differs; an added constructor, operator, event, indexer or nested type is refused like any other change. The `order` an insertion shifts is forgiven as long as the members the record holds keep the same order once the added keys are dropped. Additions the reload could have applied (ordinary methods, fields, properties) are not counted among the blocking differences; the row ends with `N applicable addition(s) omitted: <member>, <member>` — the first three of them by name, then `and <M> more` — so the reader knows which additions are not the cause |
+| The declaration of a type this domain already introduced has changed in a way the artifact cannot be brought up to | `Changed introduced type requires a compile: <type> Declaration differences: <parts>.` — the differences name the fingerprint parts that stopped matching, and are omitted when the comparison only knows the type name. `removed:<member>` and `declaration:<member>` name a member the artifact holds that the source no longer declares the same way; `added:<member>` names one the source gained; `header` is the type's own declaration (accessibility, kind, base list, type parameters), `defines` the preprocessor symbols the file was read with, and `order` the declared order of the members. `added:` keys are applied rather than refused when every added member is an ordinary method, field or property and nothing else about the declaration differs; an added constructor, operator, event, indexer or nested type is refused like any other change. The `order` an insertion shifts is forgiven as long as the members the record holds keep the same order once the added keys are dropped. Additions the reload could have applied (ordinary methods, fields, properties) are not counted among the blocking differences; the row ends with `N addition(s) not counted as differences because they apply on their own: <member>, <member>` — the first three of them by name, then `and <M> more` — so the reader knows which additions are not the cause |
 | A member body of a type this domain already introduced changed in a way that cannot be patched | `Changed member body of introduced type requires a compile: <type> Changed members: <keys>. Only ordinary method bodies and getter-only property bodies of an introduced type can be hot reloaded.` |
 | Two files of the same reload declare the same type | `Introduced type <type> is declared in more than one file of the group: <paths>.` |
 | The artifact assembly failed to compile | `Introduced-type compilation failed: <compiler output>` |
@@ -126,7 +126,7 @@ recompiled rather than reused once that generation is gone.
 - Auto Refresh stays held while any introduced type is active, so returning focus to the Editor
   does not recompile. `--revert-all` releases the hold only when no introduced type remains;
   `uloop compile` always releases it.
-- When Domain Reload is enabled on Play entry (the default), entering Play Mode reloads the
+- When Domain Reload is enabled on Play entry (the default for projects created before Unity 6.6), entering Play Mode reloads the
   domain, which discards the introduced types along with the patches. They are counted in
   `DroppedByPlayModeEntryCount` on the next `--status`, and re-applying the same declaration
   clears that record. With Enter Play Mode Options set to disable Domain Reload, Play entry
@@ -167,17 +167,21 @@ create the assembly before any reload can target it.
 
 One exception covers the files hot reload had already introduced types from. When entering Play
 Mode reloads the domain and discards those types, the files that declare them are remembered for
-the rest of the Editor session. The next `uloop hot-reload` without `--files` selects each of them
-again, after the changed files, if it is still on disk and is not already a changed file. The
-selection message then names them:
+the rest of the Editor session. `--revert-all` remembers them too: the introduced types stay
+loaded, but what later reloads added to them (a new method, a new field) is dropped, and callers
+that use those members would otherwise fail to compile on the next reload. The next
+`uloop hot-reload` without `--files` selects each remembered file again, after the changed files,
+if it is still on disk and is not already a changed file. The selection message then names them:
 
 - `--files was omitted; N changed file(s) since the last compile were selected: <paths>. M new
-  file(s) that hot reload had introduced before the Play Mode domain reload discarded them were
-  selected again: <paths>. Other new files that have never been compiled are not selected
+  file(s) declaring a type hot reload introduced were selected again, because entering Play Mode
+  or 'uloop hot-reload --revert-all' dropped what earlier reloads had applied from them: <paths>.
+  Other new files that have never been compiled are not selected
   automatically.`
 - With no changed file, the first sentence reads `--files was omitted; no file changed since the
   last compile.` and the reload still runs instead of reporting that nothing changed.
 
 A file is forgotten once every type it declared is brought back by a reload (introduced again or
-found already active), and all of them are forgotten on a successful compile or `--revert-all`.
+found already active), and all of them are forgotten on a successful compile. `--revert-all`
+forgets the earlier list and remembers the files of the introduced types it leaves loaded.
 Without such a file, the selection message is the same as before.
