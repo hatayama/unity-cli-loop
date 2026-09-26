@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.0](https://github.com/hatayama/unity-cli-loop/compare/v3.7.1...v3.8.0) (2026-09-26)
+
+
+### Features
+
+* Hot reload can wire values into added fields without a compile, and pause points use the edited file's lines after a hot reload ([#3008](https://github.com/hatayama/unity-cli-loop/issues/3008)) ([05bec46](https://github.com/hatayama/unity-cli-loop/commit/05bec468c523a8f94d25adb03bdd593bda43c99b))
+
 ## [3.7.1](https://github.com/hatayama/unity-cli-loop/compare/v3.7.0...v3.7.1) (2026-09-25)
 
 
