@@ -14,24 +14,36 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     }
 
     /// <summary>
-    /// Holds the wait observer of the current async flow, so a tool request can learn when it is
-    /// only waiting for the Editor main thread without tools having to report it themselves.
+    /// Holds the wait observer of each async flow. An AsyncLocal keeps one value per flow, so a
+    /// request that sets its observer never sees the observer of another request.
     /// </summary>
-    /// <remarks>
-    /// Why a static field and not an instance service like the main-thread dispatcher: an
-    /// AsyncLocal keeps one value per async flow, so the field shares nothing between requests.
-    /// Each request sets its own observer, and the switch awaiter, a struct any caller can create,
-    /// reads it without a reference to that request.
-    /// </remarks>
+    internal sealed class MainThreadWaitObservationService
+    {
+        private readonly AsyncLocal<IMainThreadWaitObserver> _currentObserver =
+            new AsyncLocal<IMainThreadWaitObserver>();
+
+        internal IMainThreadWaitObserver Current => _currentObserver.Value;
+
+        internal void SetCurrent(IMainThreadWaitObserver observer)
+        {
+            _currentObserver.Value = observer;
+        }
+    }
+
+    /// <summary>
+    /// Lets a tool request learn when it is only waiting for the Editor main thread, without tools
+    /// having to report it themselves: the request sets the observer of its async flow, and the
+    /// main-thread switch reports each wait to it.
+    /// </summary>
     internal static class MainThreadWaitObservation
     {
-        private static readonly AsyncLocal<IMainThreadWaitObserver> CurrentObserver = new();
+        private static readonly MainThreadWaitObservationService ServiceValue = new MainThreadWaitObservationService();
 
-        internal static IMainThreadWaitObserver Current => CurrentObserver.Value;
+        internal static IMainThreadWaitObserver Current => ServiceValue.Current;
 
         internal static void SetCurrent(IMainThreadWaitObserver observer)
         {
-            CurrentObserver.Value = observer;
+            ServiceValue.SetCurrent(observer);
         }
     }
 }
