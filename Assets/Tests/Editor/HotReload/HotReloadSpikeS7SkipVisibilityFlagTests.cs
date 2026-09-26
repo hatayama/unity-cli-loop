@@ -4,6 +4,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using CodeOptimization = UnityEditor.Compilation.CodeOptimization;
+using CompilationPipeline = UnityEditor.Compilation.CompilationPipeline;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
 {
@@ -151,6 +153,30 @@ public static class SpikeS7OverrideSnippet
     public static int AbstractThroughBase()
     {
         return new SpikeS7AbstractOverrideSnippet().AreaThroughBase();
+    }
+}
+";
+
+        // A method left without the flag calls a tiny flagged method whose body reaches an
+        // internal member of another assembly. The JIT may inline the callee into the caller, and
+        // the question is whether the access check then runs in the unflagged caller's context.
+        private const string InliningSnippetSource = @"public static class SpikeS7InliningSnippet
+{
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    public static int TinyInternalRead()
+    {
+        return io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikeInternalFixture.SecretSeed();
+    }
+
+    public static int UnflaggedCaller()
+    {
+        int sum = 0;
+        for (int index = 0; index < 3; index++)
+        {
+            sum += TinyInternalRead();
+        }
+
+        return sum;
     }
 }
 ";
@@ -319,6 +345,29 @@ public static class SpikeS7OverrideSnippet
         }
 
         /// <summary>
+        /// What: a method without the flag that calls a tiny flagged method reaching an internal
+        /// member of another assembly still gets the value while the JIT may inline the callee,
+        /// so ungranted code such as a shim can call granted code such as an artifact.
+        /// </summary>
+        [Test]
+        public async Task InliningSnippet_UnflaggedCallerOfFlaggedTinyMethod_ReachesInternalMember()
+        {
+            Assume.That(
+                CompilationPipeline.codeOptimization,
+                Is.EqualTo(CodeOptimization.Release),
+                "Debug code optimization turns JIT inlining off, which would make this pass trivially.");
+            Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
+                "S7-inlining", InliningSnippetSource, "SpikeS7InliningSnippet", new List<string>());
+            MethodInfo caller = snippetType.GetMethod("UnflaggedCaller");
+            MonoSkipVisibilityFlag.SetOnEveryMethodOfExcept(snippetType.Assembly, caller);
+            Assert.That(MonoSkipVisibilityFlag.IsSet(caller), Is.False, "Precondition: the caller stays unflagged.");
+
+            Func<int> call = (Func<int>)caller.CreateDelegate(typeof(Func<int>));
+
+            Assert.That(call(), Is.EqualTo(63), "Three calls returning 21 each.");
+        }
+
+        /// <summary>
         /// Reads and writes the skip_visibility bit of Mono's native method record.
         /// </summary>
         private static class MonoSkipVisibilityFlag
@@ -358,12 +407,22 @@ public static class SpikeS7OverrideSnippet
 
             public static void SetOnEveryMethodOf(Assembly assembly)
             {
+                SetOnEveryMethodOfExcept(assembly, null);
+            }
+
+            public static void SetOnEveryMethodOfExcept(Assembly assembly, MethodBase excluded)
+            {
                 const BindingFlags everyDeclared = BindingFlags.Public | BindingFlags.NonPublic
                     | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
                 foreach (Type type in assembly.GetTypes())
                 {
                     foreach (MethodInfo method in type.GetMethods(everyDeclared))
                     {
+                        if (method.Equals(excluded))
+                        {
+                            continue;
+                        }
+
                         Set(method);
                     }
 
