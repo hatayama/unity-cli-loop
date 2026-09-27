@@ -499,7 +499,8 @@ namespace System.Runtime.CompilerServices
             string workSubdirectoryName,
             string snippetSource,
             string snippetTypeName,
-            IReadOnlyList<string> extraReferencePaths)
+            IReadOnlyList<string> extraReferencePaths,
+            string outputAssemblyName = "SpikeS1Snippet")
         {
             string workRootPath = PrepareCleanDirectory(workSubdirectoryName);
             string publicizedDllPath = Path.Combine(workRootPath, TestAssemblyName + ".Publicized.dll");
@@ -507,7 +508,7 @@ namespace System.Runtime.CompilerServices
 
             string snippetSourcePath = Path.Combine(workRootPath, "SpikeS1Snippet.cs");
             File.WriteAllText(snippetSourcePath, snippetSource);
-            string snippetDllPath = Path.Combine(workRootPath, "SpikeS1Snippet.dll");
+            string snippetDllPath = Path.Combine(workRootPath, outputAssemblyName + ".dll");
 
             // Only mscorlib, the publicized copy, and explicitly requested extras: any leak of
             // the original assembly into the reference set would let the snippet compile
