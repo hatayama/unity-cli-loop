@@ -29,8 +29,10 @@ internal static class AddedPropertyEmitter
     {
         foreach (AddedPropertyBinding binding in addedPropertyCatalog.Bindings)
         {
+            // Why the binding tree: the declaration comes from it, and a file whose retained
+            // introduced declarations were rewritten binds from a copy, not from the tree it loaded.
             if (!SymbolEqualityComparer.Default.Equals(binding.HostType, typeState.TypeSymbol)
-                || binding.Declaration.SyntaxTree != typeState.SourceUnit.SyntaxTree
+                || binding.Declaration.SyntaxTree != typeState.SourceUnit.BindingSyntaxTree
                 || binding.UnavailableReason != null)
             {
                 continue;
