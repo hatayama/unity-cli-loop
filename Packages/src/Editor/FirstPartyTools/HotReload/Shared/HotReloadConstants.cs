@@ -25,6 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly happens to recompile.
         public const string PublicizedRefsRelativeDirectory = "Library/UloopHotReload/PublicizedRefs/fmt2";
 
+        // Artifact compilation must not inherit the shim cache's private-member visibility.
+        public const string InternalsExposedRefsRelativeDirectory = "Library/UloopHotReload/InternalsExposedRefs/fmt1";
+
         // Worker binaries are keyed by SHA256 of every TransformWorker~/*.cs file name and content.
         public const string WorkerCacheRelativeDirectory = "Library/UloopHotReload/Worker";
 

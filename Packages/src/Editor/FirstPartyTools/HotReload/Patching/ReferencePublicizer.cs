@@ -69,6 +69,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PublicizeType);
         }
 
+        internal static string GetOrCreateInternalsExposedCopy(
+            HotReloadTypeHome home,
+            IReadOnlyCollection<string> resolverSearchDirectories)
+        {
+            return GetOrCreateRewrittenCopy(
+                home,
+                resolverSearchDirectories,
+                HotReloadConstants.InternalsExposedRefsRelativeDirectory,
+                ExposeInternalsOfType);
+        }
+
         private static string GetOrCreateRewrittenCopy(
             HotReloadTypeHome home,
             IReadOnlyCollection<string> resolverSearchDirectories,
@@ -265,6 +276,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // instead; hardcoding Editor Contents Managed paths fails on Unity 6 layouts.
 
             return resolver;
+        }
+
+        private static void ExposeInternalsOfType(TypeDefinition type)
+        {
+            CecilTypeAttributes visibility = type.Attributes & CecilTypeAttributes.VisibilityMask;
+            CecilTypeAttributes exposedVisibility = visibility switch
+            {
+                CecilTypeAttributes.NotPublic => CecilTypeAttributes.Public,
+                CecilTypeAttributes.NestedAssembly => CecilTypeAttributes.NestedPublic,
+                CecilTypeAttributes.NestedFamORAssem => CecilTypeAttributes.NestedPublic,
+                CecilTypeAttributes.NestedFamANDAssem => CecilTypeAttributes.NestedFamily,
+                _ => visibility
+            };
+            type.Attributes = (type.Attributes & ~CecilTypeAttributes.VisibilityMask) | exposedVisibility;
+
+            foreach (FieldDefinition field in type.Fields)
+            {
+                CecilFieldAttributes access = field.Attributes & CecilFieldAttributes.FieldAccessMask;
+                CecilFieldAttributes exposedAccess = access switch
+                {
+                    CecilFieldAttributes.Assembly => CecilFieldAttributes.Public,
+                    CecilFieldAttributes.FamORAssem => CecilFieldAttributes.Public,
+                    CecilFieldAttributes.FamANDAssem => CecilFieldAttributes.Family,
+                    _ => access
+                };
+                field.Attributes = (field.Attributes & ~CecilFieldAttributes.FieldAccessMask) | exposedAccess;
+            }
+
+            // Accessors are ordinary metadata methods. Private event backing fields stay private
+            // through their own flags; only the full publicizer needs an event-name exception.
+            foreach (MethodDefinition method in type.Methods)
+            {
+                CecilMethodAttributes access = method.Attributes & CecilMethodAttributes.MemberAccessMask;
+                CecilMethodAttributes exposedAccess = access switch
+                {
+                    CecilMethodAttributes.Assembly => CecilMethodAttributes.Public,
+                    CecilMethodAttributes.FamORAssem => CecilMethodAttributes.Public,
+                    CecilMethodAttributes.FamANDAssem => CecilMethodAttributes.Family,
+                    _ => access
+                };
+                method.Attributes = (method.Attributes & ~CecilMethodAttributes.MemberAccessMask) | exposedAccess;
+            }
         }
 
         private static void PublicizeType(TypeDefinition type)
