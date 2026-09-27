@@ -459,11 +459,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// Verifies that methods a compiled type adds around properties of a retained introduced
         /// type that keep one accessor non-public are judged by the accessors they call, the same
         /// way on every reload: a write, a parenthesized write, an increment, a parenthesized
-        /// increment, or a deconstruction through an internal setter, a read, a compound assignment, or a nested collection
-        /// initializer through an internal getter, and a write through an internal ref-returning
-        /// property are skipped each time, while a read or a write that calls only the public
-        /// accessor, and a nameof of a property with an internal getter, are applied and run each
-        /// time.
+        /// increment, or a deconstruction through an internal setter, a read, a compound
+        /// assignment, or a nested collection initializer through an internal getter, and a write
+        /// through an internal ref-returning property are skipped each time, while a read or a
+        /// write that calls only the public accessor, and a nameof of a property with an internal
+        /// getter, are applied and run each time.
         /// </summary>
         [Test]
         public async Task Run_AddedMethodsUsingAccessorsOfRetainedType_AreJudgedByTheAccessorsTheyCall()
