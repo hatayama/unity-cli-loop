@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
@@ -17,25 +16,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// are introduced into: they compile against internals-exposed references, run once granted,
     /// and fail without touching the active types when the grant is unavailable or refused.
     /// </summary>
-    /// <remarks>
-    /// Why the owners are not fixtures on disk: a .cs under Assets/ is compiled into the test
-    /// assembly, and a type the compiler already lists is never introduced.
-    /// </remarks>
-    public sealed class HotReloadIntroducedTypeInternalAccessE2ETests : HotReloadIntroducedTypeE2ETestBase
+    public sealed class HotReloadIntroducedTypeInternalAccessE2ETests : HotReloadIntroducedTypeCallerE2ETestBase
     {
-        private const string Namespace = "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload";
         private const string OwnerPath = "Assets/Tests/Editor/HotReload/UncompiledInternalAccessOwner.cs";
         private const string LaterOwnerPath = "Assets/Tests/Editor/HotReload/UncompiledInternalAccessLaterOwner.cs";
         private const string UnexposableOwnerPath = "Assets/Tests/Editor/HotReload/UncompiledUnexposableOwner.cs";
         private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/HotReloadInternalAccessFixtures.cs";
         private const string FixtureConstantDeclaration = "internal const int Constant = 21;";
-        private const string CallerBodyAnchor = "return host.Value();";
-        private const string CompilationFailurePrefix = "Introduced-type compilation failed: ";
         private const string ExposureFailureReason = "Exposing internal members of the referenced assemblies failed";
         private const string ExposedReferenceDirectory = "InternalsExposedRefs";
         private const string GrantRefusalReason = "refused by the test";
         private const int InternalValue = 21;
-        private const int HostValue = 1;
 
         // Why NoInlining on the bodies a later reload edits: the test reads the edited body back
         // through the patched caller, which an inlined copy at the call site would not observe.
@@ -625,88 +616,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return false;
-        }
-
-        private static Dictionary<string, string> Owner(string ownerPath, string declarations)
-        {
-            return new Dictionary<string, string> { [ownerPath] = TypeSource(declarations) };
-        }
-
-        private static string TypeSource(string declarations)
-        {
-            return "namespace " + Namespace + "\n{\n    " + declarations + "\n}\n";
-        }
-
-        // Only the owners named in the map take part in the run, and the caller body is replaced by
-        // the expression, so the value the caller returns is the value the introduced type made.
-        private static Task<HotReloadOrchestratorResult> RunAsync(
-            string label,
-            string callerExpression,
-            Dictionary<string, string> sources)
-        {
-            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
-            string callerSource = File.ReadAllText(callerPath);
-            Assert.That(callerSource, Does.Contain(CallerBodyAnchor), "Precondition: caller body anchor must exist.");
-            List<string> paths = new List<string> { callerPath };
-            Dictionary<string, string> edits = new Dictionary<string, string>
-            {
-                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
-                    "InternalAccessCaller" + label + ".cs",
-                    callerSource.Replace(CallerBodyAnchor, "return " + callerExpression + ";", StringComparison.Ordinal))
-            };
-            foreach (KeyValuePair<string, string> source in sources)
-            {
-                paths.Add(source.Key);
-                edits[source.Key] = HotReloadTestSourceWriter.WriteEditedSource(
-                    Path.GetFileNameWithoutExtension(source.Key) + label + ".cs",
-                    source.Value);
-            }
-
-            return HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                paths.ToArray(),
-                contentPathOverride: null,
-                CancellationToken.None,
-                edits);
-        }
-
-        private static int CallTheCaller()
-        {
-            return new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost());
-        }
-
-        private static int ActiveTypeCount()
-        {
-            return HotReloadCompositionRoot.Services.Domain.IntroducedTypes.ActiveTypeCount;
-        }
-
-        private static void AssertIntroduced(HotReloadOrchestratorResult result, string simpleName)
-        {
-            Assert.That(CountFailures(result), Is.Zero, DescribeOutcomes(result));
-            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
-            {
-                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Introduced
-                    && outcome.MetadataName == Namespace + "." + simpleName)
-                {
-                    return;
-                }
-            }
-
-            Assert.Fail(simpleName + " must be reported as introduced.\n" + DescribeOutcomes(result));
-        }
-
-        private static string FindFailedIntroducedTypeReason(HotReloadOrchestratorResult result, string fragment)
-        {
-            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
-            {
-                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed
-                    && outcome.Reason != null
-                    && outcome.Reason.Contains(fragment, StringComparison.Ordinal))
-                {
-                    return outcome.Reason;
-                }
-            }
-
-            return null;
         }
     }
 }
