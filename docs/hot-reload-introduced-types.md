@@ -11,15 +11,23 @@ General hot-reload rules: `docs/hot-reload.md`.
 ## Scope
 
 Supported, when the declaration is top-level (not nested inside another type), non-partial,
-non-generic, and `public`:
+non-generic, and declared `public`, `internal`, or without an access modifier:
 
 | Category | Example |
 |---|---|
-| Class | `public class Order { … }` |
+| Class | `public class Order { … }`, `internal class OrderCache { … }`, `class OrderRow { … }` |
 | Static helper class | `public static class OrderMath { … }` |
 | Struct | `public struct Money { … }` |
 | Enum | `public enum OrderState { … }` |
 | Interface | `public interface IPricing { … }` |
+
+The artifact is an assembly of its own, so an `internal` or modifier-less declaration is compiled
+there as `public`: callers in the target assembly could not name it otherwise. Only that access
+token changes. The source, its declaration fingerprint, and the type's original assembly identity
+stay as written, so changing the modifier of a type this domain already introduced (for example
+from `internal` to `public`) is a declaration change like any other. A top-level declaration
+marked `private` or `protected` is not repaired; the artifact compilation reports the compiler's
+error for it.
 
 Every other shape is refused. A refused declaration is simply not introduced — the source that
 declares it stays in the tree, the rest of the reload continues, and the response carries a
@@ -30,7 +38,7 @@ declares it stays in the tree, the rest of the reload continues, and the respons
 | Generic type | `Generic introduced type requires a compile: <type>` |
 | `partial` type | `Partial introduced type requires a compile: <type>` |
 | `record` / `record struct` | `Record introduced type requires a compile: <type>` |
-| Non-`public` type | `Non-public introduced type requires a compile: <type>` |
+| `file` type | `File-local introduced type requires a compile: <type>` — an Editor whose bundled compiler predates file-local types (Unity 2022.3) rejects the `file` modifier while parsing, so that file reports the parse error instead |
 | `ref struct` | `Ref-like introduced type requires a compile: <type>` |
 | Type containing `unsafe` code | `Unsafe introduced type requires a compile: <type>` |
 | Type deriving from `UnityEngine.Object` | `Unity object introduced type requires a compile: <type>` |
@@ -60,6 +68,45 @@ nothing from them is applied, while files in other assemblies still apply.
 | Two files of the same reload declare the same type | `Introduced type <type> is declared in more than one file of the group: <paths>.` |
 | The artifact assembly failed to compile | `Introduced-type compilation failed: <compiler output>` |
 
+## Access to the target assembly's internals
+
+An introduced type can use what the assembly it belongs to keeps `internal`: members declared
+`internal` or `protected internal`, internal interfaces it implements, and internal base classes
+it derives from. The same holds for the internals of types earlier reloads introduced into that
+assembly. Two mechanisms make this possible, and both apply only to the artifact:
+
+- The artifact compiles against copies of its target assembly and of that assembly's active
+  artifacts in which only the assembly part of accessibility is removed. `private` members stay
+  private, and `private protected` members stay `protected`. The copies are cached under
+  `Library/UloopHotReload/InternalsExposedRefs/`, are never loaded, and do not change what the
+  rest of the reload compiles against.
+- After loading the artifact, and before any of its types becomes active, every method it
+  declares is allowed to reach those internals at run time and is marked to never be inlined —
+  even a method that asks for aggressive inlining. That costs a little speed, and it keeps a
+  later body patch of such a method visible to its callers.
+
+Whether the run-time step is possible is decided once per domain by a probe of the Editor's
+runtime. When the probe is unavailable, the artifact compiles against the original references
+instead: a type that needs no internal access is still introduced, and a type that uses an
+internal member of its target assembly fails with the compiler's error for it (`CS0122`). When
+the run-time step is refused for an artifact that has already loaded, the declaration fails with
+`Introduced-type compilation failed: Granting internal access to the introduced-type artifact
+failed: <reason>`; none of its types becomes active, and the types earlier reloads introduced stay
+as they were.
+
+Limits:
+
+- A `private` member of the target assembly stays out of reach. The compiler usually reports it
+  as missing (`CS0117`) rather than inaccessible, because it does not read the private members of
+  a referenced assembly.
+- Internals of other assemblies stay out of reach, including assemblies that grant the target
+  assembly access through `InternalsVisibleTo`.
+- An override declared `internal`, `protected internal`, or `private protected` of a compiled or
+  retained base member is still refused (see the table above).
+- Because the target assembly's internals look public to the artifact compilation, a declaration
+  can compile here that a regular compile rejects — a `public` member exposing an `internal`
+  type, for example. Run `uloop compile` to validate the project.
+
 ## Type identity is fixed until the next domain reload
 
 An introduced type is identified by its original assembly name and its metadata name. Once the
@@ -82,6 +129,11 @@ other body — constructors, setter, init, indexer and event accessors, field an
 initializers — and any change to the declaration other than adding an ordinary method, field or
 property still require a compile.
 
+A body edit goes through the same transform rules whether the type is introduced or compiled.
+An introduced type that was declared `internal` therefore reports the same `Skipped` rows as a
+compiled internal type would for the same body — a lambda that reads an `internal` member, for
+example. That the declaration was introduced does not promise every later body of it patches.
+
 ## Partial apply
 
 Type preparation runs before the reload commits its method patches, so a run can introduce types
@@ -103,8 +155,8 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 A snippet run by `uloop execute-dynamic-code` can name an active introduced type directly: every
 active artifact on disk is added to that compilation's references, so the type is nameable for as
 long as it stays active. Write its full name, as the snippet has no using for its namespace, and
-spell a nested type in C# form (`Outer.Inner`), which a using cannot shorten. Only a public type
-is introduced at all, so a snippet never meets an inaccessible one. Two
+spell a nested type in C# form (`Outer.Inner`), which a using cannot shorten. An `internal` or
+modifier-less type is public in its artifact, so a snippet can name it too. Two
 limits stay: members hot reload *added* to a type are still invisible to a snippet, added or not
 to an introduced type, because an addition lives only in the reload's shim; and the compilation
 cache keys on the reference set, so a snippet compiled against one generation of artifacts is

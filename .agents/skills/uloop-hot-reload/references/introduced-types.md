@@ -5,19 +5,51 @@ an artifact assembly the domain loads and keeps, and the bodies of the same relo
 
 ## What qualifies
 
-Top-level, non-nested, non-partial, non-generic, `public`, and one of: class (including
-`static` helper classes), struct, enum, interface.
+Top-level, non-nested, non-partial, non-generic, declared `public`, `internal`, or without an
+access modifier, and one of: class (including `static` helper classes), struct, enum, interface.
+An `internal` or modifier-less declaration is compiled as `public` in its artifact, so the
+edited bodies of the reload and `uloop execute-dynamic-code` snippets can name it; the source
+and its fingerprint keep the modifier as written, so changing it later is a declaration change.
 
 Everything else is refused. The declaration is simply not introduced, the rest of the reload
 continues, and `Warnings` carries `<file>: <reason>: <type>` where the reason is one of:
 
 `Generic introduced type requires a compile` · `Partial introduced type requires a compile` ·
-`Record introduced type requires a compile` · `Non-public introduced type requires a compile` ·
+`Record introduced type requires a compile` · `File-local introduced type requires a compile` ·
 `Ref-like introduced type requires a compile` · `Unsafe introduced type requires a compile` ·
 `Unity object introduced type requires a compile` · `Serializable introduced type requires a compile` ·
 `Module initializer introduced type requires a compile` · `Delegate introduced type requires a compile` ·
 `Unsupported introduced type requires a compile` ·
-`Nested type requires a compile` · `Nested declaration inside an introduced type requires a compile`
+`Nested type requires a compile` · `Nested declaration inside an introduced type requires a compile` ·
+`Internal override in an introduced type requires a compile`
+
+On Unity 2022.3 the bundled compiler predates `file` types, so a `file` declaration fails to parse
+instead of being refused. A top-level `private` or `protected` declaration is not repaired: the
+artifact compile fails on it.
+
+## Internals of the target assembly
+
+An introduced type can use the `internal` (and `protected internal`) members, interfaces, and
+base classes of the assembly it belongs to and of the types earlier reloads introduced into it.
+The artifact compiles against copies of those assemblies that expose only `internal`
+accessibility, and each artifact method is granted runtime access, and marked never to be
+inlined, before any type of the artifact becomes active.
+
+- `private` members stay out of reach; the compiler usually reports them as missing (CS0117).
+  Internals of other assemblies stay out of reach, `InternalsVisibleTo` included.
+- When the Editor runtime fails the internal-access probe, the artifact compiles against the
+  original references: a type that uses no internals is still introduced, one that does fails
+  with `Introduced-type compilation failed:` and CS0122.
+- A grant refused after loading fails the declaration with `Introduced-type compilation failed:
+  Granting internal access to the introduced-type artifact failed:`; nothing new becomes active.
+- An override declared `internal`, `protected internal`, or `private protected` of a compiled
+  or retained base member is refused (`Internal override in an introduced type requires a
+  compile`); it compiles only when the base is introduced in the same reload.
+- Internals look public to this compile, so it can accept what a regular compile rejects (a
+  `public` member exposing an `internal` type). `uloop compile` is the real check.
+- Body edits of an introduced `internal` type follow the same rules as a compiled internal
+  type: a lambda, local function, or query expression that reads a private or internal member
+  is `Skipped` on both.
 
 When an edited body in the same run names a refused type, its shim compile fails with CS0246,
 CS0234, or CS0426, or with CS0103 or CS0117 when the body reads a static member of it. That `Failed` row's `Reason` then ends with a note that quotes the refusal

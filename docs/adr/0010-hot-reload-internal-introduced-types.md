@@ -2,10 +2,10 @@
 
 Date: 2026-09-26
 
-Status: Accepted. The internal-override and Unity-ancestry refusals, reference exposure, and the
-runtime grant are implemented in the introduced-type preparation. Declaration promotion and the
-file-local refusal are not implemented yet, so introduced declarations are still limited to
-`public`.
+Status: Accepted and implemented. The introduced-type preparation promotes internal and
+modifier-less declarations, refuses file-local declarations and internal overrides of compiled
+or retained members, keeps Unity ancestry refused behind an internal base, exposes the target's
+internals to the artifact compile, and grants runtime access before publication.
 
 ## Decision
 
@@ -227,9 +227,23 @@ code optimization:
   the preparation leaves its worker input unchanged.
 - References that cannot be exposed fail the declaration without compiling or granting, and the
   run keeps its already-active rows, notices, and drift warnings.
+- Declaration promotion passes the planner and the preparation-to-caller route: internal and
+  modifier-less classes, enums, interfaces, and structs; other modifiers keep their tokens and
+  order; attributes, comments, documentation, and alias bindings survive with and without a
+  namespace; LF and CRLF sources with non-ASCII names keep their text; only the modifier the
+  defines leave active is rewritten. The fingerprint follows the written modifier, so an
+  unchanged internal rerun is `AlreadyActive` and a change to `public` fails as a header change
+  that keeps the earlier type. A top-level `private` or `protected` declaration is not repaired
+  (CS1527). Internal declarations of the other refused shapes keep their own reasons. Without the
+  grant a plain internal type is still introduced and one reading internals fails with CS0122.
+  A body edit of an introduced internal type ends like the same edit of a compiled internal
+  type: `Patched` for a plain body, `Skipped` with the same reason for a closure reading an
+  internal member.
+- The file-local refusal reason is not exercised: the compiler bundled with 2022.3 (Roslyn
+  4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
 
-Not verified yet: declaration promotion, the Release inlining test, Windows, the Unity 6
-Editors, and the full EditMode workflow.
+Not verified yet: the file-local refusal reason on an Editor whose compiler parses `file`, the
+Release inlining test, Windows, the Unity 6 Editors, and the full EditMode workflow.
 
 Before merging the production feature:
 

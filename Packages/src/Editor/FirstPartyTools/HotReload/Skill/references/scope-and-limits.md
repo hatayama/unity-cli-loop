@@ -204,8 +204,9 @@ diagnosing or tuning, keep every edit inside existing method bodies — inline a
 helper's logic at its call site for now instead of extracting it. New helper methods
 and fields can now be explored directly with hot reload, across the files of one
 assembly: pass the files you edited; unchanged files that already hold active
-patches are re-applied with that group. A top-level `public` class, struct, enum, or interface declared in an
-edited file is introduced by that reload too (`introduced-types.md`). When the change needs
+patches are re-applied with that group. A top-level class, struct, enum, or interface declared `public`, `internal`,
+or without an access modifier in an edited file is introduced by that reload too, and can use the
+assembly's internal members (`introduced-types.md`). When the change needs
 another new-type shape, visibility from another assembly or from a file outside the reload,
 runtime name-based lookup, or serialization, collect those and run `uloop compile` once: every compile triggers a domain reload that drops all active patches and pause points
 and resets the running PlayMode session, so compiling member-by-member pays that cost
