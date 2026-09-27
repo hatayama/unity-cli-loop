@@ -216,6 +216,26 @@ internal static class AddedFieldBodyScan
         return false;
     }
 
+    // Why a deconstruction element is a skip: it has to be assignable, and the store rewrite
+    // turns an added field into a GetOrInit call whose value cannot be assigned, so the shim would
+    // fail to compile instead of skipping the method.
+    internal static bool BodyDeconstructsIntoAddedField(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (ExpressionSyntax expression in bodyNode.DescendantNodesAndSelf().OfType<ExpressionSyntax>())
+        {
+            if (AssignmentTargetRules.IsDeconstructionTarget(expression)
+                && IsStoreAddedField(semanticModel, expression, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static bool BodyHasNonNumericAddedFieldIncrement(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,

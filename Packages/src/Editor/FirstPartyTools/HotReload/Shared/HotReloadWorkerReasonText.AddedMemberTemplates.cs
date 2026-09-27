@@ -152,6 +152,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Assignment to an added field would evaluate a receiver with possible side effects twice.",
                     0).EndingWith(CompileCallToAction));
             templates.Add(
+                HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,
+                // Why name the plain statement: the store rewrite already handles it, so that edit
+                // applies without a compile.
+                Plain(
+                    "Deconstruction assignment to an added field is skipped; the store write cannot stand as a "
+                    + "deconstruction target. Assign the field in its own statement 'F = value;', which the "
+                    + "store rewrite handles.",
+                    0).EndingWith(CompileCallToAction));
+            templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 Plain(
                     "Writes to members of an added value-type field, and instance method calls on that field, "

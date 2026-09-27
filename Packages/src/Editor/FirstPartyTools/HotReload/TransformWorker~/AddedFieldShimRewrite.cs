@@ -288,11 +288,6 @@ internal sealed class AddedFieldShimRewrite
             SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
     }
 
-    internal static bool IsAssignmentLeft(SyntaxNode node)
-    {
-        return node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node;
-    }
-
     internal static bool IsIncrementOperand(SyntaxNode node)
     {
         if (node.Parent is PrefixUnaryExpressionSyntax prefix

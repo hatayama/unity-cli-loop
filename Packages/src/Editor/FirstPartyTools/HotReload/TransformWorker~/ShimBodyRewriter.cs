@@ -389,7 +389,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
             ?? _semanticModel.GetSymbolInfo(node.Name).Symbol;
-        if (!AddedFieldShimRewrite.IsAssignmentLeft(node) && !AddedFieldShimRewrite.IsIncrementOperand(node))
+        if (AssignmentTargetRules.AssignmentTargetedBy(node) == null && !AddedFieldShimRewrite.IsIncrementOperand(node))
         {
             SyntaxNode addedFieldRead = AddedFields.TryRewriteAddedFieldRead(symbol, node.Expression, node);
             if (addedFieldRead != null)
@@ -422,7 +422,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitMemberAccessExpression(node);
         }
 
-        if (node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node)
+        if (AssignmentTargetRules.AssignmentTargetedBy(node) != null)
         {
             return base.VisitMemberAccessExpression(node);
         }
@@ -510,9 +510,11 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         };
     }
 
+    // Why look through parentheses: `(a.P) = 1` writes a's P, and falling back to the running
+    // instance would aim the rewritten write at the wrong object.
     internal ExpressionSyntax ExtractReceiver(ExpressionSyntax expression)
     {
-        if (expression is MemberAccessExpressionSyntax memberAccess)
+        if (AssignmentTargetRules.Unparenthesized(expression) is MemberAccessExpressionSyntax memberAccess)
         {
             return memberAccess.Expression;
         }

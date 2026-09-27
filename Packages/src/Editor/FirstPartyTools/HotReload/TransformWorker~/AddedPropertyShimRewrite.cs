@@ -63,11 +63,14 @@ internal sealed class AddedPropertyShimRewrite
             return null;
         }
 
-        ISymbol symbol = _rewriter._semanticModel.GetSymbolInfo(node.Left).Symbol;
-        ExpressionSyntax receiverSyntax = node.Left is MemberAccessExpressionSyntax memberAccess
+        // Why the target inside any parentheses: `(a.P) = 1` sets a's P, and without that receiver
+        // the setter would run on the instance running the method.
+        ExpressionSyntax target = AssignmentTargetRules.Unparenthesized(node.Left);
+        ISymbol symbol = _rewriter._semanticModel.GetSymbolInfo(target).Symbol;
+        ExpressionSyntax receiverSyntax = target is MemberAccessExpressionSyntax memberAccess
             ? memberAccess.Expression
             : null;
-        string memberName = node.Left is MemberAccessExpressionSyntax namedAccess
+        string memberName = target is MemberAccessExpressionSyntax namedAccess
             ? namedAccess.Name.Identifier.ValueText
             : null;
         AddedPropertyBinding binding = ResolveBinding(symbol, receiverSyntax, memberName);

@@ -106,9 +106,11 @@ internal static class RetainedNonPublicMemberUseGuard
 
     // The member access a property name is the name of, so the name and the access around it
     // resolve to the same site. Why a `?.` member binding needs no case: before C# 14 it can only
-    // be read, as any other parent is. Why parentheses are not looked through: `(a.P)` resolves to
-    // P itself, so `(a.P) = 1` is judged at the parentheses as a write, and the access inside
-    // counts as a read the way InaccessibleAccessScanner reads it.
+    // be read, as any other parent is. Parentheses need no case here either: FindUse visits `(a.P)`
+    // as a site of its own, since it resolves to P too. AssignmentTargetRules judges it and the
+    // access inside by the assignment around them, so `(a.P) = 1` calls only the setter wherever
+    // it is looked at, and `(a.P)++` counts the setter at the parentheses, whose parent the
+    // increment is.
     private static SyntaxNode AccessedExpression(SyntaxNode node)
     {
         return node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node
@@ -118,24 +120,24 @@ internal static class RetainedNonPublicMemberUseGuard
 
     private static bool CallsSetter(SyntaxNode site)
     {
-        AssignmentExpressionSyntax assignment = AssignmentTargetedBy(site);
+        AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(site);
         if (assignment != null)
         {
             return !IsNestedInitializer(assignment);
         }
 
-        return IsIncrementOperand(site) || IsDeconstructionTarget(site);
+        return IsIncrementOperand(site) || AssignmentTargetRules.IsDeconstructionTarget(site);
     }
 
     private static bool CallsGetter(SyntaxNode site)
     {
-        AssignmentExpressionSyntax assignment = AssignmentTargetedBy(site);
+        AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(site);
         if (assignment != null)
         {
             return !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) || IsNestedInitializer(assignment);
         }
 
-        return !IsDeconstructionTarget(site);
+        return !AssignmentTargetRules.IsDeconstructionTarget(site);
     }
 
     // `P = { ... }` inside an object initializer reads P and fills what it returns, never setting it.
@@ -144,31 +146,12 @@ internal static class RetainedNonPublicMemberUseGuard
         return assignment.Right is InitializerExpressionSyntax;
     }
 
-    private static AssignmentExpressionSyntax AssignmentTargetedBy(SyntaxNode site)
-    {
-        return site.Parent is AssignmentExpressionSyntax assignment && assignment.Left == site
-            ? assignment
-            : null;
-    }
-
     private static bool IsIncrementOperand(SyntaxNode site)
     {
         return (site.Parent is PrefixUnaryExpressionSyntax prefix
                 && (prefix.IsKind(SyntaxKind.PreIncrementExpression) || prefix.IsKind(SyntaxKind.PreDecrementExpression)))
             || (site.Parent is PostfixUnaryExpressionSyntax postfix
                 && (postfix.IsKind(SyntaxKind.PostIncrementExpression) || postfix.IsKind(SyntaxKind.PostDecrementExpression)));
-    }
-
-    // An element of a tuple, at any depth, that a simple assignment deconstructs into.
-    private static bool IsDeconstructionTarget(SyntaxNode site)
-    {
-        SyntaxNode target = site;
-        while (target.Parent is ArgumentSyntax argument && argument.Parent is TupleExpressionSyntax tuple)
-        {
-            target = tuple;
-        }
-
-        return target != site && AssignmentTargetedBy(target) != null;
     }
 
     // Why a missing accessor counts as public, unlike AccessibilityRules.IsInaccessibleAccessor:
