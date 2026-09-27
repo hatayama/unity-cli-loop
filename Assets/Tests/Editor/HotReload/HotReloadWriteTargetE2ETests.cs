@@ -169,6 +169,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a closure that already takes the accessor rewrite, deconstructing into a
+        /// ref-returning indexer or property that has no setter, is patched and writes through
+        /// the reference the public getter returns.
+        /// </summary>
+        // Why beside a private field write: it alone sends the closure to the accessor plan, which
+        // has to judge such an element by the getter it calls, not by the setter it lacks.
+        [TestCase(
+            "RefIndexer",
+            "HotReloadWriteTargetSlots slots = new HotReloadWriteTargetSlots(); (slots[0], slots[1]) = (3, 7); "
+            + "other.Hidden = slots[0] * 10 + slots[1];",
+            1,
+            37)]
+        [TestCase("RefProperty", "int ignored; (other.StoredSlot, ignored) = (5, 1);", 5, 0)]
+        public async Task Run_ClosureDeconstructingIntoARefReturningMemberWithoutASetter_WritesThroughIt(
+            string label,
+            string statements,
+            int stored,
+            int hidden)
+        {
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunCopyIntoAsync(
+                    "DeconstructedRefReturning" + label,
+                    string.Empty,
+                    InClosure("other._stored = 1; " + statements));
+                AssertCopyIntoWrites(result, stored, 0, hidden);
+            });
+        }
+
+        /// <summary>
         /// Verifies that a closure deconstructing into a property whose setter only the declaring
         /// type may call, alone or beside a private field write, is skipped with a reason naming
         /// the deconstruction, and the compiled body keeps running.

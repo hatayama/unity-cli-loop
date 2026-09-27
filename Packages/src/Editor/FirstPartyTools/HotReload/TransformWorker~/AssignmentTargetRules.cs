@@ -47,6 +47,16 @@ internal static class AssignmentTargetRules
         return isElement && AssignmentTargetedBy(target) != null;
     }
 
+    /// <summary>
+    /// Whether the node is a deconstruction element that sets the property through its setter. A
+    /// ref-returning property has no setter to call: the deconstruction writes through the
+    /// reference its getter returns, the accessor a read of it calls too.
+    /// </summary>
+    internal static bool IsDeconstructedThroughSetter(IPropertySymbol property, SyntaxNode node)
+    {
+        return !property.ReturnsByRef && !property.ReturnsByRefReadonly && IsDeconstructionTarget(node);
+    }
+
     private static SyntaxNode OutermostParentheses(SyntaxNode node)
     {
         SyntaxNode current = node;

@@ -140,12 +140,13 @@ internal static class AccessorAccessRegistrar
         ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
         if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
         {
-            if (AssignmentTargetRules.IsDeconstructionTarget(elementAccess))
+            if (AssignmentTargetRules.IsDeconstructedThroughSetter(indexer, elementAccess))
             {
                 return AccessorPropertyWriteRules.TryRegisterDeconstructedPropertyWrite(indexer, out rejectReason);
             }
 
-            // Standalone ElementAccess is a read — only the getter matters.
+            // Any other ElementAccess calls only the getter: a read, or a deconstruction into a
+            // ref-returning indexer, which writes through the reference the getter returns.
             if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
             {
                 rejectReason =
@@ -255,9 +256,11 @@ internal static class AccessorAccessRegistrar
             out rejectReason);
     }
 
-    // A property a deconstruction sets is a write; every other use outside an assignment left side
-    // is a read. Why a field element stays with the reads: its ref accessor is assignable, so the
-    // deconstruction writes through it.
+    // A property a deconstruction sets through its setter is a write; every other use outside an
+    // assignment left side calls the getter as a read does, including a deconstruction into a
+    // ref-returning property, which writes through the reference the getter returns. Why a field
+    // element stays with the reads: its ref accessor is assignable, so the deconstruction writes
+    // through it.
     private static bool TryRegisterUseOutsideAssignment(
         ExpressionSyntax site,
         ISymbol symbol,
@@ -265,7 +268,8 @@ internal static class AccessorAccessRegistrar
         AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
-        if (symbol is IPropertySymbol propertySymbol && AssignmentTargetRules.IsDeconstructionTarget(site))
+        if (symbol is IPropertySymbol propertySymbol
+            && AssignmentTargetRules.IsDeconstructedThroughSetter(propertySymbol, site))
         {
             return AccessorPropertyWriteRules.TryRegisterDeconstructedPropertyWrite(propertySymbol, out rejectReason);
         }

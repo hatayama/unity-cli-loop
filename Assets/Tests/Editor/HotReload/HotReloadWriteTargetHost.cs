@@ -18,6 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public int Stored => _stored;
 
+        // Why a ref-returning property without a setter: a write to it goes through the reference
+        // its public getter returns, so it calls no setter at all.
+        public ref int StoredSlot => ref _stored;
+
         public int HiddenValue => Hidden;
 
         // Why a private getter beside a public setter: only a read through the indexer needs an
@@ -37,5 +41,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             other.Tally = 0;
             other.Hidden = 0;
         }
+    }
+
+    /// <summary>
+    /// Compiled type whose indexer returns a reference and has no setter, the shape of the
+    /// indexer of <see cref="System.Span{T}"/>. Tests write its slots by deconstruction.
+    /// </summary>
+    public sealed class HotReloadWriteTargetSlots
+    {
+        private readonly int[] _values = new int[2];
+
+        public ref int this[int index] => ref _values[index];
     }
 }

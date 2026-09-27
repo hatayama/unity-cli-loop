@@ -277,11 +277,12 @@ internal static class InaccessibleAccessScanner
     }
 
     // The accessor a property use that is not an assignment left side calls. Why the setter for a
-    // deconstruction element: `(a.P, b) = t` sets P and never reads it, while every other such use
-    // reads the property.
+    // deconstruction element: `(a.P, b) = t` sets P and never reads it. Every other such use calls
+    // the getter, and so does a deconstruction into a ref-returning P, which writes through the
+    // reference the getter returns.
     private static IMethodSymbol AccessorCalledOutsideAssignment(IPropertySymbol property, SyntaxNode site)
     {
-        return AssignmentTargetRules.IsDeconstructionTarget(site) ? property.SetMethod : property.GetMethod;
+        return AssignmentTargetRules.IsDeconstructedThroughSetter(property, site) ? property.SetMethod : property.GetMethod;
     }
 
     // Why exclude const: a const field is IsStatic, but it has no runtime storage.
