@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 // The accessibility an introduced declaration is compiled with. The artifact is an assembly of
 // its own, so a type the user left internal, or wrote without an access modifier, has to be public
@@ -27,6 +28,22 @@ internal static class IntroducedTypeSourceAccessibility
     internal static string ToArtifactDeclarationText(BaseTypeDeclarationSyntax declaration)
     {
         string original = declaration.ToFullString();
+        TextChange? promotion = PromotionChange(declaration);
+        if (promotion == null)
+        {
+            return original;
+        }
+
+        int start = promotion.Value.Span.Start - declaration.FullSpan.Start;
+        return original.Remove(start, promotion.Value.Span.Length).Insert(start, promotion.Value.NewText);
+    }
+
+    /// <summary>
+    /// The one change that makes the declaration's implicit or internal accessibility public, at
+    /// positions of the tree that holds the declaration, or null when its accessibility stays.
+    /// </summary>
+    internal static TextChange? PromotionChange(BaseTypeDeclarationSyntax declaration)
+    {
         SyntaxTokenList modifiers = declaration.Modifiers;
         // Why private and protected stay: neither is valid on a top-level type, and quietly making
         // the artifact public would load a type the next real compile rejects.
@@ -34,20 +51,17 @@ internal static class IntroducedTypeSourceAccessibility
             || modifiers.Any(SyntaxKind.PrivateKeyword)
             || modifiers.Any(SyntaxKind.ProtectedKeyword))
         {
-            return original;
+            return null;
         }
 
-        int fullStart = declaration.FullSpan.Start;
         SyntaxToken internalModifier = modifiers.FirstOrDefault(modifier => modifier.IsKind(SyntaxKind.InternalKeyword));
         if (internalModifier.IsKind(SyntaxKind.InternalKeyword))
         {
-            return original
-                .Remove(internalModifier.SpanStart - fullStart, internalModifier.Span.Length)
-                .Insert(internalModifier.SpanStart - fullStart, "public");
+            return new TextChange(internalModifier.Span, "public");
         }
 
         SyntaxToken firstHeaderToken = modifiers.Count > 0 ? modifiers[0] : DeclarationKeyword(declaration);
-        return original.Insert(firstHeaderToken.SpanStart - fullStart, "public ");
+        return new TextChange(new TextSpan(firstHeaderToken.SpanStart, 0), "public ");
     }
 
     private static SyntaxToken DeclarationKeyword(BaseTypeDeclarationSyntax declaration)

@@ -13,9 +13,10 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 internal static class RetainedDeclarationStage
 {
     // Removes from each unit's binding tree the declarations a retained artifact already serves
-    // unchanged, records the ones whose method bodies this edit changed, and reports why the
-    // artifacts could not be used at all. Returns null when the run has no artifact to bind
-    // against, which is every run until introduced types are in play.
+    // unchanged, records the ones whose method bodies this edit changed and binds them with the
+    // accessibility their artifact was compiled with, and reports why the artifacts could not be
+    // used at all. Returns null when the run has no artifact to bind against, which is every run
+    // until introduced types are in play.
     internal static string PrepareBindingTrees(
         WorkerInput input,
         List<WorkerSourceUnit> loadedUnits,
@@ -86,8 +87,10 @@ internal static class RetainedDeclarationStage
         List<string> bindingParseErrors = new List<string>();
         foreach (KeyValuePair<WorkerSourceUnit, List<RetainedDeclarationVerdict>> entry in verdicts)
         {
-            IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(
-                entry.Key, ApplyVerdicts(entry.Key, entry.Value), parseOptions, bindingParseErrors);
+            (List<BaseTypeDeclarationSyntax> removable, List<BaseTypeDeclarationSyntax> kept) =
+                ApplyVerdicts(entry.Key, entry.Value);
+            IntroducedTypeBindingRewriter.RewriteRetainedDeclarations(
+                entry.Key, removable, kept, parseOptions, bindingParseErrors);
         }
 
         if (bindingParseErrors.Count > 0)
@@ -116,14 +119,15 @@ internal static class RetainedDeclarationStage
         }
     }
 
-    // Records what the unit's verdicts mean for it and returns the declarations to remove. The
-    // recording happens before the removal, because the rewriter replaces the unit's tree and
-    // these declarations belong to the tree it replaces.
-    private static List<BaseTypeDeclarationSyntax> ApplyVerdicts(
+    // Records what the unit's verdicts mean for it and returns the declarations to remove and the
+    // ones kept to transform their bodies. The recording happens before the rewrite, because the
+    // rewriter replaces the unit's tree and these declarations belong to the tree it replaces.
+    private static (List<BaseTypeDeclarationSyntax> Removable, List<BaseTypeDeclarationSyntax> Kept) ApplyVerdicts(
         WorkerSourceUnit unit,
         List<RetainedDeclarationVerdict> verdicts)
     {
         List<BaseTypeDeclarationSyntax> removable = new List<BaseTypeDeclarationSyntax>();
+        List<BaseTypeDeclarationSyntax> kept = new List<BaseTypeDeclarationSyntax>();
         foreach (RetainedDeclarationVerdict verdict in verdicts)
         {
             if (verdict.Match.Kind == IntroducedTypeFingerprintMatchKind.Identical)
@@ -154,9 +158,10 @@ internal static class RetainedDeclarationStage
                 ChangedMethodKeys = verdict.Match.ChangedMethodSyntaxKeys.ToArray(),
                 ChangedGetterPropertyKeys = verdict.Match.ChangedGetterPropertySyntaxKeys.ToArray()
             });
+            kept.Add(verdict.Declaration);
         }
 
-        return removable;
+        return (removable, kept);
     }
 
     // Built from the syntax rather than the symbol: the drift check strips by the syntax key of

@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
@@ -12,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// <summary>
     /// End-to-end coverage of introduced declarations that are internal or carry no access
     /// modifier: they are introduced as public artifact types, keep their source fingerprint, and
-    /// follow the rules of compiled internal types when their bodies are edited later.
+    /// end like public introduced types when their bodies are edited later.
     /// </summary>
     public sealed class HotReloadIntroducedTypeInternalDeclarationE2ETests : HotReloadIntroducedTypeCallerE2ETestBase
     {
@@ -179,55 +177,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// Verifies that editing the body of an introduced internal type ends like the same edit of
-        /// a compiled internal type: a plain body is patched on both, and a closure reaching an
-        /// internal member is skipped on both for the same reason.
+        /// an introduced public type, because both run from a public artifact type: a plain body is
+        /// patched on both, a closure reading an internal member of the compiled assembly is
+        /// skipped on both because the shim cannot name that member's type, and a closure reading
+        /// the type's own private field ends the same on both.
         /// </summary>
         [TestCase("plain")]
-        [TestCase("closure")]
-        public async Task Run_InternalIntroducedBodyEdit_MatchesCompiledInternalType(string shape)
+        [TestCase("closureReadingCompiledInternal")]
+        [TestCase("closureReadingOwnPrivate")]
+        public async Task Run_InternalIntroducedBodyEdit_MatchesPublicIntroducedType(string shape)
         {
-            string editedBody = shape == "plain"
-                ? "return 2;"
-                : "System.Func<int> read = () => HotReloadInternalAccessFixture.Read(); return read();";
             const string callerExpression =
-                "new IntroducedBodyEdit().Read() * 10 + new HotReloadInternalBodyEditFixture().Read()";
-            string fixturePath = FixturePath("HotReloadInternalAccessFixtures.cs");
-            string fixtureSource = File.ReadAllText(fixturePath);
-            Assert.That(
-                fixtureSource.IndexOf(BodyEditAnchor, StringComparison.Ordinal),
-                Is.EqualTo(fixtureSource.LastIndexOf(BodyEditAnchor, StringComparison.Ordinal)),
-                "Precondition: only the compiled fixture's body may hold the anchor.");
+                "new IntroducedBodyEdit().Read() * 10 + new PublicIntroducedBodyEdit().Read()";
 
             await RunInIntroducedTypeDomainAsync(async _ =>
             {
                 HotReloadOrchestratorResult first = await RunAsync(
                     "BodyEditFirst" + shape,
                     callerExpression,
-                    Owner(OwnerPath, IntroducedBodyEdit(BodyEditAnchor)));
+                    Owner(OwnerPath, IntroducedBodyEdits(BodyEditAnchor)));
                 AssertIntroduced(first, "IntroducedBodyEdit");
+                AssertIntroduced(first, "PublicIntroducedBodyEdit");
                 Assert.That(CallTheCaller(), Is.EqualTo(11), DescribeOutcomes(first));
 
-                Dictionary<string, string> sources = Owner(OwnerPath, IntroducedBodyEdit(editedBody));
-                sources[fixturePath] = fixtureSource.Replace(BodyEditAnchor, editedBody, StringComparison.Ordinal);
-                HotReloadOrchestratorResult edited = await RunAsync("BodyEditSecond" + shape, callerExpression, sources);
+                HotReloadOrchestratorResult edited = await RunAsync(
+                    "BodyEditSecond" + shape,
+                    callerExpression,
+                    Owner(OwnerPath, IntroducedBodyEdits(EditedBody(shape))));
 
                 string description = DescribeOutcomes(edited);
-                HotReloadMethodOutcome introducedRow = FindMethodRow(edited, Namespace + ".IntroducedBodyEdit.Read");
-                HotReloadMethodOutcome compiledRow = FindMethodRow(edited, Namespace + ".HotReloadInternalBodyEditFixture.Read");
-                Assert.That(introducedRow, Is.Not.Null, description);
-                Assert.That(compiledRow, Is.Not.Null, description);
-                Assert.That(introducedRow.Kind, Is.EqualTo(compiledRow.Kind), description);
-                if (shape == "plain")
-                {
-                    Assert.That(compiledRow.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), description);
-                    Assert.That(CallTheCaller(), Is.EqualTo(22), description);
-                    return;
-                }
-
-                Assert.That(compiledRow.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), description);
-                Assert.That(compiledRow.Reason, Does.Contain("Lambda, local-function, or query-expression bodies"), description);
-                Assert.That(introducedRow.Reason, Is.EqualTo(compiledRow.Reason), description);
-                Assert.That(CallTheCaller(), Is.EqualTo(11), description);
+                HotReloadMethodOutcome internalRow = FindMethodRow(edited, Namespace + ".IntroducedBodyEdit.Read");
+                HotReloadMethodOutcome publicRow = FindMethodRow(edited, Namespace + ".PublicIntroducedBodyEdit.Read");
+                Assert.That(internalRow, Is.Not.Null, description);
+                Assert.That(publicRow, Is.Not.Null, description);
+                Assert.That(internalRow.Kind, Is.EqualTo(publicRow.Kind), description);
+                Assert.That(internalRow.Reason, Is.EqualTo(publicRow.Reason), description);
+                AssertBodyEditOutcome(shape, publicRow, description);
             });
         }
 
@@ -283,9 +268,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(grant.GrantCalls, Is.Zero);
         }
 
-        private static string IntroducedBodyEdit(string body)
+        // The two declarations differ only in the access modifier and the name, so an edit applied
+        // to both is the same edit of an internal and of a public introduced type.
+        private static string IntroducedBodyEdits(string body)
         {
-            return "internal sealed class IntroducedBodyEdit { " + NoInlining + "public int Read() { " + body + " } }";
+            return IntroducedBodyEdit("internal", "IntroducedBodyEdit", body)
+                + "\n\n    "
+                + IntroducedBodyEdit("public", "PublicIntroducedBodyEdit", body);
+        }
+
+        private static string IntroducedBodyEdit(string access, string name, string body)
+        {
+            return access + " sealed class " + name + " { private int _value = 2; "
+                + NoInlining + "public int Read() { " + body + " } }";
+        }
+
+        private static string EditedBody(string shape)
+        {
+            return shape switch
+            {
+                "plain" => "return 2;",
+                "closureReadingCompiledInternal" =>
+                    "System.Func<int> read = () => HotReloadInternalAccessFixture.Read(); return read();",
+                "closureReadingOwnPrivate" => "System.Func<int> read = () => _value; return read();",
+                _ => throw new ArgumentException("Unknown shape: " + shape, nameof(shape))
+            };
+        }
+
+        // The absolute outcome of the public side, so the equality with the internal side cannot
+        // pass by both breaking the same way.
+        private static void AssertBodyEditOutcome(string shape, HotReloadMethodOutcome publicRow, string description)
+        {
+            if (shape == "closureReadingCompiledInternal")
+            {
+                Assert.That(publicRow.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), description);
+                Assert.That(publicRow.Reason, Does.Contain("body uses a type that is not visible"), description);
+                Assert.That(CallTheCaller(), Is.EqualTo(11), description);
+                return;
+            }
+
+            Assert.That(publicRow.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), description);
+            Assert.That(CallTheCaller(), Is.EqualTo(22), description);
         }
 
         private static bool HasIntroducedTypeRow(

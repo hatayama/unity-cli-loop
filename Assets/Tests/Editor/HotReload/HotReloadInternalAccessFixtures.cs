@@ -47,19 +47,4 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Read() + 100;
         }
     }
-
-    /// <summary>
-    /// A compiled internal type whose body a test edits exactly like the body of an introduced
-    /// internal type, so the two outcomes can be compared.
-    /// </summary>
-    internal sealed class HotReloadInternalBodyEditFixture
-    {
-        // Why NoInlining: the test reads the edited body back through the patched caller, which
-        // an inlined copy at the call site would not observe.
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public int Read()
-        {
-            return 1;
-        }
-    }
 }
