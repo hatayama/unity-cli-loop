@@ -47,9 +47,13 @@ inlined, before any type of the artifact becomes active.
   compile`); it compiles only when the base is introduced in the same reload.
 - Internals look public to this compile, so it can accept what a regular compile rejects (a
   `public` member exposing an `internal` type). `uloop compile` is the real check.
-- Body edits of an introduced `internal` type follow the same rules as a compiled internal
-  type: a lambda, local function, or query expression that reads a private or internal member
-  is `Skipped` on both.
+- Body edits of, and members added to, an introduced `internal` or modifier-less type end as on
+  a `public` introduced type, and what other types add that names it stays applied. A lambda,
+  local function, or query expression that uses a compiled `internal` type is `Skipped` on both.
+- A member another type adds cannot use a non-public member of an introduced type until
+  `uloop compile`. It is `Skipped` on every reload: with `Added members of other types cannot
+  use '…', a non-public member of a type hot reload introduced` when the reload edits that type,
+  and as a body that could not be bound otherwise.
 
 When an edited body in the same run names a refused type, its shim compile fails with CS0246,
 CS0234, or CS0426, or with CS0103 or CS0117 when the body reads a static member of it. That `Failed` row's `Reason` then ends with a note that quotes the refusal

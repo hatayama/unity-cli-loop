@@ -20,6 +20,9 @@ The implementation has three cooperating mechanisms:
    only in the source emitted for the introduced-type artifact. Keep the user's source,
    declaration fingerprint, source hash, and original assembly identity unchanged. The
    artifact's metadata remains usable by subsequent hot-reload compilation and by callers.
+   When a later reload keeps a retained declaration in the worker to patch its bodies or add
+   members, the worker binds that declaration with the same promotion, so code of other types
+   that names it is judged against the public type the domain runs.
 2. **Expose internals in compile-time references.** Compile the artifact against copies of its
    target assembly and that target's active introduced-type artifacts with the assembly part
    of accessibility removed. Other referenced assemblies stay unchanged. These copies are
@@ -190,9 +193,13 @@ requested aggressive inlining. Debug execution does not exercise this failure mo
 - Friend-assembly relationships to other target assemblies are not expanded by this decision.
 - Artifact methods do not inline, even when their source requested aggressive inlining.
   This has a runtime cost and also keeps later method replacement observable by callers.
-- Body edits of an internal introduced type still use the worker's source accessibility rules.
-  They can produce the same Skipped outcomes as equivalent edits to compiled internal types;
-  the initial introduction succeeding does not promise every later body shape is patchable.
+- Body edits of, and members added to, a retained internal or modifier-less introduced type end
+  like the same edits of a public introduced type, and the members other types add that name it
+  stay applied. The initial introduction succeeding still does not promise every later body
+  shape is patchable.
+- Members that other types add cannot use a non-public member of a retained introduced type
+  until a compile. Only the reloads that edit that type can bind such a member, so it is skipped
+  on every reload instead of being applied on some and dropped on the next.
 - Internal reference copies incur a Cecil rewrite per MVID and are cached separately from
   fully publicized shim references. Copy files are compile-time artifacts, not active types.
 - The runtime mechanism depends on Mono internals. A supported Editor for which the probe
@@ -238,9 +245,15 @@ code optimization unless a point says Release:
   that keeps the earlier type. A top-level `private` or `protected` declaration is not repaired
   (CS1527). Internal declarations of the other refused shapes keep their own reasons. Without the
   grant a plain internal type is still introduced and one reading internals fails with CS0122.
-  A body edit of an introduced internal type ends like the same edit of a compiled internal
-  type: `Patched` for a plain body, `Skipped` with the same reason for a closure reading an
-  internal member.
+  A body edit of an introduced internal type ends like the same edit of a public introduced
+  type: `Patched` for a plain body and for a closure reading its own private field, `Skipped`
+  for a closure that uses a compiled internal type. Methods and fields that compiled types add
+  and that name a retained internal or modifier-less type stay applied across its body edits;
+  before the worker bound the kept declaration as public, such an edit skipped them, which
+  usability testing reported. Members added to the retained type apply as on a public introduced
+  type, and a compiled type sharing its file keeps its added properties. A method a compiled type
+  adds that calls an internal method of the retained type is skipped on the reload that
+  introduces the type, on one that edits it, and on one that leaves it unchanged.
 - The file-local refusal reason is not exercised: the compiler bundled with 2022.3 (Roslyn
   4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
 
