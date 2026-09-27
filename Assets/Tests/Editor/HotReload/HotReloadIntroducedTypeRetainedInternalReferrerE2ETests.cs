@@ -76,6 +76,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        }\n"
             + "\n";
 
+        // Added methods of a compiled type that each call one accessor of a retained type's
+        // properties, where every property keeps one accessor non-public.
+        private static readonly string AddedMethodsCallingAccessors =
+            "        public int AddedWritesGuardedSetter()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            accessors.GuardedSetter = 5;\n"
+            + "            return 0;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedReadsGuardedGetter()\n"
+            + "        {\n"
+            + "            return new RetainedAccessors().GuardedGetter;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedCompoundsGuardedGetter()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            accessors.GuardedGetter += 5;\n"
+            + "            return 0;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedDeconstructsIntoGuardedSetter()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            int other;\n"
+            + "            (accessors.GuardedSetter, other) = (5, 6);\n"
+            + "            return other;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedFillsGuardedGetterItems()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors { GuardedItems = { 7 } };\n"
+            + "            return 0;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedReadsPublicGetter()\n"
+            + "        {\n"
+            + "            return new RetainedAccessors().GuardedSetter + 40;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedWritesPublicSetter()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            accessors.GuardedGetter = 5;\n"
+            + "            return 2;\n"
+            + "        }\n"
+            + "\n";
+
+        private static readonly string[] MethodsCallingNonPublicAccessors =
+        {
+            "AddedWritesGuardedSetter",
+            "AddedReadsGuardedGetter",
+            "AddedCompoundsGuardedGetter",
+            "AddedDeconstructsIntoGuardedSetter",
+            "AddedFillsGuardedGetterItems"
+        };
+
+        private static readonly string[] MethodsCallingPublicAccessors =
+        {
+            "AddedReadsPublicGetter",
+            "AddedWritesPublicSetter"
+        };
+
         // A compiled type's added auto-property and the added method that writes and reads it.
         private static readonly string AddedPropertyOnTheHost =
             "        public int AddedCount { get; set; }\n"
@@ -352,6 +416,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that methods a compiled type adds around properties of a retained introduced
+        /// type that keep one accessor non-public are judged by the accessors they call, the same
+        /// way on every reload: a write through an internal setter, a read, a compound assignment,
+        /// or a nested collection initializer through an internal getter, and a deconstruction
+        /// into an internal setter are skipped each time, while a read or a write that calls only
+        /// the public accessor is applied and runs each time.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodsUsingAccessorsOfRetainedType_AreJudgedByTheAccessorsTheyCall()
+        {
+            const string callerExpression = "host.AddedReadsPublicGetter() + host.AddedWritesPublicSetter()";
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    "AccessorsFirst",
+                    callerExpression,
+                    WithHostAdditions(Owner(OwnerPath, RetainedAccessors(1)), AddedMethodsCallingAccessors));
+                AssertIntroduced(introducing, "RetainedAccessors");
+                AssertAccessorCallers(introducing, UnboundBodyReason);
+
+                HotReloadOrchestratorResult edited = await RunAsync(
+                    "AccessorsSecond",
+                    callerExpression,
+                    WithHostAdditions(Owner(OwnerPath, RetainedAccessors(2)), AddedMethodsCallingAccessors));
+                AssertOutcome(edited, HotReloadMethodOutcomeKind.Patched, Namespace + ".RetainedAccessors.Read");
+                AssertAccessorCallers(edited, "a non-public member of a type hot reload introduced");
+
+                HotReloadOrchestratorResult hostOnly = await RunAsync(
+                    "AccessorsThird",
+                    callerExpression,
+                    WithHostAdditions(new Dictionary<string, string>(), AddedMethodsCallingAccessors));
+                AssertAccessorCallers(hostOnly, UnboundBodyReason);
+            });
+        }
+
+        /// <summary>
         /// Verifies that a retained internal introduced type with a public method whose signature
         /// uses an internal type of the compiled assembly still has a body edit patched: binding it
         /// as public exposes that signature, and nothing about the edit depends on it.
@@ -465,6 +565,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "    }";
         }
 
+        private static string RetainedAccessors(int value)
+        {
+            return "internal sealed class RetainedAccessors\n"
+                + "    {\n"
+                + "        public int GuardedSetter { get; internal set; }\n"
+                + "\n"
+                + "        public int GuardedGetter { internal get; set; }\n"
+                + "\n"
+                + "        public System.Collections.Generic.List<int> GuardedItems { internal get; set; }\n"
+                + "\n"
+                + "        " + NoInlining + "public int Read() { return " + value.ToString() + "; }\n"
+                + "    }";
+        }
+
         private static string RetainedInternalSignature(int value)
         {
             return "internal sealed class RetainedInternalSignature\n"
@@ -530,6 +644,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.Fail("No " + kind + " row mentions " + methodFragment + ".\n" + DescribeOutcomes(result));
+        }
+
+        // Each method calling a non-public accessor is skipped for the given reason, and the methods
+        // calling only public accessors are added and return what the caller sums.
+        private static void AssertAccessorCallers(HotReloadOrchestratorResult result, string skipReasonFragment)
+        {
+            foreach (string method in MethodsCallingNonPublicAccessors)
+            {
+                AssertOutcome(result, HotReloadMethodOutcomeKind.Skipped, method);
+                AssertReasonContains(result, method, skipReasonFragment);
+            }
+
+            foreach (string method in MethodsCallingPublicAccessors)
+            {
+                AssertOutcome(result, HotReloadMethodOutcomeKind.Added, method);
+            }
+
+            Assert.That(CallTheCaller(), Is.EqualTo(42), DescribeOutcomes(result));
         }
 
         private static void AssertReasonContains(
