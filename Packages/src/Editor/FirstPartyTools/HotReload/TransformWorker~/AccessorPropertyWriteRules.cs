@@ -89,6 +89,26 @@ internal static class AccessorPropertyWriteRules
         return true;
     }
 
+    // A deconstruction calls only the setter of a property it sets. An accessible setter needs no
+    // accessor; an inaccessible one has no rewrite shape, because a setter delegate returns void and
+    // cannot stand where the deconstruction needs an assignable element.
+    internal static bool TryRegisterDeconstructedPropertyWrite(
+        IPropertySymbol propertySymbol,
+        out WorkerReason rejectReason)
+    {
+        rejectReason = null;
+        if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
+        {
+            return false;
+        }
+
+        rejectReason = WorkerReason.Of(
+            propertySymbol.IsIndexer
+                ? HotReloadWorkerReasonCode.AccessorIndexerNoShape
+                : HotReloadWorkerReasonCode.AccessorDeconstructionPropertyNoShape);
+        return false;
+    }
+
     internal static WorkerReason TryGetPropertyWriteShapeRejectReason(
         SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment,

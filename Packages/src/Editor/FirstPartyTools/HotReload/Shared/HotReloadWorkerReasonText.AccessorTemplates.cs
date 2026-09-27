@@ -158,6 +158,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "has no accessor rewrite shape.",
                     0));
             templates.Add(
+                HotReloadWorkerReasonCode.AccessorDeconstructionPropertyNoShape,
+                // Why name the rewrite: the accessor rewrite already handles the same write as a
+                // plain assignment statement, so that edit applies without a compile.
+                Plain(
+                    "a deconstruction setting a property with an inaccessible setter has no accessor "
+                    + "rewrite shape; set that property in its own statement 'X = value;', which the "
+                    + "accessor rewrite handles.",
+                    0));
+            templates.Add(
                 HotReloadWorkerReasonCode.AccessorAssignmentValueConsumed,
                 Plain("assignment value is consumed; the setter delegate returns void.", 0));
             templates.Add(

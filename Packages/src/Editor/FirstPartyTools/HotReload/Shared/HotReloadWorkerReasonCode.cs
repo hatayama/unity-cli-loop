@@ -100,6 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AccessorCoalesceAssignmentNoShape,
         AccessorCompoundAssignmentKindUnsupported,
         AccessorCompoundInaccessibleGetterNoShape,
+        AccessorDeconstructionPropertyNoShape,
         AccessorAssignmentValueConsumed,
         AccessorReceiverDoubleEvaluation,
         AccessorRefReturningPropertyNoShape,

@@ -617,6 +617,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "compound assignment reading an inaccessible getter with an accessible setter "
                 + "has no accessor rewrite shape.");
             yield return Case(
+                HotReloadWorkerReasonCode.AccessorDeconstructionPropertyNoShape,
+                NoArgs,
+                "a deconstruction setting a property with an inaccessible setter has no accessor "
+                + "rewrite shape; set that property in its own statement 'X = value;', which the "
+                + "accessor rewrite handles.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AccessorAssignmentValueConsumed,
                 NoArgs,
                 "assignment value is consumed; the setter delegate returns void.");

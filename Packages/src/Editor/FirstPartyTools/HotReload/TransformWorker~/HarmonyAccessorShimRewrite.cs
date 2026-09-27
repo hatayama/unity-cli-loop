@@ -44,8 +44,7 @@ internal sealed class HarmonyAccessorShimRewrite
         // nameof(...) and assignment left sides must keep a member-reference shape: qualify only,
         // never rewrite to an accessor read (Func<> call results are not assignable).
         bool suppressAccessorRead = NameofRules.IsInsideNameofArgument(node)
-            || (node.Parent is AssignmentExpressionSyntax assignmentLeft
-                && assignmentLeft.Left == node);
+            || AssignmentTargetRules.AssignmentTargetedBy(node) != null;
         if (_rewriter._accessorPlan == null || suppressAccessorRead)
         {
             return null;
@@ -104,8 +103,11 @@ internal sealed class HarmonyAccessorShimRewrite
                 .WithTriviaFrom(triviaSource);
         }
 
+        // Why a deconstruction element is left as written: `(a.P, b) = t` calls only P's setter,
+        // and the plan admits that only when the setter is accessible.
         if (symbol is IPropertySymbol propertySymbol
             && !propertySymbol.IsIndexer
+            && !AssignmentTargetRules.IsDeconstructionTarget(triviaSource)
             && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
         {
             AccessorEntry entry = _rewriter._accessorPlan.GetOrAddPropertyGetter(propertySymbol);

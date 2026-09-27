@@ -132,8 +132,7 @@ internal static class AccessorAccessRegistrar
     {
         rejectReason = null;
         // Assignment-left ElementAccess is owned by the assignment branch (write context).
-        if (elementAccess.Parent is AssignmentExpressionSyntax parentElementAssignment
-            && parentElementAssignment.Left == elementAccess)
+        if (AssignmentTargetRules.AssignmentTargetedBy(elementAccess) != null)
         {
             return false;
         }
@@ -141,6 +140,11 @@ internal static class AccessorAccessRegistrar
         ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
         if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
         {
+            if (AssignmentTargetRules.IsDeconstructionTarget(elementAccess))
+            {
+                return AccessorPropertyWriteRules.TryRegisterDeconstructedPropertyWrite(indexer, out rejectReason);
+            }
+
             // Standalone ElementAccess is a read — only the getter matters.
             if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
             {
@@ -199,18 +203,17 @@ internal static class AccessorAccessRegistrar
             }
         }
 
-        if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
-            && parentAssignment.Left == memberAccess)
+        if (AssignmentTargetRules.AssignmentTargetedBy(memberAccess) != null)
         {
             return false;
         }
 
-        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
+        return TryRegisterUseOutsideAssignment(
+            memberAccess,
             semanticModel.GetSymbolInfo(memberAccess).Symbol
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
             addedMemberAccess,
-            EventAccessorRules.IsUnsubscribeOperand(memberAccess),
             out rejectReason);
     }
 
@@ -227,8 +230,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        if (name.Parent is AssignmentExpressionSyntax parentAssignment
-            && parentAssignment.Left == name)
+        if (AssignmentTargetRules.AssignmentTargetedBy(name) != null)
         {
             return false;
         }
@@ -245,11 +247,34 @@ internal static class AccessorAccessRegistrar
             }
         }
 
-        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
+        return TryRegisterUseOutsideAssignment(
+            name,
             semanticModel.GetSymbolInfo(name).Symbol,
             plan,
             addedMemberAccess,
-            EventAccessorRules.IsUnsubscribeOperand(name),
+            out rejectReason);
+    }
+
+    // A property a deconstruction sets is a write; every other use outside an assignment left side
+    // is a read. Why a field element stays with the reads: its ref accessor is assignable, so the
+    // deconstruction writes through it.
+    private static bool TryRegisterUseOutsideAssignment(
+        ExpressionSyntax site,
+        ISymbol symbol,
+        AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
+    {
+        if (symbol is IPropertySymbol propertySymbol && AssignmentTargetRules.IsDeconstructionTarget(site))
+        {
+            return AccessorPropertyWriteRules.TryRegisterDeconstructedPropertyWrite(propertySymbol, out rejectReason);
+        }
+
+        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
+            symbol,
+            plan,
+            addedMemberAccess,
+            EventAccessorRules.IsUnsubscribeOperand(site),
             out rejectReason);
     }
 
