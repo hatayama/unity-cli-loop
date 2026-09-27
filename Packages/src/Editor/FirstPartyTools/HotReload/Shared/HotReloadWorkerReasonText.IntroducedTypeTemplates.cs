@@ -23,8 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.IntroducedTypeRecord,
                 Plain("Record introduced type requires a compile: {0}", 1));
             templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeNonPublic,
-                Plain("Non-public introduced type requires a compile: {0}", 1));
+                HotReloadWorkerReasonCode.IntroducedTypeFileLocal,
+                Plain("File-local introduced type requires a compile: {0}", 1));
             templates.Add(
                 HotReloadWorkerReasonCode.IntroducedTypeRefLike,
                 Plain("Ref-like introduced type requires a compile: {0}", 1));

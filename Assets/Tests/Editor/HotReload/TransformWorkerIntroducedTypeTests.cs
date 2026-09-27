@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -65,18 +66,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].introducedTypes[0].source,
                 Does.Contain("using Alias"));
+            Assert.That(result.Output.files[1].introducedTypes, Has.Length.EqualTo(1));
+            Assert.That(result.Output.files[1].introducedTypes[0].metadataName, Is.EqualTo("Example.Introduced.Hidden"));
             Assert.That(
-                result.Output.files[1].introducedTypes,
-                Is.Empty);
-            Assert.That(
-                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[1].introducedTypeDiagnostics),
-                Has.Some.Contains("Non-public"));
-            Assert.That(
-                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[1].introducedTypeDiagnostics),
-                Has.Some.Contains("Generic"));
+                result.Output.files[1].introducedTypes[0].source,
+                Does.Contain(Environment.NewLine + "public class Hidden { } "));
             Assert.That(
                 HotReloadWorkerReasonTestText.RenderAll(result.Output.files[1].introducedTypeDiagnostics),
-                Has.Some.Contains("Nested"));
+                Is.EquivalentTo(new[]
+                {
+                    "Generic introduced type requires a compile: Example.Introduced.Generic`1",
+                    "Nested declaration inside an introduced type requires a compile: Example.Introduced.Outer/Nested"
+                }));
         }
 
         /// <summary>
@@ -337,7 +338,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// Verifies that every unsupported declaration category produces an owning-file
-        /// diagnostic and cannot become an introduced artifact descriptor.
+        /// diagnostic and cannot become an introduced artifact descriptor, while the internal
+        /// declarations beside them are introduced.
         /// </summary>
         [Test]
         public async Task PrepareIntroducedTypes_UnsupportedSemanticCategories_ReportDiagnostics()
@@ -356,17 +358,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Non-public"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Generic"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Partial"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Ref-like"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Unsafe"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Unity object"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Serializable"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Module initializer"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Delegate"));
-            Assert.That(HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Nested"));
+            Assert.That(
+                IntroducedMetadataNames(result.Output.files[0]),
+                Is.EquivalentTo(new[] { "System.Runtime.CompilerServices.ModuleInitializerAttribute", "Example.Hidden" }));
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(result.Output.files[0].introducedTypeDiagnostics),
+                Is.EquivalentTo(new[]
+                {
+                    "Generic introduced type requires a compile: Example.Generic`1",
+                    "Partial introduced type requires a compile: Example.Partial",
+                    "Ref-like introduced type requires a compile: Example.RefLike",
+                    "Unsafe introduced type requires a compile: Example.UnsafeType",
+                    "Unity object introduced type requires a compile: Example.ObjectType",
+                    "Serializable introduced type requires a compile: Example.SerializableType",
+                    "Module initializer introduced type requires a compile: Example.InitializerType",
+                    "Nested declaration inside an introduced type requires a compile: Example.Outer/Nested",
+                    "Delegate introduced type requires a compile: Example.AddedDelegate"
+                }));
         }
 
         /// <summary>
@@ -395,8 +403,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // reason - because compilation happened to drop the type rather than because the
             // outer declaration was refused.
             Assert.That(workerResult.Success, Is.True, workerResult.ErrorMessage);
-            Assert.That(workerResult.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
-            Assert.That(workerResult.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Safe"));
+            Assert.That(
+                IntroducedMetadataNames(workerResult.Output.files[0]),
+                Is.EquivalentTo(new[] { "System.Runtime.CompilerServices.ModuleInitializerAttribute", "Example.Safe" }));
             Assert.That(HotReloadWorkerReasonTestText.RenderAll(workerResult.Output.files[0].introducedTypeDiagnostics), Has.Some.Contains("Nested"));
 
             List<HotReloadIntroducedTypeDescriptor> descriptors = TransformWorkerIntroducedTypeTestInputs.CreateDescriptors(workerResult.Output.files);
@@ -477,22 +486,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(trivia.Success, Is.True, trivia.ErrorMessage);
             Assert.That(aliasChanged.Success, Is.True, aliasChanged.ErrorMessage);
             Assert.That(definesChanged.Success, Is.True, definesChanged.ErrorMessage);
+            string baseline = FingerprintOf(first, "Example.Fingerprint");
+            Assert.That(FingerprintOf(trivia, "Example.Fingerprint"), Is.EqualTo(baseline));
+            Assert.That(FingerprintOf(unrelatedUsing, "Example.Fingerprint"), Is.EqualTo(baseline));
             Assert.That(
-                trivia.Output.files[0].introducedTypes[0].declarationFingerprint,
-                Is.EqualTo(first.Output.files[0].introducedTypes[0].declarationFingerprint));
-            Assert.That(
-                unrelatedUsing.Output.files[0].introducedTypes[0].declarationFingerprint,
-                Is.EqualTo(first.Output.files[0].introducedTypes[0].declarationFingerprint));
-            Assert.That(laterType.Output.files[0].introducedTypes, Has.Length.EqualTo(2));
-            Assert.That(
-                laterType.Output.files[0].introducedTypes[0].declarationFingerprint,
-                Is.EqualTo(first.Output.files[0].introducedTypes[0].declarationFingerprint));
-            Assert.That(
-                aliasChanged.Output.files[0].introducedTypes[0].declarationFingerprint,
-                Is.Not.EqualTo(first.Output.files[0].introducedTypes[0].declarationFingerprint));
-            Assert.That(
-                definesChanged.Output.files[0].introducedTypes[0].declarationFingerprint,
-                Is.Not.EqualTo(first.Output.files[0].introducedTypes[0].declarationFingerprint));
+                IntroducedMetadataNames(laterType.Output.files[0]),
+                Is.EquivalentTo(new[] { "Example.Fingerprint", "Example.LaterIntroduced", "Unrelated.Ignore" }));
+            Assert.That(FingerprintOf(laterType, "Example.Fingerprint"), Is.EqualTo(baseline));
+            Assert.That(FingerprintOf(aliasChanged, "Example.Fingerprint"), Is.Not.EqualTo(baseline));
+            Assert.That(FingerprintOf(definesChanged, "Example.Fingerprint"), Is.Not.EqualTo(baseline));
+        }
+
+        private static string[] IntroducedMetadataNames(TransformWorkerFileOutputDto file)
+        {
+            return file.introducedTypes.Select(introduced => introduced.metadataName).ToArray();
+        }
+
+        private static string FingerprintOf(TransformWorkerClientResult result, string metadataName)
+        {
+            TransformWorkerIntroducedTypeDto introduced = result.Output.files[0].introducedTypes
+                .FirstOrDefault(candidate => candidate.metadataName == metadataName);
+            Assert.That(introduced, Is.Not.Null, metadataName + " must be introduced.");
+            return introduced.declarationFingerprint;
         }
 
         /// <summary>

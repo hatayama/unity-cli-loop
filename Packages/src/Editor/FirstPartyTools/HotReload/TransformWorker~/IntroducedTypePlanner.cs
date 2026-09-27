@@ -217,9 +217,9 @@ internal static class IntroducedTypePlanner
             return false;
         }
 
-        if (typeSymbol.DeclaredAccessibility != Accessibility.Public)
+        if (IntroducedTypeSourceAccessibility.IsFileLocal(declaration))
         {
-            reason = HotReloadWorkerReasonCode.IntroducedTypeNonPublic;
+            reason = HotReloadWorkerReasonCode.IntroducedTypeFileLocal;
             return false;
         }
 
@@ -297,7 +297,7 @@ internal static class IntroducedTypePlanner
                 }
             }
 
-            builder.Append(declaration.ToFullString());
+            builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration));
             for (int index = 0; index < namespaceDeclarations.Count; index++)
             {
                 builder.AppendLine("}");
@@ -306,7 +306,7 @@ internal static class IntroducedTypePlanner
         }
 
         AppendRootUsings(builder, root, assemblyGlobalUsings);
-        builder.Append(declaration.ToFullString());
+        builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration));
         return builder.ToString();
     }
 

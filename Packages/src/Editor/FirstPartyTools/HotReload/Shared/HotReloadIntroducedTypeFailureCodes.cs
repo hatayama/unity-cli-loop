@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 [HotReloadWorkerReasonCode.IntroducedTypeGeneric] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypePartial] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeRecord] = DeclarationArgument,
-                [HotReloadWorkerReasonCode.IntroducedTypeNonPublic] = DeclarationArgument,
+                [HotReloadWorkerReasonCode.IntroducedTypeFileLocal] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeRefLike] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeUnsafe] = DeclarationArgument,
                 [HotReloadWorkerReasonCode.IntroducedTypeUnityObject] = DeclarationArgument,

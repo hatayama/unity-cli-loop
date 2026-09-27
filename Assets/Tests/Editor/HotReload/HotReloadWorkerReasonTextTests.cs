@@ -693,9 +693,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Example.Type" },
                 "Record introduced type requires a compile: Example.Type");
             yield return Case(
-                HotReloadWorkerReasonCode.IntroducedTypeNonPublic,
+                HotReloadWorkerReasonCode.IntroducedTypeFileLocal,
                 new[] { "Example.Type" },
-                "Non-public introduced type requires a compile: Example.Type");
+                "File-local introduced type requires a compile: Example.Type");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeRefLike,
                 new[] { "Example.Type" },

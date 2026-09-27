@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -29,5 +31,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     internal interface IHotReloadInternalAccessReader
     {
         int Read();
+    }
+
+    /// <summary>
+    /// An internal base an introduced type derives from, so a call to its compiled member shows
+    /// the override the artifact declares is dispatched to.
+    /// </summary>
+    internal abstract class HotReloadInternalAccessBase
+    {
+        public abstract int Read();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ReadThroughBase()
+        {
+            return Read() + 100;
+        }
+    }
+
+    /// <summary>
+    /// A compiled internal type whose body a test edits exactly like the body of an introduced
+    /// internal type, so the two outcomes can be compared.
+    /// </summary>
+    internal sealed class HotReloadInternalBodyEditFixture
+    {
+        // Why NoInlining: the test reads the edited body back through the patched caller, which
+        // an inlined copy at the call site would not observe.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Read()
+        {
+            return 1;
+        }
     }
 }

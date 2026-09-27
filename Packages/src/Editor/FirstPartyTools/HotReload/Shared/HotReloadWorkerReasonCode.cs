@@ -115,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         IntroducedTypeGeneric,
         IntroducedTypePartial,
         IntroducedTypeRecord,
-        IntroducedTypeNonPublic,
+        IntroducedTypeFileLocal,
         IntroducedTypeRefLike,
         IntroducedTypeUnsafe,
         IntroducedTypeUnityObject,

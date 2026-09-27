@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("IntroducedTypeGeneric")]
         [TestCase("IntroducedTypePartial")]
         [TestCase("IntroducedTypeRecord")]
-        [TestCase("IntroducedTypeNonPublic")]
+        [TestCase("IntroducedTypeFileLocal")]
         [TestCase("IntroducedTypeRefLike")]
         [TestCase("IntroducedTypeUnsafe")]
         [TestCase("IntroducedTypeUnityObject")]
