@@ -20,11 +20,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class HotReloadIntroducedTypeCompiler
     {
         private readonly IHotReloadRoslynCompilerEnvironment environment;
+        private readonly IHotReloadInternalAccessGrant internalAccessGrant;
         private readonly HotReloadRoslynCompiler compiler;
 
-        public HotReloadIntroducedTypeCompiler(IHotReloadRoslynCompilerEnvironment environment)
+        public HotReloadIntroducedTypeCompiler(
+            IHotReloadRoslynCompilerEnvironment environment,
+            IHotReloadInternalAccessGrant internalAccessGrant)
         {
             this.environment = environment ?? throw new ArgumentNullException(nameof(environment));
+            this.internalAccessGrant = internalAccessGrant
+                ?? throw new ArgumentNullException(nameof(internalAccessGrant));
             compiler = new HotReloadRoslynCompiler(environment);
         }
 
@@ -35,6 +40,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (request == null)
             {
                 throw new ArgumentNullException(nameof(request));
+            }
+
+            // Why refused before anything is written: the caller chose exposed references only
+            // because the grant was available, so an unavailable grant here is a broken caller,
+            // and loading the artifact first would leave an assembly behind that nothing may run.
+            if (request.ReachesInternals && !internalAccessGrant.IsAvailable)
+            {
+                throw new InvalidOperationException(
+                    "An artifact compiled against exposed internal members needs an available internal access grant: "
+                    + internalAccessGrant.UnavailableReason);
             }
 
             HotReloadRoslynCompileOutcome outcome = await compiler
@@ -68,6 +83,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return HotReloadIntroducedTypeCompilerResult.Failure(
                     "Introduced-type artifact failed to load.");
+            }
+
+            // Why granted here, with no await since the load: the artifact is only handed out as
+            // prepared, and code compiled against exposed members must not be reachable before
+            // the runtime lets it read them. A refused grant leaves the loaded assembly behind
+            // unpublished, because a single assembly cannot be unloaded from the domain.
+            if (request.ReachesInternals)
+            {
+                HotReloadInternalAccessGrantResult grantResult =
+                    internalAccessGrant.Grant(loadResult.CompiledAssembly);
+                if (!grantResult.Success)
+                {
+                    return HotReloadIntroducedTypeCompilerResult.Failure(
+                        "Granting internal access to the introduced-type artifact failed: " + grantResult.Reason);
+                }
             }
 
             HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
@@ -233,6 +263,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public IReadOnlyList<string> DefineSymbols { get; }
 
+        /// <summary>
+        /// Whether the references expose the internal members of the target assembly, which makes
+        /// the loaded artifact unusable until the internal access grant succeeds. It states how the
+        /// artifact is compiled, not whether its source happens to use an internal member.
+        /// </summary>
+        public bool ReachesInternals { get; }
+
         public HotReloadIntroducedTypeCompilationRequest(
             IReadOnlyList<HotReloadIntroducedTypeSource> sources,
             string dllPath,
@@ -240,7 +277,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string expectedAssemblyFullName,
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
             IReadOnlyList<string> referencePaths,
-            IReadOnlyList<string> defineSymbols)
+            IReadOnlyList<string> defineSymbols,
+            bool reachesInternals = false)
         {
             IReadOnlyList<HotReloadIntroducedTypeSource> copiedSources = CopySources(sources);
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> copiedDescriptors = CopyDescriptors(descriptors);
@@ -252,13 +290,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Descriptors = copiedDescriptors;
             ReferencePaths = CopyStrings(referencePaths);
             DefineSymbols = CopyStrings(defineSymbols);
+            ReachesInternals = reachesInternals;
         }
 
         public static HotReloadIntroducedTypeCompilationRequest CreateBatch(
             HotReloadIntroducedTypeArtifactPaths paths,
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
             IReadOnlyList<string> referencePaths,
-            IReadOnlyList<string> defineSymbols)
+            IReadOnlyList<string> defineSymbols,
+            bool reachesInternals = false)
         {
             if (paths == null)
             {
@@ -278,7 +318,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 paths.AssemblyFullName,
                 descriptors,
                 referencePaths,
-                defineSymbols);
+                defineSymbols,
+                reachesInternals);
         }
 
         // The compiler writes one source file per entry and then loads the produced assembly, so a

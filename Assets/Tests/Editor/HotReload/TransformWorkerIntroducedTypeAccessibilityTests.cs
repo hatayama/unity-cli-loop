@@ -206,7 +206,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "accessibility").Create(),
                 TransformWorkerIntroducedTypeTestInputs.CreateDescriptors(files),
                 input.referencePaths, input.defines);
-            return new HotReloadIntroducedTypeCompiler(new HotReloadRoslynCompilerEnvironment())
+            return new HotReloadIntroducedTypeCompiler(
+                    new HotReloadRoslynCompilerEnvironment(), new FakeInternalAccessGrant(isAvailable: false))
                 .CompileAsync(request, CancellationToken.None);
         }
 

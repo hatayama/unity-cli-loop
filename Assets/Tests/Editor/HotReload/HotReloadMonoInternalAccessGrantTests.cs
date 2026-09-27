@@ -329,7 +329,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "grant-caller").Create(),
                 new[] { descriptor }, new[] { typeof(object).Assembly.Location, calleePath }, Array.Empty<string>());
             HotReloadIntroducedTypeCompilerResult result =
-                await new HotReloadIntroducedTypeCompiler(new HotReloadRoslynCompilerEnvironment())
+                await new HotReloadIntroducedTypeCompiler(
+                        new HotReloadRoslynCompilerEnvironment(), new FakeInternalAccessGrant(isAvailable: false))
                     .CompileAsync(request, CancellationToken.None);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result.Artifact.Assembly.GetType("GrantCaller", true);

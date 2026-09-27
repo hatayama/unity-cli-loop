@@ -229,7 +229,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     input.referencePaths,
                     input.defines);
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult compileResult = await compiler.CompileAsync(
                 request,
@@ -271,7 +272,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     input.referencePaths,
                     input.defines);
             HotReloadIntroducedTypeCompilerResult compileResult = await new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment()).CompileAsync(request, CancellationToken.None);
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false)).CompileAsync(request, CancellationToken.None);
 
             Assert.That(workerResult.Success, Is.True, workerResult.ErrorMessage);
             Assert.That(descriptors, Has.Count.EqualTo(2));
@@ -286,7 +288,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     input.referencePaths,
                     input.defines);
             HotReloadIntroducedTypeCompilerResult subsetCompileResult = await new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment()).CompileAsync(subsetRequest, CancellationToken.None);
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false)).CompileAsync(subsetRequest, CancellationToken.None);
 
             Assert.That(subsetCompileResult.Success, Is.True, subsetCompileResult.ErrorMessage);
             Assert.That(subsetCompileResult.Artifact.Assembly.GetType("GlobalAliasFixture.Second"), Is.Not.Null);
@@ -321,7 +324,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     input.referencePaths,
                     input.defines);
             HotReloadIntroducedTypeCompilerResult compileResult = await new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment()).CompileAsync(request, CancellationToken.None);
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false)).CompileAsync(request, CancellationToken.None);
 
             Assert.That(workerResult.Success, Is.True, workerResult.ErrorMessage);
             Assert.That(compileResult.Success, Is.True, compileResult.ErrorMessage);
@@ -404,7 +408,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     input.referencePaths,
                     input.defines);
             HotReloadIntroducedTypeCompilerResult compileResult = await new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment()).CompileAsync(request, CancellationToken.None);
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false)).CompileAsync(request, CancellationToken.None);
 
             Assert.That(compileResult.Success, Is.True, compileResult.ErrorMessage);
             Assert.That(compileResult.Artifact.Assembly.GetType("Example.Safe"), Is.Not.Null);
