@@ -126,6 +126,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "            return 0;\n"
             + "        }\n"
             + "\n"
+            + "        public int AddedIncrementsParenthesizedGuardedSetter()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            (accessors.GuardedSetter)++;\n"
+            + "            return 0;\n"
+            + "        }\n"
+            + "\n"
             + "        public int AddedWritesGuardedRef()\n"
             + "        {\n"
             + "            RetainedAccessors accessors = new RetainedAccessors();\n"
@@ -160,6 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "AddedFillsGuardedGetterItems",
             "AddedIncrementsGuardedSetter",
             "AddedWritesParenthesizedGuardedSetter",
+            "AddedIncrementsParenthesizedGuardedSetter",
             "AddedWritesGuardedRef"
         };
 
@@ -450,8 +458,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// Verifies that methods a compiled type adds around properties of a retained introduced
         /// type that keep one accessor non-public are judged by the accessors they call, the same
-        /// way on every reload: a write, a parenthesized write, an increment, or a deconstruction
-        /// through an internal setter, a read, a compound assignment, or a nested collection
+        /// way on every reload: a write, a parenthesized write, an increment, a parenthesized
+        /// increment, or a deconstruction through an internal setter, a read, a compound assignment, or a nested collection
         /// initializer through an internal getter, and a write through an internal ref-returning
         /// property are skipped each time, while a read or a write that calls only the public
         /// accessor, and a nameof of a property with an internal getter, are applied and run each

@@ -106,9 +106,11 @@ internal static class RetainedNonPublicMemberUseGuard
 
     // The member access a property name is the name of, so the name and the access around it
     // resolve to the same site. Why a `?.` member binding needs no case: before C# 14 it can only
-    // be read, as any other parent is. Parentheses need no case here either: `(a.P)` resolves to P
-    // too, and AssignmentTargetRules judges both it and the access inside by the assignment around
-    // them, so `(a.P) = 1` calls only the setter wherever it is looked at.
+    // be read, as any other parent is. Parentheses need no case here either: FindUse visits `(a.P)`
+    // as a site of its own, since it resolves to P too. AssignmentTargetRules judges it and the
+    // access inside by the assignment around them, so `(a.P) = 1` calls only the setter wherever
+    // it is looked at, and `(a.P)++` counts the setter at the parentheses, whose parent the
+    // increment is.
     private static SyntaxNode AccessedExpression(SyntaxNode node)
     {
         return node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node
