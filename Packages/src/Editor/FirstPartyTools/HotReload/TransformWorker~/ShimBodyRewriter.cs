@@ -389,7 +389,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
             ?? _semanticModel.GetSymbolInfo(node.Name).Symbol;
-        if (!AddedFieldShimRewrite.IsAssignmentLeft(node) && !AddedFieldShimRewrite.IsIncrementOperand(node))
+        if (AssignmentTargetRules.AssignmentTargetedBy(node) == null && !AddedFieldShimRewrite.IsIncrementOperand(node))
         {
             SyntaxNode addedFieldRead = AddedFields.TryRewriteAddedFieldRead(symbol, node.Expression, node);
             if (addedFieldRead != null)

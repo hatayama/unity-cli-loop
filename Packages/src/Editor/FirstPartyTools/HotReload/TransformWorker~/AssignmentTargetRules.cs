@@ -1,11 +1,11 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-// Where an expression is written rather than read. Parentheses around a target do not change what
-// it is: `(a.P) = 1` sets P exactly as `a.P = 1` does, and so does `(a.P, b) = t`. Every check that
-// asks whether an expression is written, or which instance a write reaches, looks through them
-// here, because a check that stops at the parentheses reads a write as a read and aims the
-// rewritten write at the wrong receiver.
+// Where an assignment writes rather than reads. Parentheses around a target do not change what it
+// is: `(a.P) = 1` sets P exactly as `a.P = 1` does, and so does `(a.P, b) = t`. A check that judges
+// the access inside the parentheses by its direct parent reads it as a read, and a rewrite that
+// takes the receiver from the direct left side aims the write at the running instance, so a check
+// that asks whether a node is assigned, or which instance an assignment writes, should ask here.
 internal static class AssignmentTargetRules
 {
     internal static ExpressionSyntax Unparenthesized(ExpressionSyntax expression)
