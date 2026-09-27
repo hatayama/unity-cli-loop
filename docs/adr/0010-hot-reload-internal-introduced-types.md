@@ -199,7 +199,9 @@ requested aggressive inlining. Debug execution does not exercise this failure mo
   shape is patchable.
 - Members that other types add cannot use a non-public member of a retained introduced type
   until a compile. Only the reloads that edit that type can bind such a member, so it is skipped
-  on every reload instead of being applied on some and dropped on the next.
+  on every reload instead of being applied on some and dropped on the next. A property counts by
+  the accessor the use calls: the other reloads keep a property with its public accessors only,
+  so reading one whose setter is internal stays applied while writing it is skipped.
 - Internal reference copies incur a Cecil rewrite per MVID and are cached separately from
   fully publicized shim references. Copy files are compile-time artifacts, not active types.
 - The runtime mechanism depends on Mono internals. A supported Editor for which the probe
@@ -253,7 +255,10 @@ code optimization unless a point says Release:
   usability testing reported. Members added to the retained type apply as on a public introduced
   type, and a compiled type sharing its file keeps its added properties. A method a compiled type
   adds that calls an internal method of the retained type is skipped on the reload that
-  introduces the type, on one that edits it, and on one that leaves its file out.
+  introduces the type, on one that edits it, and on one that leaves its file out. So are added
+  methods that call an internal accessor of its public properties (a write or a deconstruction
+  through the setter; a read, a compound assignment, or a nested initializer through the
+  getter), while those calling only the public accessor stay applied on all three reloads.
 - The file-local refusal reason is not exercised: the compiler bundled with 2022.3 (Roslyn
   4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
 

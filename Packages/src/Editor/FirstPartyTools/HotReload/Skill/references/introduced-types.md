@@ -53,7 +53,9 @@ inlined, before any type of the artifact becomes active.
 - A member another type adds cannot use a non-public member of an introduced type until
   `uloop compile`. It is `Skipped` on every reload: with `Added members of other types cannot
   use '…', a non-public member of a type hot reload introduced` when the reload edits that type,
-  and as a body that could not be bound otherwise.
+  and as a body that could not be bound otherwise. A property counts by the accessor the use
+  calls: reading one whose setter is `internal` stays applied, and writing it is `Skipped` naming
+  the setter (`….set`).
 
 When an edited body in the same run names a refused type, its shim compile fails with CS0246,
 CS0234, or CS0426, or with CS0103 or CS0117 when the body reads a static member of it. That `Failed` row's `Reason` then ends with a note that quotes the refusal
