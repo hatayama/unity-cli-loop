@@ -429,8 +429,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             InternalsExposureTestImage image = new InternalsExposureTestImage(
                 candidate =>
                 {
-                    candidate.Attributes = TypeAttributes.NotPublic | TypeAttributes.BeforeFieldInit;
-                    InternalsExposureTestImage.AddReadMethod(candidate, "Secret", MethodAttributes.Private);
+                    HideCandidate(candidate);
                     configure?.Invoke(candidate);
                 },
                 writeResolver);
@@ -438,39 +437,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return image;
         }
 
-        // Why an enum-typed constant: Cecil resolves the enum a constant is typed with to find its
-        // underlying type while it writes a module, so once the enum's assembly is gone, writing a
-        // copy of this image fails the way a copy fails when a reference it needs cannot be found.
         private InternalsExposureTestImage CreateImageWithConstantOfMissingEnum(string externalName)
         {
-            string externalDirectory = Path.Combine(Application.temporaryCachePath, externalName);
-            Directory.CreateDirectory(externalDirectory);
-            try
-            {
-                using DefaultAssemblyResolver writeResolver = new DefaultAssemblyResolver();
-                writeResolver.AddSearchDirectory(externalDirectory);
-                using AssemblyDefinition external = AssemblyDefinition.CreateAssembly(
-                    new AssemblyNameDefinition(externalName, new Version(1, 0, 0, 0)), externalName, ModuleKind.Dll);
-                TypeDefinition externalKind = new TypeDefinition(
-                    "", "ExternalKind", TypeAttributes.Public | TypeAttributes.Sealed,
-                    external.MainModule.ImportReference(typeof(Enum)));
-                externalKind.Fields.Add(new FieldDefinition(
-                    "value__",
-                    FieldAttributes.Public | FieldAttributes.SpecialName | FieldAttributes.RTSpecialName,
-                    external.MainModule.TypeSystem.Int32));
-                external.MainModule.Types.Add(externalKind);
-                external.Write(Path.Combine(externalDirectory, externalName + ".dll"));
-                return CreateImage(
-                    candidate => candidate.Fields.Add(new FieldDefinition(
-                        "Default",
-                        FieldAttributes.Assembly | FieldAttributes.Static | FieldAttributes.Literal | FieldAttributes.HasDefault,
-                        candidate.Module.ImportReference(externalKind)) { Constant = 1 }),
-                    writeResolver);
-            }
-            finally
-            {
-                Directory.Delete(externalDirectory, true);
-            }
+            InternalsExposureTestImage image =
+                InternalsExposureTestImage.CreateWithConstantOfMissingEnum(externalName, HideCandidate);
+            _images.Add(image);
+            return image;
+        }
+
+        private static void HideCandidate(TypeDefinition candidate)
+        {
+            candidate.Attributes = TypeAttributes.NotPublic | TypeAttributes.BeforeFieldInit;
+            InternalsExposureTestImage.AddReadMethod(candidate, "Secret", MethodAttributes.Private);
         }
 
         private static TransformWorkerIntroducedTypeArtifactDto ActivateRetainedArtifact(InternalsExposureTestImage image)
