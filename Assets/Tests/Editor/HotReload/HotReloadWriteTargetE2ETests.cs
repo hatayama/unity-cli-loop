@@ -240,21 +240,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// Verifies that a body writing another instance's added field or added auto-property
-        /// through parentheses stores the value on that instance rather than on the one running
-        /// the method.
+        /// through parentheses, by assignment or by increment, stores the value on that instance
+        /// rather than on the one running the method.
         /// </summary>
-        [TestCase("Field", "public int Added;")]
-        [TestCase("AutoProperty", "public int Added { get; set; }")]
+        [TestCase("Field", "public int Added;", "(other.Added) = 5;")]
+        [TestCase("AutoProperty", "public int Added { get; set; }", "(other.Added) = 5;")]
+        [TestCase("FieldIncrement", "public int Added;", "other.Added = 4; (other.Added)++;")]
         public async Task Run_BodyWritingAnAddedMemberOfAnotherInstanceThroughParentheses_WritesThatInstance(
             string label,
-            string declaration)
+            string declaration,
+            string write)
         {
             await RunInIntroducedTypeDomainAsync(async _ =>
             {
                 HotReloadOrchestratorResult result = await RunCopyIntoAsync(
                     "ParenthesizedAdded" + label,
                     "\n        " + declaration + "\n",
-                    "(other.Added) = 5;\n"
+                    write + "\n"
                     + "            other.Tally = other.Added;\n"
                     + "            Tally = Added;");
                 AssertCopyIntoWrites(result, 0, 5, 0);
