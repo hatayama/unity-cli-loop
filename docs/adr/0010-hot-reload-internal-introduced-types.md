@@ -256,9 +256,11 @@ code optimization unless a point says Release:
   type, and a compiled type sharing its file keeps its added properties. A method a compiled type
   adds that calls an internal method of the retained type is skipped on the reload that
   introduces the type, on one that edits it, and on one that leaves its file out. So are added
-  methods that call an internal accessor of its public properties (a write or a deconstruction
-  through the setter; a read, a compound assignment, or a nested initializer through the
-  getter), while those calling only the public accessor stay applied on all three reloads.
+  methods that call an internal accessor of its properties (a write, a parenthesized write, an
+  increment, or a deconstruction through the setter; a read, a compound assignment, or a nested
+  initializer through the getter; a write through an internal ref-returning property), while
+  those calling only the public accessor, or naming a property with an internal getter in
+  nameof, stay applied on all three reloads.
 - The file-local refusal reason is not exercised: the compiler bundled with 2022.3 (Roslyn
   4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
 

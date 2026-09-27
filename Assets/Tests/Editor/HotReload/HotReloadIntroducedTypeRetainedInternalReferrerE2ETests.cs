@@ -112,6 +112,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "            return 0;\n"
             + "        }\n"
             + "\n"
+            + "        public int AddedIncrementsGuardedSetter()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            accessors.GuardedSetter++;\n"
+            + "            return 0;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedWritesParenthesizedGuardedSetter()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            (accessors.GuardedSetter) = 5;\n"
+            + "            return 0;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedWritesGuardedRef()\n"
+            + "        {\n"
+            + "            RetainedAccessors accessors = new RetainedAccessors();\n"
+            + "            accessors.GuardedRef = 5;\n"
+            + "            return 0;\n"
+            + "        }\n"
+            + "\n"
+            + "        public int AddedNamesGuardedGetter()\n"
+            + "        {\n"
+            + "            return nameof(RetainedAccessors.GuardedGetter).Length;\n"
+            + "        }\n"
+            + "\n"
             + "        public int AddedReadsPublicGetter()\n"
             + "        {\n"
             + "            return new RetainedAccessors().GuardedSetter + 40;\n"
@@ -131,13 +157,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "AddedReadsGuardedGetter",
             "AddedCompoundsGuardedGetter",
             "AddedDeconstructsIntoGuardedSetter",
-            "AddedFillsGuardedGetterItems"
+            "AddedFillsGuardedGetterItems",
+            "AddedIncrementsGuardedSetter",
+            "AddedWritesParenthesizedGuardedSetter",
+            "AddedWritesGuardedRef"
         };
 
+        // Why nameof counts here: it calls no accessor and binds wherever the property is kept,
+        // which the artifact import does while one accessor is public.
         private static readonly string[] MethodsCallingPublicAccessors =
         {
             "AddedReadsPublicGetter",
-            "AddedWritesPublicSetter"
+            "AddedWritesPublicSetter",
+            "AddedNamesGuardedGetter"
         };
 
         // A compiled type's added auto-property and the added method that writes and reads it.
@@ -418,15 +450,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// Verifies that methods a compiled type adds around properties of a retained introduced
         /// type that keep one accessor non-public are judged by the accessors they call, the same
-        /// way on every reload: a write through an internal setter, a read, a compound assignment,
-        /// or a nested collection initializer through an internal getter, and a deconstruction
-        /// into an internal setter are skipped each time, while a read or a write that calls only
-        /// the public accessor is applied and runs each time.
+        /// way on every reload: a write, a parenthesized write, an increment, or a deconstruction
+        /// through an internal setter, a read, a compound assignment, or a nested collection
+        /// initializer through an internal getter, and a write through an internal ref-returning
+        /// property are skipped each time, while a read or a write that calls only the public
+        /// accessor, and a nameof of a property with an internal getter, are applied and run each
+        /// time.
         /// </summary>
         [Test]
         public async Task Run_AddedMethodsUsingAccessorsOfRetainedType_AreJudgedByTheAccessorsTheyCall()
         {
-            const string callerExpression = "host.AddedReadsPublicGetter() + host.AddedWritesPublicSetter()";
+            const string callerExpression =
+                "host.AddedReadsPublicGetter() + host.AddedWritesPublicSetter() + host.AddedNamesGuardedGetter()";
             await RunInIntroducedTypeDomainAsync(async _ =>
             {
                 HotReloadOrchestratorResult introducing = await RunAsync(
@@ -575,6 +610,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "\n"
                 + "        public System.Collections.Generic.List<int> GuardedItems { internal get; set; }\n"
                 + "\n"
+                + "        private int _refTarget;\n"
+                + "\n"
+                + "        internal ref int GuardedRef => ref _refTarget;\n"
+                + "\n"
                 + "        " + NoInlining + "public int Read() { return " + value.ToString() + "; }\n"
                 + "    }";
         }
@@ -661,7 +700,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssertOutcome(result, HotReloadMethodOutcomeKind.Added, method);
             }
 
-            Assert.That(CallTheCaller(), Is.EqualTo(42), DescribeOutcomes(result));
+            Assert.That(CallTheCaller(), Is.EqualTo(40 + 2 + "GuardedGetter".Length), DescribeOutcomes(result));
         }
 
         private static void AssertReasonContains(

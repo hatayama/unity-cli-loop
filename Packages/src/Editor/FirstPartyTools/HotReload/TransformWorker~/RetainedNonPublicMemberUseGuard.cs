@@ -104,26 +104,16 @@ internal static class RetainedNonPublicMemberUseGuard
         return null;
     }
 
-    // The member access or binding a property name is the name of, so the name and the access
-    // around it resolve to the same site, outside any parentheses, since `(a.P) = 1` writes P.
+    // The member access a property name is the name of, so the name and the access around it
+    // resolve to the same site. Why a `?.` member binding needs no case: before C# 14 it can only
+    // be read, as any other parent is. Why parentheses are not looked through: `(a.P)` resolves to
+    // P itself, so `(a.P) = 1` is judged at the parentheses as a write, and the access inside
+    // counts as a read the way InaccessibleAccessScanner reads it.
     private static SyntaxNode AccessedExpression(SyntaxNode node)
     {
-        SyntaxNode site = node;
-        if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)
-        {
-            site = memberAccess;
-        }
-        else if (node.Parent is MemberBindingExpressionSyntax memberBinding && memberBinding.Name == node)
-        {
-            site = memberBinding;
-        }
-
-        while (site.Parent is ParenthesizedExpressionSyntax parenthesized)
-        {
-            site = parenthesized;
-        }
-
-        return site;
+        return node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node
+            ? memberAccess
+            : node;
     }
 
     private static bool CallsSetter(SyntaxNode site)
