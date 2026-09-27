@@ -315,6 +315,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "'Example.Payload' from source ('Assets/Payload.cs'), so the 'Example.Payload' this body uses "
                 + "no longer matches and it is skipped.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodUsesIntroducedTypeNonPublicMember,
+                new[] { "Example.Helper.Secret()" },
+                "Added members of other types cannot use 'Example.Helper.Secret()', a non-public member of "
+                + "a type hot reload introduced: only the reloads that edit that type can bind it, so the "
+                + "member would be applied on some reloads and dropped on others. Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,
                 "Added fields on struct types are skipped; the store requires a reference-type instance. "

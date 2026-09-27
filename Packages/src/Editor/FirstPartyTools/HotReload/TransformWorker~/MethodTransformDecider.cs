@@ -296,9 +296,8 @@ internal static class MethodTransformDecider
         SemanticModel semanticModel,
         MethodTransformDecision current,
         AddedMemberAccessLookup addedMemberAccess,
-        IntroducedTypeArtifactMap artifactMap,
-        IAssemblySymbol targetAssembly,
-        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
+        WorkerSourceUnit sourceUnit,
+        IAssemblySymbol targetAssembly)
     {
         // Checked before the delegation path: a closure that binds one private access still takes
         // that path, and an unbound call beside it would reach the shim unrewritten.
@@ -310,9 +309,24 @@ internal static class MethodTransformDecider
                     semanticModel,
                     methodBodyNode,
                     bindingError,
-                    artifactMap,
+                    sourceUnit.ArtifactMap,
                     targetAssembly,
-                    projectRelativePathsByBindingTree));
+                    sourceUnit.RunProjectRelativePathsByBindingTree));
+        }
+
+        // Checked before the delegation path too: a closure reaching the member through an accessor
+        // would be applied on this reload and fail to bind on the next one that leaves its type alone.
+        ISymbol retainedNonPublicMember = RetainedNonPublicMemberUseGuard.FindUse(
+            semanticModel,
+            methodBodyNode,
+            typeSymbol,
+            sourceUnit);
+        if (retainedNonPublicMember != null)
+        {
+            return MethodTransformDecision.Skip(
+                WorkerReason.Of(
+                    HotReloadWorkerReasonCode.AddedMethodUsesIntroducedTypeNonPublicMember,
+                    retainedNonPublicMember.ToDisplayString()));
         }
 
         if (current.UsesDelegation)

@@ -159,9 +159,8 @@ internal static class AddedPropertyAccessorGuard
             typeState.SourceUnit.SemanticModel,
             decision,
             addedMemberAccess: null,
-            typeState.SourceUnit.ArtifactMap,
-            typeState.TargetAssembly,
-            typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
+            typeState.SourceUnit,
+            typeState.TargetAssembly);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

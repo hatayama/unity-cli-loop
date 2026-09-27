@@ -64,6 +64,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "\n"
             + "        public int Doubled { get { return Count * 2; } }\n";
 
+        // An added method of a compiled type whose body calls an internal method of the retained type.
+        private static readonly string AddedMethodCallingTheSecret =
+            "        public int AddedUsesSecret()\n"
+            + "        {\n"
+            + "            return new RetainedHelper().Secret();\n"
+            + "        }\n"
+            + "\n";
+
         // A compiled type's added auto-property and the added method that writes and reads it.
         private static readonly string AddedPropertyOnTheHost =
             "        public int AddedCount { get; set; }\n"
@@ -301,6 +309,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a method a compiled type adds is never applied while its body calls an
+        /// internal method of a retained introduced type: it is skipped when the type is introduced
+        /// in the same reload, when a later reload edits a body of the type, and when a reload
+        /// brings the type back to what its artifact holds, so no unrelated reload drops a method
+        /// an earlier one applied.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodCallingInternalMemberOfRetainedType_IsSkippedOnEveryReload()
+        {
+            const string callerExpression = "new RetainedHelper().Read()";
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    "SecretFirst",
+                    callerExpression,
+                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(1)), AddedMethodCallingTheSecret));
+                AssertIntroduced(introducing, "RetainedHelper");
+                AssertOutcome(introducing, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
+
+                HotReloadOrchestratorResult edited = await RunAsync(
+                    "SecretSecond",
+                    callerExpression,
+                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(2)), AddedMethodCallingTheSecret));
+                AssertOutcome(edited, HotReloadMethodOutcomeKind.Patched, Namespace + ".RetainedHelper.Read");
+                AssertOutcome(edited, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
+                AssertReasonContains(edited, "AddedUsesSecret", "a non-public member of a type hot reload introduced");
+                Assert.That(CallTheCaller(), Is.EqualTo(2), DescribeOutcomes(edited));
+
+                HotReloadOrchestratorResult restored = await RunAsync(
+                    "SecretThird",
+                    callerExpression,
+                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(1)), AddedMethodCallingTheSecret));
+                AssertOutcome(restored, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
+            });
+        }
+
+        /// <summary>
         /// Verifies that a retained internal introduced type with a public method whose signature
         /// uses an internal type of the compiled assembly still has a body edit patched: binding it
         /// as public exposes that signature, and nothing about the edit depends on it.
@@ -404,6 +449,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + NoInlining + "public int Read() { return " + secondValue.ToString() + "; } }";
         }
 
+        private static string RetainedHelper(int value)
+        {
+            return "internal sealed class RetainedHelper\n"
+                + "    {\n"
+                + "        internal int Secret() { return 5; }\n"
+                + "\n"
+                + "        " + NoInlining + "public int Read() { return " + value.ToString() + "; }\n"
+                + "    }";
+        }
+
         private static string RetainedInternalSignature(int value)
         {
             return "internal sealed class RetainedInternalSignature\n"
@@ -469,6 +524,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.Fail("No " + kind + " row mentions " + methodFragment + ".\n" + DescribeOutcomes(result));
+        }
+
+        private static void AssertReasonContains(
+            HotReloadOrchestratorResult result,
+            string methodFragment,
+            string reasonFragment)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method != null && outcome.Method.Contains(methodFragment, StringComparison.Ordinal))
+                {
+                    Assert.That(outcome.Reason, Does.Contain(reasonFragment), DescribeOutcomes(result));
+                    return;
+                }
+            }
+
+            Assert.Fail("No row mentions " + methodFragment + ".\n" + DescribeOutcomes(result));
         }
     }
 }
