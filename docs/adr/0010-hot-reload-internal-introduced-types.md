@@ -209,10 +209,12 @@ nine cases passing in 2022.3 Release. The additional generic-bitfield probe was 
 ten passed on every Editor version or operating system.
 
 Production evidence so far comes from scoped EditMode runs on 2022.3.62f3, macOS, with Debug
-code optimization:
+code optimization unless a point says Release:
 
-- The grant tests pass. The Release-only inlining test is inconclusive under Debug and has not
-  been run in Release yet.
+- The grant tests pass. Under Debug the Release-only inlining test is inconclusive. When the
+  grant was added, before any production route used it, the grant tests including that inlining
+  test and the ten S7 tests also passed with Release code optimization (30 of 30, 2022.3.62f3,
+  macOS). Release has not been run again since the grant was connected to the production route.
 - The production preparation-to-caller route passes for internal static members, internal
   interfaces, lambda closures, async methods, iterators, generic methods with reference and
   value type arguments, internal members of a retained artifact, a later body edit, and an
@@ -242,8 +244,10 @@ code optimization:
 - The file-local refusal reason is not exercised: the compiler bundled with 2022.3 (Roslyn
   4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
 
-Not verified yet: the file-local refusal reason on an Editor whose compiler parses `file`, the
-Release inlining test, Windows, the Unity 6 Editors, and the full EditMode workflow.
+Not verified yet: the file-local refusal reason on an Editor whose compiler parses `file`, a
+Release run of the grant, inlining, and production-route tests at the revision that connects
+the grant, Windows, the Unity 6 Editors, and the full EditMode workflow. The Release pass above
+covers 2022.3.62f3 on macOS only.
 
 Before merging the production feature:
 
