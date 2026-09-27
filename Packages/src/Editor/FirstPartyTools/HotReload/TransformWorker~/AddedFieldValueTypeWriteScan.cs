@@ -64,13 +64,14 @@ internal static class AddedFieldValueTypeWriteScan
     }
 
     // A whole-value reassignment of the field itself stays supported, so only a target reached
-    // through at least one member or element step counts as a write into the copy.
+    // through at least one member or element step counts as a write into the copy. Parentheses
+    // around the target are no such step: `(a.F) = v` reassigns F exactly as `a.F = v` does.
     private static bool WritesThroughValueTypeAddedField(
         SemanticModel semanticModel,
         ExpressionSyntax target,
         AddedFieldCatalog addedFieldCatalog)
     {
-        ExpressionSyntax receiver = TryGetReceiver(target);
+        ExpressionSyntax receiver = TryGetReceiver(AssignmentTargetRules.Unparenthesized(target));
         return receiver != null
             && ReachesValueTypeAddedFieldRoot(semanticModel, receiver, addedFieldCatalog);
     }

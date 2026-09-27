@@ -313,7 +313,10 @@ internal static class AccessorEligibility
         SemanticModel semanticModel,
         ExpressionSyntax left)
     {
-        ExpressionSyntax receiver = left is MemberAccessExpressionSyntax memberAccess
+        // Why look through parentheses around the left: `(a.P) += 1` evaluates `a` twice exactly as
+        // `a.P += 1` does, so the parentheses must not pass it off as a bare member.
+        ExpressionSyntax target = AssignmentTargetRules.Unparenthesized(left);
+        ExpressionSyntax receiver = target is MemberAccessExpressionSyntax memberAccess
             ? memberAccess.Expression
             : null;
         if (receiver == null)

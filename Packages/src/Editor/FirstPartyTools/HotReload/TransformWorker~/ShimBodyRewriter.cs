@@ -510,9 +510,11 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         };
     }
 
+    // Why look through parentheses: `(a.P) = 1` writes a's P, and falling back to the running
+    // instance would aim the rewritten write at the wrong object.
     internal ExpressionSyntax ExtractReceiver(ExpressionSyntax expression)
     {
-        if (expression is MemberAccessExpressionSyntax memberAccess)
+        if (AssignmentTargetRules.Unparenthesized(expression) is MemberAccessExpressionSyntax memberAccess)
         {
             return memberAccess.Expression;
         }

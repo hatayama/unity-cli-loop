@@ -11,12 +11,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// End-to-end coverage of writes whose target an assignment reaches through parentheses or a
-    /// deconstruction. The accessor rewrite has to treat such a target as written, never read.
+    /// deconstruction. The accessor and added-member rewrites have to treat such a target as
+    /// written, never read, and have to write the instance the target names.
     /// </summary>
     /// <remarks>
-    /// Why the compiled-host edits write inside a closure: a plain synchronous body is
-    /// transplanted without the accessor rewrite, so only a closure, an async or iterator body,
-    /// or an added method reaches the paths under test.
+    /// Why the compiled-host edits that use accessors write inside a closure: a plain synchronous
+    /// body is transplanted without the accessor rewrite, so only a closure, an async or iterator
+    /// body, or an added method reaches the paths under test. The edits that use added members
+    /// need no closure, because the added-member rewrite runs on a transplanted body too.
     /// </remarks>
     public sealed class HotReloadWriteTargetE2ETests : HotReloadIntroducedTypeCallerE2ETestBase
     {
@@ -189,6 +191,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssertOutcome(result, HotReloadMethodOutcomeKind.Skipped, CopyIntoMethod);
                 AssertReasonContains(result, CopyIntoMethod, "deconstruction");
                 AssertCompiledCopyIntoRuns(result);
+            });
+        }
+
+        /// <summary>
+        /// Verifies that a closure writing another instance's private field, or its property with
+        /// a private setter, through parentheses is patched and writes that instance rather than
+        /// the one running the method.
+        /// </summary>
+        [TestCase("Field", "(other._stored) = 5;", 5, 0)]
+        [TestCase("PrivateSetter", "(other.Tally) = 7;", 0, 7)]
+        public async Task Run_ClosureWritingAnotherInstanceThroughParentheses_WritesThatInstance(
+            string label,
+            string statement,
+            int stored,
+            int tally)
+        {
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunCopyIntoAsync(
+                    "Parenthesized" + label,
+                    string.Empty,
+                    InClosure(statement));
+                AssertCopyIntoWrites(result, stored, tally, 0);
+            });
+        }
+
+        /// <summary>
+        /// Verifies that a closure compound-assigning through parentheses a property with a
+        /// private setter, on a receiver that calls a method, is skipped rather than rewritten to
+        /// call the method twice, and the compiled body keeps running.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCompoundWritingThroughParenthesesOnACallReceiver_IsSkipped()
+        {
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunCopyIntoAsync(
+                    "ParenthesizedCallReceiver",
+                    string.Empty,
+                    "HotReloadWriteTargetHost Pick() { return other; }\n"
+                    + "            " + InClosure("(Pick().Tally) += 7;"));
+                AssertOutcome(result, HotReloadMethodOutcomeKind.Skipped, CopyIntoMethod);
+                AssertReasonContains(result, CopyIntoMethod, "evaluated twice");
+                AssertCompiledCopyIntoRuns(result);
+            });
+        }
+
+        /// <summary>
+        /// Verifies that a body writing another instance's added field or added auto-property
+        /// through parentheses stores the value on that instance rather than on the one running
+        /// the method.
+        /// </summary>
+        [TestCase("Field", "public int Added;")]
+        [TestCase("AutoProperty", "public int Added { get; set; }")]
+        public async Task Run_BodyWritingAnAddedMemberOfAnotherInstanceThroughParentheses_WritesThatInstance(
+            string label,
+            string declaration)
+        {
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunCopyIntoAsync(
+                    "ParenthesizedAdded" + label,
+                    "\n        " + declaration + "\n",
+                    "(other.Added) = 5;\n"
+                    + "            other.Tally = other.Added;\n"
+                    + "            Tally = Added;");
+                AssertCopyIntoWrites(result, 0, 5, 0);
             });
         }
 
