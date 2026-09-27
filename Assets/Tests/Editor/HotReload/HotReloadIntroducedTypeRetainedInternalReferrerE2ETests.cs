@@ -23,6 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
         private const string AddedFieldName = "AddedRetained";
 
+        // What a reload that binds the retained artifact through its public surface reports for a
+        // body naming one of its internal members.
+        private const string UnboundBodyReason = "could not be fully bound";
+
         // Why NoInlining on the bodies a later reload edits: the test reads the edited body back
         // through a direct call, which an inlined copy at the call site would not observe.
         private const string NoInlining =
@@ -312,7 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// Verifies that a method a compiled type adds is never applied while its body calls an
         /// internal method of a retained introduced type: it is skipped when the type is introduced
         /// in the same reload, when a later reload edits a body of the type, and when a reload
-        /// brings the type back to what its artifact holds, so no unrelated reload drops a method
+        /// leaves the type's file out and binds the artifact, so no unrelated reload drops a method
         /// an earlier one applied.
         /// </summary>
         [Test]
@@ -327,6 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     WithHostAdditions(Owner(OwnerPath, RetainedHelper(1)), AddedMethodCallingTheSecret));
                 AssertIntroduced(introducing, "RetainedHelper");
                 AssertOutcome(introducing, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
+                AssertReasonContains(introducing, "AddedUsesSecret", UnboundBodyReason);
 
                 HotReloadOrchestratorResult edited = await RunAsync(
                     "SecretSecond",
@@ -337,11 +342,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssertReasonContains(edited, "AddedUsesSecret", "a non-public member of a type hot reload introduced");
                 Assert.That(CallTheCaller(), Is.EqualTo(2), DescribeOutcomes(edited));
 
-                HotReloadOrchestratorResult restored = await RunAsync(
+                HotReloadOrchestratorResult hostOnly = await RunAsync(
                     "SecretThird",
                     callerExpression,
-                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(1)), AddedMethodCallingTheSecret));
-                AssertOutcome(restored, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
+                    WithHostAdditions(new Dictionary<string, string>(), AddedMethodCallingTheSecret));
+                AssertOutcome(hostOnly, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
+                AssertReasonContains(hostOnly, "AddedUsesSecret", UnboundBodyReason);
             });
         }
 

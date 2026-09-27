@@ -253,7 +253,7 @@ code optimization unless a point says Release:
   usability testing reported. Members added to the retained type apply as on a public introduced
   type, and a compiled type sharing its file keeps its added properties. A method a compiled type
   adds that calls an internal method of the retained type is skipped on the reload that
-  introduces the type, on one that edits it, and on one that leaves it unchanged.
+  introduces the type, on one that edits it, and on one that leaves its file out.
 - The file-local refusal reason is not exercised: the compiler bundled with 2022.3 (Roslyn
   4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
 
