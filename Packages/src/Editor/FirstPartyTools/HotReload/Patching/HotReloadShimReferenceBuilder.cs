@@ -240,8 +240,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // a file-name check while being the same assembly identity twice.
         internal static void AppendIfMissingByFullPath(List<string> references, string fullPath)
         {
-            foreach (string reference in references)
+            if (IndexOfFullPath(references, fullPath) >= 0)
             {
+                return;
+            }
+
+            references.Add(fullPath);
+        }
+
+        /// <summary>
+        /// Finds the first reference naming <paramref name="fullPath"/> under the full-path rule
+        /// <see cref="AppendIfMissingByFullPath"/> deduplicates by, or -1 when none does.
+        /// </summary>
+        internal static int IndexOfFullPath(IReadOnlyList<string> references, string fullPath)
+        {
+            for (int index = 0; index < references.Count; index++)
+            {
+                string reference = references[index];
                 if (string.IsNullOrEmpty(reference))
                 {
                     continue;
@@ -252,11 +267,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     fullPath,
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    return;
+                    return index;
                 }
             }
 
-            references.Add(fullPath);
+            return -1;
         }
 
         internal static bool NeedsHarmonyReference(TransformWorkerOutputDto output)

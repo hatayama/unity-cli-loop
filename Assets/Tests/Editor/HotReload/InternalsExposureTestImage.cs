@@ -19,7 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         internal AssemblyDefinition Definition { get; }
         internal HotReloadTypeHome Home { get; }
 
-        internal InternalsExposureTestImage(Action<TypeDefinition> configure = null)
+        // Why a resolver can be supplied: an image whose metadata needs another assembly while it
+        // is written, such as an enum-typed constant, has to find that assembly now, even when the
+        // test later makes it unresolvable for the copy under test.
+        internal InternalsExposureTestImage(
+            Action<TypeDefinition> configure = null,
+            IAssemblyResolver writeResolver = null)
         {
             ProjectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string assemblyName = "ExposedReferenceFixture_" + Guid.NewGuid().ToString("N");
@@ -28,7 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(directory);
             DllPath = Path.Combine(directory, assemblyName + ".dll");
             Definition = AssemblyDefinition.CreateAssembly(
-                new AssemblyNameDefinition(assemblyName, new Version(1, 0, 0, 0)), assemblyName, ModuleKind.Dll);
+                new AssemblyNameDefinition(assemblyName, new Version(1, 0, 0, 0)),
+                assemblyName,
+                new ModuleParameters { Kind = ModuleKind.Dll, AssemblyResolver = writeResolver });
             TypeDefinition candidate = new TypeDefinition("", "Candidate",
                 TypeAttributes.Public | TypeAttributes.BeforeFieldInit, Definition.MainModule.TypeSystem.Object);
             Definition.MainModule.Types.Add(candidate);
