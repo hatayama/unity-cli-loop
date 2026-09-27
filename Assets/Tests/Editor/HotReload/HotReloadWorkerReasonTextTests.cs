@@ -363,6 +363,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assignment to an added field would evaluate a receiver with possible side effects twice. "
                 + "Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,
+                NoArgs,
+                "Deconstruction assignment to an added field is skipped; the store write cannot stand as a "
+                + "deconstruction target. Assign the field in its own statement 'F = value;', which the "
+                + "store rewrite handles. Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 NoArgs,
                 "Writes to members of an added value-type field, and instance method calls on that field, "

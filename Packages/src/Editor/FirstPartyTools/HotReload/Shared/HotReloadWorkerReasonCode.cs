@@ -45,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AddedFieldRefOutIn,
         AddedFieldConsumedWrite,
         AddedFieldDoubleEvalReceiver,
+        AddedFieldDeconstructionTarget,
         AddedFieldValueTypeMemberWrite,
         AddedFieldUnavailableAddedField,
         AddedFieldCoalesceAssignment,

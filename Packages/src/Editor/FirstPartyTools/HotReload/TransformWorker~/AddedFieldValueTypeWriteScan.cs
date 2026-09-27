@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -13,10 +14,9 @@ internal static class AddedFieldValueTypeWriteScan
         SemanticModel semanticModel,
         AddedFieldCatalog addedFieldCatalog)
     {
-        foreach (AssignmentExpressionSyntax assignment in bodyNode.DescendantNodesAndSelf()
-            .OfType<AssignmentExpressionSyntax>())
+        foreach (ExpressionSyntax target in AssignedTargets(bodyNode))
         {
-            if (WritesThroughValueTypeAddedField(semanticModel, assignment.Left, addedFieldCatalog))
+            if (WritesThroughValueTypeAddedField(semanticModel, target, addedFieldCatalog))
             {
                 return true;
             }
@@ -61,6 +61,23 @@ internal static class AddedFieldValueTypeWriteScan
         }
 
         return false;
+    }
+
+    // Every expression an assignment writes: its left side, and each element of a tuple it
+    // deconstructs into, which it writes just as it writes a left side.
+    private static IEnumerable<ExpressionSyntax> AssignedTargets(SyntaxNode bodyNode)
+    {
+        foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
+        {
+            if (node is AssignmentExpressionSyntax assignment)
+            {
+                yield return assignment.Left;
+            }
+            else if (node is ExpressionSyntax expression && AssignmentTargetRules.IsDeconstructionTarget(expression))
+            {
+                yield return expression;
+            }
+        }
     }
 
     // A whole-value reassignment of the field itself stays supported, so only a target reached

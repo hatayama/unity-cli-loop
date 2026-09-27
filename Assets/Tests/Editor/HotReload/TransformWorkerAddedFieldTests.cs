@@ -1045,6 +1045,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a deconstruction into an added field, named bare or through another instance,
+        /// skips with a dedicated reason, because the store write is a call that cannot stand as a
+        /// deconstruction target, so the shim would not compile.
+        /// </summary>
+        [TestCase("AddedFieldDeconstructedByName.cs", "(AddedCount, other) = (value, value);")]
+        [TestCase("AddedFieldDeconstructedThroughReceiver.cs", "(Inner.AddedCount, other) = (value, value);")]
+        public async Task Skip_DeconstructionIntoAddedField_UsesDedicatedReason(
+            string editedFileName,
+            string deconstruction)
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedCount;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            int other;\n"
+                + "            " + deconstruction + "\n"
+                + "            return other;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited(editedFileName, edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "Deconstruction assignment to an added field");
+        }
+
+        /// <summary>
         /// What: a simple assignment through a side-effect receiver still rewrites because Set
         /// evaluates the receiver once.
         /// </summary>
@@ -1159,6 +1188,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertValueTypeMemberWriteSkipAsync(
                 "AddedFieldValueTypeIndexerWrite.cs",
                 "            AddedValue[0] = value;\n            return value;");
+        }
+
+        /// <summary>
+        /// What: a deconstruction into a member of an added value-type field skips with the
+        /// value-type reason, because that element would write into the copy the store hands back.
+        /// </summary>
+        [Test]
+        public async Task Skip_DeconstructionIntoValueTypeAddedFieldMember_UsesDedicatedReason()
+        {
+            await AssertValueTypeMemberWriteSkipAsync(
+                "AddedFieldValueTypeDeconstruction.cs",
+                "            int other;\n"
+                + "            (AddedValue.Existing, other) = (value, value);\n"
+                + "            return other;");
         }
 
         /// <summary>

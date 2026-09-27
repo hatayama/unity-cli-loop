@@ -69,6 +69,11 @@ internal static class AddedFieldSkipEvaluator
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver);
         }
 
+        if (AddedFieldBodyScan.BodyDeconstructsIntoAddedField(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget);
+        }
+
         if (AddedFieldValueTypeWriteScan.BodyHasValueTypeAddedFieldMemberWrite(bodyNode, semanticModel, addedFieldCatalog))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite);
