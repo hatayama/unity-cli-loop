@@ -379,7 +379,7 @@ public static class SpikeS7OverrideSnippet
         [Test]
         public async Task InliningSnippet_UnflaggedCallerInliningAFlaggedTinyMethod_ThrowsMethodAccessException()
         {
-            AssumeReleaseCodeOptimization();
+            IgnoreUnlessReleaseCodeOptimization();
             Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
                 "S7-inlining", InliningSnippetSource, "SpikeS7InliningSnippet", new List<string>());
             MethodInfo caller = snippetType.GetMethod("UnflaggedCaller");
@@ -399,7 +399,7 @@ public static class SpikeS7OverrideSnippet
         [Test]
         public async Task InliningSnippet_FlaggedTinyMethodMarkedNoInlining_UnflaggedCallerReachesInternalMember()
         {
-            AssumeReleaseCodeOptimization();
+            IgnoreUnlessReleaseCodeOptimization();
             Type snippetType = await HotReloadSpikeS1PublicizedAccessTests.CompileAndLoadSnippetAsync(
                 "S7-noinlining", InliningSnippetSource, "SpikeS7InliningSnippet", new List<string>());
             MethodInfo caller = snippetType.GetMethod("UnflaggedCaller");
@@ -416,12 +416,14 @@ public static class SpikeS7OverrideSnippet
                 "Reflection reads the implementation flags back from the same record.");
         }
 
-        private static void AssumeReleaseCodeOptimization()
+        private static void IgnoreUnlessReleaseCodeOptimization()
         {
-            Assume.That(
-                CompilationPipeline.codeOptimization,
-                Is.EqualTo(CodeOptimization.Release),
-                "Debug code optimization turns JIT inlining off, which would make this pass trivially.");
+            // Why Ignore, not Assume: batchmode -runTests exits with 2 on an inconclusive test even when
+            // nothing failed, which fails the CI job that runs the Editor directly under Debug.
+            if (CompilationPipeline.codeOptimization != CodeOptimization.Release)
+            {
+                Assert.Ignore("Debug code optimization turns JIT inlining off, which would make this pass trivially.");
+            }
         }
 
         /// <summary>
