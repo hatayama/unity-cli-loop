@@ -274,9 +274,12 @@ language version of the Editor's bundled compiler, so on 6000.5.8f1 and 6000.7.0
 compilers parse `file`, the file-local test takes the refusal-reason path. The hot reload
 suites also passed on 6000.7.0b2 on macOS under Debug.
 
+A dedicated job in the same workflow runs the grant tests and the S7 tests, the 30 above, with
+Release code optimization on the committed Unity version on Linux. They passed 30 of 30 on
+2022.3.62f3, including the three Release-only inlining tests, when the job was added.
+
 Not verified yet: a Release run of the production-route tests, Release runs on 6000.3 and
-6000.5, and Windows. The Release passes above ran on macOS only; no workflow leg runs the
-Release-only tests with Release code optimization.
+6000.5, and Windows.
 
 Before merging the production feature:
 
