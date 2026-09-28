@@ -67,7 +67,7 @@ changed are patched (`UnchangedTotal` counts the rest).
   visible to edited code of the same reload within the same assembly (pass the declaring
   file and its callers together), and gone on any compile or domain reload.
 - New types: a top-level class, struct, enum, or interface declared in an edited
-  file is introduced by that reload and listed in `IntroducedTypes`; every other shape is
+  file is introduced by that reload and listed in `IntroducedTypes`; other valid shapes are
   refused with a `Warnings` line naming the reason. Use from another assembly or from files
   outside the reload, reflection, serialization, and Unity message discovery still need
   `uloop compile`.
