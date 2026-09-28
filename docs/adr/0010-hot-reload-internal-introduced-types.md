@@ -262,12 +262,21 @@ code optimization unless a point says otherwise:
   initializer through the getter; a write through an internal ref-returning property), while
   those calling only the public accessor, or naming a property with an internal getter in
   nameof, stay applied on all three reloads.
-- The file-local refusal reason is not exercised: the compiler bundled with 2022.3 (Roslyn
-  4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
+- The file-local refusal reason is not reached on 2022.3: its bundled compiler (Roslyn 4.3.1)
+  rejects `file` while parsing (CS0116), and the test asserts that path instead.
 
-Not verified yet: the file-local refusal reason on an Editor whose compiler parses `file`, a
-Release run of the production-route tests, Windows, the Unity 6 Editors beyond the Release run
-above, and the full EditMode workflow. The Release passes above ran on macOS only.
+The EditMode workflow on the integration branch passed on every leg with no failed or
+inconclusive tests: the full suite on 2022.3.62f3 and the hot reload suites on 6000.3.15f1,
+6000.5.8f1, and 6000.7.0b2 (Linux, Debug). The skipped tests were the Release-only inlining
+tests, the path case that needs a platform with two directory separators, and
+environment-dependent tests outside hot reload on 2022.3. The worker parses with the latest
+language version of the Editor's bundled compiler, so on 6000.5.8f1 and 6000.7.0b2, whose
+compilers parse `file`, the file-local test takes the refusal-reason path. The hot reload
+suites also passed on 6000.7.0b2 on macOS under Debug.
+
+Not verified yet: a Release run of the production-route tests, Release runs on 6000.3 and
+6000.5, and Windows. The Release passes above ran on macOS only; no workflow leg runs the
+Release-only tests with Release code optimization.
 
 Before merging the production feature:
 
