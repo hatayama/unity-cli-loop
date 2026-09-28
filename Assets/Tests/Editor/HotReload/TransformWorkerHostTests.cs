@@ -21,15 +21,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerHostTests
     {
         private const int DefaultTimeoutMilliseconds = 30_000;
-        private const int ShortTimeoutMilliseconds = 300;
+        // Why not shorter: the request after the timed-out one runs under the same budget, and a fresh
+        // scripted worker has to read and write its files within it; 300 ms ran out under load.
+        private const int ShortTimeoutMilliseconds = 2_000;
         private const int WaitMilliseconds = 15_000;
         private const int GateDeadlineTimeoutMilliseconds = 1_000;
-        private const int RemainderDeadlineTimeoutMilliseconds = 1_000;
-        private const int BreakConversationDelayMilliseconds = 800;
-        // The response budget (1000) plus the graceful-quit wait the timeout path spends killing the
-        // hung worker (500), plus slack. An implementation that restarts the budget per attempt spends
-        // 800 + 1000 + 500 instead and lands well above this bound.
-        private const int RemainderDeadlineBudgetMilliseconds = 1_900;
+        // Why the break lands at half the budget: the retry only starts if the test's delay ends before
+        // the budget does, and that delay overruns under load (800 ms once overran a 1000 ms budget).
+        private const int RemainderDeadlineTimeoutMilliseconds = 3_000;
+        private const int BreakConversationDelayMilliseconds = 1_500;
+        // The response budget (3000) plus the graceful-quit wait the timeout path spends killing the
+        // hung worker (500), plus 1000 of slack. An implementation that restarts the budget per attempt
+        // spends at least 1500 + 3000 + 500 instead and lands above this bound.
+        private const int RemainderDeadlineBudgetMilliseconds = 4_500;
 
         private ScriptedChannelFactory _factory;
         private string _workerDirectory;
