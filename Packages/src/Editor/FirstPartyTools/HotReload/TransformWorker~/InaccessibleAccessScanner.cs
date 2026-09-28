@@ -108,7 +108,8 @@ internal static class InaccessibleAccessScanner
             ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
             if (initializerSymbol is IPropertySymbol initializerProperty)
             {
-                return AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod);
+                return AccessibilityRules.IsInaccessibleAccessor(
+                    AssignmentTargetRules.AccessorCalledByWrite(initializerProperty));
             }
 
             return IsInaccessibleNonConstSymbol(initializerSymbol);
@@ -123,7 +124,7 @@ internal static class InaccessibleAccessScanner
                 return true;
             }
 
-            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+            return AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(propertySymbol));
         }
 
         return IsInaccessibleNonConstSymbol(leftSymbol);
@@ -306,7 +307,7 @@ internal static class InaccessibleAccessScanner
         if (symbol is IPropertySymbol propertySymbol)
         {
             return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
-                || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+                || AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(propertySymbol));
         }
 
         return IsInaccessibleNonConstSymbol(symbol);

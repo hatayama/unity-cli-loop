@@ -30,10 +30,13 @@ internal static class AccessorPropertyWriteRules
         bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
 
         // Why accessibility first: shape gates (indexer/ref-return) must not reject fully
-        // public writes such as dict[key]=value or Time.timeScale=0f. The read-side path already
-        // pre-filters with IsInaccessibleAccessor/IsInaccessibleFromExternalAssembly before shape
-        // checks — keep that order here for symmetry.
-        bool setterInaccessible = AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+        // public writes such as dict[key]=value, Time.timeScale=0f, or a write through a public
+        // ref-returning getter. The read-side path already pre-filters with
+        // IsInaccessibleAccessor/IsInaccessibleFromExternalAssembly before shape checks — keep
+        // that order here for symmetry. A ref-returning property is judged by the getter its write
+        // calls, not by the setter it lacks.
+        bool setterInaccessible = AccessibilityRules.IsInaccessibleAccessor(
+            AssignmentTargetRules.AccessorCalledByWrite(propertySymbol));
         bool getterInaccessible = needsGetter
             && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
         if (!setterInaccessible && !getterInaccessible)

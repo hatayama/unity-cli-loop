@@ -199,6 +199,88 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a closure that already takes the accessor rewrite, assigning,
+        /// compound-assigning, incrementing or setting in an object initializer through a
+        /// ref-returning indexer or property that has no setter, is patched and writes through the
+        /// reference the public getter returns.
+        /// </summary>
+        // Why beside a private field write: it alone sends the closure to the accessor plan and the
+        // accessor rewrite, which have to judge such a write by the getter it calls, not by the
+        // setter it lacks.
+        [TestCase(
+            "IndexerAssignment",
+            "HotReloadWriteTargetSlots slots = new HotReloadWriteTargetSlots(); slots[0] = 3; slots[1] = 7; "
+            + "other.Hidden = slots[0] * 10 + slots[1];",
+            1,
+            37)]
+        [TestCase(
+            "IndexerCompound",
+            "HotReloadWriteTargetSlots slots = new HotReloadWriteTargetSlots(); slots[0] = 3; slots[0] += 4; "
+            + "other.Hidden = slots[0];",
+            1,
+            7)]
+        [TestCase(
+            "IndexerIncrement",
+            "HotReloadWriteTargetSlots slots = new HotReloadWriteTargetSlots(); slots[0]++; ++slots[0]; "
+            + "other.Hidden = slots[0];",
+            1,
+            2)]
+        [TestCase("PropertyAssignment", "other.StoredSlot = 5;", 5, 0)]
+        [TestCase("PropertyCompound", "other.StoredSlot += 4;", 5, 0)]
+        [TestCase("PropertyIncrement", "other.StoredSlot++; ++other.StoredSlot;", 3, 0)]
+        [TestCase(
+            "IndexerInitializer",
+            "HotReloadWriteTargetSlots slots = new HotReloadWriteTargetSlots { [0] = 3, [1] = 7 }; "
+            + "other.Hidden = slots[0] * 10 + slots[1];",
+            1,
+            37)]
+        [TestCase(
+            "PropertyInitializer",
+            "HotReloadWriteTargetHost made = new HotReloadWriteTargetHost { StoredSlot = 5 }; other.Hidden = made.Stored;",
+            1,
+            5)]
+        public async Task Run_ClosureWritingThroughARefReturningMemberWithoutASetter_WritesThroughIt(
+            string label,
+            string statements,
+            int stored,
+            int hidden)
+        {
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunCopyIntoAsync(
+                    "WrittenRefReturning" + label,
+                    string.Empty,
+                    InClosure("other._stored = 1; " + statements));
+                AssertCopyIntoWrites(result, stored, 0, hidden);
+            });
+        }
+
+        /// <summary>
+        /// Verifies that a closure assigning or incrementing through a ref-returning property whose
+        /// getter only the declaring type may call is skipped with the ref-returning reason, and
+        /// the compiled body keeps running.
+        /// </summary>
+        // Why this pins the getter: such a write calls no setter, so only the private getter makes
+        // it inaccessible, and judging it accessible would transplant a private access.
+        [TestCase("Assignment", "other.PrivateSlot = 5;")]
+        [TestCase("Increment", "other.PrivateSlot++;")]
+        public async Task Run_ClosureWritingThroughAPrivateRefReturningProperty_IsSkippedAndKeepsTheCompiledBody(
+            string label,
+            string statement)
+        {
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunCopyIntoAsync(
+                    "PrivateRefReturning" + label,
+                    string.Empty,
+                    InClosure(statement));
+                AssertOutcome(result, HotReloadMethodOutcomeKind.Skipped, CopyIntoMethod);
+                AssertReasonContains(result, CopyIntoMethod, "ref-returning");
+                AssertCompiledCopyIntoRuns(result);
+            });
+        }
+
+        /// <summary>
         /// Verifies that a closure deconstructing into a property whose setter only the declaring
         /// type may call, alone or beside a private field write, is skipped with a reason naming
         /// the deconstruction, and the compiled body keeps running.

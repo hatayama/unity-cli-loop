@@ -112,7 +112,7 @@ internal static class AccessorAccessRegistrar
         // Initializer assignments are always writes (including ImplicitElementAccess indexers).
         ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
         bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
-            ? AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod)
+            ? AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(initializerProperty))
             : initializerSymbol != null
                 && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
         if (inaccessibleWrite)
