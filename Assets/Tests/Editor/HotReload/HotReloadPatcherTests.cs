@@ -451,19 +451,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: constructed generic parameters use Type.ToString (List`1[System.Int32]), not
-        /// assembly-qualified FullName (FullName would embed Version/PublicKeyToken).
+        /// What: constructed generic parameters are spelled the way metadata spells them, with the
+        /// type arguments in angle brackets, never with Type.ToString's square brackets or the
+        /// assembly-qualified FullName (which would embed Version/PublicKeyToken).
         /// </summary>
         [Test]
-        public void FormatMethodKey_ConstructedGenericParameter_OmitsAssemblyQualification()
+        public void FormatMethodKey_ConstructedGenericParameter_UsesMetadataSpellingWithoutAssemblyQualification()
         {
             MethodInfo take = AccessTools.Method(
                 typeof(HotReloadGenericKeyFixture),
                 nameof(HotReloadGenericKeyFixture.Take));
             string key = HotReloadMethodKeys.FormatMethodLabel(take);
 
-            Assert.That(key, Does.Contain("System.Collections.Generic.List`1[System.Int32]"));
-            Assert.That(key, Does.Contain("System.Collections.Generic.Dictionary`2[System.String,System.Int32]"));
+            Assert.That(key, Does.Contain("System.Collections.Generic.List`1<System.Int32>"));
+            Assert.That(key, Does.Contain("System.Collections.Generic.Dictionary`2<System.String,System.Int32>"));
             Assert.That(key, Does.Not.Contain("Version="));
             Assert.That(key, Does.Not.Contain("PublicKeyToken="));
             Assert.That(key, Does.Not.Contain("mscorlib"));
