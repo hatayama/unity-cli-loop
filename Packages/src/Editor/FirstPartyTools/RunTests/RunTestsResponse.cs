@@ -71,6 +71,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int SkippedCount { get; set; }
 
         /// <summary>
+        /// Number of inconclusive tests, whose assumptions were not met
+        /// </summary>
+        public int InconclusiveCount { get; set; }
+
+        /// <summary>
         /// Path to XML result file (if saved)
         /// </summary>
         public string XmlPath { get; set; }
@@ -92,6 +97,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string[] SkippedTests { get; set; }
+
+        /// <summary>
+        /// Inconclusive leaf tests, omitted from JSON when none were inconclusive.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public SerializableTestResult.InconclusiveTestDetail[] InconclusiveTests { get; set; }
 
         /// <summary>
         /// Policy warning when hot-reload changes were live at test-run start. Empty when none
@@ -171,6 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int passedCount,
             int failedCount,
             int skippedCount,
+            int inconclusiveCount,
             string xmlPath,
             string status,
             bool hasFailures,
@@ -187,6 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PassedCount = passedCount;
             FailedCount = failedCount;
             SkippedCount = skippedCount;
+            InconclusiveCount = inconclusiveCount;
             XmlPath = xmlPath;
             Status = status;
             HasFailures = hasFailures;
@@ -204,6 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedCount: 0,
                 failedCount: 0,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: null,
                 status: RunTestsExecutionStatus.ExecutionFailed,
                 hasFailures: false,

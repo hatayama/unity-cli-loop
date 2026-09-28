@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         [SerializeField] public int passedCount;
         [SerializeField] public int failedCount;
         [SerializeField] public int skippedCount;
+        [SerializeField] public int inconclusiveCount;
         [SerializeField] public string xmlPath;
 
         /// <summary>
@@ -32,6 +33,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Skipped leaf test full names, capped for the JSON response. Null when none skipped.
         /// </summary>
         public string[] skippedTests;
+
+        /// <summary>
+        /// Inconclusive leaf tests, capped for the JSON response. Null when none were inconclusive.
+        /// </summary>
+        public InconclusiveTestDetail[] inconclusiveTests;
+
+        /// <summary>
+        /// One inconclusive test leaf included in a run-tests response, with the message that names
+        /// the assumption it could not meet.
+        /// </summary>
+        [Serializable]
+        public class InconclusiveTestDetail
+        {
+            public string FullName { get; set; }
+
+            public string Message { get; set; }
+        }
 
         /// <summary>
         /// One failed test leaf included in a run-tests response.
@@ -65,6 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedCount = 0,
                 failedCount = 0,
                 skippedCount = 0,
+                inconclusiveCount = 0,
                 xmlPath = null
             };
         }

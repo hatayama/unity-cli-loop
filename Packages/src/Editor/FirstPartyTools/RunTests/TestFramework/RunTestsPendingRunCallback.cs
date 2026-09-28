@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public void RunFinished(ITestResultAdaptor result)
         {
             SerializableTestResult serializableResult = SerializableTestResultConverter.FromTestResult(result);
-            if (serializableResult.failedCount > 0)
+            if (SerializableTestResultConverter.ShouldSaveResultXml(serializableResult))
             {
                 serializableResult.xmlPath = PlayModeTestExecuter.TrySaveFailureXml(result);
             }

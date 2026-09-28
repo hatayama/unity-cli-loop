@@ -293,6 +293,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedCount: 0,
                 failedCount: 0,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: null,
                 status: RunTestsExecutionStatus.ExecutionFailed,
                 hasFailures: false,
