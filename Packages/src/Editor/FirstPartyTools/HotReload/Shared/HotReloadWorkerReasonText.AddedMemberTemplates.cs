@@ -98,6 +98,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "was introduced, while this reload builds {2} from source ({3}), so the {2} this body "
                     + "uses no longer matches and it is skipped.",
                     4));
+            // Why a compile is the only step: the use is valid C#, and only a compile moves the type
+            // into the assembly, where every reload binds its members the same way.
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodUsesIntroducedTypeNonPublicMember,
+                Plain(
+                    "Added members of other types cannot use '{0}', a non-public member of a type hot "
+                    + "reload introduced: only the reloads that edit that type can bind it, so the member "
+                    + "would be applied on some reloads and dropped on others.",
+                    1).EndingWith(CompileCallToAction));
 
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
@@ -141,6 +150,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver,
                 Plain(
                     "Assignment to an added field would evaluate a receiver with possible side effects twice.",
+                    0).EndingWith(CompileCallToAction));
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,
+                // Why name the plain statement: the store rewrite already handles it, so that edit
+                // applies without a compile.
+                Plain(
+                    "Deconstruction assignment to an added field is skipped; the store write cannot stand as a "
+                    + "deconstruction target. Assign the field in its own statement 'F = value;', which the "
+                    + "store rewrite handles.",
                     0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,

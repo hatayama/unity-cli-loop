@@ -30,10 +30,13 @@ internal static class AccessorPropertyWriteRules
         bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
 
         // Why accessibility first: shape gates (indexer/ref-return) must not reject fully
-        // public writes such as dict[key]=value or Time.timeScale=0f. The read-side path already
-        // pre-filters with IsInaccessibleAccessor/IsInaccessibleFromExternalAssembly before shape
-        // checks — keep that order here for symmetry.
-        bool setterInaccessible = AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+        // public writes such as dict[key]=value, Time.timeScale=0f, or a write through a public
+        // ref-returning getter. The read-side path already pre-filters with
+        // IsInaccessibleAccessor/IsInaccessibleFromExternalAssembly before shape checks — keep
+        // that order here for symmetry. A ref-returning property is judged by the getter its write
+        // calls, not by the setter it lacks.
+        bool setterInaccessible = AccessibilityRules.IsInaccessibleAccessor(
+            AssignmentTargetRules.AccessorCalledByWrite(propertySymbol));
         bool getterInaccessible = needsGetter
             && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
         if (!setterInaccessible && !getterInaccessible)
@@ -87,6 +90,26 @@ internal static class AccessorPropertyWriteRules
         }
 
         return true;
+    }
+
+    // A deconstruction calls only the setter of a property it sets. An accessible setter needs no
+    // accessor; an inaccessible one has no rewrite shape, because a setter delegate returns void and
+    // cannot stand where the deconstruction needs an assignable element.
+    internal static bool TryRegisterDeconstructedPropertyWrite(
+        IPropertySymbol propertySymbol,
+        out WorkerReason rejectReason)
+    {
+        rejectReason = null;
+        if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
+        {
+            return false;
+        }
+
+        rejectReason = WorkerReason.Of(
+            propertySymbol.IsIndexer
+                ? HotReloadWorkerReasonCode.AccessorIndexerNoShape
+                : HotReloadWorkerReasonCode.AccessorDeconstructionPropertyNoShape);
+        return false;
     }
 
     internal static WorkerReason TryGetPropertyWriteShapeRejectReason(

@@ -26,7 +26,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task CompileAsync_PathsUnavailable_DoesNotCompileOrLoad()
         {
             FakeEnvironment environment = new FakeEnvironment { PathsAvailable = false };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 CreateRequest(),
@@ -49,7 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 BackendKind = DynamicCompilationBackendKind.AssemblyBuilderFallback
             };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 CreateRequest(),
@@ -77,7 +81,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 CreateRequest(),
@@ -95,7 +101,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task CompileAsync_MissingPdb_DoesNotLoad()
         {
             FakeEnvironment environment = new FakeEnvironment { PdbExists = false };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 CreateRequest(),
@@ -113,7 +121,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task CompileAsync_AssemblyIdentityMismatch_DoesNotLoad()
         {
             FakeEnvironment environment = new FakeEnvironment { IdentityMatches = false };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 CreateRequest(),
@@ -131,7 +141,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task CompileAsync_MissingRequestedTypeDefinition_DoesNotLoad()
         {
             FakeEnvironment environment = new FakeEnvironment { ContainsRequestedType = false };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 CreateRequest(),
@@ -149,7 +161,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task CompileAsync_ValidatedOutput_ReturnsPreparedArtifact()
         {
             FakeEnvironment environment = new FakeEnvironment();
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 CreateRequest(),
@@ -159,6 +173,211 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Artifact, Is.Not.Null);
             Assert.That(environment.LoadCalls, Is.EqualTo(1));
             Assert.That(environment.WriteSourceCalls, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies that a compiler cannot be built without an internal access grant, so no
+        /// artifact compiled against exposed references can reach a compiler unable to grant it.
+        /// </summary>
+        [Test]
+        public void Constructor_NullInternalAccessGrant_IsRejected()
+        {
+            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
+                () => new HotReloadIntroducedTypeCompiler(new FakeEnvironment(), null));
+
+            Assert.That(exception.ParamName, Is.EqualTo("internalAccessGrant"));
+        }
+
+        /// <summary>
+        /// Verifies that a request compiled against exposed references is refused before any
+        /// source is written or compiled when the grant it needs is unavailable.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_GrantUnavailable_RejectsBeforeCompilation()
+        {
+            FakeEnvironment environment = new FakeEnvironment();
+            FakeInternalAccessGrant grant = new FakeInternalAccessGrant(isAvailable: false);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment, grant);
+
+            bool rejected = false;
+            try
+            {
+                await compiler.CompileAsync(CreateRequest(reachesInternals: true), CancellationToken.None);
+            }
+            catch (InvalidOperationException)
+            {
+                rejected = true;
+            }
+
+            Assert.That(rejected, Is.True);
+            Assert.That(environment.WriteSourceCalls, Is.EqualTo(0));
+            Assert.That(environment.CompileCalls, Is.EqualTo(0));
+            Assert.That(environment.LoadCalls, Is.EqualTo(0));
+            Assert.That(grant.GrantCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a compilation that produced no result is refused without loading or
+        /// granting the assembly left behind.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_NullBackend_DoesNotGrant()
+        {
+            FakeEnvironment environment = new FakeEnvironment { ReturnsNoBackendResult = true };
+            FakeInternalAccessGrant grant = new FakeInternalAccessGrant(isAvailable: true);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment, grant);
+
+            HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
+                CreateRequest(reachesInternals: true),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
+            Assert.That(environment.LoadCalls, Is.EqualTo(0));
+            Assert.That(grant.GrantCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a load the environment reports as failed, or one that hands back no
+        /// assembly, is refused without asking the grant for anything.
+        /// </summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task CompileAsync_LoadFailure_DoesNotGrant(bool loadsNullAssembly)
+        {
+            FakeEnvironment environment = new FakeEnvironment
+            {
+                LoadSucceeds = loadsNullAssembly,
+                LoadsNullAssembly = loadsNullAssembly
+            };
+            FakeInternalAccessGrant grant = new FakeInternalAccessGrant(isAvailable: true);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment, grant);
+
+            HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
+                CreateRequest(reachesInternals: true),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
+            Assert.That(environment.LoadCalls, Is.EqualTo(1));
+            Assert.That(grant.GrantCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a refused grant fails the compilation with the grant's reason instead of
+        /// preparing an artifact whose code could not reach the members it was compiled against.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_GrantRefused_ReturnsFailure()
+        {
+            FakeEnvironment environment = new FakeEnvironment();
+            FakeInternalAccessGrant grant = new FakeInternalAccessGrant(isAvailable: true)
+            {
+                RefusalReason = "refused by the test"
+            };
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment, grant);
+
+            HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
+                CreateRequest(reachesInternals: true),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Granting internal access to the introduced-type artifact failed: refused by the test"));
+            Assert.That(result.Diagnostics, Is.Empty);
+            Assert.That(environment.LoadCalls, Is.EqualTo(1));
+            Assert.That(grant.GrantCalls, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies that the assembly the grant was given is the very assembly the prepared
+        /// artifact carries, so no other load of the same bytes can be published ungranted.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_GrantedAssembly_IsThePreparedAssembly()
+        {
+            FakeEnvironment environment = new FakeEnvironment();
+            FakeInternalAccessGrant grant = new FakeInternalAccessGrant(isAvailable: true);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment, grant);
+
+            HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
+                CreateRequest(reachesInternals: true),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(grant.GrantCalls, Is.EqualTo(1));
+            Assert.That(grant.LastGrantedAssembly, Is.SameAs(result.Artifact.Assembly));
+        }
+
+        /// <summary>
+        /// Verifies that an artifact compiled against the raw references is prepared without the
+        /// grant being asked, even when the grant is available.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_RawReferences_DoNotGrant()
+        {
+            FakeEnvironment environment = new FakeEnvironment();
+            FakeInternalAccessGrant grant = new FakeInternalAccessGrant(isAvailable: true);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment, grant);
+
+            HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
+                CreateRequest(reachesInternals: false),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(grant.GrantCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that an exception thrown by the loader escapes unchanged, and that nothing is
+        /// granted for an assembly the compiler never received.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_LoadThrows_DoesNotGrant()
+        {
+            FakeEnvironment environment = new FakeEnvironment
+            {
+                LoadException = new BadImageFormatException("unloadable by the test")
+            };
+            FakeInternalAccessGrant grant = new FakeInternalAccessGrant(isAvailable: true);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment, grant);
+
+            BadImageFormatException escaped = null;
+            try
+            {
+                await compiler.CompileAsync(CreateRequest(reachesInternals: true), CancellationToken.None);
+            }
+            catch (BadImageFormatException exception)
+            {
+                escaped = exception;
+            }
+
+            Assert.That(escaped, Is.SameAs(environment.LoadException));
+            Assert.That(grant.GrantCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that the batch factory carries whether the artifact is compiled against
+        /// exposed references, and that a request states raw references unless told otherwise.
+        /// </summary>
+        [Test]
+        public void CompilationRequest_ReachesInternals_IsCarriedByTheBatchFactory()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadIntroducedTypeArtifactPathFactory factory =
+                new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "compiler-tests");
+            HotReloadIntroducedTypeDescriptor[] descriptors = { CreateDescriptor("Example.Introduced", "Assets/A.cs") };
+
+            HotReloadIntroducedTypeCompilationRequest exposed = HotReloadIntroducedTypeCompilationRequest.CreateBatch(
+                factory.Create(), descriptors, Array.Empty<string>(), Array.Empty<string>(), reachesInternals: true);
+            HotReloadIntroducedTypeCompilationRequest raw = HotReloadIntroducedTypeCompilationRequest.CreateBatch(
+                factory.Create(), descriptors, Array.Empty<string>(), Array.Empty<string>());
+
+            Assert.That(exposed.ReachesInternals, Is.True);
+            Assert.That(raw.ReachesInternals, Is.False);
+            Assert.That(CreateRequest().ReachesInternals, Is.False);
         }
 
         /// <summary>
@@ -196,7 +415,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 request,
@@ -250,7 +471,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateReferencePaths(),
                     Array.Empty<string>());
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 request,
@@ -499,7 +721,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 AfterCompile = cancellation.Cancel
             };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             bool cancelled = false;
             try
@@ -527,7 +751,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 AfterFirstReadAllBytes = cancellation.Cancel
             };
-            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                environment,
+                new FakeInternalAccessGrant(isAvailable: false));
 
             bool cancelled = false;
             try
@@ -586,7 +812,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateReferencePaths(),
                     new[] { "INTRODUCED_DEFINE" });
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 request,
@@ -635,7 +862,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateReferencePaths(),
                     Array.Empty<string>());
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false));
 
             HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
                 request,
@@ -669,7 +897,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadIntroducedTypeArtifactPaths withReferencePaths =
                 new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "compiler-continuation-with").Create();
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
-                new HotReloadRoslynCompilerEnvironment());
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false));
 
             try
             {
@@ -823,7 +1052,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<string>());
         }
 
-        private static HotReloadIntroducedTypeCompilationRequest CreateRequest()
+        private static HotReloadIntroducedTypeCompilationRequest CreateRequest(bool reachesInternals = false)
         {
             AssemblyName assemblyName = typeof(HotReloadIntroducedTypeCompilerTests).Assembly.GetName();
             List<HotReloadIntroducedTypeDescriptor> descriptors =
@@ -845,7 +1074,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 assemblyName.FullName,
                 descriptors,
                 Array.Empty<string>(),
-                Array.Empty<string>());
+                Array.Empty<string>(),
+                reachesInternals);
         }
 
         private static HotReloadIntroducedTypeDescriptor CreateDescriptor(
@@ -877,6 +1107,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             public bool ContainsRequestedType { get; set; } = true;
 
             public CompilerMessage[] CompilerMessages { get; set; } = Array.Empty<CompilerMessage>();
+
+            public bool ReturnsNoBackendResult { get; set; }
+
+            public bool LoadSucceeds { get; set; } = true;
+
+            public bool LoadsNullAssembly { get; set; }
+
+            public Exception LoadException { get; set; }
 
             public int CompileCalls { get; private set; }
 
@@ -915,9 +1153,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 CompileCalls++;
                 AfterCompile?.Invoke();
-                DynamicCompilationBackendResult result = new DynamicCompilationBackendResult(
-                    CompilerMessages,
-                    BackendKind);
+                DynamicCompilationBackendResult result = ReturnsNoBackendResult
+                    ? null
+                    : new DynamicCompilationBackendResult(CompilerMessages, BackendKind);
                 return Task.FromResult(result);
             }
 
@@ -947,9 +1185,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             public CompiledAssemblyLoadResult Load(byte[] assemblyBytes, byte[] pdbBytes)
             {
                 LoadCalls++;
+                if (LoadException != null)
+                {
+                    throw LoadException;
+                }
+
                 return new CompiledAssemblyLoadResult(
-                    true,
-                    typeof(HotReloadIntroducedTypeCompilerTests).Assembly,
+                    LoadSucceeds,
+                    LoadsNullAssembly ? null : typeof(HotReloadIntroducedTypeCompilerTests).Assembly,
                     0.0d);
             }
 

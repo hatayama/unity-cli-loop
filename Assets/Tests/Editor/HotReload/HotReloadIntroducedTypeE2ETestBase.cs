@@ -47,8 +47,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Why one helper owns both scopes: every reload of a run has to see the same domain and the
         // same captured artifact, and the artifact assembly only lives while the scopes are open.
+        // Why the grant is optional: a test that leaves it out runs on the grant production builds.
         private protected static async Task RunInIntroducedTypeDomainAsync(
-            Func<Func<HotReloadIntroducedTypeArtifact>, Task> runReloads)
+            Func<Func<HotReloadIntroducedTypeArtifact>, Task> runReloads,
+            IHotReloadInternalAccessGrant internalAccessGrant = null,
+            HotReloadIntroducedTypeStageProbe probe = null)
         {
             HotReloadIntroducedTypeArtifact artifact = null;
 
@@ -57,6 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                     CreateArtifactCapturingDependencies(
                         collaborators,
+                        internalAccessGrant,
+                        probe ?? new HotReloadIntroducedTypeStageProbe(),
                         prepared =>
                         {
                             if (prepared != null)
@@ -68,6 +73,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     await runReloads(() => artifact);
                 }
             }
+        }
+
+        /// <summary>
+        /// The collaborators a preparation runs on, with only the internal access grant replaced
+        /// when <paramref name="internalAccessGrant"/> is given.
+        /// </summary>
+        /// <remarks>
+        /// Why a copy instead of a settable grant: the collaborators are fixed when the services
+        /// are built, and every other stage of the run keeps the production collaborators.
+        /// </remarks>
+        private protected static HotReloadGroupStageCollaborators WithInternalAccessGrant(
+            HotReloadGroupStageCollaborators collaborators,
+            IHotReloadInternalAccessGrant internalAccessGrant)
+        {
+            if (internalAccessGrant == null)
+            {
+                return collaborators;
+            }
+
+            return new HotReloadGroupStageCollaborators(
+                collaborators.Domain,
+                collaborators.Patcher,
+                collaborators.FileEntryApplier,
+                collaborators.EntryApplier,
+                collaborators.TransformWorkerClient,
+                collaborators.PackageRootCapture,
+                collaborators.EditorStateSnapshotCapture,
+                collaborators.CommitPolicy,
+                collaborators.PlayMode,
+                internalAccessGrant);
         }
 
         private protected static Task<HotReloadOrchestratorResult> RunReloadAsync(
@@ -88,22 +123,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Why the preparation stage is the only one wrapped: the test reads the edited body back
-        // through the artifact assembly, and the prepared artifact is the only handle on it.
+        // through the artifact assembly, and the prepared artifact is the only handle on it. The
+        // probe only watches the stages it is hung on and hands every input on unchanged.
         private static HotReloadGroupProcessorDependencies CreateArtifactCapturingDependencies(
             HotReloadGroupStageCollaborators collaborators,
+            IHotReloadInternalAccessGrant internalAccessGrant,
+            HotReloadIntroducedTypeStageProbe probe,
             Action<HotReloadIntroducedTypeArtifact> captureArtifact)
         {
+            HotReloadGroupStageCollaborators preparationCollaborators =
+                WithInternalAccessGrant(collaborators, internalAccessGrant);
             return HotReloadGroupProcessorDependencies.Create(
                 files => HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, files),
                 async (files, input, ct) =>
                 {
+                    probe.BeforePrepare?.Invoke(input);
                     HotReloadIntroducedTypePreparationResult preparation =
-                        await HotReloadIntroducedTypePreparation.PrepareAsync(collaborators, files, input, ct);
+                        await HotReloadIntroducedTypePreparation.PrepareAsync(
+                            preparationCollaborators, files, input, ct);
+                    probe.AfterPrepare?.Invoke(input, preparation);
                     captureArtifact(preparation.Prepared?.Artifact);
                     return preparation;
                 },
-                HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync,
-                (context, ct) => HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct),
+                (input, ct) =>
+                {
+                    probe.BeforeTransform?.Invoke(input);
+                    return HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, ct);
+                },
+                (context, ct) =>
+                {
+                    probe.BeforeGate?.Invoke(context);
+                    return HotReloadGroupProcessor.GateAndCompileAsync(collaborators, context, ct);
+                },
                 (context, compileResult, entriesToPatch) => HotReloadGroupEntryPreparation.PrepareGroup(
                     collaborators, context, compileResult, entriesToPatch),
                 HotReloadCompositionRoot.Services.EntryApplier.ApplyPreparedEntries);

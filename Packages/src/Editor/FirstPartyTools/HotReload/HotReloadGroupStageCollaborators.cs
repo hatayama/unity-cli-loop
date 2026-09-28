@@ -23,7 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadPackageRootCapture packageRootCapture,
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             HotReloadGroupCommitPolicy commitPolicy,
-            IHotReloadPlayModeQuery playMode)
+            IHotReloadPlayModeQuery playMode,
+            IHotReloadInternalAccessGrant internalAccessGrant)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
@@ -35,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             Debug.Assert(commitPolicy != null, "commitPolicy must not be null.");
             Debug.Assert(playMode != null, "playMode must not be null.");
+            Debug.Assert(internalAccessGrant != null, "internalAccessGrant must not be null.");
             Domain = domain;
             Patcher = patcher;
             FileEntryApplier = fileEntryApplier;
@@ -44,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EditorStateSnapshotCapture = editorStateSnapshotCapture;
             CommitPolicy = commitPolicy;
             PlayMode = playMode;
+            InternalAccessGrant = internalAccessGrant;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -63,5 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadGroupCommitPolicy CommitPolicy { get; }
 
         internal IHotReloadPlayModeQuery PlayMode { get; }
+
+        // Why one grant per services graph: its availability is probed once when it is built, and
+        // every artifact of the domain these collaborators serve is granted through that answer.
+        internal IHotReloadInternalAccessGrant InternalAccessGrant { get; }
     }
 }

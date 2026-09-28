@@ -293,9 +293,8 @@ internal static class OrdinaryMethodQueue
                 semanticModel,
                 decision,
                 typeState.AddedMemberAccess,
-                typeState.SourceUnit.ArtifactMap,
-                typeState.TargetAssembly,
-                typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
+                typeState.SourceUnit,
+                typeState.TargetAssembly);
         }
 
         if (!isAddedMethod && decision.SkipReason == null && typeState.SourceUnit.Input.ReappliedSibling)

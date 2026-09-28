@@ -106,6 +106,18 @@ What the spike **proved**:
   shim, return" routes calls to the shim, whose state machine JIT-compiles legally. Verified
   end-to-end on an async original.
 
+**What changed for introduced types (S7, ADR 0010).** The findings above still hold for code
+that runs as ordinary JIT-compiled methods, and an introduced-type artifact is exactly that: its
+methods are neither transplanted nor rewritten to accessors. Refuted item 1 is therefore why an
+artifact compiled against exposed references alone would still throw. The S7 spike found the
+per-method runtime flag Mono checks before those access checks; production sets it, together
+with `NoInlining`, on every method of a freshly loaded artifact before any of its types becomes
+active, after compiling the artifact against reference copies that expose only `internal`
+accessibility. Unlike the fully publicized copies above, those copies keep `private` members
+private, so an introduced type reaches the target assembly's internals and nothing more.
+`IgnoresAccessChecksToAttribute` (refuted item 2) plays no part. Details and the runtime probe
+that gates the flag: `docs/adr/0010-hot-reload-internal-introduced-types.md`.
+
 ### S2 — transform worker bootstrap
 
 Test file: `HotReloadSpikeS2WorkerBootstrapTests.cs`.
@@ -390,8 +402,10 @@ Wire details:
 
 ## Known Limits (documented, not worked around)
 
-- New top-level `public` classes, structs, enums, and interfaces of the same assembly are
-  introduced by the reload that declares them; every other new-type shape, and any use of an
+- New top-level classes, structs, enums, and interfaces of the same assembly, declared `public`,
+  `internal`, or without an access modifier, are introduced by the reload that declares them and
+  can use that assembly's internal members when the Editor's runtime passes the internal-access
+  probe; every other new-type shape, and any use of an
   introduced type from another assembly or through Unity, still requires `uloop compile`
   (`docs/hot-reload-introduced-types.md`). Added members referenced from another assembly or
   from a file that is neither passed to this reload nor already hot-reloaded, and changed

@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -75,18 +77,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     declarationDriftWarnings);
             }
 
-            HotReloadIntroducedTypeArtifactPaths paths =
-                new HotReloadIntroducedTypeArtifactPathFactory(files[0].ProjectRoot, SessionId).Create();
-            HotReloadIntroducedTypeCompilerResult compileResult =
-                await new HotReloadIntroducedTypeCompiler(new HotReloadRoslynCompilerEnvironment())
-                    .CompileAsync(
-                        HotReloadIntroducedTypeCompilationRequest.CreateBatch(
-                            paths,
-                            descriptors,
-                            BuildArtifactReferencePaths(transformInput),
-                            transformInput.defines),
-                        ct)
-                    .ConfigureAwait(false);
+            HotReloadIntroducedTypeCompilerResult compileResult = await CompileArtifactAsync(
+                    collaborators,
+                    files[0],
+                    descriptors,
+                    transformInput,
+                    ct)
+                .ConfigureAwait(false);
             if (!compileResult.Success)
             {
                 return HotReloadIntroducedTypePreparationResult.TypeFailures(
@@ -106,6 +103,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     CollectOwnerSourceHashes(prepareResult.Output, descriptors)),
                 alreadyActiveTypes,
                 notices);
+        }
+
+        /// <summary>
+        /// Compiles the declarations into one artifact against the internals of the target assembly
+        /// when the grant can let the loaded artifact reach them, and against the raw references
+        /// otherwise.
+        /// </summary>
+        /// <remarks>
+        /// Why references that cannot be exposed fail as a compilation: the declarations are no
+        /// more introduced than when the compiler rejects them, so they get the same rows. Why
+        /// the exposure is decided here and not by what the source uses: only a compilation can
+        /// tell, and one that failed against the raw references would have to be run again.
+        /// </remarks>
+        private static async Task<HotReloadIntroducedTypeCompilerResult> CompileArtifactAsync(
+            HotReloadGroupStageCollaborators collaborators,
+            HotReloadGroupFile firstFile,
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
+            TransformWorkerInputDto transformInput,
+            CancellationToken ct)
+        {
+            // Why the main thread: an exposing build writes its reference copies through Unity APIs.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            HotReloadArtifactCompileReferences references = HotReloadIntroducedTypeArtifactReferenceBuilder.Build(
+                transformInput,
+                firstFile.Home,
+                collaborators.Domain,
+                firstFile.ProjectRoot,
+                collaborators.InternalAccessGrant.IsAvailable);
+            if (!references.Success)
+            {
+                return HotReloadIntroducedTypeCompilerResult.Failure(references.ErrorMessage);
+            }
+
+            HotReloadIntroducedTypeArtifactPaths paths =
+                new HotReloadIntroducedTypeArtifactPathFactory(firstFile.ProjectRoot, SessionId).Create();
+            return await new HotReloadIntroducedTypeCompiler(
+                    new HotReloadRoslynCompilerEnvironment(),
+                    collaborators.InternalAccessGrant)
+                .CompileAsync(
+                    HotReloadIntroducedTypeCompilationRequest.CreateBatch(
+                        paths,
+                        descriptors,
+                        references.Paths,
+                        transformInput.defines,
+                        references.ExposesInternals),
+                    ct)
+                .ConfigureAwait(false);
         }
 
         private static Dictionary<string, string[]> CollectDeclarationDriftWarnings(TransformWorkerOutputDto output)
@@ -139,18 +183,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadIntroducedTypeAddedMemberNames(names, enumMemberNames);
-        }
-
-        // Why the active artifacts as well: a declaration this run introduces may name a type an
-        // earlier reload introduced, which lives in neither the compiled assembly nor the sources
-        // of this run. Only the assemblies those reloads retained can supply it.
-        private static List<string> BuildArtifactReferencePaths(TransformWorkerInputDto transformInput)
-        {
-            List<string> referencePaths = new List<string>(transformInput.referencePaths);
-            HotReloadShimReferenceBuilder.AppendIntroducedTypeArtifactReferences(
-                referencePaths,
-                transformInput.introducedTypeArtifacts);
-            return referencePaths;
         }
 
         // Why the same sources and references: preparation asks the worker which declarations of

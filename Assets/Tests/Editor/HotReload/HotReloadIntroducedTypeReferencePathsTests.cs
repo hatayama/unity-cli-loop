@@ -80,6 +80,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(new[] { _existingDllPath }));
         }
 
+        /// <summary>
+        /// Verifies raw references preserve input order, deduplicate retained paths, and leave
+        /// the worker input unchanged, including null and empty artifact collections.
+        /// </summary>
+        [TestCase("missing")]
+        [TestCase("empty")]
+        [TestCase("retained")]
+        public void BuildRawReferencePaths_MatchesExistingReferenceOrderAndDeduplication(string artifactsKind)
+        {
+            string targetPath = Path.Combine(Application.temporaryCachePath, "Target.dll");
+            string retainedPath = Path.Combine(Application.temporaryCachePath, "Retained.dll");
+            string duplicatePath = Path.Combine(Application.temporaryCachePath, ".", "Retained.dll");
+            string[] originalReferences = { targetPath, _existingDllPath };
+            TransformWorkerIntroducedTypeArtifactDto[] artifacts =
+                artifactsKind == "missing" ? null : new TransformWorkerIntroducedTypeArtifactDto[0];
+            if (artifactsKind == "retained")
+            {
+                artifacts = new[]
+                {
+                    null,
+                    new TransformWorkerIntroducedTypeArtifactDto { referencePath = string.Empty },
+                    new TransformWorkerIntroducedTypeArtifactDto { referencePath = targetPath },
+                    new TransformWorkerIntroducedTypeArtifactDto { referencePath = retainedPath },
+                    new TransformWorkerIntroducedTypeArtifactDto { referencePath = duplicatePath }
+                };
+            }
+
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                referencePaths = originalReferences,
+                introducedTypeArtifacts = artifacts
+            };
+
+            List<string> paths = HotReloadIntroducedTypeArtifactReferenceBuilder.BuildRawReferencePaths(input);
+
+            string[] expected = artifactsKind == "retained"
+                ? new[] { targetPath, _existingDllPath, Path.GetFullPath(retainedPath) }
+                : new[] { targetPath, _existingDllPath };
+            Assert.That(paths, Is.EqualTo(expected));
+            Assert.That(input.referencePaths, Is.SameAs(originalReferences));
+            Assert.That(input.referencePaths, Is.EqualTo(new[] { targetPath, _existingDllPath }));
+            Assert.That(input.introducedTypeArtifacts, Is.SameAs(artifacts));
+            if (artifactsKind == "retained")
+            {
+                Assert.That(input.introducedTypeArtifacts[4].referencePath, Is.EqualTo(duplicatePath));
+            }
+        }
+
         private static void ActivateArtifact(
             HotReloadIntroducedTypeRegistry registry,
             string fingerprint,

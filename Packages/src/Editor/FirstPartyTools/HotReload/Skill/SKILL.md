@@ -1,7 +1,7 @@
 ---
 name: uloop-hot-reload
 toolName: hot-reload
-description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New top-level public types (class/struct/enum/interface/static helper) of the same assembly are introduced by the reload that declares them; other new-type shapes, use from another assembly or through Unity, asmdef changes, and members referenced from other assemblies or from files that are neither passed to the reload nor already hot-reloaded require 'uloop compile'."
+description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New top-level types (class/struct/enum/interface/static helper) of the same assembly are introduced by the reload that declares them; other new-type shapes, use from another assembly or through Unity, asmdef changes, and members referenced from other assemblies or from files that are neither passed to the reload nor already hot-reloaded require 'uloop compile'."
 ---
 
 # uloop hot-reload
@@ -66,8 +66,8 @@ changed are patched (`UnchangedTotal` counts the rest).
 - Added members: new methods, fields, and supported properties apply as `Added` rows,
   visible to edited code of the same reload within the same assembly (pass the declaring
   file and its callers together), and gone on any compile or domain reload.
-- New types: a top-level `public` class, struct, enum, or interface declared in an edited
-  file is introduced by that reload and listed in `IntroducedTypes`; every other shape is
+- New types: a top-level class, struct, enum, or interface declared in an edited
+  file is introduced by that reload and listed in `IntroducedTypes`; other valid shapes are
   refused with a `Warnings` line naming the reason. Use from another assembly or from files
   outside the reload, reflection, serialization, and Unity message discovery still need
   `uloop compile`.
@@ -100,6 +100,6 @@ All files live in `references/` beside this skill; read the one whose trigger ma
 - `references/mechanism-and-lifecycle.md` — patch mechanism, convergence, what survives which reload, Editor-code iteration without PlayMode.
 - `references/troubleshooting.md` — `Patched` but no behavior change, JIT inlining, reading `--status` and `InvocationCount`.
 - `references/pause-point-interaction.md` — how patches re-target or suppress armed pause points; one-way reachability checks.
-- `references/introduced-types.md` — new types a reload can introduce: supported shapes, refusal wording, identity and lifetime, why a new file is never selected automatically.
+- `references/introduced-types.md` — types a reload can introduce: supported shapes, internal access, refusal wording, identity and lifetime, why a new file is never selected automatically.
 - `references/added-field-wiring.md` — putting a value into an added field without a compile.
 - `references/output.md` — every response field: `ErrorCode`, `NextActions`, `Methods` rows, `Warnings`, totals.

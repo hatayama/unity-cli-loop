@@ -108,7 +108,8 @@ internal static class InaccessibleAccessScanner
             ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
             if (initializerSymbol is IPropertySymbol initializerProperty)
             {
-                return AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod);
+                return AccessibilityRules.IsInaccessibleAccessor(
+                    AssignmentTargetRules.AccessorCalledByWrite(initializerProperty));
             }
 
             return IsInaccessibleNonConstSymbol(initializerSymbol);
@@ -123,7 +124,7 @@ internal static class InaccessibleAccessScanner
                 return true;
             }
 
-            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+            return AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(propertySymbol));
         }
 
         return IsInaccessibleNonConstSymbol(leftSymbol);
@@ -182,8 +183,7 @@ internal static class InaccessibleAccessScanner
         ElementAccessExpressionSyntax elementAccess)
     {
         // Assignment-left ElementAccess is owned by the assignment branch (write context).
-        if (elementAccess.Parent is AssignmentExpressionSyntax parentAssignment
-            && parentAssignment.Left == elementAccess)
+        if (AssignmentTargetRules.AssignmentTargetedBy(elementAccess) != null)
         {
             return false;
         }
@@ -191,8 +191,7 @@ internal static class InaccessibleAccessScanner
         ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
         if (symbol is IPropertySymbol indexer)
         {
-            // Standalone ElementAccess is a read.
-            return AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod);
+            return AccessibilityRules.IsInaccessibleAccessor(AccessorCalledOutsideAssignment(indexer, elementAccess));
         }
 
         return IsInaccessibleNonConstSymbol(symbol);
@@ -222,8 +221,7 @@ internal static class InaccessibleAccessScanner
             return false;
         }
 
-        if (name.Parent is AssignmentExpressionSyntax parentAssignment
-            && parentAssignment.Left == name)
+        if (AssignmentTargetRules.AssignmentTargetedBy(name) != null)
         {
             return false;
         }
@@ -243,7 +241,7 @@ internal static class InaccessibleAccessScanner
         ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
         if (symbol is IPropertySymbol propertySymbol)
         {
-            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+            return AccessibilityRules.IsInaccessibleAccessor(AccessorCalledOutsideAssignment(propertySymbol, name));
         }
 
         return IsInaccessibleNonConstSymbol(symbol);
@@ -264,8 +262,7 @@ internal static class InaccessibleAccessScanner
             }
         }
 
-        if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
-            && parentAssignment.Left == memberAccess)
+        if (AssignmentTargetRules.AssignmentTargetedBy(memberAccess) != null)
         {
             return false;
         }
@@ -274,10 +271,19 @@ internal static class InaccessibleAccessScanner
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
         if (symbol is IPropertySymbol propertySymbol)
         {
-            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+            return AccessibilityRules.IsInaccessibleAccessor(AccessorCalledOutsideAssignment(propertySymbol, memberAccess));
         }
 
         return IsInaccessibleNonConstSymbol(symbol);
+    }
+
+    // The accessor a property use that is not an assignment left side calls. Why the setter for a
+    // deconstruction element: `(a.P, b) = t` sets P and never reads it. Every other such use calls
+    // the getter, and so does a deconstruction into a ref-returning P, which writes through the
+    // reference the getter returns.
+    private static IMethodSymbol AccessorCalledOutsideAssignment(IPropertySymbol property, SyntaxNode site)
+    {
+        return AssignmentTargetRules.IsDeconstructedThroughSetter(property, site) ? property.SetMethod : property.GetMethod;
     }
 
     // Why exclude const: a const field is IsStatic, but it has no runtime storage.
@@ -301,7 +307,7 @@ internal static class InaccessibleAccessScanner
         if (symbol is IPropertySymbol propertySymbol)
         {
             return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
-                || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+                || AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(propertySymbol));
         }
 
         return IsInaccessibleNonConstSymbol(symbol);

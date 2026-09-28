@@ -63,4 +63,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             return 21;
         }
     }
+
+    /// <summary>
+    /// Internal base type the S7 spike derives from in another assembly, asking whether the Mono
+    /// type loader checks the accessibility of a base type the way the JIT checks member access.
+    /// </summary>
+    internal class SpikeInternalBaseFixture
+    {
+        internal virtual int Value()
+        {
+            return 7;
+        }
+
+        // Calls the virtual from inside this assembly, the way compiled code reaches an override.
+        internal int ValueThroughBase()
+        {
+            return Value();
+        }
+    }
+
+    /// <summary>
+    /// Internal abstract base the S7 spike implements in another assembly. The C# compiler emits
+    /// internal virtual and abstract members with the strict (check-access-on-override) flag, so
+    /// the question is whether the runtime lets an override from another assembly fill the slot.
+    /// </summary>
+    internal abstract class SpikeInternalAbstractBaseFixture
+    {
+        internal abstract int Area();
+
+        internal int AreaThroughBase()
+        {
+            return Area();
+        }
+    }
+
+    /// <summary>
+    /// Internal interface the S7 spike implements in another assembly, for the same question as
+    /// <see cref="SpikeInternalBaseFixture"/> asked of interface implementation.
+    /// </summary>
+    internal interface ISpikeInternalContract
+    {
+        int Contract();
+    }
 }

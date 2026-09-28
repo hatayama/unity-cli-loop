@@ -112,7 +112,7 @@ internal static class AccessorAccessRegistrar
         // Initializer assignments are always writes (including ImplicitElementAccess indexers).
         ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
         bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
-            ? AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod)
+            ? AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(initializerProperty))
             : initializerSymbol != null
                 && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
         if (inaccessibleWrite)
@@ -132,8 +132,7 @@ internal static class AccessorAccessRegistrar
     {
         rejectReason = null;
         // Assignment-left ElementAccess is owned by the assignment branch (write context).
-        if (elementAccess.Parent is AssignmentExpressionSyntax parentElementAssignment
-            && parentElementAssignment.Left == elementAccess)
+        if (AssignmentTargetRules.AssignmentTargetedBy(elementAccess) != null)
         {
             return false;
         }
@@ -141,7 +140,13 @@ internal static class AccessorAccessRegistrar
         ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
         if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
         {
-            // Standalone ElementAccess is a read — only the getter matters.
+            if (AssignmentTargetRules.IsDeconstructedThroughSetter(indexer, elementAccess))
+            {
+                return AccessorPropertyWriteRules.TryRegisterDeconstructedPropertyWrite(indexer, out rejectReason);
+            }
+
+            // Any other ElementAccess calls only the getter: a read, or a deconstruction into a
+            // ref-returning indexer, which writes through the reference the getter returns.
             if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
             {
                 rejectReason =
@@ -199,18 +204,17 @@ internal static class AccessorAccessRegistrar
             }
         }
 
-        if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
-            && parentAssignment.Left == memberAccess)
+        if (AssignmentTargetRules.AssignmentTargetedBy(memberAccess) != null)
         {
             return false;
         }
 
-        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
+        return TryRegisterUseOutsideAssignment(
+            memberAccess,
             semanticModel.GetSymbolInfo(memberAccess).Symbol
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
             addedMemberAccess,
-            EventAccessorRules.IsUnsubscribeOperand(memberAccess),
             out rejectReason);
     }
 
@@ -227,8 +231,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        if (name.Parent is AssignmentExpressionSyntax parentAssignment
-            && parentAssignment.Left == name)
+        if (AssignmentTargetRules.AssignmentTargetedBy(name) != null)
         {
             return false;
         }
@@ -245,11 +248,37 @@ internal static class AccessorAccessRegistrar
             }
         }
 
-        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
+        return TryRegisterUseOutsideAssignment(
+            name,
             semanticModel.GetSymbolInfo(name).Symbol,
             plan,
             addedMemberAccess,
-            EventAccessorRules.IsUnsubscribeOperand(name),
+            out rejectReason);
+    }
+
+    // A property a deconstruction sets through its setter is a write; every other use outside an
+    // assignment left side calls the getter as a read does, including a deconstruction into a
+    // ref-returning property, which writes through the reference the getter returns. Why a field
+    // element stays with the reads: its ref accessor is assignable, so the deconstruction writes
+    // through it.
+    private static bool TryRegisterUseOutsideAssignment(
+        ExpressionSyntax site,
+        ISymbol symbol,
+        AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
+    {
+        if (symbol is IPropertySymbol propertySymbol
+            && AssignmentTargetRules.IsDeconstructedThroughSetter(propertySymbol, site))
+        {
+            return AccessorPropertyWriteRules.TryRegisterDeconstructedPropertyWrite(propertySymbol, out rejectReason);
+        }
+
+        return AccessorReadRegistrar.TryRegisterPropertyOrFieldRead(
+            symbol,
+            plan,
+            addedMemberAccess,
+            EventAccessorRules.IsUnsubscribeOperand(site),
             out rejectReason);
     }
 

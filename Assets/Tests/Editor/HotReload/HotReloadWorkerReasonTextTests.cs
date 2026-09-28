@@ -315,6 +315,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "'Example.Payload' from source ('Assets/Payload.cs'), so the 'Example.Payload' this body uses "
                 + "no longer matches and it is skipped.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodUsesIntroducedTypeNonPublicMember,
+                new[] { "Example.Helper.Secret()" },
+                "Added members of other types cannot use 'Example.Helper.Secret()', a non-public member of "
+                + "a type hot reload introduced: only the reloads that edit that type can bind it, so the "
+                + "member would be applied on some reloads and dropped on others. Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldStructHost,
                 NoArgs,
                 "Added fields on struct types are skipped; the store requires a reference-type instance. "
@@ -356,6 +362,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "Assignment to an added field would evaluate a receiver with possible side effects twice. "
                 + "Run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,
+                NoArgs,
+                "Deconstruction assignment to an added field is skipped; the store write cannot stand as a "
+                + "deconstruction target. Assign the field in its own statement 'F = value;', which the "
+                + "store rewrite handles. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 NoArgs,
@@ -611,6 +623,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "compound assignment reading an inaccessible getter with an accessible setter "
                 + "has no accessor rewrite shape.");
             yield return Case(
+                HotReloadWorkerReasonCode.AccessorDeconstructionPropertyNoShape,
+                NoArgs,
+                "a deconstruction setting a property with an inaccessible setter has no accessor "
+                + "rewrite shape; set that property in its own statement 'X = value;', which the "
+                + "accessor rewrite handles.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AccessorAssignmentValueConsumed,
                 NoArgs,
                 "assignment value is consumed; the setter delegate returns void.");
@@ -693,9 +711,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Example.Type" },
                 "Record introduced type requires a compile: Example.Type");
             yield return Case(
-                HotReloadWorkerReasonCode.IntroducedTypeNonPublic,
+                HotReloadWorkerReasonCode.IntroducedTypeFileLocal,
                 new[] { "Example.Type" },
-                "Non-public introduced type requires a compile: Example.Type");
+                "File-local introduced type requires a compile: Example.Type");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeRefLike,
                 new[] { "Example.Type" },
@@ -720,6 +738,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.IntroducedTypeUnsupported,
                 new[] { "Example.Type" },
                 "Unsupported introduced type requires a compile: Example.Type");
+            yield return Case(
+                HotReloadWorkerReasonCode.IntroducedTypeInternalOverride,
+                new[] { "Example.Type", "Read" },
+                "Internal override in an introduced type requires a compile: Example.Type.Read");
             yield return Case(
                 HotReloadWorkerReasonCode.IntroducedTypeConstValueUnverifiable,
                 new[] { "Example.Other.Limit", "Example.Type" },

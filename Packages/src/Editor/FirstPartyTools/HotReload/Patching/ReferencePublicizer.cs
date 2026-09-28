@@ -62,6 +62,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTypeHome home,
             IReadOnlyCollection<string> resolverSearchDirectories)
         {
+            return GetOrCreateRewrittenCopy(
+                home,
+                resolverSearchDirectories,
+                HotReloadConstants.PublicizedRefsRelativeDirectory,
+                PublicizeType);
+        }
+
+        internal static string GetOrCreateInternalsExposedCopy(
+            HotReloadTypeHome home,
+            IReadOnlyCollection<string> resolverSearchDirectories)
+        {
+            return GetOrCreateRewrittenCopy(
+                home,
+                resolverSearchDirectories,
+                HotReloadConstants.InternalsExposedRefsRelativeDirectory,
+                ExposeInternalsOfType);
+        }
+
+        private static string GetOrCreateRewrittenCopy(
+            HotReloadTypeHome home,
+            IReadOnlyCollection<string> resolverSearchDirectories,
+            string outputRelativeDirectory,
+            Action<TypeDefinition> rewriteType)
+        {
             Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(home.IsPublicizable, "home must be publicizable.");
             Debug.Assert(resolverSearchDirectories != null, "resolverSearchDirectories must not be null.");
@@ -85,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string assemblyName = assemblyDefinition.Name.Name;
             string mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
-            string outputDirectory = ResolvePublicizedRefsDirectory();
+            string outputDirectory = ResolveOutputDirectory(outputRelativeDirectory);
             Directory.CreateDirectory(outputDirectory);
 
             string outputDllPath = Path.Combine(
@@ -106,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // An Mvid change means the assembly already reloaded; no in-flight compile can still
             // need the previous publicized copy, so drop stale siblings before writing the new one.
-            DeleteStalePublicizedCopies(outputDirectory, assemblyName, outputDllPath);
+            DeleteStaleCopies(outputDirectory, assemblyName, outputDllPath);
 
             foreach (ModuleDefinition module in assemblyDefinition.Modules)
             {
@@ -118,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    PublicizeType(type);
+                    rewriteType(type);
                 }
             }
 
@@ -140,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return outputDllPath;
         }
 
-        private static void DeleteStalePublicizedCopies(
+        private static void DeleteStaleCopies(
             string outputDirectory,
             string assemblyName,
             string currentOutputDllPath)
@@ -217,10 +241,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return normalizedSourcePath.StartsWith(normalizedDirectory + "/", comparison);
         }
 
-        private static string ResolvePublicizedRefsDirectory()
+        private static string ResolveOutputDirectory(string relativeDirectory)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            return Path.Combine(projectRoot, HotReloadConstants.PublicizedRefsRelativeDirectory);
+            return Path.Combine(projectRoot, relativeDirectory);
         }
 
         private static DefaultAssemblyResolver CreateAssemblyResolver(
@@ -252,6 +276,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // instead; hardcoding Editor Contents Managed paths fails on Unity 6 layouts.
 
             return resolver;
+        }
+
+        private static void ExposeInternalsOfType(TypeDefinition type)
+        {
+            CecilTypeAttributes visibility = type.Attributes & CecilTypeAttributes.VisibilityMask;
+            CecilTypeAttributes exposedVisibility = visibility switch
+            {
+                CecilTypeAttributes.NotPublic => CecilTypeAttributes.Public,
+                CecilTypeAttributes.NestedAssembly => CecilTypeAttributes.NestedPublic,
+                CecilTypeAttributes.NestedFamORAssem => CecilTypeAttributes.NestedPublic,
+                CecilTypeAttributes.NestedFamANDAssem => CecilTypeAttributes.NestedFamily,
+                _ => visibility
+            };
+            type.Attributes = (type.Attributes & ~CecilTypeAttributes.VisibilityMask) | exposedVisibility;
+
+            foreach (FieldDefinition field in type.Fields)
+            {
+                CecilFieldAttributes access = field.Attributes & CecilFieldAttributes.FieldAccessMask;
+                CecilFieldAttributes exposedAccess = access switch
+                {
+                    CecilFieldAttributes.Assembly => CecilFieldAttributes.Public,
+                    CecilFieldAttributes.FamORAssem => CecilFieldAttributes.Public,
+                    CecilFieldAttributes.FamANDAssem => CecilFieldAttributes.Family,
+                    _ => access
+                };
+                field.Attributes = (field.Attributes & ~CecilFieldAttributes.FieldAccessMask) | exposedAccess;
+            }
+
+            // Accessors are ordinary metadata methods. Private event backing fields stay private
+            // through their own flags; only the full publicizer needs an event-name exception.
+            foreach (MethodDefinition method in type.Methods)
+            {
+                CecilMethodAttributes access = method.Attributes & CecilMethodAttributes.MemberAccessMask;
+                CecilMethodAttributes exposedAccess = access switch
+                {
+                    CecilMethodAttributes.Assembly => CecilMethodAttributes.Public,
+                    CecilMethodAttributes.FamORAssem => CecilMethodAttributes.Public,
+                    CecilMethodAttributes.FamANDAssem => CecilMethodAttributes.Family,
+                    _ => access
+                };
+                method.Attributes = (method.Attributes & ~CecilMethodAttributes.MemberAccessMask) | exposedAccess;
+            }
         }
 
         private static void PublicizeType(TypeDefinition type)

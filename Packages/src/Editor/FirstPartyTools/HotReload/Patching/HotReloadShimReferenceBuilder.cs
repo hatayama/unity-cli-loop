@@ -188,22 +188,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (TransformWorkerIntroducedTypeArtifactDto artifact in introducedTypeArtifacts)
             {
-                if (artifact == null || string.IsNullOrEmpty(artifact.assemblyFullName))
-                {
-                    continue;
-                }
-
-                HotReloadTypeHome home = domain.ResolveTypeHome(
-                    projectRoot,
-                    new AssemblyName(artifact.assemblyFullName).Name);
-                if (home.Kind == HotReloadTypeHomeKind.RetainedArtifact)
+                HotReloadTypeHome home = ResolveRetainedArtifactHome(domain, projectRoot, artifact);
+                if (home != null)
                 {
                     homes.Add(home);
                 }
             }
         }
 
-        private static IReadOnlyCollection<string> CollectArtifactSearchDirectories(
+        internal static HotReloadTypeHome ResolveRetainedArtifactHome(
+            HotReloadDomain domain,
+            string projectRoot,
+            TransformWorkerIntroducedTypeArtifactDto artifact)
+        {
+            if (artifact == null || string.IsNullOrEmpty(artifact.assemblyFullName))
+            {
+                return null;
+            }
+
+            HotReloadTypeHome home = domain.ResolveTypeHome(
+                projectRoot,
+                new AssemblyName(artifact.assemblyFullName).Name);
+            return home.Kind == HotReloadTypeHomeKind.RetainedArtifact ? home : null;
+        }
+
+        internal static IReadOnlyCollection<string> CollectArtifactSearchDirectories(
             IReadOnlyList<HotReloadTypeHome> artifactHomes,
             IReadOnlyCollection<string> resolverSearchDirectories)
         {
@@ -229,10 +238,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // of an artifact is named after the assembly and its Mvid, so file names alone cannot tell
         // two artifacts of one run apart, and a raw image and its publicized copy would both pass
         // a file-name check while being the same assembly identity twice.
-        private static void AppendIfMissingByFullPath(List<string> references, string fullPath)
+        internal static void AppendIfMissingByFullPath(List<string> references, string fullPath)
         {
-            foreach (string reference in references)
+            if (IndexOfFullPath(references, fullPath) >= 0)
             {
+                return;
+            }
+
+            references.Add(fullPath);
+        }
+
+        /// <summary>
+        /// Finds the first reference naming <paramref name="fullPath"/> under the full-path rule
+        /// <see cref="AppendIfMissingByFullPath"/> deduplicates by, or -1 when none does.
+        /// </summary>
+        internal static int IndexOfFullPath(IReadOnlyList<string> references, string fullPath)
+        {
+            for (int index = 0; index < references.Count; index++)
+            {
+                string reference = references[index];
                 if (string.IsNullOrEmpty(reference))
                 {
                     continue;
@@ -243,11 +267,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     fullPath,
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    return;
+                    return index;
                 }
             }
 
-            references.Add(fullPath);
+            return -1;
         }
 
         internal static bool NeedsHarmonyReference(TransformWorkerOutputDto output)

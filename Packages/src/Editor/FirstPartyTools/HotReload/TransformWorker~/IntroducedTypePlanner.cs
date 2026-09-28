@@ -55,6 +55,17 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
+            if (IntroducedTypeInternalOverrideGuard.TryFindUnsupportedOverride(
+                    typeSymbol, home, targetAssemblyMvid, artifactMap, out string overrideMember))
+            {
+                unit.IntroducedTypeDiagnostics.Add(
+                    WorkerReason.Of(
+                        HotReloadWorkerReasonCode.IntroducedTypeInternalOverride,
+                        CecilTypeNames.ToMetadataName(typeSymbol),
+                        overrideMember));
+                continue;
+            }
+
             if (IntroducedTypeConstDriftDetector.TryFindUnusableReferencedConst(
                     declaration,
                     unit.ConstDriftSemanticModel ?? unit.SemanticModel,
@@ -206,9 +217,9 @@ internal static class IntroducedTypePlanner
             return false;
         }
 
-        if (typeSymbol.DeclaredAccessibility != Accessibility.Public)
+        if (IntroducedTypeSourceAccessibility.IsFileLocal(declaration))
         {
-            reason = HotReloadWorkerReasonCode.IntroducedTypeNonPublic;
+            reason = HotReloadWorkerReasonCode.IntroducedTypeFileLocal;
             return false;
         }
 
@@ -286,7 +297,7 @@ internal static class IntroducedTypePlanner
                 }
             }
 
-            builder.Append(declaration.ToFullString());
+            builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration));
             for (int index = 0; index < namespaceDeclarations.Count; index++)
             {
                 builder.AppendLine("}");
@@ -295,7 +306,7 @@ internal static class IntroducedTypePlanner
         }
 
         AppendRootUsings(builder, root, assemblyGlobalUsings);
-        builder.Append(declaration.ToFullString());
+        builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration));
         return builder.ToString();
     }
 
@@ -335,10 +346,26 @@ internal static class IntroducedTypePlanner
                 return true;
             }
 
-            current = current.BaseType;
+            current = ResolveBaseType(current);
         }
 
         return false;
+    }
+
+    // Inaccessible metadata bases still carry their unique candidate. Following only that
+    // candidate preserves Unity object refusal without guessing at ambiguous or missing types.
+    private static INamedTypeSymbol ResolveBaseType(INamedTypeSymbol typeSymbol)
+    {
+        INamedTypeSymbol baseType = typeSymbol.BaseType;
+        if (baseType is IErrorTypeSymbol error
+            && error.CandidateReason == CandidateReason.Inaccessible
+            && error.CandidateSymbols.Length == 1
+            && error.CandidateSymbols[0] is INamedTypeSymbol candidate)
+        {
+            return candidate;
+        }
+
+        return baseType;
     }
 
     private static bool HasSerializableAttribute(INamedTypeSymbol typeSymbol)

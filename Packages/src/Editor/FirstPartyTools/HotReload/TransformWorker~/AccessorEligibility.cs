@@ -248,10 +248,13 @@ internal static class AccessorEligibility
                 continue;
             }
 
+            // The increment reads through the getter and stores through the accessor a write
+            // calls, which for a ref-returning property is that getter again, not a setter.
             if (semanticModel.GetSymbolInfo(operand).Symbol is IPropertySymbol propertySymbol
                 && !IsLeftToAddedPropertyScan(propertySymbol, addedMemberAccess)
                 && (AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
-                    || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod)))
+                    || AccessibilityRules.IsInaccessibleAccessor(
+                        AssignmentTargetRules.AccessorCalledByWrite(propertySymbol))))
             {
                 return true;
             }
@@ -313,7 +316,10 @@ internal static class AccessorEligibility
         SemanticModel semanticModel,
         ExpressionSyntax left)
     {
-        ExpressionSyntax receiver = left is MemberAccessExpressionSyntax memberAccess
+        // Why look through parentheses around the left: `(a.P) += 1` evaluates `a` twice exactly as
+        // `a.P += 1` does, so the parentheses must not pass it off as a bare member.
+        ExpressionSyntax target = AssignmentTargetRules.Unparenthesized(left);
+        ExpressionSyntax receiver = target is MemberAccessExpressionSyntax memberAccess
             ? memberAccess.Expression
             : null;
         if (receiver == null)

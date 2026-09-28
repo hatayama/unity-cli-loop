@@ -69,7 +69,8 @@ internal static class AddedPropertyAccessorGuard
     {
         foreach (TypeEmitState typeState in typeEmitStates)
         {
-            if (typeState.SourceUnit.SyntaxTree == binding.Declaration.SyntaxTree
+            // Why the binding tree: see AddedPropertyEmitter - the declaration comes from it.
+            if (typeState.SourceUnit.BindingSyntaxTree == binding.Declaration.SyntaxTree
                 && SymbolEqualityComparer.Default.Equals(typeState.TypeSymbol, binding.HostType))
             {
                 return typeState;
@@ -158,9 +159,8 @@ internal static class AddedPropertyAccessorGuard
             typeState.SourceUnit.SemanticModel,
             decision,
             addedMemberAccess: null,
-            typeState.SourceUnit.ArtifactMap,
-            typeState.TargetAssembly,
-            typeState.SourceUnit.RunProjectRelativePathsByBindingTree);
+            typeState.SourceUnit,
+            typeState.TargetAssembly);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

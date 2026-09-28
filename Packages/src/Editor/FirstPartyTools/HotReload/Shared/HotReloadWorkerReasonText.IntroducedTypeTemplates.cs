@@ -23,8 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.IntroducedTypeRecord,
                 Plain("Record introduced type requires a compile: {0}", 1));
             templates.Add(
-                HotReloadWorkerReasonCode.IntroducedTypeNonPublic,
-                Plain("Non-public introduced type requires a compile: {0}", 1));
+                HotReloadWorkerReasonCode.IntroducedTypeFileLocal,
+                Plain("File-local introduced type requires a compile: {0}", 1));
             templates.Add(
                 HotReloadWorkerReasonCode.IntroducedTypeRefLike,
                 Plain("Ref-like introduced type requires a compile: {0}", 1));
@@ -43,6 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.IntroducedTypeUnsupported,
                 Plain("Unsupported introduced type requires a compile: {0}", 1));
+            templates.Add(
+                HotReloadWorkerReasonCode.IntroducedTypeInternalOverride,
+                Plain("Internal override in an introduced type requires a compile: {0}.{1}", 2));
             templates.Add(
                 HotReloadWorkerReasonCode.IntroducedTypeConstValueUnverifiable,
                 Plain("Const value cannot be verified: {0} referenced by {1}", 2));
