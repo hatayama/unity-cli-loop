@@ -263,8 +263,9 @@ code optimization unless a point says otherwise:
   those calling only the public accessor, or naming a property with an internal getter in
   nameof, stay applied on all three reloads.
 - The file-local refusal reason is not reached on 2022.3 or 6000.3: both bundle the same
-  compiler build (Roslyn 4.3.1), which rejects `file` while parsing (CS0116), and the test
-  asserts that path instead.
+  compiler build (Roslyn 4.3.1), which rejects `file` while parsing (CS0116), so the test takes
+  its parse-error branch there. The test accepts either branch; it does not pin which one a
+  version takes.
 
 The EditMode workflow on the integration branch passed on every leg with no failed or
 inconclusive tests: the full suite on 2022.3.62f3 and the hot reload suites on 6000.3.15f1,
