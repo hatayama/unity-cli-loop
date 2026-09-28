@@ -125,6 +125,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: the saved XML records an inconclusive leaf's unmet assumption as its reason, not as
+        /// a failure, so the leaves beyond the response's listing limit keep their messages.
+        /// </summary>
+        [Test]
+        public void SaveTestResultAsXml_WhenALeafIsInconclusive_WritesItsMessageAsReason()
+        {
+            ITestResultAdaptor result = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Passed,
+                0.5,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("InconclusiveTest", TestResultStatus.Inconclusive, 0.5, "Release is required.")
+                });
+
+            string filePath = null;
+            try
+            {
+                XmlDocument document = SaveResultAndLoadXml(result, out filePath);
+                XmlNode reasonMessage = document.SelectSingleNode("//test-case/reason/message");
+
+                Assert.That(reasonMessage, Is.Not.Null);
+                Assert.That(reasonMessage.InnerText, Is.EqualTo("Release is required."));
+                Assert.That(document.SelectSingleNode("//test-case/failure"), Is.Null);
+            }
+            finally
+            {
+                DeleteIfExists(filePath);
+            }
+        }
+
         [Test]
         public void FromTestResult_WhenResultIsNull_ReturnsFailureWithoutCounts()
         {

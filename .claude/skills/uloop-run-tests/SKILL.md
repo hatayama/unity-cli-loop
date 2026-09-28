@@ -6,7 +6,7 @@ description: "Run Unity Test Runner and report detailed results. Use for EditMod
 
 # uloop run-tests
 
-Execute Unity Test Runner. When tests fail or end inconclusive, NUnit XML results with error messages and stack traces are automatically saved. Read the XML file at `XmlPath` for detailed failure diagnosis.
+Execute Unity Test Runner. When tests fail or end inconclusive, NUnit XML results with failure messages, stack traces, and inconclusive reasons are automatically saved. Read the XML file at `XmlPath` for detailed diagnosis.
 
 `uloop run-tests` automatically compiles pending script changes before running tests. Pass `--skip-compile` only while validating active hot-reload patches, because the compile clears those patches; otherwise let the default compile surface errors and run against current scripts. `--skip-compile` skips only the CLI-side compile: Unity still imports script edits saved since the last compile, and that import reloads the domain as soon as the run releases its assembly lock, discarding active patches and ending the request.
 
@@ -62,7 +62,7 @@ Returns JSON with:
 - `ClearedPausePointIds` (string[], optional): IDs of pause points that were cleared before test execution. Omitted from JSON when no pause points were active.
 - `FailedTests` (array, optional): Up to 10 failed leaf tests with `FullName`, `Message`, and when the stack trace contains a path:line location, `File` and `Line`. Omitted when no tests failed. When `FailedCount` is greater than 10, `Message` ends with `first 10 of N failures listed; see XmlPath for full results.`
 - `SkippedTests` (string[], optional): Up to 10 full names of skipped leaf tests. Omitted when no tests were skipped. When `SkippedCount` is greater than 10, only the first 10 names are listed.
-- `InconclusiveTests` (array, optional): Up to 10 inconclusive leaf tests with `FullName` and `Message`. Omitted when no test was inconclusive. When `InconclusiveCount` is greater than 10, only the first 10 are listed.
+- `InconclusiveTests` (array, optional): Up to 10 inconclusive leaf tests with `FullName` and `Message`. Omitted when no test was inconclusive. When `InconclusiveCount` is greater than 10, only the first 10 are listed; the XML at `XmlPath` has every message.
 - `ProposedTestAsmdef` (object, optional): `AssetPath` and `Content` of a ready-to-write test `.asmdef` (test-assembly wiring plus references to the project's assemblies under test). Present only when an unfiltered run found no tests and no test assembly exists for the TestMode.
 - `CompileNote` (string, optional): States that the automatic compile ran and succeeded before the tests and names `--skip-compile` as the opt-out. When the compile response carried a Warning (for example active hot-reload changes dropped by the domain reload), the note repeats it. Omitted when `--skip-compile` was passed; a failed compile returns the compile error response instead.
 
@@ -73,3 +73,4 @@ When tests fail or end inconclusive, NUnit XML results are automatically saved t
 - Test name and full name
 - Pass/fail/skip status and duration
 - For failed tests: `<message>` (assertion error) and `<stack-trace>`
+- For inconclusive tests: `<reason><message>` (the assumption that was not met)

@@ -14,7 +14,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Writes failing Unity Test Runner results as NUnit XML files for CLI diagnostics.
+    /// Writes failing or inconclusive Unity Test Runner results as NUnit XML files for CLI diagnostics.
     /// </summary>
     internal static class NUnitXmlResultExporter
     {
@@ -160,6 +160,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             testCase.SetAttribute("end-time", FormatDateTime(result.EndTime));
             testCase.SetAttribute("duration", FormatDuration(result.Duration));
 
+            if (result.TestStatus == TestStatus.Inconclusive)
+            {
+                AppendReason(document, testCase, result);
+                return testCase;
+            }
+
             if (result.TestStatus != TestStatus.Failed)
             {
                 return testCase;
@@ -169,6 +175,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendFailureMessage(document, failure, result);
             testCase.AppendChild(failure);
             return testCase;
+        }
+
+        // Why <reason> and not <failure>: NUnit 3 keeps the explanation of a test that reached no
+        // verdict in <reason>, so readers of the XML do not count it as a failed assertion.
+        private static void AppendReason(XmlDocument document, XmlElement testCase, ITestResultAdaptor result)
+        {
+            if (string.IsNullOrEmpty(result.Message))
+            {
+                return;
+            }
+
+            XmlElement reason = document.CreateElement("reason");
+            XmlElement message = document.CreateElement("message");
+            message.InnerText = result.Message;
+            reason.AppendChild(message);
+            testCase.AppendChild(reason);
         }
 
         private static void AppendFailureMessage(XmlDocument document, XmlElement failure, ITestResultAdaptor result)
