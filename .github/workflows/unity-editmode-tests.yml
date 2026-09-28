@@ -346,3 +346,163 @@ jobs:
         with:
           name: Unity test results (latest 6000.7)
           path: artifacts
+
+  # The Release-only tests ignore themselves under Debug code optimization,
+  # where JIT inlining is off and they would pass trivially, so the Debug legs
+  # above never run them. GameCI's unity-test-runner cannot host this leg: it
+  # starts every run with -enableCodeCoverage -debugCodeOptimization. This job
+  # starts the extracted Editor itself, like the latest 6000.7 job.
+  editmode-tests-release-optimization:
+    name: EditMode Tests (Release code optimization)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
+      UNITY_TARBALL: .unity-ci/unity-linux-editor.tar.xz
+      UNITY_INSTALL_DIR: .unity-ci/unity-editor
+      RESULTS_XML: artifacts/editmode-release-optimization.xml
+      # The Test Framework splits -testFilter on ';' and matches each part
+      # against full test names.
+      RELEASE_ONLY_TEST_FILTER: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadMonoInternalAccessGrantTests;io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.HotReloadSpikeS7SkipVisibilityFlagTests
+    steps:
+      - name: Checkout repository
+        if: env.HAS_UNITY_LICENSE == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          lfs: true
+
+      # Why read ProjectVersion.txt instead of naming a version here: the leg
+      # tests the committed project version, and the file already records the
+      # changeset that the download URL needs.
+      - name: Resolve committed Linux editor
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          set -eu
+          VERSION_LINE=$(grep '^m_EditorVersionWithRevision: ' ProjectSettings/ProjectVersion.txt)
+          UNITY_VERSION=$(printf '%s\n' "$VERSION_LINE" | sed -n -E 's/^m_EditorVersionWithRevision: ([^ ]+) \(([0-9a-f]+)\)$/\1/p')
+          UNITY_CHANGESET=$(printf '%s\n' "$VERSION_LINE" | sed -n -E 's/^m_EditorVersionWithRevision: ([^ ]+) \(([0-9a-f]+)\)$/\2/p')
+          test -n "$UNITY_VERSION"
+          test -n "$UNITY_CHANGESET"
+          echo "UNITY_VERSION=$UNITY_VERSION" >> "$GITHUB_ENV"
+          echo "UNITY_EDITOR_URL=https://download.unity3d.com/download_unity/$UNITY_CHANGESET/LinuxEditorInstaller/Unity-$UNITY_VERSION.tar.xz" >> "$GITHUB_ENV"
+          echo "Resolved Unity $UNITY_VERSION ($UNITY_CHANGESET)"
+
+      - name: Free disk space
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          set -eu
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h
+
+      # Why not cache the tarball or Library: the editor archive is ~4GB, and
+      # a second Library entry for the committed version would compete with
+      # the matrix leg's entry for the 10GB Actions cache quota. Two test
+      # classes do not need a warm import.
+      - name: Download Linux editor
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          set -eu
+          mkdir -p .unity-ci
+          curl --fail --location --retry 3 --retry-delay 5 \
+            --output "$UNITY_TARBALL" \
+            "$UNITY_EDITOR_URL"
+          ls -lh "$UNITY_TARBALL"
+
+      - name: Install Linux editor
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          set -eu
+          mkdir -p "$UNITY_INSTALL_DIR"
+          tar -xJf "$UNITY_TARBALL" -C "$UNITY_INSTALL_DIR"
+          rm -f "$UNITY_TARBALL"
+          UNITY_EDITOR=$(find "$UNITY_INSTALL_DIR" -path '*/Editor/Unity' -type f -print -quit)
+          test -n "$UNITY_EDITOR"
+          test -x "$UNITY_EDITOR"
+          echo "UNITY_EDITOR=$UNITY_EDITOR" >> "$GITHUB_ENV"
+          echo "Installed Unity $UNITY_VERSION at $UNITY_EDITOR"
+          df -h
+
+      - name: Activate Unity license and run Release-only EditMode tests
+        if: env.HAS_UNITY_LICENSE == 'true'
+        timeout-minutes: 60
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+          set -eu
+          mkdir -p artifacts "$RUNNER_TEMP/BlankProject/Assets"
+          trap '"$UNITY_EDITOR" -batchmode -nographics -quit -returnlicense \
+            -logFile /dev/stdout \
+            -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" \
+            -projectPath "$RUNNER_TEMP/BlankProject" >/dev/null 2>&1 || true' EXIT
+
+          LICENSE_VALUE=$(printf "%s" "$UNITY_LICENSE" | tr "\n" " " | sed -n 's/.*<DeveloperData Value="\([^"]*\)"\/>.*/\1/p')
+          test -n "$LICENSE_VALUE"
+          printf "%s" "$LICENSE_VALUE" | base64 -d > "$RUNNER_TEMP/developer-data.bin"
+          SERIAL=$(tail -c +5 "$RUNNER_TEMP/developer-data.bin" | tr -d "\r\n")
+          test "${#SERIAL}" -eq 27
+
+          # Why RUNNER_TEMP: Unity prints -username unmasked in COMMAND LINE
+          # ARGUMENTS. artifacts/ is uploaded from a public repository.
+          ACTIVATE_LOG="$RUNNER_TEMP/unity-activate.log"
+          ACTIVATE_FALLBACK_LOG="$RUNNER_TEMP/unity-activate-fallback.log"
+
+          ACTIVATED=false
+          ATTEMPT=1
+          while [ "$ATTEMPT" -le 3 ]; do
+            if "$UNITY_EDITOR" -batchmode -nographics -quit \
+              -logFile "$ACTIVATE_LOG" \
+              -serial "$SERIAL" \
+              -username "$UNITY_EMAIL" \
+              -password "$UNITY_PASSWORD" \
+              -projectPath "$RUNNER_TEMP/BlankProject"; then
+              ACTIVATED=true
+              break
+            fi
+            echo "Serial activation attempt $ATTEMPT failed"
+            tail -n 80 "$ACTIVATE_LOG" || true
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep $((ATTEMPT * 5))
+          done
+
+          if [ "$ACTIVATED" != true ]; then
+            echo "Serial activation failed; falling back to email/password"
+            if ! "$UNITY_EDITOR" -batchmode -nographics -quit \
+              -logFile "$ACTIVATE_FALLBACK_LOG" \
+              -username "$UNITY_EMAIL" \
+              -password "$UNITY_PASSWORD" \
+              -projectPath "$RUNNER_TEMP/BlankProject"; then
+              echo "Email/password fallback failed"
+              tail -n 80 "$ACTIVATE_FALLBACK_LOG" || true
+              exit 1
+            fi
+          fi
+
+          "$UNITY_EDITOR" -batchmode -nographics -releaseCodeOptimization \
+            -projectPath "$GITHUB_WORKSPACE" \
+            -runTests \
+            -testPlatform EditMode \
+            -testFilter "$RELEASE_ONLY_TEST_FILTER" \
+            -testResults "$RESULTS_XML" \
+            -logFile artifacts/unity-editmode-release-optimization.log
+
+      # Why: an ignored test does not fail -runTests, and the Release-only
+      # tests ignore themselves when the Editor is not in Release. Zero skipped
+      # tests out of a nonzero total is the evidence that it was.
+      - name: Check that the Release-only tests ran
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          set -eu
+          TEST_RUN_LINE=$(grep -m 1 '<test-run ' "$RESULTS_XML")
+          echo "$TEST_RUN_LINE"
+          printf '%s\n' "$TEST_RUN_LINE" | grep -q -E ' total="[1-9][0-9]*"'
+          printf '%s\n' "$TEST_RUN_LINE" | grep -q ' skipped="0"'
+
+      - name: Upload Release code optimization test results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && env.HAS_UNITY_LICENSE == 'true'
+        with:
+          name: Unity test results (Release code optimization)
+          path: artifacts
