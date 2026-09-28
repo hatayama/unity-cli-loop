@@ -248,10 +248,13 @@ internal static class AccessorEligibility
                 continue;
             }
 
+            // The increment reads through the getter and stores through the accessor a write
+            // calls, which for a ref-returning property is that getter again, not a setter.
             if (semanticModel.GetSymbolInfo(operand).Symbol is IPropertySymbol propertySymbol
                 && !IsLeftToAddedPropertyScan(propertySymbol, addedMemberAccess)
                 && (AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
-                    || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod)))
+                    || AccessibilityRules.IsInaccessibleAccessor(
+                        AssignmentTargetRules.AccessorCalledByWrite(propertySymbol))))
             {
                 return true;
             }

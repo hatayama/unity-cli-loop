@@ -314,10 +314,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitAssignmentExpression(node);
         }
 
+        // Why not the setter: a ref-returning property has none, and a write through the
+        // reference its accessible getter returns needs no setter delegate to be built.
         ISymbol leftSymbol = _semanticModel.GetSymbolInfo(node.Left).Symbol;
         if (leftSymbol is IPropertySymbol propertySymbol
             && !propertySymbol.IsIndexer
-            && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
+            && AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(propertySymbol)))
         {
             return HarmonyAccessors.RewritePropertyAssignment(node, propertySymbol);
         }
