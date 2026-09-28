@@ -23,9 +23,9 @@ continues, and `Warnings` carries `<file>: <reason>: <type>` where the reason is
 `Nested type requires a compile` · `Nested declaration inside an introduced type requires a compile` ·
 `Internal override in an introduced type requires a compile`
 
-On Unity 2022.3 the bundled compiler predates `file` types, so a `file` declaration fails to parse
-instead of being refused. A top-level `private` or `protected` declaration is not repaired: the
-artifact compile fails on it.
+On Unity 2022.3 and 6000.3 the bundled compiler (Roslyn 4.3.1) predates `file` types, so a `file`
+declaration fails to parse instead of being refused. A top-level `private` or `protected`
+declaration is not repaired: the artifact compile fails on it.
 
 ## Internals of the target assembly
 

@@ -262,8 +262,9 @@ code optimization unless a point says otherwise:
   initializer through the getter; a write through an internal ref-returning property), while
   those calling only the public accessor, or naming a property with an internal getter in
   nameof, stay applied on all three reloads.
-- The file-local refusal reason is not reached on 2022.3: its bundled compiler (Roslyn 4.3.1)
-  rejects `file` while parsing (CS0116), and the test asserts that path instead.
+- The file-local refusal reason is not reached on 2022.3 or 6000.3: both bundle the same
+  compiler build (Roslyn 4.3.1), which rejects `file` while parsing (CS0116), and the test
+  asserts that path instead.
 
 The EditMode workflow on the integration branch passed on every leg with no failed or
 inconclusive tests: the full suite on 2022.3.62f3 and the hot reload suites on 6000.3.15f1,
