@@ -69,7 +69,12 @@ To apply such a field without compiling, declare it
 without an initializer — it starts at `default(T)` — and assign it inside the patched
 method instead; for a reference type, guard that with
 `if (_field == null) { _field = new List<int>(); }`. `??=` is not rewritable and keeps
-the method `Skipped`. When every method that assigns such a field is `Skipped` but a
+the method `Skipped`. So do the other writes the store rewrite cannot carry: a
+deconstruction into the field (`(_field, other) = pair;` — assign it in its own statement
+`_field = value;` instead), an assignment whose value is consumed, a receiver that would be
+evaluated twice, and a write to a member of a value-type added field or an instance method
+call on it (copy the field into a local, change the local, and assign it back). When every
+method that assigns such a field is `Skipped` but a
 method that reads it was applied, a `Warnings` entry names the field, the skipped
 writers and the reader: the reader sees `default(T)`. Fix the skip reason and reload
 again, or run `uloop compile`. Accessors of properties added in the same edit count as

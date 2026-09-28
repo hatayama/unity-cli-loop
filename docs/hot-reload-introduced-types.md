@@ -38,7 +38,7 @@ declares it stays in the tree, the rest of the reload continues, and the respons
 | Generic type | `Generic introduced type requires a compile: <type>` |
 | `partial` type | `Partial introduced type requires a compile: <type>` |
 | `record` / `record struct` | `Record introduced type requires a compile: <type>` |
-| `file` type | `File-local introduced type requires a compile: <type>` — an Editor whose bundled compiler predates file-local types (Unity 2022.3) rejects the `file` modifier while parsing, so that file reports the parse error instead |
+| `file` type | `File-local introduced type requires a compile: <type>` — an Editor whose bundled compiler predates file-local types (Unity 2022.3 and 6000.3) rejects the `file` modifier while parsing, so that file reports the parse error instead |
 | `ref struct` | `Ref-like introduced type requires a compile: <type>` |
 | Type containing `unsafe` code | `Unsafe introduced type requires a compile: <type>` |
 | Type deriving from `UnityEngine.Object` | `Unity object introduced type requires a compile: <type>` |
