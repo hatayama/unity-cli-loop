@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.0](https://github.com/hatayama/unity-cli-loop/compare/v3.8.0...v3.9.0) (2026-09-28)
+
+
+### Features
+
+* Hot reload can introduce new types declared internal or without an access modifier, and they can use internal members of their assembly ([#3017](https://github.com/hatayama/unity-cli-loop/issues/3017)) ([5333ae0](https://github.com/hatayama/unity-cli-loop/commit/5333ae0de340e58b2ae14881996782820f47396f))
+
 ## [3.8.0](https://github.com/hatayama/unity-cli-loop/compare/v3.7.1...v3.8.0) (2026-09-26)
 
 
