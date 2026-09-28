@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const short MultiByteOpCodePrefix = 0xFE;
         private const int SwitchCaseCountSize = 4;
         private const int SwitchCaseSize = 4;
+        private const string TearDownFailureMessage = "TearDown : System.InvalidOperationException : teardown failed";
 
         [Test]
         public void SaveTestResultAsXml_WhenSavingResult_UsesCollisionResistantFileName()
@@ -150,6 +151,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(reasonMessage, Is.Not.Null);
                 Assert.That(reasonMessage.InnerText, Is.EqualTo("Release is required."));
                 Assert.That(document.SelectSingleNode("//test-case/failure"), Is.Null);
+            }
+            finally
+            {
+                DeleteIfExists(filePath);
+            }
+        }
+
+        /// <summary>
+        /// What: the saved XML keeps the message of a fixture that failed outside its tests on the
+        /// fixture's test-suite element, since no test case carries it.
+        /// </summary>
+        [Test]
+        public void SaveTestResultAsXml_WhenAFixtureFailsOutsideItsTests_WritesItsMessageOnTheSuite()
+        {
+            string filePath = null;
+            try
+            {
+                XmlDocument document = SaveResultAndLoadXml(CreateRunWithFailedTearDownFixture(), out filePath);
+                XmlNode suiteMessage = document.SelectSingleNode("//test-suite[@name='TearDownFixture']/failure/message");
+
+                Assert.That(suiteMessage, Is.Not.Null);
+                Assert.That(suiteMessage.InnerText, Is.EqualTo(TearDownFailureMessage));
+            }
+            finally
+            {
+                DeleteIfExists(filePath);
+            }
+        }
+
+        /// <summary>
+        /// What: the saved XML marks the whole run Failed when a fixture failed although every test
+        /// case passed.
+        /// </summary>
+        [Test]
+        public void SaveTestResultAsXml_WhenOnlyAFixtureFailed_MarksTheRunFailed()
+        {
+            string filePath = null;
+            try
+            {
+                XmlDocument document = SaveResultAndLoadXml(CreateRunWithFailedTearDownFixture(), out filePath);
+                XmlNode runResult = document.SelectSingleNode("/test-run/@result");
+
+                Assert.That(runResult, Is.Not.Null);
+                Assert.That(runResult.Value, Is.EqualTo("Failed"));
             }
             finally
             {
@@ -500,6 +545,118 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a run in which every test passed but a fixture's OneTimeTearDown threw is reported
+        /// as a failure instead of a pass.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenFixtureTearDownFailsAndEveryTestPassed_ReportsFailed()
+        {
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
+                CreateRunWithFailedTearDownFixture());
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Failed"));
+            Assert.That(result.hasFailures, Is.True);
+            Assert.That(result.failedCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: the fixture that failed outside its tests is listed with its message and the source
+        /// location from its stack trace.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenFixtureTearDownFails_ListsTheFixtureWithMessageAndLocation()
+        {
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
+                CreateRunWithFailedTearDownFixture());
+
+            Assert.That(result.failedSuites, Is.Not.Null);
+            Assert.That(result.failedSuites.Length, Is.EqualTo(1));
+            Assert.That(result.failedSuites[0].FullName, Is.EqualTo("Example.Tests.TearDownFixture"));
+            Assert.That(result.failedSuites[0].Message, Is.EqualTo(TearDownFailureMessage));
+            Assert.That(result.failedSuites[0].File, Is.EqualTo("Assets/Tests/TearDownFixture.cs"));
+            Assert.That(result.failedSuites[0].Line, Is.EqualTo(12));
+        }
+
+        /// <summary>
+        /// What: when a setup fixture's OneTimeTearDown throws, only that suite is listed, not the
+        /// ancestors whose Failed status merely rolls it up.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenSetUpFixtureTearDownFails_ListsOnlyTheSetUpFixture()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "NamespaceSuite",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestSuite(
+                                "SetUpFixtureSuite",
+                                TestResultStatus.Failed,
+                                0.1,
+                                new List<ITestResultAdaptor>
+                                {
+                                    CreateTestSuite(
+                                        "PassingFixture",
+                                        TestResultStatus.Passed,
+                                        0.1,
+                                        new List<ITestResultAdaptor>
+                                        {
+                                            CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1)
+                                        })
+                                },
+                                TearDownFailureMessage)
+                        },
+                        "One or more child tests had errors")
+                },
+                "One or more child tests had errors");
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedSuites, Is.Not.Null);
+            Assert.That(result.failedSuites.Length, Is.EqualTo(1));
+            Assert.That(result.failedSuites[0].FullName, Is.EqualTo("Example.Tests.SetUpFixtureSuite"));
+        }
+
+        /// <summary>
+        /// What: a fixture that is Failed only because one of its tests failed is not listed as a
+        /// failed suite; the failed test already carries the failure.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenATestFails_DoesNotListItsFixtureAsAFailedSuite()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "FixtureWithFailingTest",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1, "Expected 2 But was: 1")
+                        },
+                        "One or more child tests had errors")
+                },
+                "One or more child tests had errors");
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedCount, Is.EqualTo(1));
+            Assert.That(result.failedSuites, Is.Null);
+        }
+
+        /// <summary>
         /// What: a non-Passed root aggregate containing an inconclusive leaf remains non-successful.
         /// </summary>
         [Test]
@@ -708,6 +865,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(SerializableTestResultConverter.ShouldSaveResultXml(result), Is.False);
         }
 
+        /// <summary>
+        /// What: a run whose only failure is a suite that failed outside its tests still saves the
+        /// result XML, which keeps the suite's message.
+        /// </summary>
+        [Test]
+        public void ShouldSaveResultXml_WhenOnlyASuiteFailed_ReturnsTrue()
+        {
+            SerializableTestResult result = new SerializableTestResult
+            {
+                testCount = 1,
+                passedCount = 1,
+                failedCount = 0,
+                inconclusiveCount = 0,
+                failedSuites = new[]
+                {
+                    new SerializableTestResult.FailedTestDetail
+                    {
+                        FullName = "Example.Tests.TearDownFixture",
+                        Message = TearDownFailureMessage
+                    }
+                }
+            };
+
+            Assert.That(SerializableTestResultConverter.ShouldSaveResultXml(result), Is.True);
+        }
+
         [Test]
         public void SaveTestResultAsXml_DoesNotCallAssetDatabaseRefresh()
         {
@@ -871,10 +1054,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string name,
             TestResultStatus status,
             double durationSeconds,
-            IReadOnlyList<ITestResultAdaptor> children)
+            IReadOnlyList<ITestResultAdaptor> children,
+            string message = "",
+            string stackTrace = "")
         {
             FakeTestAdaptor test = new FakeTestAdaptor(name, true);
-            return new FakeTestResultAdaptor(test, status, durationSeconds, children);
+            return new FakeTestResultAdaptor(test, status, durationSeconds, children, message, stackTrace);
+        }
+
+        // Mirrors how Unity reports a fixture whose OneTimeTearDown threw: the fixture is Failed
+        // with the teardown message while its only test keeps Passed, and the root rolls up Failed.
+        private static ITestResultAdaptor CreateRunWithFailedTearDownFixture()
+        {
+            return CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "TearDownFixture",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1)
+                        },
+                        TearDownFailureMessage,
+                        "--TearDown\n  at Example.Tests.TearDownFixture.TearDownOnce () [0x00000] in /ignored/path.cs:1\n  (at Assets/Tests/TearDownFixture.cs:12)")
+                });
         }
 
         private static ITestResultAdaptor CreateTestCase(

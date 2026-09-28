@@ -47,8 +47,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int failedTests = CountFailedTests(result);
             int skippedTests = CountSkippedTests(result);
             int inconclusiveTests = CountInconclusiveTests(result);
+            SerializableTestResult.FailedTestDetail[] failedSuites = CollectFailedSuiteDetails(result);
             bool noTestsFound = totalTests == 0;
-            bool hasFailures = failedTests > 0;
+            bool hasFailures = failedTests > 0 || failedSuites != null;
             RunTestsResultClassification classification = Classify(
                 result,
                 totalTests,
@@ -82,17 +83,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 xmlPath = null,
                 failedTests = CollectFailedTestDetails(result),
                 skippedTests = CollectSkippedTestFullNames(result),
-                inconclusiveTests = CollectInconclusiveTestDetails(result)
+                inconclusiveTests = CollectInconclusiveTestDetails(result),
+                failedSuites = failedSuites
             };
         }
 
         /// <summary>
         /// Whether a finished run leaves anything to read in the NUnit XML: a failed or an
-        /// inconclusive leaf.
+        /// inconclusive leaf, or a suite that failed outside its tests.
         /// </summary>
         internal static bool ShouldSaveResultXml(SerializableTestResult result)
         {
-            return result.failedCount > 0 || result.inconclusiveCount > 0;
+            return result.failedCount > 0
+                || result.inconclusiveCount > 0
+                || (result.failedSuites != null && result.failedSuites.Length > 0);
         }
 
         private static RunTestsResultClassification Classify(
@@ -287,6 +291,73 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 File = file,
                 Line = line
             };
+        }
+
+        private static SerializableTestResult.FailedTestDetail[] CollectFailedSuiteDetails(ITestResultAdaptor result)
+        {
+            List<SerializableTestResult.FailedTestDetail> details =
+                new List<SerializableTestResult.FailedTestDetail>();
+            AppendFailedSuiteDetails(result, details);
+            if (details.Count == 0)
+            {
+                return null;
+            }
+
+            return details.ToArray();
+        }
+
+        // Why only the deepest Failed suite: NUnit rolls a failure up into every ancestor suite, so
+        // a Failed suite is where the failure started only when neither a child suite nor one of its
+        // tests failed. That is a OneTimeTearDown error, which leaves every test's own result alone.
+        private static void AppendFailedSuiteDetails(
+            ITestResultAdaptor result,
+            List<SerializableTestResult.FailedTestDetail> details)
+        {
+            if (details.Count >= RunTestsConstants.FailedTestDetailsLimit)
+            {
+                return;
+            }
+
+            if (!result.Test.IsSuite || result.TestStatus != TestStatus.Failed)
+            {
+                return;
+            }
+
+            if (AppendFailedChildSuiteDetails(result, details))
+            {
+                return;
+            }
+
+            if (CountFailedTests(result) > 0)
+            {
+                return;
+            }
+
+            details.Add(CreateFailedTestDetail(result));
+        }
+
+        private static bool AppendFailedChildSuiteDetails(
+            ITestResultAdaptor result,
+            List<SerializableTestResult.FailedTestDetail> details)
+        {
+            if (result.Children == null)
+            {
+                return false;
+            }
+
+            bool hasFailedChildSuite = false;
+            foreach (ITestResultAdaptor child in result.Children)
+            {
+                if (!child.Test.IsSuite || child.TestStatus != TestStatus.Failed)
+                {
+                    continue;
+                }
+
+                hasFailedChildSuite = true;
+                AppendFailedSuiteDetails(child, details);
+            }
+
+            return hasFailedChildSuite;
         }
 
         private static string[] CollectSkippedTestFullNames(ITestResultAdaptor result)
