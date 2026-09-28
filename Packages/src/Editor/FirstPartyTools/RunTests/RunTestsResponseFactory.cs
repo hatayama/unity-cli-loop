@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedCount: result.passedCount,
                 failedCount: result.failedCount,
                 skippedCount: result.skippedCount,
+                inconclusiveCount: result.inconclusiveCount,
                 xmlPath: result.xmlPath,
                 status: result.status,
                 hasFailures: result.hasFailures,
@@ -50,6 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (result.skippedTests != null && result.skippedTests.Length > 0)
             {
                 response.SkippedTests = result.skippedTests;
+            }
+
+            if (result.inconclusiveTests != null && result.inconclusiveTests.Length > 0)
+            {
+                response.InconclusiveTests = result.inconclusiveTests;
             }
         }
     }

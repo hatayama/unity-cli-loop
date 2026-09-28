@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 1,
                 failedCount: 0,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: string.Empty,
                 status: RunTestsExecutionStatus.Passed,
                 hasFailures: false,
@@ -49,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 0,
                 failedCount: 1,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: "TestResults/example.xml",
                 status: RunTestsExecutionStatus.Failed,
                 hasFailures: true,
@@ -96,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 1,
                 failedCount: 0,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: string.Empty,
                 status: RunTestsExecutionStatus.Passed,
                 hasFailures: false,
@@ -118,6 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 1,
                 failedCount: 0,
                 skippedCount: 1,
+                inconclusiveCount: 0,
                 xmlPath: string.Empty,
                 status: RunTestsExecutionStatus.Passed,
                 hasFailures: false,
@@ -140,6 +144,128 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: InconclusiveCount is always written, while InconclusiveTests is omitted without
+        /// inconclusive leaves and serializes each name and message when present.
+        /// </summary>
+        [Test]
+        public void RunTestsResponse_WhenSerialized_WritesInconclusiveCountAndOmitsOrIncludesInconclusiveTests()
+        {
+            RunTestsResponse zeroInconclusive = new RunTestsResponse(
+                success: true,
+                message: "Test execution completed with status: Passed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 1,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0,
+                inconclusiveCount: 0,
+                xmlPath: string.Empty,
+                status: RunTestsExecutionStatus.Passed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty);
+
+            JObject zeroInconclusiveJson = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    zeroInconclusive,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(zeroInconclusiveJson.Value<int>("InconclusiveCount"), Is.EqualTo(0));
+            Assert.That(zeroInconclusiveJson.Property("InconclusiveTests"), Is.Null);
+
+            RunTestsResponse populated = new RunTestsResponse(
+                success: false,
+                message: "Test execution completed with status: Inconclusive",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 2,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0,
+                inconclusiveCount: 1,
+                xmlPath: "TestResults/example.xml",
+                status: RunTestsExecutionStatus.Inconclusive,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty)
+            {
+                InconclusiveTests = new[]
+                {
+                    new SerializableTestResult.InconclusiveTestDetail
+                    {
+                        FullName = "Example.Tests.InconclusiveTest",
+                        Message = "Release is required."
+                    }
+                }
+            };
+
+            JObject populatedJson = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    populated,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+            JArray inconclusiveTests = (JArray)populatedJson["InconclusiveTests"];
+
+            Assert.That(populatedJson.Value<int>("InconclusiveCount"), Is.EqualTo(1));
+            Assert.That(populatedJson.Value<string>("Status"), Is.EqualTo("Inconclusive"));
+            Assert.That(inconclusiveTests, Is.Not.Null);
+            Assert.That(inconclusiveTests.Count, Is.EqualTo(1));
+            JObject first = (JObject)inconclusiveTests[0];
+            Assert.That(first["FullName"]?.Value<string>(), Is.EqualTo("Example.Tests.InconclusiveTest"));
+            Assert.That(first["Message"]?.Value<string>(), Is.EqualTo("Release is required."));
+        }
+
+        /// <summary>
+        /// What: the response built from a stored result carries its inconclusive count and details,
+        /// and leaves InconclusiveTests unset when the result lists none.
+        /// </summary>
+        [Test]
+        public void FromResult_WhenResultHasInconclusiveLeaves_CopiesCountAndDetails()
+        {
+            SerializableTestResult withInconclusive = new SerializableTestResult
+            {
+                success = false,
+                status = RunTestsExecutionStatus.Inconclusive,
+                message = "Test execution completed with status: Inconclusive",
+                noTestsFoundExplanation = string.Empty,
+                completedAt = "2026-01-01T00:00:00.0000000Z",
+                testCount = 2,
+                passedCount = 1,
+                inconclusiveCount = 1,
+                inconclusiveTests = new[]
+                {
+                    new SerializableTestResult.InconclusiveTestDetail
+                    {
+                        FullName = "Example.Tests.InconclusiveTest",
+                        Message = "Release is required."
+                    }
+                }
+            };
+            SerializableTestResult withoutInconclusive = new SerializableTestResult
+            {
+                success = true,
+                status = RunTestsExecutionStatus.Passed,
+                message = "Test execution completed with status: Passed",
+                noTestsFoundExplanation = string.Empty,
+                completedAt = "2026-01-01T00:00:00.0000000Z",
+                testCount = 1,
+                passedCount = 1,
+                inconclusiveCount = 0,
+                inconclusiveTests = new SerializableTestResult.InconclusiveTestDetail[0]
+            };
+
+            RunTestsResponse copied = RunTestsResponseFactory.FromResult(withInconclusive);
+            RunTestsResponse empty = RunTestsResponseFactory.FromResult(withoutInconclusive);
+
+            Assert.That(copied.InconclusiveCount, Is.EqualTo(1));
+            Assert.That(copied.InconclusiveTests, Is.Not.Null);
+            Assert.That(copied.InconclusiveTests.Length, Is.EqualTo(1));
+            Assert.That(copied.InconclusiveTests[0].FullName, Is.EqualTo("Example.Tests.InconclusiveTest"));
+            Assert.That(empty.InconclusiveCount, Is.EqualTo(0));
+            Assert.That(empty.InconclusiveTests, Is.Null);
+        }
+
+        /// <summary>
         /// What: an empty Warning is omitted from production JSON so the key cannot reappear unnoticed.
         /// </summary>
         [Test]
@@ -153,6 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 1,
                 failedCount: 0,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: string.Empty,
                 status: RunTestsExecutionStatus.Passed,
                 hasFailures: false,
@@ -182,6 +309,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 1,
                 failedCount: 0,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: string.Empty,
                 status: RunTestsExecutionStatus.Passed,
                 hasFailures: false,

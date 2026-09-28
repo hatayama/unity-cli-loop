@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             NoTestsFound,
             HasFailures,
+            HasInconclusive,
             FullyPassed,
             RootStatus
         }
@@ -36,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     passedCount = 0,
                     failedCount = 0,
                     skippedCount = 0,
+                    inconclusiveCount = 0,
                     xmlPath = null
                 };
             }
@@ -44,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int passedTests = CountPassedTests(result);
             int failedTests = CountFailedTests(result);
             int skippedTests = CountSkippedTests(result);
+            int inconclusiveTests = CountInconclusiveTests(result);
             bool noTestsFound = totalTests == 0;
             bool hasFailures = failedTests > 0;
             RunTestsResultClassification classification = Classify(
@@ -52,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedTests,
                 failedTests,
                 skippedTests,
+                inconclusiveTests,
                 noTestsFound,
                 hasFailures);
             bool success = classification == RunTestsResultClassification.FullyPassed;
@@ -74,10 +78,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedCount = passedTests,
                 failedCount = failedTests,
                 skippedCount = skippedTests,
+                inconclusiveCount = inconclusiveTests,
                 xmlPath = null,
                 failedTests = CollectFailedTestDetails(result),
-                skippedTests = CollectSkippedTestFullNames(result)
+                skippedTests = CollectSkippedTestFullNames(result),
+                inconclusiveTests = CollectInconclusiveTestDetails(result)
             };
+        }
+
+        /// <summary>
+        /// Whether a finished run leaves anything to read in the NUnit XML: a failed or an
+        /// inconclusive leaf.
+        /// </summary>
+        internal static bool ShouldSaveResultXml(SerializableTestResult result)
+        {
+            return result.failedCount > 0 || result.inconclusiveCount > 0;
         }
 
         private static RunTestsResultClassification Classify(
@@ -86,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int passedTests,
             int failedTests,
             int skippedTests,
+            int inconclusiveTests,
             bool noTestsFound,
             bool hasFailures)
         {
@@ -97,6 +113,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (hasFailures)
             {
                 return RunTestsResultClassification.HasFailures;
+            }
+
+            // Why before the root status: NUnit can roll an inconclusive leaf up into a Passed suite,
+            // while Unity's batchmode run exits with a failure for it, so the leaf decides.
+            if (inconclusiveTests > 0)
+            {
+                return RunTestsResultClassification.HasInconclusive;
             }
 
             if (totalTests > 0
@@ -122,6 +145,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (classification == RunTestsResultClassification.HasFailures)
             {
                 return RunTestsExecutionStatus.Failed;
+            }
+
+            if (classification == RunTestsResultClassification.HasInconclusive)
+            {
+                return RunTestsExecutionStatus.Inconclusive;
             }
 
             if (classification == RunTestsResultClassification.FullyPassed)
@@ -169,6 +197,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             int count = 0;
             CountTestsByStatus(result, ref count, TestStatus.Skipped);
+            return count;
+        }
+
+        private static int CountInconclusiveTests(ITestResultAdaptor result)
+        {
+            int count = 0;
+            CountTestsByStatus(result, ref count, TestStatus.Inconclusive);
             return count;
         }
 
@@ -293,6 +328,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 AppendSkippedTestFullNames(child, fullNames);
                 if (fullNames.Count >= RunTestsConstants.FailedTestDetailsLimit)
+                {
+                    return;
+                }
+            }
+        }
+
+        private static SerializableTestResult.InconclusiveTestDetail[] CollectInconclusiveTestDetails(
+            ITestResultAdaptor result)
+        {
+            List<SerializableTestResult.InconclusiveTestDetail> details =
+                new List<SerializableTestResult.InconclusiveTestDetail>();
+            AppendInconclusiveTestDetails(result, details);
+            if (details.Count == 0)
+            {
+                return null;
+            }
+
+            return details.ToArray();
+        }
+
+        private static void AppendInconclusiveTestDetails(
+            ITestResultAdaptor result,
+            List<SerializableTestResult.InconclusiveTestDetail> details)
+        {
+            if (details.Count >= RunTestsConstants.FailedTestDetailsLimit)
+            {
+                return;
+            }
+
+            if (!result.Test.IsSuite)
+            {
+                if (result.TestStatus == TestStatus.Inconclusive)
+                {
+                    details.Add(
+                        new SerializableTestResult.InconclusiveTestDetail
+                        {
+                            FullName = result.Test.FullName,
+                            Message = result.Message ?? string.Empty
+                        });
+                }
+
+                return;
+            }
+
+            if (result.Children == null)
+            {
+                return;
+            }
+
+            foreach (ITestResultAdaptor child in result.Children)
+            {
+                AppendInconclusiveTestDetails(child, details);
+                if (details.Count >= RunTestsConstants.FailedTestDetailsLimit)
                 {
                     return;
                 }

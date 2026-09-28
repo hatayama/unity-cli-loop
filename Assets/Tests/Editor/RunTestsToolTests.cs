@@ -105,6 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.PassedCount, Is.EqualTo(0));
             Assert.That(response.FailedCount, Is.EqualTo(0));
             Assert.That(response.SkippedCount, Is.EqualTo(0));
+            Assert.That(response.InconclusiveCount, Is.EqualTo(0));
             Assert.That(response.XmlPath, Is.Null);
         }
 
@@ -120,6 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 3,
                 failedCount: 2,
                 skippedCount: 1,
+                inconclusiveCount: 4,
                 xmlPath: "/tmp/results.xml",
                 status: "CustomStatus",
                 hasFailures: false,
@@ -133,6 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.PassedCount, Is.EqualTo(3));
             Assert.That(response.FailedCount, Is.EqualTo(2));
             Assert.That(response.SkippedCount, Is.EqualTo(1));
+            Assert.That(response.InconclusiveCount, Is.EqualTo(4));
             Assert.That(response.XmlPath, Is.EqualTo("/tmp/results.xml"));
             Assert.That(response.Status, Is.EqualTo("CustomStatus"));
             Assert.That(response.HasFailures, Is.False);

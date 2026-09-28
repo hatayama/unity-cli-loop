@@ -168,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return;
                 }
 
-                if (result.failedCount > 0 && rawResult != null)
+                if (SerializableTestResultConverter.ShouldSaveResultXml(result) && rawResult != null)
                 {
                     result.xmlPath = TrySaveFailureXml(rawResult);
                 }

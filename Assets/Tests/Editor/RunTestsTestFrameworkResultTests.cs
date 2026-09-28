@@ -331,10 +331,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a root Passed aggregate containing an inconclusive leaf remains a successful run.
+        /// What: an inconclusive leaf makes the run non-successful even when the root aggregate is Passed,
+        /// as Unity's batchmode test run does with its exit code.
         /// </summary>
         [Test]
-        public void FromTestResult_WhenPassedAndInconclusiveLeavesHavePassedRoot_PreservesPassedSuccess()
+        public void FromTestResult_WhenPassedAndInconclusiveLeavesHavePassedRoot_ReturnsInconclusiveFailure()
         {
             ITestResultAdaptor resultAdaptor = CreateTestSuite(
                 "RootSuite",
@@ -348,9 +349,97 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
 
-            Assert.That(result.success, Is.True);
-            Assert.That(result.status, Is.EqualTo("Passed"));
-            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Passed"));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Inconclusive"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Inconclusive"));
+        }
+
+        /// <summary>
+        /// What: an inconclusive leaf is counted and listed with its name and the message that
+        /// explains the unmet assumption.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenALeafIsInconclusive_CountsItAndListsItsNameAndMessage()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Passed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("InconclusiveTest", TestResultStatus.Inconclusive, 0.1, "Release is required.")
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.testCount, Is.EqualTo(2));
+            Assert.That(result.passedCount, Is.EqualTo(1));
+            Assert.That(result.inconclusiveCount, Is.EqualTo(1));
+            Assert.That(result.inconclusiveTests, Is.Not.Null);
+            Assert.That(result.inconclusiveTests.Length, Is.EqualTo(1));
+            Assert.That(result.inconclusiveTests[0].FullName, Is.EqualTo("Example.Tests.InconclusiveTest"));
+            Assert.That(result.inconclusiveTests[0].Message, Is.EqualTo("Release is required."));
+        }
+
+        /// <summary>
+        /// What: a failed leaf keeps the Failed status over an inconclusive sibling, and the
+        /// inconclusive leaf is still counted and listed.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenFailedAndInconclusiveLeaves_ReportsFailedAndStillListsInconclusive()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1, "boom"),
+                    CreateTestCase("InconclusiveTest", TestResultStatus.Inconclusive, 0.1, "Release is required.")
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Failed"));
+            Assert.That(result.hasFailures, Is.True);
+            Assert.That(result.inconclusiveCount, Is.EqualTo(1));
+            Assert.That(result.inconclusiveTests, Is.Not.Null);
+            Assert.That(result.inconclusiveTests.Length, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: only the first 10 inconclusive leaves are listed while the count keeps all of them.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenElevenTestsAreInconclusive_ListsFirstTenInconclusiveDetails()
+        {
+            List<ITestResultAdaptor> children = new List<ITestResultAdaptor>();
+            for (int index = 0; index < 11; index++)
+            {
+                string suffix = index.ToString(CultureInfo.InvariantCulture);
+                children.Add(
+                    CreateTestCase(
+                        "InconclusiveTest" + suffix,
+                        TestResultStatus.Inconclusive,
+                        0.1,
+                        "assumption " + suffix));
+            }
+
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Inconclusive,
+                0.1,
+                children);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.inconclusiveCount, Is.EqualTo(11));
+            Assert.That(result.inconclusiveTests, Is.Not.Null);
+            Assert.That(result.inconclusiveTests.Length, Is.EqualTo(10));
+            Assert.That(result.inconclusiveTests[0].FullName, Is.EqualTo("Example.Tests.InconclusiveTest0"));
+            Assert.That(result.inconclusiveTests[9].FullName, Is.EqualTo("Example.Tests.InconclusiveTest9"));
         }
 
         /// <summary>
@@ -508,6 +597,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string xmlPath = PlayModeTestExecuter.TrySaveFailureXml(result);
 
             Assert.That(xmlPath, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a run whose only non-passed leaves are inconclusive still saves the result XML.
+        /// </summary>
+        [Test]
+        public void ShouldSaveResultXml_WhenALeafIsInconclusiveAndNoneFailed_ReturnsTrue()
+        {
+            SerializableTestResult result = new SerializableTestResult
+            {
+                testCount = 2,
+                passedCount = 1,
+                failedCount = 0,
+                inconclusiveCount = 1
+            };
+
+            Assert.That(SerializableTestResultConverter.ShouldSaveResultXml(result), Is.True);
+        }
+
+        /// <summary>
+        /// What: a run with a failed leaf saves the result XML.
+        /// </summary>
+        [Test]
+        public void ShouldSaveResultXml_WhenALeafFailed_ReturnsTrue()
+        {
+            SerializableTestResult result = new SerializableTestResult
+            {
+                testCount = 2,
+                passedCount = 1,
+                failedCount = 1,
+                inconclusiveCount = 0
+            };
+
+            Assert.That(SerializableTestResultConverter.ShouldSaveResultXml(result), Is.True);
+        }
+
+        /// <summary>
+        /// What: a run of only passed and skipped leaves saves no result XML.
+        /// </summary>
+        [Test]
+        public void ShouldSaveResultXml_WhenLeavesOnlyPassedOrWereSkipped_ReturnsFalse()
+        {
+            SerializableTestResult result = new SerializableTestResult
+            {
+                testCount = 2,
+                passedCount = 1,
+                skippedCount = 1,
+                failedCount = 0,
+                inconclusiveCount = 0
+            };
+
+            Assert.That(SerializableTestResultConverter.ShouldSaveResultXml(result), Is.False);
         }
 
         [Test]

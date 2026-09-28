@@ -143,6 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 passedCount: 0,
                 failedCount: 0,
                 skippedCount: 0,
+                inconclusiveCount: 0,
                 xmlPath: null,
                 status: RunTestsExecutionStatus.NoTestsFound,
                 hasFailures: false,

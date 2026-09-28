@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public const string Passed = "Passed";
         public const string Failed = "Failed";
+        public const string Inconclusive = "Inconclusive";
         public const string NoTestsFound = "NoTestsFound";
         public const string ExecutionFailed = "ExecutionFailed";
     }
