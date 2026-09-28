@@ -33,6 +33,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int SwitchCaseCountSize = 4;
         private const int SwitchCaseSize = 4;
         private const string TearDownFailureMessage = "TearDown : System.InvalidOperationException : teardown failed";
+        private const string SetUpFailureMessage = "System.InvalidOperationException : setup failed";
+        private const string ChildFailureMessage = "One or more child tests had errors";
+
+        // Unity's NUnit renders a suite's result state as Status[:Label][(Site)]; these are the
+        // strings it produces for the suite outcomes the tests below model.
+        private const string ChildFailureResultState = "Failed(Child)";
+        private const string TearDownErrorResultState = "Failed:Error(TearDown)";
+        private const string SetUpErrorResultState = "Failed:Error(SetUp)";
+        private const string ParentErrorResultState = "Failed:Error(Parent)";
+        private const string CancelledResultState = "Failed:Cancelled";
 
         [Test]
         public void SaveTestResultAsXml_WhenSavingResult_UsesCollisionResistantFileName()
@@ -612,11 +622,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                                             CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1)
                                         })
                                 },
-                                TearDownFailureMessage)
+                                TearDownFailureMessage,
+                                resultState: TearDownErrorResultState)
                         },
-                        "One or more child tests had errors")
+                        ChildFailureMessage,
+                        resultState: ChildFailureResultState)
                 },
-                "One or more child tests had errors");
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
 
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
 
@@ -646,14 +659,181 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         {
                             CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1, "Expected 2 But was: 1")
                         },
-                        "One or more child tests had errors")
+                        ChildFailureMessage,
+                        resultState: ChildFailureResultState)
                 },
-                "One or more child tests had errors");
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
 
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
 
             Assert.That(result.failedCount, Is.EqualTo(1));
             Assert.That(result.failedSuites, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a fixture whose OneTimeTearDown threw is listed even when one of its tests failed
+        /// too, so the teardown error is not hidden behind the test failure.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenFixtureTearDownFailsAlongsideAFailedTest_ListsTheFixture()
+        {
+            string fixtureMessage = ChildFailureMessage + "\n" + TearDownFailureMessage;
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "TearDownFixture",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1, "Expected 2 But was: 1")
+                        },
+                        fixtureMessage,
+                        resultState: TearDownErrorResultState)
+                },
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedCount, Is.EqualTo(1));
+            Assert.That(result.failedSuites, Is.Not.Null);
+            Assert.That(result.failedSuites.Length, Is.EqualTo(1));
+            Assert.That(result.failedSuites[0].FullName, Is.EqualTo("Example.Tests.TearDownFixture"));
+            Assert.That(result.failedSuites[0].Message, Is.EqualTo(fixtureMessage));
+        }
+
+        /// <summary>
+        /// What: a setup fixture whose OneTimeTearDown threw is listed even when a fixture under it
+        /// failed, while that fixture, Failed only through its failing test, is not.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenSetUpFixtureTearDownFailsAlongsideAFailedFixture_ListsOnlyTheSetUpFixture()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "SetUpFixtureSuite",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestSuite(
+                                "FixtureWithFailingTest",
+                                TestResultStatus.Failed,
+                                0.1,
+                                new List<ITestResultAdaptor>
+                                {
+                                    CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1, "Expected 2 But was: 1")
+                                },
+                                ChildFailureMessage,
+                                resultState: ChildFailureResultState)
+                        },
+                        ChildFailureMessage + "\n" + TearDownFailureMessage,
+                        resultState: TearDownErrorResultState)
+                },
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedSuites, Is.Not.Null);
+            Assert.That(result.failedSuites.Length, Is.EqualTo(1));
+            Assert.That(result.failedSuites[0].FullName, Is.EqualTo("Example.Tests.SetUpFixtureSuite"));
+        }
+
+        /// <summary>
+        /// What: when a setup fixture's OneTimeSetUp throws, that suite is listed, while the fixture
+        /// it skipped, which inherits the failure from it, is not.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenSetUpFixtureSetUpFails_ListsOnlyTheSetUpFixture()
+        {
+            string inheritedMessage = "OneTimeSetUp: " + SetUpFailureMessage;
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "SetUpFixtureSuite",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestSuite(
+                                "FixtureUnderFailedSetUp",
+                                TestResultStatus.Failed,
+                                0.1,
+                                new List<ITestResultAdaptor>
+                                {
+                                    CreateTestCase("TestUnderFailedSetUp", TestResultStatus.Failed, 0.1, inheritedMessage)
+                                },
+                                inheritedMessage,
+                                resultState: ParentErrorResultState)
+                        },
+                        SetUpFailureMessage,
+                        resultState: SetUpErrorResultState)
+                },
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedCount, Is.EqualTo(1));
+            Assert.That(result.failedSuites, Is.Not.Null);
+            Assert.That(result.failedSuites.Length, Is.EqualTo(1));
+            Assert.That(result.failedSuites[0].FullName, Is.EqualTo("Example.Tests.SetUpFixtureSuite"));
+        }
+
+        /// <summary>
+        /// What: a run cancelled after every executed test passed is reported as a failure that lists
+        /// only the cancelled fixture, not the ancestors cancelled along with it.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenAFixtureIsCancelled_ListsOnlyThatFixtureAndReportsFailed()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "PassingFixture",
+                        TestResultStatus.Passed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1)
+                        }),
+                    CreateTestSuite(
+                        "CancelledFixture",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>(),
+                        "Test cancelled by user",
+                        resultState: CancelledResultState)
+                },
+                "Cancelled by user",
+                resultState: CancelledResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.failedSuites, Is.Not.Null);
+            Assert.That(result.failedSuites.Length, Is.EqualTo(1));
+            Assert.That(result.failedSuites[0].FullName, Is.EqualTo("Example.Tests.CancelledFixture"));
         }
 
         /// <summary>
@@ -1056,14 +1236,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             double durationSeconds,
             IReadOnlyList<ITestResultAdaptor> children,
             string message = "",
-            string stackTrace = "")
+            string stackTrace = "",
+            string resultState = null)
         {
             FakeTestAdaptor test = new FakeTestAdaptor(name, true);
-            return new FakeTestResultAdaptor(test, status, durationSeconds, children, message, stackTrace);
+            return new FakeTestResultAdaptor(
+                test,
+                status,
+                durationSeconds,
+                children,
+                message,
+                stackTrace,
+                resultState);
         }
 
-        // Mirrors how Unity reports a fixture whose OneTimeTearDown threw: the fixture is Failed
-        // with the teardown message while its only test keeps Passed, and the root rolls up Failed.
+        // Mirrors how Unity reports a fixture whose OneTimeTearDown threw: the fixture is Failed at
+        // the TearDown site with the teardown message while its only test keeps Passed, and the root
+        // rolls it up as a child failure.
         private static ITestResultAdaptor CreateRunWithFailedTearDownFixture()
         {
             return CreateTestSuite(
@@ -1081,8 +1270,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1)
                         },
                         TearDownFailureMessage,
-                        "--TearDown\n  at Example.Tests.TearDownFixture.TearDownOnce () [0x00000] in /ignored/path.cs:1\n  (at Assets/Tests/TearDownFixture.cs:12)")
-                });
+                        "--TearDown\n  at Example.Tests.TearDownFixture.TearDownOnce () [0x00000] in /ignored/path.cs:1\n  (at Assets/Tests/TearDownFixture.cs:12)",
+                        TearDownErrorResultState)
+                },
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
         }
 
         private static ITestResultAdaptor CreateTestCase(
@@ -1110,6 +1302,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             private readonly IReadOnlyList<ITestResultAdaptor> _children;
             private readonly string _message;
             private readonly string _stackTrace;
+            private readonly string _resultState;
 
             public FakeTestResultAdaptor(
                 ITestAdaptor test,
@@ -1117,7 +1310,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 double durationSeconds,
                 IReadOnlyList<ITestResultAdaptor> children,
                 string message = "",
-                string stackTrace = "")
+                string stackTrace = "",
+                string resultState = null)
             {
                 _test = test;
                 _status = status;
@@ -1125,12 +1319,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _children = children;
                 _message = message ?? string.Empty;
                 _stackTrace = stackTrace ?? string.Empty;
+                _resultState = resultState ?? status.ToString();
             }
 
             public ITestAdaptor Test => _test;
             public string Name => _test.Name;
             public string FullName => _test.FullName;
-            public string ResultState => _status.ToString();
+            public string ResultState => _resultState;
             public TestResultStatus TestStatus => _status;
             public double Duration => _durationSeconds;
             public DateTime StartTime => new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);

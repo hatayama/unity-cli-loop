@@ -306,9 +306,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return details.ToArray();
         }
 
-        // Why only the deepest Failed suite: NUnit rolls a failure up into every ancestor suite, so
-        // a Failed suite is where the failure started only when neither a child suite nor one of its
-        // tests failed. That is a OneTimeTearDown error, which leaves every test's own result alone.
         private static void AppendFailedSuiteDetails(
             ITestResultAdaptor result,
             List<SerializableTestResult.FailedTestDetail> details)
@@ -323,41 +320,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            if (AppendFailedChildSuiteDetails(result, details))
+            if (FailedOutsideItsTests(result))
+            {
+                details.Add(CreateFailedTestDetail(result));
+            }
+
+            if (result.Children == null)
             {
                 return;
             }
 
-            if (CountFailedTests(result) > 0)
+            foreach (ITestResultAdaptor child in result.Children)
             {
-                return;
+                AppendFailedSuiteDetails(child, details);
             }
-
-            details.Add(CreateFailedTestDetail(result));
         }
 
-        private static bool AppendFailedChildSuiteDetails(
-            ITestResultAdaptor result,
-            List<SerializableTestResult.FailedTestDetail> details)
+        // Why two rules: NUnit records a OneTimeSetUp or OneTimeTearDown error on the suite's own
+        // result state at the SetUp or TearDown site and rolls it into every ancestor at the Child
+        // site, so that site marks where the failure started even when some tests failed too. A
+        // Failed suite with neither site and nothing Failed beneath it, such as a cancelled one,
+        // would otherwise leave a Failed run with nothing that explains it.
+        private static bool FailedOutsideItsTests(ITestResultAdaptor suite)
         {
-            if (result.Children == null)
+            if (HasSetUpOrTearDownSite(suite.ResultState))
+            {
+                return true;
+            }
+
+            return !HasFailedChildSuite(suite) && CountFailedTests(suite) == 0;
+        }
+
+        // Why the text: ITestResultAdaptor exposes the site only through NUnit's ResultState
+        // string, which renders as Status[:Label][(Site)].
+        private static bool HasSetUpOrTearDownSite(string resultState)
+        {
+            return resultState.EndsWith("(SetUp)", StringComparison.Ordinal)
+                || resultState.EndsWith("(TearDown)", StringComparison.Ordinal);
+        }
+
+        private static bool HasFailedChildSuite(ITestResultAdaptor suite)
+        {
+            if (suite.Children == null)
             {
                 return false;
             }
 
-            bool hasFailedChildSuite = false;
-            foreach (ITestResultAdaptor child in result.Children)
+            foreach (ITestResultAdaptor child in suite.Children)
             {
-                if (!child.Test.IsSuite || child.TestStatus != TestStatus.Failed)
+                if (child.Test.IsSuite && child.TestStatus == TestStatus.Failed)
                 {
-                    continue;
+                    return true;
                 }
-
-                hasFailedChildSuite = true;
-                AppendFailedSuiteDetails(child, details);
             }
 
-            return hasFailedChildSuite;
+            return false;
         }
 
         private static string[] CollectSkippedTestFullNames(ITestResultAdaptor result)

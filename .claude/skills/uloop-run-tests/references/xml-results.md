@@ -8,6 +8,6 @@ The XML contains per-test-case results including:
 - Pass/fail/skip status and duration
 - For failed tests: `<message>` (assertion error) and `<stack-trace>`
 - For inconclusive tests: `<reason><message>` (the assumption that was not met)
-- For failed suites: `<failure>` with `<message>` and `<stack-trace>` on the `<test-suite>`. A fixture whose `OneTimeTearDown` threw keeps its error only here and in `FailedSuites`, because its test cases stay passed.
+- For failed suites: `<failure>` with `<message>` and `<stack-trace>` on the `<test-suite>`. A fixture whose `OneTimeTearDown` threw keeps its error only here and in `FailedSuites`: its test cases keep their own results, passed or failed.
 
 The response lists at most 10 entries in each of `FailedTests`, `InconclusiveTests`, and `FailedSuites`; the XML keeps every one.
