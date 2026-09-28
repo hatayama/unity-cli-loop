@@ -475,6 +475,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a Failed root outranks an inconclusive leaf when no leaf failed, as when a
+        /// OneTimeTearDown exception fails only the fixture, and the inconclusive leaf is still listed.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenFailedRootHasInconclusiveLeafAndNoFailedLeaf_KeepsFailedStatus()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("InconclusiveTest", TestResultStatus.Inconclusive, 0.1, "Release is required.")
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Failed"));
+            Assert.That(result.inconclusiveCount, Is.EqualTo(1));
+            Assert.That(result.inconclusiveTests, Has.Length.EqualTo(1));
+        }
+
+        /// <summary>
         /// What: a non-Passed root aggregate containing an inconclusive leaf remains non-successful.
         /// </summary>
         [Test]

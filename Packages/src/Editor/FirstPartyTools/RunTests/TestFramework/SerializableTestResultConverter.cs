@@ -116,8 +116,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // Why before the root status: NUnit can roll an inconclusive leaf up into a Passed suite,
-            // while Unity's batchmode run exits with a failure for it, so the leaf decides.
-            if (inconclusiveTests > 0)
+            // while Unity's batchmode run exits with a failure for it, so the leaf decides. A Failed
+            // root still outranks it: a OneTimeTearDown exception fails the fixture but no leaf.
+            if (inconclusiveTests > 0 && result.TestStatus != TestStatus.Failed)
             {
                 return RunTestsResultClassification.HasInconclusive;
             }
