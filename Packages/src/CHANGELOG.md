@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.1](https://github.com/hatayama/unity-cli-loop/compare/v3.9.0...v3.9.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* run-tests no longer reports runs with inconclusive tests as passed ([#3020](https://github.com/hatayama/unity-cli-loop/issues/3020)) ([ce5b4d4](https://github.com/hatayama/unity-cli-loop/commit/ce5b4d4afd9528b24b00df1c77e52dc52587c4d9))
+
 ## [3.9.0](https://github.com/hatayama/unity-cli-loop/compare/v3.8.0...v3.9.0) (2026-09-28)
 
 
