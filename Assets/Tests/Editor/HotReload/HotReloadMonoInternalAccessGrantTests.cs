@@ -208,8 +208,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Grant_ReleaseInlining_UnflaggedCallerReachesInternalMember()
         {
-            Assume.That(CompilationPipeline.codeOptimization, Is.EqualTo(CodeOptimization.Release),
-                "Release is required to exercise the JIT inlining boundary.");
+            // Why Ignore, not Assume: batchmode -runTests exits with 2 on an inconclusive test even when
+            // nothing failed, which fails the CI job that runs the Editor directly under Debug.
+            if (CompilationPipeline.codeOptimization != CodeOptimization.Release)
+            {
+                Assert.Ignore("Release is required to exercise the JIT inlining boundary.");
+            }
+
             string workName = "GrantInlining-" + Guid.NewGuid().ToString("N");
             // A referencing assembly binds by identity, not by this test's unique directory.
             string calleeAssemblyName = "GrantInliningCallee_" + Guid.NewGuid().ToString("N");

@@ -218,12 +218,13 @@ nine cases passing in 2022.3 Release. The additional generic-bitfield probe was 
 ten passed on every Editor version or operating system.
 
 Production evidence so far comes from scoped EditMode runs on 2022.3.62f3, macOS, with Debug
-code optimization unless a point says Release:
+code optimization unless a point says otherwise:
 
-- The grant tests pass. Under Debug the Release-only inlining test is inconclusive. When the
+- The grant tests pass. Under Debug the Release-only inlining tests are skipped. When the
   grant was added, before any production route used it, the grant tests including that inlining
   test and the ten S7 tests also passed with Release code optimization (30 of 30, 2022.3.62f3,
-  macOS). Release has not been run again since the grant was connected to the production route.
+  macOS). After the grant was connected to the production route, the same 30 tests passed again
+  with Release code optimization on 2022.3.62f3 and 6000.7.0b2 (macOS).
 - The production preparation-to-caller route passes for internal static members, internal
   interfaces, lambda closures, async methods, iterators, generic methods with reference and
   value type arguments, internal members of a retained artifact, a later body edit, and an
@@ -265,9 +266,8 @@ code optimization unless a point says Release:
   4.3.1) rejects `file` while parsing (CS0116), and the test asserts that path instead.
 
 Not verified yet: the file-local refusal reason on an Editor whose compiler parses `file`, a
-Release run of the grant, inlining, and production-route tests at the revision that connects
-the grant, Windows, the Unity 6 Editors, and the full EditMode workflow. The Release pass above
-covers 2022.3.62f3 on macOS only.
+Release run of the production-route tests, Windows, the Unity 6 Editors beyond the Release run
+above, and the full EditMode workflow. The Release passes above ran on macOS only.
 
 Before merging the production feature:
 
@@ -279,7 +279,7 @@ Before merging the production feature:
   worker or shim reference inputs.
 - Verify original-source fingerprints, unchanged reruns, header changes, source/MVID changes
   during a run, and the existing commit gates.
-- Run Release-only inlining tests and distinguish them from Debug runs with inconclusive tests.
+- Run Release-only inlining tests and distinguish them from Debug runs, where they are skipped.
 - Verify UTF-8 method names, platform path handling, and source rewriting with LF and CRLF.
   Record Windows and Editor-version coverage explicitly.
 
