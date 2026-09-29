@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadConstants.IntroducedTypeArtifactsRelativeDirectory,
                 sessionId,
                 artifactId);
-            string assemblyName = "UloopIntroducedTypes_" + artifactId;
+            string assemblyName = HotReloadConstants.IntroducedTypeArtifactAssemblyNamePrefix + artifactId;
             string dllPath = Path.Combine(directory, assemblyName + ".dll");
             return new HotReloadIntroducedTypeArtifactPaths(
                 Path.Combine(directory, assemblyName + ".cs"),

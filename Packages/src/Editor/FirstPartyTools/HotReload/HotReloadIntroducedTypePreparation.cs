@@ -19,6 +19,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // the assembly files a loaded artifact of this domain still maps.
         private static readonly string SessionId = Guid.NewGuid().ToString("N");
 
+        /// <summary>
+        /// Deletes the artifacts that earlier domains left and the reference-cache copies made from
+        /// them. Nothing in a later domain loads them, since the registry that knew them died with
+        /// their domain; this domain's session stays whatever it already holds.
+        /// </summary>
+        public static void SweepArtifactsOfEarlierDomains(string projectRoot)
+        {
+            new HotReloadIntroducedTypeArtifactSweeper(projectRoot, SessionId).Sweep();
+        }
+
         public static async Task<HotReloadIntroducedTypePreparationResult> PrepareAsync(
             HotReloadGroupStageCollaborators collaborators,
             IReadOnlyList<HotReloadGroupFile> files,

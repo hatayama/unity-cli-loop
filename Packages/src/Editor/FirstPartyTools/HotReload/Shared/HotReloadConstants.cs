@@ -15,6 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // session and artifact below it. Shared with the publicizer, which accepts an image from
         // here as well as one from ScriptAssemblies.
         public const string IntroducedTypeArtifactsRelativeDirectory = "Library/UloopHotReload/IntroducedTypes";
+
+        // An artifact assembly is named this prefix followed by its artifact id, which is also the
+        // name of its directory. The reference caches key their copies by the same name.
+        public const string IntroducedTypeArtifactAssemblyNamePrefix = "UloopIntroducedTypes_";
         public const string CompiledAssemblyExtension = ".dll";
 
         // Publicized reference copies are keyed by assembly name + Mvid so a recompiled assembly
@@ -572,6 +576,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogWorkerHostLifecycleClosed = "hot_reload_worker_lifecycle_closed";
         public const string VibeLogWorkerHostBrokenConversation = "hot_reload_worker_broken_conversation";
         public const string VibeLogWorkerHostTempCleanupFailed = "hot_reload_worker_temp_cleanup_failed";
+        public const string VibeLogIntroducedTypeArtifactSweepFailed = "hot_reload_introduced_type_artifact_sweep_failed";
         public const string VibeLogWorkerHostFallbackOneShot = "hot_reload_worker_fallback_one_shot";
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
