@@ -49,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileSinks sinks = new HotReloadFileSinks(
                 run.SiblingDerivedWarnings,
                 run.OneShotCallerNoteCandidates,
+                run.StaleSignatureWarnings,
                 run.DisplayedRemovedMembers);
             List<HotReloadMethodOutcome> alreadyActiveOutcomes = new List<HotReloadMethodOutcome>();
 

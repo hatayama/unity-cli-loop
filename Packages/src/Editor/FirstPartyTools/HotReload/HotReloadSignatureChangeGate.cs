@@ -47,16 +47,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget =
                 CollectInitialUncoveredCallers(context.AssemblyName, entries, hits, deletedCallerExemptions);
 
-            List<string> staleWarnings = HotReloadSignatureChangeCoverage.CollectStaleSignatureWarnings(
-                removedSignatures,
-                uncoveredCallersByTarget);
+            List<HotReloadStaleSignatureCallSites> staleSignatureCallSites =
+                HotReloadSignatureChangeCoverage.CollectStaleSignatureCallSites(
+                    removedSignatures,
+                    hits,
+                    uncoveredCallersByTarget);
             List<TransformWorkerEntryDto> gatedReplacements = CollectGatedReplacementEntries(
                 replacementEntries,
                 uncoveredCallersByTarget);
             if (gatedReplacements.Count == 0)
             {
                 return SignatureChangeGateResult.WarningsOnly(
-                    staleWarnings,
+                    staleSignatureCallSites,
                     hits,
                     deletedCallerExemptions);
             }
@@ -116,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return SignatureChangeGateResult.Retried(
                 retry.Isolation,
                 skippedOutcomes,
-                staleWarnings,
+                staleSignatureCallSites,
                 hits,
                 deletedCallerExemptions,
                 gatedReplacementMethodKeys);
@@ -351,7 +353,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public bool DidScan { get; }
             public HotReloadShimIsolation.HotReloadShimIsolationResult Isolation { get; }
             public List<HotReloadMethodOutcome> SkippedOutcomes { get; }
-            public List<string> Warnings { get; }
+            public List<HotReloadStaleSignatureCallSites> StaleSignatureCallSites { get; }
             public List<HotReloadCallSiteScanner.CallSiteHit> Hits { get; }
             public HashSet<HotReloadQualifiedMethodIdentity> DeletedCallerExemptions { get; }
             public List<string> GatedReplacementMethodKeys { get; }
@@ -365,7 +367,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool didScan,
                 HotReloadShimIsolation.HotReloadShimIsolationResult isolation,
                 List<HotReloadMethodOutcome> skippedOutcomes,
-                List<string> warnings,
+                List<HotReloadStaleSignatureCallSites> staleSignatureCallSites,
                 List<HotReloadCallSiteScanner.CallSiteHit> hits,
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions,
                 List<string> gatedReplacementMethodKeys)
@@ -375,7 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 DidScan = didScan;
                 Isolation = isolation;
                 SkippedOutcomes = skippedOutcomes ?? new List<HotReloadMethodOutcome>();
-                Warnings = warnings ?? new List<string>();
+                StaleSignatureCallSites = staleSignatureCallSites ?? new List<HotReloadStaleSignatureCallSites>();
                 Hits = hits ?? new List<HotReloadCallSiteScanner.CallSiteHit>();
                 DeletedCallerExemptions = deletedCallerExemptions
                     ?? new HashSet<HotReloadQualifiedMethodIdentity>();
@@ -390,13 +392,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             public static SignatureChangeGateResult WarningsOnly(
-                List<string> warnings,
+                List<HotReloadStaleSignatureCallSites> staleSignatureCallSites,
                 List<HotReloadCallSiteScanner.CallSiteHit> hits,
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions)
             {
                 return new SignatureChangeGateResult(
                     SignatureChangeGateOutcome.WarningsOnly,
-                    null, true, null, null, warnings, hits, deletedCallerExemptions, null);
+                    null, true, null, null, staleSignatureCallSites, hits, deletedCallerExemptions, null);
             }
 
             // Why didScan is true: this result is only built after FindCallSites has already run,
@@ -421,7 +423,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public static SignatureChangeGateResult Retried(
                 HotReloadShimIsolation.HotReloadShimIsolationResult isolation,
                 List<HotReloadMethodOutcome> skippedOutcomes,
-                List<string> warnings,
+                List<HotReloadStaleSignatureCallSites> staleSignatureCallSites,
                 List<HotReloadCallSiteScanner.CallSiteHit> hits,
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions,
                 List<string> gatedReplacementMethodKeys)
@@ -432,7 +434,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     true,
                     isolation,
                     skippedOutcomes,
-                    warnings,
+                    staleSignatureCallSites,
                     hits,
                     deletedCallerExemptions,
                     gatedReplacementMethodKeys);

@@ -56,11 +56,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return uncoveredCallersByTarget;
         }
 
-        internal static List<string> CollectStaleSignatureWarnings(
+        /// <summary>
+        /// One entry per removed signature that still has an uncovered compiled caller, holding the
+        /// first scan hit of each such caller in scan order.
+        /// </summary>
+        internal static List<HotReloadStaleSignatureCallSites> CollectStaleSignatureCallSites(
             TransformWorkerRemovedMethodSignatureDto[] removedSignatures,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget)
         {
-            List<string> warnings = new List<string>();
+            List<HotReloadStaleSignatureCallSites> staleCallSites = new List<HotReloadStaleSignatureCallSites>();
             foreach (TransformWorkerRemovedMethodSignatureDto signature in removedSignatures)
             {
                 string methodKey = HotReloadMethodKeys.BuildMethodKeyParts(
@@ -76,14 +81,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.StaleSignatureCallersWarningFormat,
+                staleCallSites.Add(
+                    new HotReloadStaleSignatureCallSites(
                         methodKey,
-                        FormatUncoveredCallerMethodKeys(callers)));
+                        CollectFirstHitPerCaller(methodKey, hits, callers)));
             }
 
-            return warnings;
+            return staleCallSites;
+        }
+
+        // Why one hit per caller: a caller that calls the removed method twice is still one caller
+        // to name, and whether it still runs its compiled body is decided per caller.
+        private static List<HotReloadCallSiteScanner.CallSiteHit> CollectFirstHitPerCaller(
+            string targetMethodKey,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            List<HotReloadQualifiedMethodIdentity> uncoveredCallers)
+        {
+            HashSet<HotReloadQualifiedMethodIdentity> callersWithoutHit =
+                new HashSet<HotReloadQualifiedMethodIdentity>(uncoveredCallers);
+            List<HotReloadCallSiteScanner.CallSiteHit> callerHits =
+                new List<HotReloadCallSiteScanner.CallSiteHit>(uncoveredCallers.Count);
+            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            {
+                if (string.Equals(hit.TargetMethodKey, targetMethodKey, StringComparison.Ordinal)
+                    && callersWithoutHit.Remove(CreateCallerIdentity(hit)))
+                {
+                    callerHits.Add(hit);
+                }
+            }
+
+            Debug.Assert(
+                callersWithoutHit.Count == 0,
+                "Every uncovered caller comes from a hit on the removed signature.");
+            return callerHits;
         }
 
         // Why only already-patched callers of applied replacements: a caller the user
@@ -160,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static string FormatCallSiteCallerLabel(HotReloadCallSiteScanner.CallSiteHit hit)
+        internal static string FormatCallSiteCallerLabel(HotReloadCallSiteScanner.CallSiteHit hit)
         {
             Debug.Assert(hit != null, "hit must not be null.");
             return HotReloadMethodKeys.FormatMethodLabelParts(
@@ -378,24 +408,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return string.Join(", ", names);
-        }
-
-        private static string FormatUncoveredCallerMethodKeys(
-            IReadOnlyList<HotReloadQualifiedMethodIdentity> callers)
-        {
-            List<string> methodKeys = new List<string>(callers.Count);
-            HashSet<string> seenMethodKeys = new HashSet<string>(StringComparer.Ordinal);
-            foreach (HotReloadQualifiedMethodIdentity caller in callers)
-            {
-                if (!seenMethodKeys.Add(caller.MethodKey))
-                {
-                    continue;
-                }
-
-                methodKeys.Add(caller.MethodKey);
-            }
-
-            return string.Join(", ", methodKeys);
         }
 
         private static HotReloadQualifiedMethodIdentity CreateEntryIdentity(
