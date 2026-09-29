@@ -2,9 +2,9 @@
 
 ## Reading `--status` and `InvocationCount`
 
-`uloop hot-reload --status` lists the methods whose bodies are currently replaced,
-without applying or reverting anything. It cannot be combined with `--files` or
-`--revert-all`. Patches are static Editor state, so the answer is authoritative: after
+`uloop hot-reload --status` lists the methods whose bodies are currently replaced and the
+members hot reload added, without applying or reverting anything. It cannot be combined
+with `--files` or `--revert-all`. Patches are static Editor state, so the answer is authoritative: after
 a domain reload it reports zero patched methods, which is exactly when an
 `ActivePatchTotal` remembered from an earlier response has gone stale.
 
@@ -12,9 +12,19 @@ Each `Active` row's `InvocationCount` counts calls into the patched body since t
 was applied. Reloading the same source with no edits after a fully applied reload (a run
 with no Skipped or Failed outcomes) reports `AlreadyActive` and the row carries
 the live `InvocationCount`, unless another edited file of the same assembly is in the
-reload — then the unchanged file is re-applied with that group; re-running after a real edit replaces the patch and resets it to zero. When `InvocationCount` is 0 on an `Active` row, `Reason` notes that the method has not run since this patch was applied: calls that already finished do not re-run, and the patched body takes effect the next time this method is called. For initialization-only methods it also names how to trigger that next call. While Unity is
-paused — including while a pause-point hit holds the game — the player loop does not
-advance, so game-driven calls stop and the count freezes; calls you make yourself (for
+reload — then the unchanged file is re-applied with that group; re-running after a real edit replaces the patch and resets it to zero. When `InvocationCount` is 0 on an `Active` row, `Reason` notes that the method has not run since this patch was applied: calls that already finished do not re-run, and the patched body takes effect the next time this method is called. For initialization-only methods it also names how to trigger that next call.
+
+Each `Added` row's `InvocationCount` counts calls into the added member's body the same
+way, from a counter of the member's own: an unchanged reload's `AlreadyActive` row for it
+carries that count, and re-applying the member — by editing it, or by re-applying its file
+with an edited file of the same assembly — starts the count over at zero. Compiled code
+cannot call an added member, so the count stays 0 until a hot-reloaded body that calls it
+runs, or, for a forwarded Unity message, until the hot-reload proxy delivers the message in
+Play Mode; `Reason` says so while the count is 0. An added iterator counts when its
+enumeration starts rather than when it is called.
+
+While Unity is paused — including while a pause-point hit holds the game — the player loop
+does not advance, so game-driven calls stop and the count freezes; calls you make yourself (for
 example through `uloop execute-dynamic-code`) still increment it. A frozen count during a
 pause only means game-driven calls are not running; it says nothing about whether call
 sites reach the patch. Resume first

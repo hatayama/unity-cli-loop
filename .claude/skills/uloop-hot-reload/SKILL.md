@@ -44,8 +44,8 @@ automatically — pass it with `--files`.
 
 `uloop hot-reload --status` lists the currently active changes; it cannot be combined with
 `--files` or `--revert-all`. Every change is static Editor state, so after a domain reload
-it reports zero. Each `Active` row's `InvocationCount` counts calls
-into the patched body since it was applied — a reachability signal only while the code is
+it reports zero. Each `Active`/`Added` row's `InvocationCount` counts calls
+into its body since it was applied — a reachability signal only while the code is
 being driven.
 
 ## How It Works
