@@ -248,26 +248,34 @@ func TestRunCompileAttachProbeLastAnswerDecidesAfterDisconnect(t *testing.T) {
 // acknowledged the query, because the command has no time left to wait.
 func TestRunCompileAttachProbeContextDeadlineDoesNotWait(t *testing.T) {
 	test := newAttachProbeTest(t, "compile_attach_probe_context_deadline")
-	deps := compileWaitTestDeps(func(ctx context.Context, _ unityipc.Connection, requestID string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(nil)
+	deps.queryCompileStatus = func(ctx context.Context, _ unityipc.Connection, requestID string) (compileStatusResponse, error) {
 		if requestID != test.requestID {
 			return finishedCompileStatus(attachProbeTestNewCompileErrorCount), nil
 		}
+		calledAt := time.Now()
 		<-ctx.Done()
+		// Why also wait out the probe deadline: the probe set it before this call, so the probe then
+		// reports this error. Returning before it lets the probe stop on its own check of the finished
+		// context, and that bare ctx.Err() starts a new compile even without the caller-deadline check.
+		time.Sleep(time.Until(calledAt.Add(deps.attachProbeTimeout)))
 		// This is how a status query ends when the caller's deadline passes after Unity's ack.
 		return compileStatusResponse{}, classifyCompileStatusQueryError(
 			unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
 			ctx.Err(),
 		)
-	})
+	}
 	params := map[string]any{compileWaitTimeoutParam: attachProbeTestWaitTimeoutSeconds}
-	// Why longer than the 40ms probe deadline: the query then returns after that deadline, so the probe
-	// reports the query's error instead of stopping on its own check of the finished context.
+	// Why a deadline, not a cancel: only a deadline that passes after the ack marks the query as
+	// unanswered, which is the case the caller-deadline check exists for.
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	_, _, _ = test.runCompile(ctx, params, deps)
 	test.assertRecordUnchanged(t)
-	test.assertVibeLog(t, nil, []string{vibeLogAttachStart})
+	test.assertVibeLog(t,
+		[]string{vibeLogProbeFailed, vibeLogNextNewCompile},
+		[]string{vibeLogNextWaiting, vibeLogAttachStart})
 }
 
 // attachProbeTest holds what the probe-failure reattach tests share: a pending record for a compile
