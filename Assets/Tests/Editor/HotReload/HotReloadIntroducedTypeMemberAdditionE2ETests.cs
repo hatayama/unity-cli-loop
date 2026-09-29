@@ -32,20 +32,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string HostValueAnchor = "        public int Value()";
         private const string CompiledTypeAddedMethodName = "AddedForIntroducedType";
-        private const string InvisibleAddedMemberTypeName = "HotReloadAddedMemberInvisibleIntroducedValue";
-        private const string AddedMemberInvisibleHint =
-            "One or more of the missing members share a name with a hot reload addition, from this "
-            + "reload or an earlier one. If the missing member is that addition, an introduced type "
-            + "cannot see it: it compiles against the compiled assemblies and earlier introduced "
-            + "types only, so reloading the addition first does not help. Run 'uloop compile' to "
-            + "make the added members compiled, then rerun.";
+        private const int CompiledTypeAddedValue = 41;
+        private const string AddedMemberCallerTypeName = "HotReloadAddedMemberCallerIntroducedValue";
+        private const string AddedMemberCallerMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload." + AddedMemberCallerTypeName;
 
         // The method the first reload adds to a compiled type. It exists only in that reload's
         // shim, never in the assembly on disk the introduced-type compilation reads.
         private static readonly string CompiledTypeAddedMember =
             "        public int " + CompiledTypeAddedMethodName + "()\n"
             + "        {\n"
-            + "            return 41;\n"
+            + "            return " + CompiledTypeAddedValue + ";\n"
             + "        }\n"
             + "\n";
 
@@ -238,12 +235,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a type introduced by this reload whose body calls a member an earlier reload
-        /// added to a compiled type fails to compile, and the failure explains that an introduced
-        /// type cannot see a hot-reload addition instead of leaving the bare compiler error.
+        /// What: a type introduced by this reload whose method calls a member an earlier reload
+        /// added to a compiled type is introduced, and the method runs that member because the
+        /// reload patches its real body over the stub the artifact compiled.
         /// </summary>
         [Test]
-        public async Task Run_IntroducedTypeUsesAMemberAddedToACompiledType_FailsWithTheAddedMemberHint()
+        public async Task Run_IntroducedTypeUsesAMemberAddedToACompiledType_RunsTheAddedMember()
         {
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
@@ -261,32 +258,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     callerPath,
                     CreateIntroducedTypeUsingTheAddedMemberEdits(hostPath, callerPath));
 
-                string reason = FindIntroducedTypeFailureReason(introduced);
+                Assert.That(CountFailures(introduced), Is.EqualTo(0), DescribeOutcomes(introduced));
+                AssertOutcome(
+                    introduced,
+                    HotReloadMethodOutcomeKind.Patched,
+                    AddedMemberCallerMetadataName + ".Compute()");
                 Assert.That(
-                    reason,
-                    Does.Contain("CS1061"),
-                    "The compilation of the introduced type must report the member as missing.\n"
-                    + DescribeOutcomes(introduced));
-                Assert.That(
-                    reason,
-                    Does.EndWith(AddedMemberInvisibleHint),
-                    "The failure must explain why the added member is invisible here.\n"
+                    ReadComputedValue(readArtifact(), AddedMemberCallerMetadataName),
+                    Is.EqualTo(CompiledTypeAddedValue),
+                    "The introduced method must run the member the earlier reload added.\n"
                     + DescribeOutcomes(introduced));
             });
-        }
-
-        private static string FindIntroducedTypeFailureReason(HotReloadOrchestratorResult result)
-        {
-            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
-            {
-                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed)
-                {
-                    return outcome.Reason;
-                }
-            }
-
-            Assert.Fail("No introduced type failed.\n" + DescribeOutcomes(result));
-            return null;
         }
 
         private static Dictionary<string, string> CreateCompiledTypeAdditionEdits(
@@ -305,7 +287,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // The addition stays declared so it is still active, and a new type declared beside it
-        // calls it - which only the shim of the previous reload can answer.
+        // calls it, so the artifact compiles a stub for that body and this reload patches the
+        // real one in.
         private static Dictionary<string, string> CreateIntroducedTypeUsingTheAddedMemberEdits(
             string hostPath,
             string callerPath)
@@ -336,7 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
             string introduced =
-                "    public sealed class " + InvisibleAddedMemberTypeName + "\n"
+                "    public sealed class " + AddedMemberCallerTypeName + "\n"
                 + "    {\n"
                 + "        public int Compute()\n"
                 + "        {\n"
@@ -399,11 +382,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return count;
         }
 
-        private static int ReadComputedValue(HotReloadIntroducedTypeArtifact artifact)
+        private static int ReadComputedValue(
+            HotReloadIntroducedTypeArtifact artifact,
+            string metadataName = IntroducedTypeMetadataName)
         {
             Assert.That(artifact, Is.Not.Null, "A reload had to introduce the type before this check.");
-            Type introducedType = artifact.Assembly.GetType(IntroducedTypeMetadataName, throwOnError: false);
-            Assert.That(introducedType, Is.Not.Null, "The artifact must hold " + IntroducedTypeMetadataName + ".");
+            Type introducedType = artifact.Assembly.GetType(metadataName, throwOnError: false);
+            Assert.That(introducedType, Is.Not.Null, "The artifact must hold " + metadataName + ".");
             MethodInfo compute = introducedType.GetMethod(
                 "Compute",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);

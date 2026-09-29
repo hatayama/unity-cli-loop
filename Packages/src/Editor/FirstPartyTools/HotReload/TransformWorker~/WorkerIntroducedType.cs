@@ -28,4 +28,9 @@ internal sealed class WorkerIntroducedType
     public string DeclarationFingerprint { get; set; }
 
     public string Source { get; set; }
+
+    // The methods whose bodies the source stubs because they call members this reload adds, keyed
+    // the way the transform's entries are. The artifact may only be activated once every one of
+    // them is patched, since until then those bodies throw instead of running.
+    public string[] StubbedMethodKeys { get; set; } = Array.Empty<string>();
 }

@@ -26,7 +26,8 @@ internal static class IntroducedTypePlanner
         string targetAssemblyMvid,
         IntroducedTypeArtifactMap artifactMap,
         IReadOnlyList<string> defineSymbols,
-        IReadOnlyList<UsingDirectiveSyntax> assemblyGlobalUsings)
+        IReadOnlyList<UsingDirectiveSyntax> assemblyGlobalUsings,
+        AddedMemberReferenceClassifier addedMemberClassifier)
     {
         foreach (BaseTypeDeclarationSyntax declaration in unit.Root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
         {
@@ -82,7 +83,7 @@ internal static class IntroducedTypePlanner
             }
 
             string metadataName = CecilTypeNames.ToMetadataName(typeSymbol);
-            string declarationFingerprint = IntroducedTypeFingerprint.Compute(
+            HotReloadIntroducedTypeFingerprint fingerprint = IntroducedTypeFingerprint.Compute(
                 declaration,
                 defineSymbols,
                 typeSymbol,
@@ -90,7 +91,8 @@ internal static class IntroducedTypePlanner
                 home.AssemblySymbol,
                 home.AssemblyName,
                 targetAssemblyMvid,
-                artifactMap).Serialize();
+                artifactMap);
+            string declarationFingerprint = fingerprint.Serialize();
             if (IntroducedTypeReuseDecider.IsAlreadyIntroduced(
                     unit,
                     artifactMap,
@@ -103,6 +105,15 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
+            // Why the record carries the stubbed fingerprint: the artifact does not run the stubbed
+            // bodies the source spells, so every later comparison has to read them as edited bodies
+            // for the transform to patch, the run that introduces the type included.
+            IntroducedTypeStubPlan stubs = IntroducedTypeAddedMemberStubs.Plan(
+                declaration,
+                typeSymbol,
+                unit.SemanticModel,
+                addedMemberClassifier,
+                unit.Input.ProjectRelativePath);
             unit.IntroducedTypes.Add(
                 new WorkerIntroducedType
                 {
@@ -110,8 +121,9 @@ internal static class IntroducedTypePlanner
                     OriginalAssemblyMvid = targetAssemblyMvid ?? string.Empty,
                     MetadataName = metadataName,
                     OwnerProjectRelativePath = unit.Input.ProjectRelativePath,
-                    DeclarationFingerprint = declarationFingerprint,
-                    Source = BuildTypeSource(unit.Root, typeSymbol, declaration, assemblyGlobalUsings)
+                    DeclarationFingerprint = fingerprint.WithStubbedBodies(stubs.FingerprintKeys).Serialize(),
+                    Source = BuildTypeSource(unit.Root, typeSymbol, declaration, assemblyGlobalUsings, stubs.BodyChanges),
+                    StubbedMethodKeys = stubs.MethodKeys.ToArray()
                 });
         }
 
@@ -270,7 +282,8 @@ internal static class IntroducedTypePlanner
         CompilationUnitSyntax root,
         INamedTypeSymbol typeSymbol,
         BaseTypeDeclarationSyntax declaration,
-        IReadOnlyList<UsingDirectiveSyntax> assemblyGlobalUsings)
+        IReadOnlyList<UsingDirectiveSyntax> assemblyGlobalUsings,
+        IReadOnlyList<TextChange> bodyChanges)
     {
         StringBuilder builder = new StringBuilder();
         foreach (ExternAliasDirectiveSyntax externAlias in root.Externs)
@@ -297,7 +310,7 @@ internal static class IntroducedTypePlanner
                 }
             }
 
-            builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration));
+            builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration, bodyChanges));
             for (int index = 0; index < namespaceDeclarations.Count; index++)
             {
                 builder.AppendLine("}");
@@ -306,7 +319,7 @@ internal static class IntroducedTypePlanner
         }
 
         AppendRootUsings(builder, root, assemblyGlobalUsings);
-        builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration));
+        builder.Append(IntroducedTypeSourceAccessibility.ToArtifactDeclarationText(declaration, bodyChanges));
         return builder.ToString();
     }
 

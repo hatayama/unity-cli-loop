@@ -38,8 +38,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why once for the group: every file of the group is resolved against the same
             // domain and project, and a row that names an artifact assembly must resolve to the
             // same retained home no matter which file it came from.
-            HotReloadEntryHomeResolver homeResolver =
-                new HotReloadEntryHomeResolver(collaborators.Domain, context.ProjectRoot);
+            HotReloadEntryHomeResolver homeResolver = new HotReloadEntryHomeResolver(
+                collaborators.Domain,
+                context.ProjectRoot,
+                context.PreparedIntroducedTypes?.Artifact);
             List<HotReloadPreparedGroupFile> prepared =
                 new List<HotReloadPreparedGroupFile>(context.Files.Count);
             foreach (HotReloadGroupFile file in context.Files)

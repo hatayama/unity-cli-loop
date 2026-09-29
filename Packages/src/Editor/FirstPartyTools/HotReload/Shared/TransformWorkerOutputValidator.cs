@@ -439,7 +439,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            if (!HoldsDistinctStubbedMethodKeys(introducedType.stubbedMethodKeys))
+            {
+                errorMessage = "Preparation descriptor stubbedMethodKeys must be non-blank and distinct.";
+                return false;
+            }
+
             errorMessage = string.Empty;
+            return true;
+        }
+
+        // Why refused rather than trimmed: a blank key would let the activation check wait for a
+        // patch no entry can name, and a repeated one would let one patch count for two stubs.
+        // Why null passes: coalescing reads an omitted list as a type with no stubs.
+        private bool HoldsDistinctStubbedMethodKeys(string[] stubbedMethodKeys)
+        {
+            if (stubbedMethodKeys == null)
+            {
+                return true;
+            }
+
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string key in stubbedMethodKeys)
+            {
+                if (string.IsNullOrWhiteSpace(key) || !seen.Add(key))
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
     }

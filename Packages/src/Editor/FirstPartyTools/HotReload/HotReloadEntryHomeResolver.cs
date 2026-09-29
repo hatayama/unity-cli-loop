@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 
 using UnityEngine;
 
@@ -14,14 +15,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly HotReloadDomain _domain;
         private readonly string _projectRoot;
+        private readonly HotReloadIntroducedTypeArtifact _preparedArtifact;
+        private readonly string _preparedArtifactName;
 
-        internal HotReloadEntryHomeResolver(HotReloadDomain domain, string projectRoot)
+        /// <param name="preparedArtifact">
+        /// The artifact this run prepared, or null. Rows name it when they patch a body the
+        /// artifact stubs, and they are resolved before the artifact is activated, which is the
+        /// point from which the domain would answer for it.
+        /// </param>
+        internal HotReloadEntryHomeResolver(
+            HotReloadDomain domain,
+            string projectRoot,
+            HotReloadIntroducedTypeArtifact preparedArtifact = null)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
 
             _domain = domain;
             _projectRoot = projectRoot;
+            _preparedArtifact = preparedArtifact;
+            _preparedArtifactName = preparedArtifact == null
+                ? null
+                : new AssemblyName(preparedArtifact.AssemblyFullName).Name;
         }
 
         /// <summary>
@@ -36,6 +51,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (string.IsNullOrEmpty(homeAssemblyName))
             {
                 return fileHome;
+            }
+
+            if (_preparedArtifact != null
+                && string.Equals(homeAssemblyName, _preparedArtifactName, StringComparison.Ordinal))
+            {
+                return HotReloadTypeHome.RetainedArtifact(
+                    _preparedArtifactName,
+                    _preparedArtifact.DllPath,
+                    _preparedArtifact.Assembly);
             }
 
             HotReloadTypeHome home = _domain.ResolveTypeHome(_projectRoot, homeAssemblyName);

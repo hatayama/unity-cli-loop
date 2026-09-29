@@ -112,6 +112,11 @@ internal static class IntroducedTypePreparation
             syntaxTrees,
             references,
             compilation);
+        AddedMemberReferenceClassifier addedMemberClassifier = new AddedMemberReferenceClassifier(
+            compilation,
+            home,
+            artifactMap,
+            input.TargetAssemblyMvid);
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         string[][] plannedAddedMemberNames = new string[units.Count][];
         string[][] plannedAddedEnumMemberNames = new string[units.Count][];
@@ -133,7 +138,8 @@ internal static class IntroducedTypePreparation
                         input.TargetAssemblyMvid,
                         artifactMap,
                         input.Defines,
-                        assemblyGlobalUsings);
+                        assemblyGlobalUsings,
+                        addedMemberClassifier);
                     plannedAddedMemberNames[index] = PlannedAddedMemberNames.Collect(
                         unit,
                         home,

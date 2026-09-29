@@ -85,6 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// The commit point of a group run and everything that follows it: the introduced types
         /// become active, the patches this run supersedes are peeled, and the resolved entries are
         /// applied. A failure after the commit point leaves the types active and fails methods.
+        /// A run that leaves a body the prepared artifact stubs unpatched is refused before it.
         /// </summary>
         internal IReadOnlyList<HotReloadFileProcessResult> Commit(
             HotReloadApplyContext context,
@@ -96,6 +97,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPreparedIntroducedTypes prepared = context.PreparedIntroducedTypes;
             if (prepared != null)
             {
+                // Why here and not per file: whether a stub is patched depends on every file of
+                // the group, and this is the last point at which refusing changes nothing.
+                List<HotReloadIntroducedTypeOutcome> uncoveredTypes =
+                    HotReloadStubbedMemberCoverage.FindUncoveredTypes(prepared.Artifact, preparedFiles);
+                if (uncoveredTypes.Count > 0)
+                {
+                    HotReloadIntroducedTypeOutcomeSink.Append(files, uncoveredTypes);
+                    return _fileEntryApplier.BuildUnappliedGroupResults(files);
+                }
+
                 _domain.IntroducedTypes.Activate(prepared.Artifact);
                 // Why after the activation and not at preparation: only a type the boundary
                 // published is introduced, so a run that never reached here must report none.

@@ -254,6 +254,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string ownerProjectRelativePath;
         public string declarationFingerprint;
         public string source;
+
+        // Entry keys of the methods whose bodies source stubs; the artifact may only be activated
+        // once this run patches every one of them. Null/omitted deserializes as empty after
+        // client coalesce.
+        public string[] stubbedMethodKeys;
     }
 
     /// <summary>

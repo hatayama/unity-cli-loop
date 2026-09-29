@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -19,13 +20,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string Source { get; }
 
+        /// <summary>
+        /// Entry keys of the methods whose bodies <see cref="Source"/> stubs because they call
+        /// members a hot reload adds; empty when it stubs none. Only the run that prepares the
+        /// artifact reads them, to hold the activation back until each one is patched.
+        /// </summary>
+        public IReadOnlyList<string> StubbedMethodKeys { get; }
+
         public HotReloadIntroducedTypeDescriptor(
             string originalAssemblyName,
             string originalAssemblyMvid,
             string metadataName,
             string ownerProjectRelativePath,
             string declarationFingerprint,
-            string source)
+            string source,
+            IReadOnlyList<string> stubbedMethodKeys = null)
         {
             // BuildIdentity concatenates the first three parts and HasSameDefinition compares the
             // fingerprint, so a missing part would collapse distinct declarations onto one identity
@@ -40,6 +49,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OwnerProjectRelativePath = ownerProjectRelativePath;
             DeclarationFingerprint = declarationFingerprint;
             Source = source;
+            StubbedMethodKeys = CopyStubbedMethodKeys(stubbedMethodKeys);
+        }
+
+        // A blank or repeated key would let the activation check count a key it can never match,
+        // or one patch for two stubs.
+        private static string[] CopyStubbedMethodKeys(IReadOnlyList<string> stubbedMethodKeys)
+        {
+            if (stubbedMethodKeys == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            string[] copy = new string[stubbedMethodKeys.Count];
+            for (int index = 0; index < stubbedMethodKeys.Count; index++)
+            {
+                string key = stubbedMethodKeys[index];
+                RequireValue(key, nameof(stubbedMethodKeys));
+                if (!seen.Add(key))
+                {
+                    throw new ArgumentException("A stubbed method key must not repeat: " + key, nameof(stubbedMethodKeys));
+                }
+
+                copy[index] = key;
+            }
+
+            return copy;
         }
 
         private static void RequireValue(string value, string parameterName)

@@ -124,6 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.addedConstNames ??= Array.Empty<string>();
                 fileOutput.addedEnumMemberNames ??= Array.Empty<string>();
                 fileOutput.introducedTypes ??= Array.Empty<TransformWorkerIntroducedTypeDto>();
+                CoalesceIntroducedTypes(fileOutput.introducedTypes);
                 fileOutput.introducedTypeDiagnostics ??= Array.Empty<TransformWorkerReasonDto>();
                 fileOutput.introducedTypeReuses ??= Array.Empty<TransformWorkerIntroducedTypeReuseDto>();
                 fileOutput.plannedAddedMemberNames ??= Array.Empty<string>();
@@ -141,6 +142,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entry.patchKind ??= string.Empty;
                 entry.calledAddedMethodKeys ??= Array.Empty<string>();
                 entry.parameterTypeFullNames ??= Array.Empty<string>();
+            }
+        }
+
+        private static void CoalesceIntroducedTypes(TransformWorkerIntroducedTypeDto[] introducedTypes)
+        {
+            foreach (TransformWorkerIntroducedTypeDto introducedType in introducedTypes)
+            {
+                if (introducedType == null)
+                {
+                    continue;
+                }
+
+                introducedType.stubbedMethodKeys ??= Array.Empty<string>();
             }
         }
 
