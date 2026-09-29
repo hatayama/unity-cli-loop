@@ -878,7 +878,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a sibling pulled in to re-bind is not described as re-applied when the host
         /// shim compile fails on a broken body beside the added method; isolation reports the
         /// caller as Skipped, the live patch stays on the previous body, and the sibling gets the
-        /// Skipped-only warning rather than being told the reload failed for it.
+        /// Skipped-only warning rather than being told the reload failed for it. The failed host
+        /// keeps its earlier registration of the added method, so the caller's patch is not named
+        /// as calling a retired member.
         /// </summary>
         [Test]
         public async Task Run_FailedSiblingRebindDoesNotClaimReApplied()
@@ -949,6 +951,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         HotReloadConstants.ActiveSiblingRebindSkippedOnlyWarningFormat,
                         CallerProjectRelativePath())),
                 string.Join("\n", second.Warnings));
+            HotReloadStaleAddedMemberCallsWarnings.AssertNone(second.Warnings);
             Assert.That(
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));

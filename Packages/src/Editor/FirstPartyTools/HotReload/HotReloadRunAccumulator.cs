@@ -26,6 +26,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<string> _addedConsts = new List<string>();
         private readonly List<string> _siblingDerivedWarnings = new List<string>();
         private readonly List<string> _reappliedSiblingPaths = new List<string>();
+        private readonly List<string> _pathsInRun = new List<string>();
+        private readonly HotReloadStaleAddedMemberCallers _staleAddedMemberCallers =
+            new HotReloadStaleAddedMemberCallers();
         private readonly HotReloadSiblingBaselineNotices _siblingBaselineNotices =
             new HotReloadSiblingBaselineNotices();
         // Why appended without deduplication: one row per declaration is what the report means,
@@ -115,6 +118,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _outcomes.AddRange(fileResult.Outcomes);
             _warnings.AddRange(fileResult.Warnings);
+            // Why every merged file, short-circuited inputs and siblings included: a call left
+            // running into a retired added member is reported on every run that touches either end.
+            // Why the empty check: the run-wide path set skips an input that resolved to no path.
+            if (!string.IsNullOrEmpty(projectRelativePath))
+            {
+                _pathsInRun.Add(projectRelativePath);
+            }
+
             HotReloadOutcomeAggregation.AppendDistinct(_suppressedPausePointIds, fileResult.SuppressedPausePointIds);
             HotReloadOutcomeAggregation.AppendDistinct(_retargetedPausePointIds, fileResult.RetargetedPausePointIds);
             HotReloadOutcomeAggregation.AppendDistinct(_inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
@@ -224,6 +235,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendAddedFieldsLifetimeWarning();
             AppendSerializedAddedFieldWarning();
             AppendUnforwardedUnityMessageWarning();
+            AppendStaleAddedMemberCallsWarning();
             // Why at the end of the run and on the main thread: the added methods this run brought
             // in are in the domain by now, and building a proxy type touches Unity APIs that only
             // answer on the main thread. A type whose proxy cannot be built reports here, so the
@@ -291,6 +303,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private HotReloadCarriedInState DescribeCarriedInState(string projectRelativePath)
         {
             return _siblingLedgerUpdates.DescribeAfterApply(new HotReloadDomainCarriedInLookup(_domain), projectRelativePath);
+        }
+
+        // Why after every group: a call is stale only once no generation registers its member, and
+        // a later group of the same run can register it again or retire it.
+        private void AppendStaleAddedMemberCallsWarning()
+        {
+            List<HotReloadAddedMemberCall> calls = new List<HotReloadAddedMemberCall>();
+            _domain.CollectAddedMemberCalls(calls);
+            string warning = _staleAddedMemberCallers.DescribeOrNull(calls, _domain.DescribeAddedMembers(), _pathsInRun);
+            if (warning != null)
+            {
+                _warnings.Add(warning);
+            }
         }
 
         private void AppendInlineRiskWarning()
