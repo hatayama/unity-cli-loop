@@ -95,9 +95,11 @@ by name through the wiring entry point, which is how a value or scene reference 
 into an added `[SerializeField]` without a compile — see
 [added-field-wiring.md](added-field-wiring.md).
 
-A type introduced in the same reload cannot use added members of a compiled type: its
-artifact is compiled against the compiled assemblies, so such a reference fails with
-CS1061/CS0117 and needs a compile (issue #2695).
+A type a reload introduces can call added members of a compiled type from its ordinary
+methods and get-only properties: its artifact compiles those bodies as stubs, and the same
+reload patches the real bodies in. From a constructor, initializer, setter, indexer,
+operator or event accessor such a reference still fails with CS1061/CS0117 and needs a
+compile — see [introduced-types.md](introduced-types.md).
 
 Added members are an Editor-session illusion. Any real compile or domain reload
 drops them all: added methods disappear from the ledger and added-field values are
