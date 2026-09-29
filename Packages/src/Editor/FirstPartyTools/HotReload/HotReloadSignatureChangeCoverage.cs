@@ -93,8 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // removals, so restrict to replacements that remain in the apply set. Known
         // limits: an already-patched caller that is also edited this run is
         // over-reported (the text is still true); a caller that stayed Skipped and
-        // drifted is missed; constructed generics can miss when the label space differs
-        // from the wire key (same constraint as IsActiveMember).
+        // drifted is missed.
         internal static void AppendSignatureChangeCallersRepatchedWarnings(
             List<string> warnings,
             string assemblyName,
