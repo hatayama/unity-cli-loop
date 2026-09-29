@@ -145,8 +145,9 @@ events, indexers or nested types still require a compile.
 A new type's ordinary methods and get-only properties can call a method, field or property that
 hot reload adds, in the same reload or an earlier one, to a compiled type of the same assembly or
 to a type an earlier reload introduced. The artifact compiles each such body as a stub that
-throws, and the same reload patches the real body onto it before the type becomes active, so the
-response shows the type as `Introduced` and those bodies as `Patched` rows. Later reloads that
+throws, and the same reload activates the type only when it holds a patch for every stub, then
+patches the real bodies in, so the response shows the type as `Introduced` and those bodies as
+`Patched` rows. Later reloads that
 include the file keep the type `AlreadyActive` and patch the body again. The file declaring the
 addition has to be in the reload: passed, or unchanged since it was last applied, which the
 reload pulls back in on its own.
@@ -165,8 +166,10 @@ assembly, or in a file that changed since it was last applied and is not passed.
   method bodies run through hot reload patches, …`; run `uloop compile`, or name the type only
   inside that other type's method bodies. Two types that both call additions this way may name
   each other.
-- After `--revert-all` a stubbed body runs its stub, which throws `InvalidOperationException`
-  naming the file to reload; reloading that file patches the body in again.
+- After `--revert-all`, or when the reload that introduces the type fails to apply one of those
+  patches (that method's row is `Failed`), a stubbed body runs its stub, which throws
+  `InvalidOperationException` naming the file to reload; reloading that file patches the body in
+  again.
 
 ## Still needs `uloop compile`
 

@@ -183,8 +183,10 @@ recompiled rather than reused once that generation is gone.
   Introduced types compile against the compiled assemblies and the retained artifacts only, so
   the artifact compilation fails with the compiler error naming the missing member. Ordinary
   methods and get-only properties can make the call: the artifact compiles their bodies as
-  throwing stubs, and the same reload patches the real bodies in before the type becomes active.
-  A stubbed body the reload does not patch (a generic method, a struct method) is reported as
+  throwing stubs, and the same reload activates the type only when it holds a patch for every
+  stub, then applies those patches right after the activation. If one of them fails to apply
+  there, the type stays active, that method's row is `Failed`, and the body runs its stub until
+  a later reload patches it in. A stubbed body the reload does not patch (a generic method, a struct method) is reported as
   `Not introduced: <method> calls members that a hot reload added, …` and keeps every type of
   that artifact out, and a type the same reload introduces cannot name a stubbed type in its
   member signatures (`Introduced type '<type>' calls members that a hot reload added, so its
