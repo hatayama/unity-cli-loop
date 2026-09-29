@@ -47,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
-        /// <paramref name="patchShape"/>. Re-applying the same method Unpatches the previous
+        /// <paramref name="patchShape"/>, recording <paramref name="calledAddedMembers"/> as the
+        /// added members the shim's body calls. Re-applying the same method Unpatches the previous
         /// transpiler first so patches do not stack.
         /// Engine failures during apply never throw; they are contained as an
         /// <see cref="HotReloadPatchFailureReason.ApplyFailed"/> result for that method only.
@@ -56,7 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase method,
             MethodInfo shimMethodInfo,
             HotReloadPatchShape patchShape,
-            string filePath)
+            string filePath,
+            IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers = null)
         {
             if (method == null)
             {
@@ -113,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // The patch is committed only after Patch succeeds. During Patch the transpiler reads
             // the pending entry because Harmony resolves transpilers statically (no MethodInfo arg).
-            generation.BeginPatch(method, shimMethodInfo);
+            generation.BeginPatch(method, shimMethodInfo, calledAddedMembers);
             try
             {
                 // Why Priority.First: same numeric priority sorts by registration index, and

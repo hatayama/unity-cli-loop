@@ -83,7 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FilePath,
                 ShimAssembly,
                 entries,
-                new Dictionary<string, string>());
+                new Dictionary<string, string>(),
+                new HotReloadAddedCalleeIndex(entries));
 
             Assert.That(result.AllResolved, Is.True);
             Assert.That(result.ResolvedEntries, Has.Count.EqualTo(2));
@@ -116,7 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FilePath,
                 ShimAssembly,
                 entries,
-                new Dictionary<string, string>());
+                new Dictionary<string, string>(),
+                new HotReloadAddedCalleeIndex(entries));
 
             Assert.That(result.AllResolved, Is.False);
             Assert.That(result.ResolvedEntries, Is.Empty);
@@ -159,7 +161,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FilePath,
                 ShimAssembly,
                 entries,
-                new Dictionary<string, string>());
+                new Dictionary<string, string>(),
+                new HotReloadAddedCalleeIndex(entries));
 
             Assert.That(result.AllResolved, Is.False);
             Assert.That(result.ResolvedEntries, Is.Empty);
@@ -197,7 +200,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FilePath,
                 ShimAssembly,
                 entries,
-                new Dictionary<string, string>());
+                new Dictionary<string, string>(),
+                new HotReloadAddedCalleeIndex(entries));
 
             Assert.That(result.AllResolved, Is.True);
             Assert.That(result.ResolvedEntries, Has.Count.EqualTo(1));
@@ -208,6 +212,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.ResolvedEntries[0].InvocationCounter,
                 Is.EqualTo(typeof(HotReloadHandwrittenShims).GetField(
                     nameof(HotReloadHandwrittenShims.StaticPing__shim0__uloopCalls))));
+        }
+
+        /// <summary>
+        /// What: each resolved entry carries the added members its body calls, as the ledger
+        /// labels them, whether the entry patches an existing method or is an added method itself;
+        /// an entry that calls none carries an empty list.
+        /// </summary>
+        [Test]
+        public void ResolveEntries_RecordsTheAddedMembersEachEntryCalls()
+        {
+            TransformWorkerEntryDto added = BuildAddedMethodEntry(nameof(HotReloadHandwrittenShims.StaticPing__shim0));
+            TransformWorkerEntryDto caller = BuildExistingMethodEntry(
+                nameof(HotReloadCoreFixture.StaticPing),
+                new string[0],
+                "StaticPing__shim0");
+            caller.calledAddedMethodKeys = new[] { FixtureTypeMetadataName + "::AddedByThisReload()" };
+            TransformWorkerEntryDto[] entries = { added, caller };
+
+            HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
+                TestAssemblyHome,
+                FileHomeResolver,
+                FilePath,
+                ShimAssembly,
+                entries,
+                new Dictionary<string, string>(),
+                new HotReloadAddedCalleeIndex(entries));
+
+            Assert.That(result.AllResolved, Is.True);
+            Assert.That(result.ResolvedEntries[0].CalledAddedMembers, Is.Empty);
+            Assert.That(result.ResolvedEntries[1].CalledAddedMembers.Count, Is.EqualTo(1));
+            Assert.That(
+                result.ResolvedEntries[1].CalledAddedMembers[0].Label,
+                Is.EqualTo(FixtureTypeMetadataName + ".AddedByThisReload()"));
+            Assert.That(result.ResolvedEntries[1].CalledAddedMembers[0].DeclaringFilePath, Is.EqualTo(FilePath));
+        }
+
+        /// <summary>
+        /// What: an entry calling an added member the group declares no entry for fails the whole
+        /// file like a missing shim does, and the Failed row names the call's key.
+        /// </summary>
+        [Test]
+        public void ResolveEntries_WhenACallNamesNoAddedEntry_FailsTheFileAtomically()
+        {
+            string missingKey = FixtureTypeMetadataName + "::RetiredByThisReload()";
+            TransformWorkerEntryDto caller = BuildExistingMethodEntry(
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                new[] { "System.Int32" },
+                "ReplaceableCompute__shim0");
+            caller.calledAddedMethodKeys = new[] { missingKey };
+            TransformWorkerEntryDto[] entries =
+            {
+                BuildExistingMethodEntry(
+                    nameof(HotReloadCoreFixture.StaticPing),
+                    new string[0],
+                    "StaticPing__shim0"),
+                caller
+            };
+
+            HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
+                TestAssemblyHome,
+                FileHomeResolver,
+                FilePath,
+                ShimAssembly,
+                entries,
+                new Dictionary<string, string>(),
+                new HotReloadAddedCalleeIndex(entries));
+
+            Assert.That(result.AllResolved, Is.False);
+            Assert.That(result.ResolvedEntries, Is.Empty);
+            Assert.That(result.FailureOutcomes, Has.Count.EqualTo(2));
+            Assert.That(
+                result.FailureOutcomes[0].Reason,
+                Is.EqualTo(HotReloadConstants.AtomicFileSkipReason));
+            Assert.That(
+                result.FailureOutcomes[1].Kind,
+                Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            Assert.That(result.FailureOutcomes[1].Reason, Does.Contain(missingKey));
         }
 
         private static string ResolveProjectRoot()

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -38,6 +39,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public FieldInfo InvocationCounter { get; }
 
+        /// <summary>The other added members this member's body calls; empty when it calls none.</summary>
+        public IReadOnlyList<HotReloadCalledAddedMember> CalledAddedMembers { get; }
+
         public HotReloadAddedMemberInfo(
             string methodKey,
             string filePath,
@@ -46,7 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int sourceEndLine = 0,
             string methodName = null,
             string declaringTypeMetadataName = null,
-            FieldInfo invocationCounter = null)
+            FieldInfo invocationCounter = null,
+            IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers = null)
         {
             MethodKey = methodKey ?? string.Empty;
             FilePath = filePath ?? string.Empty;
@@ -56,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodName = methodName ?? string.Empty;
             DeclaringTypeMetadataName = declaringTypeMetadataName ?? string.Empty;
             InvocationCounter = invocationCounter;
+            CalledAddedMembers = calledAddedMembers ?? Array.Empty<HotReloadCalledAddedMember>();
         }
 
         /// <summary>
