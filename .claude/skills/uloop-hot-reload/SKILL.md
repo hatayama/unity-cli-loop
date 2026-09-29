@@ -71,9 +71,9 @@ changed are patched (`UnchangedTotal` counts the rest).
   refused with a `Warnings` line naming the reason. Use from another assembly or from files
   outside the reload, reflection, serialization, and Unity message discovery still need
   `uloop compile`.
-- Signature changes: a return-type change is `Skipped` unless this reload or an earlier one
-  patched every live compiled caller of the old signature; a rename or parameter change
-  applies as an added method and warns about the call sites left on the old signature.
+- Signature changes: a return-type change is `Skipped` unless this or an earlier reload
+  patched every live compiled caller, none in another assembly; a rename or parameter change
+  applies as an added method and warns about call sites left on the old signature.
 - Constructors, operators, struct methods, compiled setter/init/indexer accessors, and event
   accessors are `Skipped`; finalizers and interface members are silently not applied.
 - A reload applies each file all-or-nothing: a `Failed` method leaves that file unapplied,
