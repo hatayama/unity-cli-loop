@@ -24,6 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string PlaceholderShimSourcePath = "/placeholder/Source.cs";
         private const string PlaceholderShimSourceContentSha256 = "placeholder-sha256";
 
+        // Counters of the two shapes a registration refuses besides a missing one; no test reads
+        // their values.
+        public long InstanceLongCounter;
+        public static int StaticIntCounter;
+
         /// <summary>
         /// What: a patch of a method whose shim this generation never registered is refused, which
         /// is the invariant that every patch is a patch of a method the edited source declares.
@@ -113,7 +118,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     GetAddedTarget(),
                     FixtureProjectRelativePath,
                     "AddedMember",
-                    "FileGenerationContractFixture"));
+                    "FileGenerationContractFixture",
+                    HotReloadUnreadInvocationCounter.Field));
+            Assert.That(generation.AddedMemberCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: registering an added member without a counter its InvocationCount can be read
+        /// from (none, an instance field, or a static field that is not a long) is refused, and
+        /// nothing is registered.
+        /// </summary>
+        [TestCase(null)]
+        [TestCase(nameof(InstanceLongCounter))]
+        [TestCase(nameof(StaticIntCounter))]
+        public void RegisterAddedMethod_WithoutAUsableCounter_Throws(string counterFieldName)
+        {
+            HotReloadFileGeneration generation = new HotReloadFileGeneration(FixtureProjectRelativePath);
+            generation.BeginAddedMemberGeneration();
+            FieldInfo counter = counterFieldName == null
+                ? null
+                : typeof(HotReloadFileGenerationContractTests).GetField(counterFieldName);
+            Assert.That(
+                counter == null,
+                Is.EqualTo(counterFieldName == null),
+                "Precondition: a named counter field must exist, so the case tests its shape.");
+
+            Assert.Throws<ArgumentException>(
+                () => generation.RegisterAddedMethod(
+                    AddedMethodKey,
+                    GetAddedTarget(),
+                    FixtureProjectRelativePath,
+                    "AddedMember",
+                    "FileGenerationContractFixture",
+                    counter));
             Assert.That(generation.AddedMemberCount, Is.EqualTo(0));
         }
 

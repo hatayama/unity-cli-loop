@@ -154,6 +154,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Failed(methodLabel, shimError, filePath));
             }
 
+            (FieldInfo invocationCounter, string counterError) = FindInvocationCounter(shimMethod);
+            if (invocationCounter == null)
+            {
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, counterError, filePath));
+            }
+
             return ResolvedEntryOutcome.Succeeded(
                 new ResolvedEntry(
                     entry,
@@ -162,7 +169,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadPatchShape.Transplant,
                     originalMethod: null,
                     shimMethod,
-                    isAddedMethod: true));
+                    isAddedMethod: true,
+                    invocationCounter));
+        }
+
+        // Why a missing counter fails the file like a missing shim does: the counter is what
+        // --status reports as the member's InvocationCount, and a shim without it means the worker
+        // and this Editor disagree on the shape of an added-member shim.
+        private static (FieldInfo InvocationCounter, string ErrorMessage) FindInvocationCounter(
+            MethodInfo shimMethod)
+        {
+            Type shimType = shimMethod.DeclaringType;
+            string counterName = shimMethod.Name + HotReloadConstants.AddedMemberInvocationCounterSuffix;
+            FieldInfo counter = shimType.GetField(
+                counterName,
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            if (counter == null)
+            {
+                return (null, "Invocation counter not found: " + shimType.Name + "." + counterName);
+            }
+
+            if (!HotReloadAddedMemberInfo.IsReadableInvocationCounter(counter))
+            {
+                return (null, "Invocation counter is not a static long: " + shimType.Name + "." + counterName);
+            }
+
+            return (counter, null);
         }
 
         private static ResolvedEntryOutcome TryResolveExistingMethod(
@@ -224,7 +256,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patchShape,
                     matchResult.Method,
                     shimMethod,
-                    isAddedMethod: false));
+                    isAddedMethod: false,
+                    invocationCounter: null));
         }
 
         private static (MethodInfo ShimMethod, string ErrorMessage) FindShimMethod(
@@ -301,6 +334,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public MethodInfo ShimMethod { get; }
             public bool IsAddedMethod { get; }
 
+            /// <summary>
+            /// The counter declared beside an added method's shim, or null for an entry that
+            /// patches an existing method.
+            /// </summary>
+            public FieldInfo InvocationCounter { get; }
+
             public ResolvedEntry(
                 TransformWorkerEntryDto entry,
                 string methodLabel,
@@ -308,7 +347,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPatchShape patchShape,
                 MethodBase originalMethod,
                 MethodInfo shimMethod,
-                bool isAddedMethod)
+                bool isAddedMethod,
+                FieldInfo invocationCounter)
             {
                 Entry = entry;
                 MethodLabel = methodLabel;
@@ -317,6 +357,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 OriginalMethod = originalMethod;
                 ShimMethod = shimMethod;
                 IsAddedMethod = isAddedMethod;
+                InvocationCounter = invocationCounter;
             }
         }
 

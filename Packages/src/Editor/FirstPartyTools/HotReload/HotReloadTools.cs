@@ -69,10 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string FilePath { get; set; } = string.Empty;
 
         /// <summary>
-        /// How many times this patched method body has run since the current patch was applied.
-        /// Populated on --status Active rows and AlreadyActive apply rows; 0 for other
-        /// apply/revert outcomes. Added-member AlreadyActive rows are always 0 because
-        /// added-member calls are not instrumented.
+        /// How many times this method's hot-reloaded body has run since it was applied. Populated
+        /// on --status Active and Added rows and on AlreadyActive and Stale apply rows, where an
+        /// added member's AlreadyActive row keeps that member's own count; 0 for other
+        /// apply/revert outcomes, including the Added rows of the run that applied them.
         /// </summary>
         public long InvocationCount { get; set; }
 

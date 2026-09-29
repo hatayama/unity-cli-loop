@@ -90,14 +90,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Domain.BeginAddedMemberOnlyGeneration(projectRelativePath);
         }
 
+        /// <summary>
+        /// Registers an added member in a fresh added-member generation of the file, counting its
+        /// calls on invocationCounter, or on a counter no test reads when none is given.
+        /// </summary>
         internal void RegisterAddedMember(
             string projectRelativePath,
             string methodKey,
             MethodInfo shimMethod,
-            string filePath)
+            string filePath,
+            FieldInfo invocationCounter = null)
         {
             Domain.BeginAddedMemberOnlyGeneration(projectRelativePath)
-                .RegisterAddedMethod(methodKey, shimMethod, filePath, "Added", "Fixture");
+                .RegisterAddedMethod(
+                    methodKey,
+                    shimMethod,
+                    filePath,
+                    "Added",
+                    "Fixture",
+                    invocationCounter ?? HotReloadUnreadInvocationCounter.Field);
         }
 
         internal void ReplaceAddedFields(

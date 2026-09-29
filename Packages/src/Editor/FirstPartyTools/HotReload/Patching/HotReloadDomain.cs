@@ -311,6 +311,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// The added member the file's generation registered under the key, or null when the file
+        /// has no generation or its generation registered none. Keyed by path for the reason
+        /// IsActiveMember is.
+        /// </summary>
+        internal HotReloadAddedMemberInfo FindAddedMember(string projectRelativePath, string methodKey)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
+            return FindGeneration(projectRelativePath)?.FindAddedMember(methodKey);
+        }
+
+        /// <summary>
         /// The live patches this domain holds on the methods one assembly declares on one type,
         /// which is what a run peels when an edited body matches that assembly's own code again.
         /// </summary>

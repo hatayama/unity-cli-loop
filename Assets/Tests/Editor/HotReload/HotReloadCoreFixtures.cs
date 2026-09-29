@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
@@ -86,6 +87,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public static class HotReloadHandwrittenShims
     {
+        // The invocation counter a generated added-member shim declares beside itself; tests that
+        // resolve StaticPing__shim0 as an added method need it, because resolution refuses a shim
+        // without one.
+        public static long StaticPing__shim0__uloopCalls;
+
         public static string StaticPing__shim0()
         {
             return "patched";
@@ -114,5 +120,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await Task.Yield();
             return instance.PublicSeed + delta + 1;
         }
+
+        // An added-member shim with no invocation counter beside it, the shape a worker that
+        // disagreed with the Editor on the counter's name would emit.
+        public static void AddedWithoutCounter__shim0()
+        {
+        }
+
+        // An added-member shim whose invocation counter is not a long, so the Editor cannot read
+        // it as the member's count.
+        public static int AddedWithIntCounter__shim0__uloopCalls;
+
+        public static void AddedWithIntCounter__shim0()
+        {
+        }
+    }
+
+    /// <summary>
+    /// An invocation counter for tests that register an added member without ever reading its
+    /// InvocationCount: registration requires the static long counter a generated shim declares.
+    /// </summary>
+    internal static class HotReloadUnreadInvocationCounter
+    {
+        public static long Calls;
+
+        internal static FieldInfo Field => typeof(HotReloadUnreadInvocationCounter).GetField(nameof(Calls));
     }
 }
