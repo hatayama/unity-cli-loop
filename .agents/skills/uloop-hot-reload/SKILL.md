@@ -98,7 +98,7 @@ All files live in `references/` beside this skill; read the one whose trigger ma
 
 - `references/scope-and-limits.md` — full scope rules: added members, signature changes, `Skipped`/`Failed` tables, source baselines, one-shot code, tunable getters.
 - `references/mechanism-and-lifecycle.md` — patch mechanism, convergence, what survives which reload, Editor-code iteration without PlayMode.
-- `references/troubleshooting.md` — `Patched` but no behavior change, JIT inlining, reading `--status` and `InvocationCount`.
+- `references/troubleshooting.md` — `Patched` but no behavior change, JIT inlining, `--status`, stack frames without lines.
 - `references/pause-point-interaction.md` — how patches re-target or suppress armed pause points; one-way reachability checks.
 - `references/introduced-types.md` — types a reload can introduce: supported shapes, internal access, refusal wording, identity and lifetime, why a new file is never selected automatically.
 - `references/added-field-wiring.md` — putting a value into an added field without a compile.

@@ -136,6 +136,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             suite.SetAttribute("skipped", CountSkipped(result).ToString());
             suite.SetAttribute("inconclusive", CountInconclusive(result).ToString());
 
+            // Why on the suite: a OneTimeTearDown error fails the fixture but none of its test cases,
+            // so the suite is the only element that can carry its message.
+            if (result.TestStatus == TestStatus.Failed && !string.IsNullOrEmpty(result.Message))
+            {
+                XmlElement failure = document.CreateElement("failure");
+                AppendFailureMessage(document, failure, result);
+                suite.AppendChild(failure);
+            }
+
             if (result.Children == null)
             {
                 return suite;
@@ -214,7 +223,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string GetOverallResult(ITestResultAdaptor result)
         {
-            if (CountFailed(result) > 0)
+            // Why the root status too: a fixture that failed outside its tests fails the run with
+            // no failed test case to count.
+            if (CountFailed(result) > 0 || result.TestStatus == TestStatus.Failed)
             {
                 return "Failed";
             }
