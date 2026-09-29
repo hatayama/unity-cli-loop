@@ -15,7 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// End-to-end coverage of a new type whose methods and getters call members hot reload adds,
     /// in the same reload or an earlier one, to a compiled type or to a type an earlier reload
     /// introduced. The artifact cannot compile those bodies, so it carries stubs, and the same
-    /// reload patches the real bodies in before the type is activated.
+    /// reload patches the real bodies in before the type is activated. A new type that names such
+    /// a type in its signatures is still refused, and that refusal has to say why.
     /// </summary>
     /// <remarks>
     /// Why the owners are not fixtures on disk: a .cs under Assets/ is compiled into the test
@@ -29,10 +30,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string UserOwnerPath =
             "Assets/Tests/Editor/HotReload/UncompiledCallsAddedMemberUserOwner.cs";
 
+        private const string FactoryOwnerPath =
+            "Assets/Tests/Editor/HotReload/UncompiledCallsAddedMemberFactoryOwner.cs";
+
         private const string Namespace = "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload";
         private const string ValueSimpleName = "HotReloadCallsAddedMemberValue";
         private const string UserSimpleName = "HotReloadCallsAddedMemberUser";
         private const string UserMetadataName = Namespace + "." + UserSimpleName;
+        private const string FactorySimpleName = "HotReloadCallsAddedMemberFactory";
+        private const string FactoryMetadataName = Namespace + "." + FactorySimpleName;
         private const string HostValueAnchor = "        public int Value()";
         private const string CompiledTypeAddedMethodName = "AddedForTheNewType";
         private const int CompiledTypeAddedValue = 41;
@@ -61,6 +67,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        public int " + IntroducedTypeAddedMethodName + "()\n"
             + "        {\n"
             + "            return " + IntroducedTypeAddedValue + ";\n"
+            + "        }\n";
+
+        // A factory member naming the user type in its signature, and one naming it only inside
+        // its body.
+        private static readonly string FactoryMakeMember =
+            "        public " + UserSimpleName + " Make()\n"
+            + "        {\n"
+            + "            return new " + UserSimpleName + "();\n"
+            + "        }\n";
+
+        private static readonly string FactoryTotalMember =
+            "        public int Total()\n"
+            + "        {\n"
+            + "            return new " + UserSimpleName + "().Run();\n"
+            + "        }\n";
+
+        // A factory body that calls the addition itself, so the factory is stubbed as well.
+        private static readonly string FactoryScaledMember =
+            "\n"
+            + "        public int Scaled()\n"
+            + "        {\n"
+            + "            return " + CompiledTypeAddedCall + " * 2;\n"
+            + "        }\n";
+
+        // A user member naming the factory in its signature.
+        private static readonly string UserPairMember =
+            "\n"
+            + "        public " + FactorySimpleName + " Pair()\n"
+            + "        {\n"
+            + "            return new " + FactorySimpleName + "();\n"
             + "        }\n";
 
         /// <summary>
@@ -305,6 +341,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// What: a new type naming a stubbed new type in a member signature is refused with the
+        /// message that says the stubbed type runs through patches, not with the two-step advice
+        /// for a type an earlier reload loaded, and moving the name into a method body lets both
+        /// types be introduced.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeNamesAStubbedTypeInASignature_RefusesUntilTheNameMovesIntoABody()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string hostWithAddition = WriteSource(
+                hostPath,
+                "SignatureReferrer",
+                InsertCompiledTypeMember(File.ReadAllText(hostPath)));
+            string user = WriteSource(UserOwnerPath, "SignatureReferrer", BuildUserSource(CompiledTypeAddedCall));
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult refused = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = hostWithAddition,
+                        [UserOwnerPath] = user,
+                        [FactoryOwnerPath] = WriteSource(
+                            FactoryOwnerPath,
+                            "SignatureReferrer",
+                            BuildFactorySource(FactoryMakeMember))
+                    });
+
+                string description = DescribeOutcomes(refused);
+                Assert.That(CountFailures(refused), Is.GreaterThan(0), description);
+                Assert.That(
+                    description,
+                    Does.Contain("Introduced type '" + UserMetadataName + "' " + StubMessageCore
+                        + ", so its method bodies run through hot reload patches, and it appears in member signatures of '"
+                        + FactoryMetadataName + "'."),
+                    description);
+                Assert.That(
+                    description,
+                    Does.Contain("name '" + UserMetadataName + "' only inside method bodies of '" + FactoryMetadataName + "'"),
+                    description);
+                Assert.That(description, Does.Not.Contain("reload in two steps"), description);
+                Assert.That(IsActive(UserMetadataName), Is.False, "A refused run must introduce nothing.");
+
+                HotReloadOrchestratorResult bodyOnly = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = hostWithAddition,
+                        [UserOwnerPath] = user,
+                        [FactoryOwnerPath] = WriteSource(
+                            FactoryOwnerPath,
+                            "BodyReferrer",
+                            BuildFactorySource(FactoryTotalMember))
+                    });
+
+                AssertIntroduced(bodyOnly);
+                Assert.That(IsActive(FactoryMetadataName), Is.True, DescribeOutcomes(bodyOnly));
+                Assert.That(
+                    Invoke(readArtifact(), "Total", FactoryMetadataName),
+                    Is.EqualTo(CompiledTypeAddedValue),
+                    DescribeOutcomes(bodyOnly));
+            });
+        }
+
+        /// <summary>
+        /// What: two new types that both call a member the reload adds and name each other in
+        /// their signatures are not refused, because both stay in the source together, and both
+        /// run their patched bodies.
+        /// </summary>
+        [Test]
+        public async Task Run_TwoStubbedNewTypesNameEachOtherInSignatures_IntroducesBoth()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult result = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = WriteSource(hostPath, "MutualReferrers", InsertCompiledTypeMember(File.ReadAllText(hostPath))),
+                        [UserOwnerPath] = WriteSource(
+                            UserOwnerPath,
+                            "MutualReferrers",
+                            BuildUserSource(CompiledTypeAddedCall, UserPairMember)),
+                        [FactoryOwnerPath] = WriteSource(
+                            FactoryOwnerPath,
+                            "MutualReferrers",
+                            BuildFactorySource(FactoryMakeMember + FactoryScaledMember))
+                    });
+
+                AssertIntroduced(result);
+                Assert.That(IsActive(FactoryMetadataName), Is.True, DescribeOutcomes(result));
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Patched, UserSimpleName + ".Run(");
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Patched, FactorySimpleName + ".Scaled(");
+                Assert.That(Invoke(readArtifact(), "Run"), Is.EqualTo(CompiledTypeAddedValue), DescribeOutcomes(result));
+                Assert.That(
+                    Invoke(readArtifact(), "Scaled", FactoryMetadataName),
+                    Is.EqualTo(CompiledTypeAddedValue * 2),
+                    DescribeOutcomes(result));
+            });
+        }
+
         private static void AssertIntroduced(HotReloadOrchestratorResult result)
         {
             Assert.That(CountFailures(result), Is.EqualTo(0), DescribeOutcomes(result));
@@ -376,14 +514,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Why the method is looked up by name, getters included: the patch replaces the method the
         // artifact compiled, so calling it through reflection runs whatever body is patched in.
-        private static int Invoke(HotReloadIntroducedTypeArtifact artifact, string methodName)
+        private static int Invoke(
+            HotReloadIntroducedTypeArtifact artifact,
+            string methodName,
+            string metadataName = UserMetadataName)
         {
             Assert.That(artifact, Is.Not.Null, "A reload had to prepare the type before this call.");
-            Type userType = artifact.Assembly.GetType(UserMetadataName, throwOnError: false);
-            Assert.That(userType, Is.Not.Null, "The artifact must hold " + UserMetadataName + ".");
-            MethodInfo method = userType.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
-            Assert.That(method, Is.Not.Null, UserMetadataName + " must declare " + methodName + ".");
-            return (int)method.Invoke(Activator.CreateInstance(userType), Array.Empty<object>());
+            Type type = artifact.Assembly.GetType(metadataName, throwOnError: false);
+            Assert.That(type, Is.Not.Null, "The artifact must hold " + metadataName + ".");
+            MethodInfo method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(method, Is.Not.Null, metadataName + " must declare " + methodName + ".");
+            return (int)method.Invoke(Activator.CreateInstance(type), Array.Empty<object>());
         }
 
         private static Task<HotReloadOrchestratorResult> RunAsync(Dictionary<string, string> edits)
@@ -427,7 +568,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "}\n";
         }
 
-        private static string BuildUserSource(string expression)
+        private static string BuildUserSource(string expression, string extraMembers = NoExtraMembers)
         {
             return
                 "namespace " + Namespace + "\n"
@@ -445,6 +586,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        {\n"
                 + "            return " + PlainValue + ";\n"
                 + "        }\n"
+                + extraMembers
+                + "    }\n"
+                + "}\n";
+        }
+
+        private static string BuildFactorySource(string members)
+        {
+            return
+                "namespace " + Namespace + "\n"
+                + "{\n"
+                + "    public sealed class " + FactorySimpleName + "\n"
+                + "    {\n"
+                + members
                 + "    }\n"
                 + "}\n";
         }
