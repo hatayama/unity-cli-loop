@@ -48,6 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const int EditedOffset = 100;
         private const string NoExtraMembers = "";
         private const string StubMessageCore = "calls members that a hot reload added";
+        private const string MixedParametersMethodName = "Mixed";
 
         private const string CompiledTypeAddedCall =
             "new HotReloadCrossFileAddedMemberHost()." + CompiledTypeAddedMethodName + "()";
@@ -97,6 +98,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        public " + FactorySimpleName + " Pair()\n"
             + "        {\n"
             + "            return new " + FactorySimpleName + "();\n"
+            + "        }\n";
+
+        // A stubbed user method with a parameter of each shape a method key spells in its own way:
+        // an array, a multi-dimensional array, a nested type, a by-ref value and a constructed
+        // generic type.
+        private static readonly string UserMixedParametersMember =
+            "\n"
+            + "        public int " + MixedParametersMethodName + "(\n"
+            + "            int[] values,\n"
+            + "            int[,] grid,\n"
+            + "            System.Environment.SpecialFolder folder,\n"
+            + "            ref int counter,\n"
+            + "            System.Collections.Generic.List<int> list)\n"
+            + "        {\n"
+            + "            counter++;\n"
+            + "            return " + CompiledTypeAddedCall + " + values.Length + grid.Length + list.Count;\n"
             + "        }\n";
 
         /// <summary>
@@ -443,6 +460,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// What: a stubbed method taking an array, a multi-dimensional array, a nested type, a
+        /// by-ref value and a constructed generic type is introduced and runs the addition. The
+        /// artifact is activated only when the key the worker records for the stub is the key the
+        /// transform gives the method's entry, so either side spelling one of these shapes in its
+        /// own way leaves the type out.
+        /// </summary>
+        [Test]
+        public async Task Run_StubbedMethodWithParametersOfEveryKeyShape_RunsTheAddition()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult result = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = WriteSource(hostPath, "MixedParameters", InsertCompiledTypeMember(File.ReadAllText(hostPath))),
+                        [UserOwnerPath] = WriteSource(
+                            UserOwnerPath,
+                            "MixedParameters",
+                            BuildUserSource(CompiledTypeAddedCall, UserMixedParametersMember))
+                    });
+
+                AssertIntroduced(result);
+                AssertMethodRow(
+                    result,
+                    HotReloadMethodOutcomeKind.Patched,
+                    UserSimpleName + "." + MixedParametersMethodName + "(");
+                object[] arguments =
+                {
+                    new[] { 1, 2 },
+                    new int[2, 3],
+                    Environment.SpecialFolder.Desktop,
+                    0,
+                    new List<int> { 5 }
+                };
+                Assert.That(
+                    Invoke(readArtifact(), MixedParametersMethodName, arguments: arguments),
+                    Is.EqualTo(CompiledTypeAddedValue + 2 + 6 + 1),
+                    DescribeOutcomes(result));
+                Assert.That(arguments[3], Is.EqualTo(1), "The patched body must write through the by-ref parameter.");
+            });
+        }
+
         private static void AssertIntroduced(HotReloadOrchestratorResult result)
         {
             Assert.That(CountFailures(result), Is.EqualTo(0), DescribeOutcomes(result));
@@ -514,17 +576,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Why the method is looked up by name, getters included: the patch replaces the method the
         // artifact compiled, so calling it through reflection runs whatever body is patched in.
+        // Why the arguments are the caller's array: reflection writes a by-ref argument back into
+        // it, which is how a caller reads what the body wrote.
         private static int Invoke(
             HotReloadIntroducedTypeArtifact artifact,
             string methodName,
-            string metadataName = UserMetadataName)
+            string metadataName = UserMetadataName,
+            object[] arguments = null)
         {
             Assert.That(artifact, Is.Not.Null, "A reload had to prepare the type before this call.");
             Type type = artifact.Assembly.GetType(metadataName, throwOnError: false);
             Assert.That(type, Is.Not.Null, "The artifact must hold " + metadataName + ".");
             MethodInfo method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
             Assert.That(method, Is.Not.Null, metadataName + " must declare " + methodName + ".");
-            return (int)method.Invoke(Activator.CreateInstance(type), Array.Empty<object>());
+            return (int)method.Invoke(Activator.CreateInstance(type), arguments ?? Array.Empty<object>());
         }
 
         private static Task<HotReloadOrchestratorResult> RunAsync(Dictionary<string, string> edits)
