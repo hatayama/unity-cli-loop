@@ -266,6 +266,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: FailedSuites is omitted from JSON when no suite failed and serializes each suite's
+        /// name and message when one did.
+        /// </summary>
+        [Test]
+        public void RunTestsResponse_WhenSerialized_OmitsOrIncludesFailedSuites()
+        {
+            RunTestsResponse withoutFailedSuites = CreateFailedSuitesResponse(null);
+            RunTestsResponse withFailedSuites = CreateFailedSuitesResponse(new[]
+            {
+                new SerializableTestResult.FailedTestDetail
+                {
+                    FullName = "Example.Tests.TearDownFixture",
+                    Message = "TearDown : System.InvalidOperationException : teardown failed"
+                }
+            });
+
+            JObject withoutJson = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    withoutFailedSuites,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+            JObject withJson = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    withFailedSuites,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+            JArray failedSuites = (JArray)withJson["FailedSuites"];
+
+            Assert.That(withoutJson.Property("FailedSuites"), Is.Null);
+            Assert.That(failedSuites, Is.Not.Null);
+            Assert.That(failedSuites.Count, Is.EqualTo(1));
+            JObject first = (JObject)failedSuites[0];
+            Assert.That(first["FullName"]?.Value<string>(), Is.EqualTo("Example.Tests.TearDownFixture"));
+            Assert.That(
+                first["Message"]?.Value<string>(),
+                Is.EqualTo("TearDown : System.InvalidOperationException : teardown failed"));
+        }
+
+        /// <summary>
+        /// What: the response built from a stored result carries its failed suites, and leaves
+        /// FailedSuites unset when the result lists none.
+        /// </summary>
+        [Test]
+        public void FromResult_WhenResultHasFailedSuites_CopiesThem()
+        {
+            SerializableTestResult withFailedSuites = new SerializableTestResult
+            {
+                success = false,
+                status = RunTestsExecutionStatus.Failed,
+                hasFailures = true,
+                message = "Test execution completed with status: Failed",
+                noTestsFoundExplanation = string.Empty,
+                completedAt = "2026-01-01T00:00:00.0000000Z",
+                testCount = 1,
+                passedCount = 1,
+                failedSuites = new[]
+                {
+                    new SerializableTestResult.FailedTestDetail
+                    {
+                        FullName = "Example.Tests.TearDownFixture",
+                        Message = "TearDown : System.InvalidOperationException : teardown failed"
+                    }
+                }
+            };
+            SerializableTestResult withoutFailedSuites = new SerializableTestResult
+            {
+                success = true,
+                status = RunTestsExecutionStatus.Passed,
+                message = "Test execution completed with status: Passed",
+                noTestsFoundExplanation = string.Empty,
+                completedAt = "2026-01-01T00:00:00.0000000Z",
+                testCount = 1,
+                passedCount = 1,
+                failedSuites = new SerializableTestResult.FailedTestDetail[0]
+            };
+
+            RunTestsResponse copied = RunTestsResponseFactory.FromResult(withFailedSuites);
+            RunTestsResponse empty = RunTestsResponseFactory.FromResult(withoutFailedSuites);
+
+            Assert.That(copied.FailedSuites, Is.Not.Null);
+            Assert.That(copied.FailedSuites.Length, Is.EqualTo(1));
+            Assert.That(copied.FailedSuites[0].FullName, Is.EqualTo("Example.Tests.TearDownFixture"));
+            Assert.That(empty.FailedSuites, Is.Null);
+        }
+
+        private static RunTestsResponse CreateFailedSuitesResponse(
+            SerializableTestResult.FailedTestDetail[] failedSuites)
+        {
+            return new RunTestsResponse(
+                success: failedSuites == null,
+                message: "Test execution completed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 1,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0,
+                inconclusiveCount: 0,
+                xmlPath: null,
+                status: failedSuites == null ? RunTestsExecutionStatus.Passed : RunTestsExecutionStatus.Failed,
+                hasFailures: failedSuites != null,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty)
+            {
+                FailedSuites = failedSuites
+            };
+        }
+
+        /// <summary>
         /// What: an empty Warning is omitted from production JSON so the key cannot reappear unnoticed.
         /// </summary>
         [Test]
