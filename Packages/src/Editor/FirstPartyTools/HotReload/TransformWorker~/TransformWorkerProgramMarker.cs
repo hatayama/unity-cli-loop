@@ -40,4 +40,9 @@ internal static class TransformWorkerProgramMarker
 
     // Keep in sync with HotReloadAddedFieldStore.FieldKeySeparator.
     public const string AddedFieldKeySeparator = "::";
+
+    // Keep in sync with HotReloadConstants.AddedMemberInvocationCounterSuffix, which the Editor
+    // appends to an entry's shimMethodName to find the counter. Why a suffix of the shim method
+    // name: shim method names are unique across a run, so every counter name is too.
+    public const string AddedMemberInvocationCounterSuffix = "__uloopCalls";
 }

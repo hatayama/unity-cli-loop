@@ -436,7 +436,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string SliceShimMethod(string shimSource, string shimMethodName)
         {
-            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
+            // Why the '(': an added member's shim type also declares its invocation counter, whose
+            // name starts with the shim method name.
+            int nameIndex = shimSource.IndexOf(shimMethodName + "(", StringComparison.Ordinal);
             Assert.That(nameIndex, Is.GreaterThanOrEqualTo(0), "Shim method missing: " + shimMethodName);
             int declarationStart = shimSource.LastIndexOf("public static", nameIndex, StringComparison.Ordinal);
             int openBrace = shimSource.IndexOf('{', nameIndex);

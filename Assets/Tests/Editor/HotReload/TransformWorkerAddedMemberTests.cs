@@ -286,6 +286,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertReceiverCheckMapsTo(result.Output.shimSource, FindLineNumberContaining(edited, "get => 8;"));
         }
 
+        /// <summary>
+        /// What: every added-member shim declares its own static long invocation counter and
+        /// increments it exactly once before its body runs: after the receiver check for an
+        /// instance member, with no receiver check for a static one, and the same for expression
+        /// bodies and for auto-property accessors built against the added-field store.
+        /// </summary>
+        [TestCase("Instance block method", "public int AddedCountedBlock(int value)\n        {\n            return value + 1;\n        }", "AddedCountedBlock", "return value + 1;", true)]
+        [TestCase("Instance arrow method", "public int AddedCountedArrow() => 42;", "AddedCountedArrow", "return 42;", true)]
+        [TestCase("Instance throw arrow method", "public int AddedCountedThrow() => throw new System.InvalidOperationException();", "AddedCountedThrow", "InvalidOperationException", true)]
+        [TestCase("Static block method", "public static int AddedCountedStatic(int value)\n        {\n            return value + 2;\n        }", "AddedCountedStatic", "return value + 2;", false)]
+        [TestCase("Static arrow method", "public static int AddedCountedStaticArrow() => 43;", "AddedCountedStaticArrow", "return 43;", false)]
+        [TestCase("Bodied getter", "public int AddedCountedBodied\n        {\n            get { return 3; }\n        }", "get_AddedCountedBodied", "return 3;", true)]
+        [TestCase("Instance auto getter", "public int AddedCountedAuto { get; set; }", "get_AddedCountedAuto", "GetOrInit", true)]
+        [TestCase("Instance auto setter", "public int AddedCountedAuto { get; set; }", "set_AddedCountedAuto", "Set<", true)]
+        [TestCase("Static auto getter", "public static int AddedCountedStaticAuto { get; set; }", "get_AddedCountedStaticAuto", "GetOrInitStatic", false)]
+        public async Task Emit_AddedMemberShim_DeclaresItsCounterAndIncrementsItOnceBeforeTheBody(
+            string label,
+            string hostMember,
+            string methodName,
+            string bodyMarker,
+            bool expectsReceiverCheck)
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(hostMember);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto added = FindEntry(result, methodName);
+            Assert.That(added, Is.Not.Null, label);
+
+            string counterName = added.shimMethodName + "__uloopCalls";
+            string shimSource = result.Output.shimSource;
+            Assert.That(
+                shimSource,
+                Does.Contain("public static long " + counterName + ";"),
+                label + "\n" + shimSource);
+
+            string method = ExtractShimMethod(shimSource, added.shimMethodName);
+            string increment = "global::System.Threading.Interlocked.Increment(ref " + counterName + ");";
+            int incrementIndex = method.IndexOf(increment, StringComparison.Ordinal);
+            Assert.That(incrementIndex, Is.GreaterThan(0), label + "\n" + method);
+            Assert.That(
+                method.IndexOf(increment, incrementIndex + increment.Length, StringComparison.Ordinal),
+                Is.EqualTo(-1),
+                "The counter must be incremented once.\n" + method);
+            Assert.That(
+                method.IndexOf(bodyMarker, incrementIndex, StringComparison.Ordinal),
+                Is.GreaterThan(incrementIndex),
+                "The increment must run before the body.\n" + method);
+
+            int receiverCheckIndex = method.IndexOf(
+                "throw new global::System.NullReferenceException",
+                StringComparison.Ordinal);
+            if (expectsReceiverCheck)
+            {
+                Assert.That(receiverCheckIndex, Is.GreaterThan(0), label + "\n" + method);
+                Assert.That(
+                    receiverCheckIndex,
+                    Is.LessThan(incrementIndex),
+                    "A call the receiver check refuses must not count.\n" + method);
+            }
+            else
+            {
+                Assert.That(receiverCheckIndex, Is.EqualTo(-1), label + "\n" + method);
+            }
+        }
+
+        // The text of one emitted shim method: from its declaration to the #line default the
+        // emitter appends after every method.
+        private static string ExtractShimMethod(string shimSource, string shimMethodName)
+        {
+            Match declaration = Regex.Match(
+                shimSource,
+                @"public static [^\n]*\b" + Regex.Escape(shimMethodName) + @"\(");
+            Assert.That(declaration.Success, Is.True, "Shim method missing: " + shimMethodName + "\n" + shimSource);
+            int end = shimSource.IndexOf("#line default", declaration.Index, StringComparison.Ordinal);
+            Assert.That(end, Is.GreaterThan(declaration.Index), shimSource);
+            return shimSource.Substring(declaration.Index, end - declaration.Index);
+        }
+
         private static void AssertReceiverCheckMapsTo(string shimSource, int expectedLine)
         {
             int guardIndex = shimSource.IndexOf(
@@ -2128,7 +2205,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string SliceShimMethod(string shimSource, string shimMethodName)
         {
-            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
+            // Why the '(': an added member's shim type also declares its invocation counter, whose
+            // name starts with the shim method name.
+            int nameIndex = shimSource.IndexOf(shimMethodName + "(", StringComparison.Ordinal);
             Assert.That(nameIndex, Is.GreaterThanOrEqualTo(0), "Shim method missing: " + shimMethodName);
             int declarationStart = shimSource.LastIndexOf("public static", nameIndex, StringComparison.Ordinal);
             int openBrace = shimSource.IndexOf('{', nameIndex);
