@@ -268,7 +268,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadOrchestratorResult result = await services.Orchestrator
-                .RunAsync(selection.Files, contentPathOverride: null, ct)
+                .RunAsync(
+                    selection.Files,
+                    contentPathOverride: null,
+                    ct,
+                    isDefaultSelection: selection.IsDefaultSelection)
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
