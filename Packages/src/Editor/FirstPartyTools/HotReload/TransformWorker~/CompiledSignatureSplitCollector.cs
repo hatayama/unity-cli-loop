@@ -45,7 +45,8 @@ internal static class CompiledSignatureSplitCollector
             new List<string>(names.DeclaringTypes),
             new List<string>(names.ArtifactBoundTypes),
             new List<string>(names.ArtifactHosts),
-            new List<string>(names.ArtifactBoundDeclaringFiles));
+            new List<string>(names.ArtifactBoundDeclaringFiles),
+            new List<string>(names.SplitSourceFiles));
     }
 
     private static bool IsMemberUse(SyntaxNode node)
@@ -167,7 +168,11 @@ internal static class CompiledSignatureSplitCollector
             {
                 names.ArtifactBoundTypes.Add(CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition));
                 names.ArtifactHosts.Add(CecilTypeNames.ToMetadataName(declaringType.OriginalDefinition));
-                AddSourceCopyFiles(signatureType, sourceAssembly, names);
+                AddSourceCopyFiles(
+                    signatureType,
+                    sourceAssembly,
+                    names.ProjectRelativePathsByBindingTree,
+                    names.ArtifactBoundDeclaringFiles);
                 continue;
             }
 
@@ -179,6 +184,11 @@ internal static class CompiledSignatureSplitCollector
             }
 
             names.SplitTypes.Add(CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition));
+            AddSourceCopyFiles(
+                signatureType,
+                sourceAssembly,
+                names.ProjectRelativePathsByBindingTree,
+                names.SplitSourceFiles);
             found = true;
         }
 
@@ -194,7 +204,8 @@ internal static class CompiledSignatureSplitCollector
     private static void AddSourceCopyFiles(
         INamedTypeSymbol signatureType,
         IAssemblySymbol sourceAssembly,
-        CompiledSignatureSplitNames names)
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree,
+        SortedSet<string> sourceCopyFiles)
     {
         string reflectionName = CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition).Replace('/', '+');
         INamedTypeSymbol sourceCopy = sourceAssembly.GetTypeByMetadataName(reflectionName);
@@ -202,7 +213,7 @@ internal static class CompiledSignatureSplitCollector
         {
             // The compilation holds only the run's binding trees, so a declaration outside them
             // means the map was built from other trees than the ones this model binds.
-            if (!names.ProjectRelativePathsByBindingTree.TryGetValue(
+            if (!projectRelativePathsByBindingTree.TryGetValue(
                     declaration.SyntaxTree,
                     out string projectRelativePath))
             {
@@ -210,7 +221,7 @@ internal static class CompiledSignatureSplitCollector
                     "The source copy of '" + reflectionName + "' is declared outside the run's binding trees.");
             }
 
-            names.ArtifactBoundDeclaringFiles.Add(projectRelativePath);
+            sourceCopyFiles.Add(projectRelativePath);
         }
     }
 
@@ -318,6 +329,8 @@ internal sealed class CompiledSignatureSplitNames
     internal SortedSet<string> ArtifactHosts { get; } = new SortedSet<string>(StringComparer.Ordinal);
 
     internal SortedSet<string> ArtifactBoundDeclaringFiles { get; } = new SortedSet<string>(StringComparer.Ordinal);
+
+    internal SortedSet<string> SplitSourceFiles { get; } = new SortedSet<string>(StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -332,13 +345,15 @@ internal sealed class CompiledSignatureSplit
         List<string> declaringTypeMetadataNames,
         List<string> artifactBoundTypeMetadataNames,
         List<string> artifactHostMetadataNames,
-        List<string> artifactBoundDeclaringFiles)
+        List<string> artifactBoundDeclaringFiles,
+        List<string> splitSourceFiles)
     {
         SplitTypeMetadataNames = splitTypeMetadataNames;
         DeclaringTypeMetadataNames = declaringTypeMetadataNames;
         ArtifactBoundTypeMetadataNames = artifactBoundTypeMetadataNames;
         ArtifactHostMetadataNames = artifactHostMetadataNames;
         ArtifactBoundDeclaringFiles = artifactBoundDeclaringFiles;
+        SplitSourceFiles = splitSourceFiles;
     }
 
     internal List<string> SplitTypeMetadataNames { get; }
@@ -355,4 +370,8 @@ internal sealed class CompiledSignatureSplit
     // Project-relative paths of the run's files that declare the source copies of those compiled
     // types.
     internal List<string> ArtifactBoundDeclaringFiles { get; }
+
+    // Project-relative paths of the run's files that declare the source copies of the split
+    // types, which the compiled signatures still name by their compiled copies.
+    internal List<string> SplitSourceFiles { get; }
 }

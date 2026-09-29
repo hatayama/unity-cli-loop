@@ -20,6 +20,10 @@ internal sealed class WorkerReason
     // types only this process can resolve to files. Null when the Editor resolves them instead.
     public string[] DeclaringFiles { get; set; }
 
+    // Project-relative paths of the run's files that build the split types from source, for a
+    // reason whose compiled signatures still name the compiled copies. Null for other reasons.
+    public string[] SplitSourceFiles { get; set; }
+
     internal static WorkerReason Of(HotReloadWorkerReasonCode code, params string[] args)
     {
         return new WorkerReason
