@@ -39,6 +39,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HintCore =
             "share a name with a hot reload addition, from this reload or an earlier one";
 
+        // The part of the hint that says a constructor is one of the places no patch can reach.
+        private const string UnpatchableBodiesHintCore =
+            "Constructors, initializers, setters, indexers, operators, event accessors and "
+            + "subscriptions to an added event cannot.";
+
         private static readonly string CompiledTypeAddedMember =
             "        public int " + CompiledTypeAddedMethodName + "()\n"
             + "        {\n"
@@ -110,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string reason = FindIntroducedTypeFailureReason(result, "CS1061");
             Assert.That(reason, Does.Contain(HintCore), DescribeOutcomes(result));
+            Assert.That(reason, Does.Contain(UnpatchableBodiesHintCore), DescribeOutcomes(result));
         }
 
         private static string FindIntroducedTypeFailureReason(
