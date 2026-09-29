@@ -40,6 +40,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public InconclusiveTestDetail[] inconclusiveTests;
 
         /// <summary>
+        /// Suites that failed outside their tests, such as a fixture whose OneTimeTearDown threw,
+        /// capped for the JSON response. Null when none failed.
+        /// </summary>
+        public FailedTestDetail[] failedSuites;
+
+        /// <summary>
         /// One inconclusive test leaf included in a run-tests response, with the message that names
         /// the assumption it could not meet.
         /// </summary>
