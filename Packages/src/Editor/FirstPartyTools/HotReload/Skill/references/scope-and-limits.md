@@ -126,6 +126,11 @@ reason says the name is an enum member this reload adds, and the enum-member and
 changed-`const` warnings of the files passed to that reload stay in `Warnings` even though
 that failure stops the file. The drift of a changed sibling file that was not passed is not
 reported on this failure path.
+When `--files` is omitted and the enum's file has no edit besides its new enum members,
+the reload leaves that file out instead, so the added members of the other files apply;
+a `Warnings` line names the left-out file and the enum members that still need
+`uloop compile`. A file that already holds patches or declares a new type stays in the
+reload.
 
 An added property applies unless its shape is listed below. A bodied getter or setter is
 emitted like an added method;
