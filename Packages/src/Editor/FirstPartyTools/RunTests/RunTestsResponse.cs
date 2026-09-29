@@ -105,6 +105,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public SerializableTestResult.InconclusiveTestDetail[] InconclusiveTests { get; set; }
 
         /// <summary>
+        /// Suites that failed outside their tests, omitted from JSON when none failed.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public SerializableTestResult.FailedTestDetail[] FailedSuites { get; set; }
+
+        /// <summary>
         /// Policy warning when hot-reload changes were live at test-run start. Empty when none
         /// were active; omitted from JSON via ShouldSerializeWarning.
         /// </summary>

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const windowsPowerShellCommand = "powershell"
@@ -69,13 +71,41 @@ func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
 }
 
 func listUnityProcessesWindows(ctx context.Context) ([]UnityProcess, error) {
-	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
-	defer cancel()
-	output, err := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", windowsUnityProcessListScript()).Output()
+	output, err := runProcessListCommandWithin(
+		ctx,
+		ProcessListCommandTimeout,
+		windowsPowerShellCommand,
+		"-NoProfile",
+		"-Command",
+		windowsUnityProcessListScript(),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve Unity process list on Windows: %w", err)
+		return nil, err
 	}
 	return parseWindowsUnityProcesses(string(output)), nil
+}
+
+// runProcessListCommandWithin takes the timeout as a parameter so a test can reach the
+// timeout path without waiting for ProcessListCommandTimeout.
+// why the timeout is spelled out: the kill leaves Windows reporting only exit status 1,
+// so a PowerShell or WMI that is slow to start and a failing script look the same. It is
+// claimed only while ctx is alive: a caller whose own deadline or cancellation came
+// first reports that itself, and this limit was not what stopped the command.
+func runProcessListCommandWithin(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
+	commandContext, cancel := withCommandTimeout(ctx, timeout)
+	defer cancel()
+	output, err := exec.CommandContext(commandContext, name, args...).Output()
+	if err == nil {
+		return output, nil
+	}
+	if ctx.Err() == nil && errors.Is(commandContext.Err(), context.DeadlineExceeded) {
+		return nil, fmt.Errorf(
+			"listing Unity processes on Windows timed out after %s; PowerShell or WMI did not respond, retry the command: %w",
+			timeout,
+			err,
+		)
+	}
+	return nil, fmt.Errorf("failed to retrieve Unity process list on Windows: %w", commandErrorWithStderr(err, exitErrorStderr(err)))
 }
 
 // windowsUnityProcessListScript builds the PowerShell script that lists Unity

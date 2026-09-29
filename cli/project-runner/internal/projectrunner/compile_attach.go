@@ -46,10 +46,20 @@ func tryAttachToPendingCompile(
 		return false, compileExecutionResult{}
 	}
 
-	status, probed := probePendingCompileStatus(ctx, connection, record.RequestID, deps)
-	if !probed {
+	status, probeErr := probePendingCompileStatus(ctx, connection, record.RequestID, deps)
+	if probeErr != nil {
+		// Why wait: Unity acknowledged the query, so its server is alive and only the main thread
+		// that answers status queries stayed blocked. While the pending compile holds the
+		// single-flight slot a new compile request is rejected as busy, so polling its status is the
+		// only way to reach its result. Why check ctx: the caller's own deadline passing after the
+		// ack ends the query the same way, and then there is no time left to wait.
+		if ctx.Err() == nil && isUnansweredStatusProbe(probeErr) {
+			logCompileAttachProbeFailed(connection, record.RequestID, probeErr, "waiting")
+			return attachWaitForPendingCompile(ctx, connection, record, params, waitTimeout, stderr, deps)
+		}
 		// Why keep the record: probe failures during domain reload are transient and
 		// do not prove the in-flight compile is gone.
+		logCompileAttachProbeFailed(connection, record.RequestID, probeErr, "new_compile")
 		return false, compileExecutionResult{}
 	}
 
@@ -73,12 +83,15 @@ func tryAttachToPendingCompile(
 	return false, compileExecutionResult{}
 }
 
+// probePendingCompileStatus queries the pending compile's status until one query succeeds or the
+// probe deadline passes. A failed probe returns the last query's error, or ctx.Err() when ctx ends
+// between queries.
 func probePendingCompileStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
 	requestID string,
 	deps compileWaitDeps,
-) (compileStatusResponse, bool) {
+) (compileStatusResponse, error) {
 	timeout := deps.attachProbeTimeout
 	if timeout <= 0 {
 		timeout = compileAttachProbeTimeout
@@ -92,10 +105,12 @@ func probePendingCompileStatus(
 	for {
 		status, err := deps.queryCompileStatus(ctx, connection, requestID)
 		if err == nil {
-			return status, true
+			return status, nil
 		}
 		if !time.Now().Before(deadline) {
-			return compileStatusResponse{}, false
+			// Why the last error, not the first: it is the Editor's latest state. An Editor that was
+			// unreachable and then acknowledged queries is back with its main thread blocked.
+			return compileStatusResponse{}, err
 		}
 
 		remaining := time.Until(deadline)
@@ -107,7 +122,7 @@ func probePendingCompileStatus(
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return compileStatusResponse{}, false
+			return compileStatusResponse{}, ctx.Err()
 		case <-timer.C:
 		}
 	}
@@ -307,6 +322,27 @@ func logCompileAttachStart(connection unityipc.Connection, requestID string, mod
 				"command":          clicore.CompileCommandName,
 				"request_id":       requestID,
 				"attach_mode":      mode,
+				"project_identity": vibelog.ProjectIdentity(connection.ProjectRoot),
+				"endpoint":         connection.Endpoint.Address,
+			},
+			CorrelationID: requestID,
+		}
+	})
+}
+
+// logCompileAttachProbeFailed records why a status probe for the pending compile failed and whether
+// the command then waits for that compile or starts a new one.
+func logCompileAttachProbeFailed(connection unityipc.Connection, requestID string, probeErr error, next string) {
+	writeCompileVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
+		return vibelog.CLIVibeLogEntry{
+			Level:     "WARNING",
+			Operation: "cli_compile_attach_probe_failed",
+			Message:   "Status probe for a previously timed-out compile request failed.",
+			Context: map[string]any{
+				"command":          clicore.CompileCommandName,
+				"request_id":       requestID,
+				"transport_error":  clicore.ErrorMessage(probeErr),
+				"next":             next,
 				"project_identity": vibelog.ProjectIdentity(connection.ProjectRoot),
 				"endpoint":         connection.Endpoint.Address,
 			},

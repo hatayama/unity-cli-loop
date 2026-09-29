@@ -4,8 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 )
+
+// exitErrorStderr returns what Output captured on stderr, which it only exposes
+// through the returned *exec.ExitError.
+func exitErrorStderr(err error) string {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return string(exitErr.Stderr)
+	}
+	return ""
+}
 
 func commandErrorWithStderr(err error, stderr string) error {
 	if err == nil {
