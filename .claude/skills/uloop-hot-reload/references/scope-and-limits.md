@@ -196,6 +196,9 @@ reported removed, and a `Warnings` entry names each compiled call site of the ol
 signature that the reload leaves unpatched — those call sites keep the previous
 behavior until `uloop compile`. Deleting a method emits the same warning when
 compiled callers remain.
+An added member that a later reload re-signatures or deletes has no compiled callers, but a
+hot-reloaded caller that does not apply again in that reload keeps calling the member's
+earlier body; `Warnings` then names that call (see [troubleshooting.md](troubleshooting.md)).
 
 Field declarations are stricter: when a compiled field's type — or its `static`/
 `const` modifier — differs from the edited source, every edited method that reads
