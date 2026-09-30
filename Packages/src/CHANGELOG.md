@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.10.0](https://github.com/hatayama/unity-cli-loop/compare/v3.9.1...v3.10.0) (2026-09-30)
+
+
+### Features
+
+* Hot reload status now reports how often each added member has been called ([#3036](https://github.com/hatayama/unity-cli-loop/issues/3036)) ([5f4bbf5](https://github.com/hatayama/unity-cli-loop/commit/5f4bbf5db3e5b4a0f1f98d947f634f215f8ca869))
+* New types can call members that hot reload added without a compile ([#3038](https://github.com/hatayama/unity-cli-loop/issues/3038)) ([0786880](https://github.com/hatayama/unity-cli-loop/commit/07868802261a6a553e5ddf98b53979ec804bb9a6))
+
+
+### Bug Fixes
+
+* Hot reload no longer leaves the files it builds for new types piling up in Library ([#3028](https://github.com/hatayama/unity-cli-loop/issues/3028)) ([c2ebf15](https://github.com/hatayama/unity-cli-loop/commit/c2ebf1541b05335e04cc8509cbc80d5e8c7d38b8))
+* Hot reload no longer warns about callers in other assemblies that it already patched ([#3033](https://github.com/hatayama/unity-cli-loop/issues/3033)) ([adc73c8](https://github.com/hatayama/unity-cli-loop/commit/adc73c866138bb71c4498f8cb3d69ef2cbbb07c9))
+* Hot reload now warns when earlier reloaded code still calls an added member that is gone ([#3037](https://github.com/hatayama/unity-cli-loop/issues/3037)) ([85e9352](https://github.com/hatayama/unity-cli-loop/commit/85e9352e13daee42137a59ae0d92e9fad82349d0))
+* Hot reload warnings and pause points now recognize methods with generic or multidimensional-array parameters ([#3031](https://github.com/hatayama/unity-cli-loop/issues/3031)) ([12377bd](https://github.com/hatayama/unity-cli-loop/commit/12377bda59461b4a7f65af43379325f904afb449))
+* Hot reload without --files no longer skips added methods because another file only adds enum members ([#3034](https://github.com/hatayama/unity-cli-loop/issues/3034)) ([63bbefa](https://github.com/hatayama/unity-cli-loop/commit/63bbefa2e361cf65e26b6444883b6aa4e91d50ad))
+* run-tests now fails a run when a fixture's one-time setup or teardown throws ([#3027](https://github.com/hatayama/unity-cli-loop/issues/3027)) ([2ca48a6](https://github.com/hatayama/unity-cli-loop/commit/2ca48a6d1ab6f00e2bcc8875a0a2c8d8736c4cbf))
+
 ## [3.9.1](https://github.com/hatayama/unity-cli-loop/compare/v3.9.0...v3.9.1) (2026-09-28)
 
 
