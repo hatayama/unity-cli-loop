@@ -16,7 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// in the same reload or an earlier one, to a compiled type or to a type an earlier reload
     /// introduced. The artifact cannot compile those bodies, so it carries stubs, and the same
     /// reload patches the real bodies in before the type is activated. A new type that names such
-    /// a type in its signatures is still refused, and that refusal has to say why.
+    /// a type in its signatures is still refused, and that refusal has to say why. A later reload
+    /// that retires a member those patches still call has to name the calls.
     /// </summary>
     /// <remarks>
     /// Why the owners are not fixtures on disk: a .cs under Assets/ is compiled into the test
@@ -49,6 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string NoExtraMembers = "";
         private const string StubMessageCore = "calls members that a hot reload added";
         private const string MixedParametersMethodName = "Mixed";
+        private const int ReshapedAddedSeed = 2;
+        private const int ReshapedAddedOffset = 50;
 
         private const string CompiledTypeAddedCall =
             "new HotReloadCrossFileAddedMemberHost()." + CompiledTypeAddedMethodName + "()";
@@ -62,6 +65,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "            return " + CompiledTypeAddedValue + ";\n"
             + "        }\n"
             + "\n";
+
+        // The same added method with a parameter, which a later reload registers under a new key
+        // while retiring the one the new type's earlier patches call.
+        private static readonly string ReshapedCompiledTypeAddedMember =
+            "        public int " + CompiledTypeAddedMethodName + "(int seed)\n"
+            + "        {\n"
+            + "            return seed + " + ReshapedAddedOffset + ";\n"
+            + "        }\n"
+            + "\n";
+
+        private static readonly string ReshapedCompiledTypeAddedCall =
+            "new HotReloadCrossFileAddedMemberHost()." + CompiledTypeAddedMethodName + "(" + ReshapedAddedSeed + ")";
 
         private static readonly string IntroducedTypeAddedMember =
             "\n"
@@ -505,6 +520,133 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// What: when a reload changes the signature of the added method a new type calls and the
+        /// new type's file fails in that reload, the new type keeps running the method's earlier
+        /// body and the run names both of its calls; the reload that applies the new type on the
+        /// new signature no longer does.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeFailsWhenTheAddedMethodItCallsChangesSignature_NamesItsCallsUntilItApplies()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string reshapedHost = WriteSource(
+                hostPath,
+                "StaleCallReshaped",
+                InsertReshapedCompiledTypeMember(File.ReadAllText(hostPath)));
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = WriteSource(hostPath, "StaleCallIntroducing", InsertCompiledTypeMember(File.ReadAllText(hostPath))),
+                        [UserOwnerPath] = WriteSource(UserOwnerPath, "StaleCallIntroducing", BuildUserSource(CompiledTypeAddedCall))
+                    });
+                AssertIntroduced(introducing);
+                HotReloadStaleAddedMemberCallsWarnings.AssertNone(introducing.Warnings);
+
+                HotReloadOrchestratorResult failed = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = reshapedHost,
+                        [UserOwnerPath] = WriteSource(
+                            UserOwnerPath,
+                            "StaleCallFailed",
+                            BreakPlainBody(BuildUserSource(ReshapedCompiledTypeAddedCall)))
+                    });
+                AssertMethodRow(failed, HotReloadMethodOutcomeKind.Failed, UserSimpleName + ".");
+                AssertMethodRow(failed, HotReloadMethodOutcomeKind.Added, "." + CompiledTypeAddedMethodName + "(System.Int32)");
+                Assert.That(failed.Warnings, Does.Contain(ExpectedStaleCallsFromTheNewType()), DescribeRun(failed));
+                Assert.That(Invoke(readArtifact(), "Run"), Is.EqualTo(CompiledTypeAddedValue), DescribeRun(failed));
+
+                HotReloadOrchestratorResult applied = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = reshapedHost,
+                        [UserOwnerPath] = WriteSource(UserOwnerPath, "StaleCallApplied", BuildUserSource(ReshapedCompiledTypeAddedCall))
+                    });
+                Assert.That(CountFailures(applied), Is.EqualTo(0), DescribeRun(applied));
+                HotReloadStaleAddedMemberCallsWarnings.AssertNone(applied.Warnings);
+                Assert.That(Invoke(readArtifact(), "Run"), Is.EqualTo(ReshapedAddedSeed + ReshapedAddedOffset), DescribeRun(applied));
+                Assert.That(
+                    Invoke(readArtifact(), "get_Answer"),
+                    Is.EqualTo(ReshapedAddedSeed + ReshapedAddedOffset + 1),
+                    DescribeRun(applied));
+            });
+        }
+
+        /// <summary>
+        /// What: a reload given only the file that changes the signature of the added method a new
+        /// type calls leaves the new type's earlier patches running the method's earlier body, and
+        /// the run names both of their calls.
+        /// </summary>
+        [Test]
+        public async Task Run_OnlyTheHostChangesTheSignatureOfTheAddedMethodANewTypeCalls_NamesItsCalls()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string user = WriteSource(UserOwnerPath, "StaleCallHostOnly", BuildUserSource(CompiledTypeAddedCall));
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = WriteSource(hostPath, "StaleCallHostOnlyIntroducing", InsertCompiledTypeMember(File.ReadAllText(hostPath))),
+                        [UserOwnerPath] = user
+                    });
+                AssertIntroduced(introducing);
+
+                // Why the new type's file stays in the overrides though it is not passed: it is not
+                // on disk, so a run that pulls it back in has to read the source the last reload
+                // applied from there.
+                HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { hostPath },
+                    contentPathOverride: null,
+                    CancellationToken.None,
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = WriteSource(
+                            hostPath,
+                            "StaleCallHostOnlyReshaped",
+                            InsertReshapedCompiledTypeMember(File.ReadAllText(hostPath))),
+                        [UserOwnerPath] = user
+                    });
+
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Added, "." + CompiledTypeAddedMethodName + "(System.Int32)");
+                Assert.That(result.Warnings, Does.Contain(ExpectedStaleCallsFromTheNewType()), DescribeRun(result));
+                Assert.That(Invoke(readArtifact(), "Run"), Is.EqualTo(CompiledTypeAddedValue), DescribeRun(result));
+            });
+        }
+
+        // Why both calls: the new type's method and its getter each call the added method, and the
+        // warning lists every call left running into a retired member in ordinal order.
+        private static string ExpectedStaleCallsFromTheNewType()
+        {
+            string retiredMember = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadCrossFileAddedMemberHost).FullName),
+                CompiledTypeAddedMethodName,
+                Array.Empty<string>(),
+                0);
+            return HotReloadStaleAddedMemberCallsWarnings.Expected(
+                HotReloadStaleAddedMemberCallsWarnings.Pair(UserMethodLabel("Run"), retiredMember),
+                HotReloadStaleAddedMemberCallsWarnings.Pair(UserMethodLabel("get_Answer"), retiredMember));
+        }
+
+        private static string UserMethodLabel(string methodName)
+        {
+            return HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(UserMetadataName),
+                methodName,
+                Array.Empty<string>(),
+                0);
+        }
+
+        private static string DescribeRun(HotReloadOrchestratorResult result)
+        {
+            return DescribeOutcomes(result) + "\nWarnings:\n  " + string.Join("\n  ", result.Warnings);
+        }
+
         private static void AssertIntroduced(HotReloadOrchestratorResult result)
         {
             Assert.That(CountFailures(result), Is.EqualTo(0), DescribeOutcomes(result));
@@ -610,10 +752,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string InsertCompiledTypeMember(string hostSource)
         {
+            return InsertBeforeHostValue(hostSource, CompiledTypeAddedMember);
+        }
+
+        private static string InsertReshapedCompiledTypeMember(string hostSource)
+        {
+            return InsertBeforeHostValue(hostSource, ReshapedCompiledTypeAddedMember);
+        }
+
+        private static string InsertBeforeHostValue(string hostSource, string member)
+        {
             Assert.That(hostSource, Does.Contain(HostValueAnchor), "Precondition: host value anchor must exist.");
             return hostSource.Replace(
                 HostValueAnchor,
-                CompiledTypeAddedMember + HostValueAnchor,
+                member + HostValueAnchor,
+                StringComparison.Ordinal);
+        }
+
+        // A type error in a body the new type already has fails the file's shim compile, so the
+        // file keeps its earlier patches whatever its other bodies say.
+        private static string BreakPlainBody(string userSource)
+        {
+            string plainBody = "            return " + PlainValue + ";\n";
+            Assert.That(userSource, Does.Contain(plainBody), "Precondition: the plain body must exist.");
+            return userSource.Replace(
+                plainBody,
+                "            int broken = \"not an int\";\n            return broken;\n",
                 StringComparison.Ordinal);
         }
 
