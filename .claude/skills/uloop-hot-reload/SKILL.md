@@ -1,7 +1,7 @@
 ---
 name: uloop-hot-reload
 toolName: hot-reload
-description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New top-level types (class/struct/enum/interface/static helper) of the same assembly are introduced by the reload that declares them; other new-type shapes, use from another assembly or through Unity, asmdef changes, and members referenced from other assemblies or from files that are neither passed to the reload nor already hot-reloaded require 'uloop compile'."
+description: "Apply C# edits to the running Editor without a compile or domain reload, keeping Play Mode state. Use instead of compile after editing method bodies or adding methods, fields, or new classes."
 ---
 
 # uloop hot-reload

@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-mouse-input
 toolName: simulate-mouse-input
-description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, long-press (LongPress), movement delta (MoveDelta/SmoothDelta), or scroll. Use --dry-run to check what a Game View coordinate hits in 3D physics before clicking (works in EditMode; no Input System required). Use simulate-mouse-ui for UI. Requires the Input System package and Active Input Handling set to 'Input System Package (New)' or 'Both' (except --dry-run)."
+description: "Simulate mouse clicks, long-press, movement, and scroll in PlayMode through the Input System. Use for gameplay mouse input; --dry-run checks what a Game View point hits. Use simulate-mouse-ui for UI."
 ---
 
 # Task
@@ -11,7 +11,7 @@ Simulate mouse input via Input System in Unity PlayMode, or dry-run a Game View 
 ## Workflow
 
 1. When checking what a screenshot coordinate would hit in 3D physics before clicking, run `uloop simulate-mouse-input --dry-run --x <x> --y <y>` first (EditMode is fine; no Input System required)
-2. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not) before injecting real mouse input
+2. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not) before injecting real mouse input. Real input requires the Input System package and Active Input Handling set to 'Input System Package (New)' or 'Both'
 3. For Click/LongPress: determine the target Game View input position from annotated `SimX`/`SimY`, raycast-grid `InputX`/`InputY`, or raw image pixels converted with `ScreenshotToInputFormula`
 4. Execute the needed `uloop simulate-mouse-input` commands
 5. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot

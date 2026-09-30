@@ -1,6 +1,6 @@
 ---
 name: uloop-pause-point
-description: "Pauses Unity playback at any source file:line without editing code or recompiling, and returns a snapshot of the locals, parameters, and instance fields at that exact frame. Use for bug investigation, PlayMode/E2E verification, checking variable values at a specific frame, or confirming that a code path executed."
+description: "Breakpoint-like: pause Unity at a source file:line without editing code or recompiling, and get the locals, parameters, and fields there. Use to check values or confirm a code path ran."
 ---
 
 # uloop pause-point
