@@ -62,17 +62,50 @@ publish_draft_section() {
   ' "$WORKFLOW"
 }
 
-post_publish_section() {
-  awk '
-    /^  post-publish:/ { printing = 1 }
+# A job ends at the next line indented like a job key (the next job, or a comment above it), so
+# a job section never reads into the job written after it.
+job_section() {
+  job_name=$1
+  awk -v header="  $job_name:" '
+    $0 == header { printing = 1; print; next }
+    printing && /^  [^ \t]/ { exit }
     printing { print }
   ' "$WORKFLOW"
+}
+
+post_publish_section() {
+  job_section "post-publish"
+}
+
+package_managers_section() {
+  job_section "package-managers"
+}
+
+assert_job_contains() {
+  job_name=$1
+  expected=$2
+  if ! job_section "$job_name" | grep -F -- "$expected" >/dev/null 2>&1; then
+    echo "Expected the $job_name job to contain: $expected" >&2
+    exit 1
+  fi
+}
+
+assert_job_before() {
+  job_name=$1
+  earlier=$2
+  later=$3
+  earlier_line=$(job_section "$job_name" | grep -nF -- "$earlier" | head -n 1 | cut -d: -f 1)
+  later_line=$(job_section "$job_name" | grep -nF -- "$later" | head -n 1 | cut -d: -f 1)
+  if [ -z "$earlier_line" ] || [ -z "$later_line" ] || [ "$earlier_line" -ge "$later_line" ]; then
+    echo "Expected $job_name '$earlier' to appear before '$later'." >&2
+    exit 1
+  fi
 }
 
 winget_pull_request_section() {
   awk '
     /^      - name: Open winget-pkgs pull request$/ { printing = 1; next }
-    printing && /^      - name:/ { exit }
+    printing && (/^      - name:/ || /^  [^ \t]/) { exit }
     printing { print }
   ' "$WORKFLOW"
 }
@@ -88,7 +121,7 @@ assert_winget_pull_request_contains() {
 package_release_merge_section() {
   awk '
     /^      - name: Merge the Unity package release pull request now that the pin records this dispatcher$/ { printing = 1; next }
-    printing && /^      - name:/ { exit }
+    printing && (/^      - name:/ || /^  [^ \t]/) { exit }
     printing { print }
   ' "$WORKFLOW"
 }
@@ -102,14 +135,7 @@ assert_package_release_merge_contains() {
 }
 
 assert_post_publish_before() {
-  earlier=$1
-  later=$2
-  earlier_line=$(post_publish_section | grep -nF -- "$earlier" | head -n 1 | cut -d: -f 1)
-  later_line=$(post_publish_section | grep -nF -- "$later" | head -n 1 | cut -d: -f 1)
-  if [ -z "$earlier_line" ] || [ -z "$later_line" ] || [ "$earlier_line" -ge "$later_line" ]; then
-    echo "Expected post-publish '$earlier' to appear before '$later'." >&2
-    exit 1
-  fi
+  assert_job_before "post-publish" "$1" "$2"
 }
 
 test_build_and_publish_jobs_have_separate_trust_boundaries() {
@@ -128,7 +154,7 @@ test_unprivileged_build_uses_only_the_approved_event_commit() {
   assert_not_contains "inputs.ref"
   assert_not_contains "INPUT_REF"
   assert_contains '          ref: ${{ github.sha }}'
-  assert_count 2 "          persist-credentials: false"
+  assert_count 3 "          persist-credentials: false"
   assert_contains "if: github.ref == 'refs/heads/main'"
   assert_not_contains "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'"
 }
@@ -256,14 +282,44 @@ test_winget_pull_request_follows_homebrew_update_for_stable_releases() {
   assert_winget_pull_request_contains '          --tag "${RELEASE_TAG}"'
   assert_winget_pull_request_contains "          --fork-repo hatayama/winget-pkgs"
   assert_before "      - name: Update Homebrew formula" "      - name: Open winget-pkgs pull request"
-  assert_before "      - name: Open winget-pkgs pull request" "      - name: Mint dispatcher pin push token"
+}
+
+# Verifies Homebrew and winget update in a job beside post-publish: a failure in either channel
+# must not skip the pin stamp or the package release merge, and a slow package release merge
+# must not hold the channels back.
+test_package_manager_updates_run_beside_post_publish() {
+  assert_contains "  package-managers:"
+  assert_job_contains "package-managers" "    needs: [build, publish]"
+  assert_job_contains "package-managers" "    if: needs.build.outputs.dry_run != 'true'"
+  assert_job_contains "package-managers" "      contents: read"
+  if package_managers_section | grep -E "^      [a-z-]+: (read|write|none)$" |
+    grep -v -x -e "      contents: read" >/dev/null 2>&1; then
+    echo "The package-managers job writes through its own tokens and must hold only Contents read." >&2
+    exit 1
+  fi
+  assert_job_contains "package-managers" '          ref: ${{ github.sha }}'
+  assert_job_contains "package-managers" "          persist-credentials: false"
+  assert_job_contains "package-managers" "          go-version-file: cli/.go-version"
+  assert_job_contains "package-managers" "      - name: Update Homebrew formula"
+  assert_job_contains "package-managers" "      - name: Open winget-pkgs pull request"
+  assert_job_before "package-managers" "      - name: Update Homebrew formula" "      - name: Open winget-pkgs pull request"
+  for step_name in "Update Homebrew formula" "Open winget-pkgs pull request"; do
+    if post_publish_section | grep -F -- "      - name: $step_name" >/dev/null 2>&1; then
+      echo "Post-publish must not run '$step_name': its failure would skip the pin stamp." >&2
+      exit 1
+    fi
+  done
+  if post_publish_section | grep -F "package-managers" >/dev/null 2>&1; then
+    echo "Post-publish must not wait for the package-managers job." >&2
+    exit 1
+  fi
 }
 
 step_section() {
   step_name=$1
   awk -v step="      - name: $step_name" '
     $0 == step { printing = 1; print; next }
-    printing && /^      - name:/ { exit }
+    printing && (/^      - name:/ || /^  [^ \t]/) { exit }
     printing { print }
   ' "$WORKFLOW"
 }
@@ -360,5 +416,6 @@ test_dispatcher_publish_rechecks_the_tag_before_publishing
 test_dispatcher_build_preserves_release_checks
 test_dispatcher_release_target_and_prerelease_state_remain_verified
 test_winget_pull_request_follows_homebrew_update_for_stable_releases
+test_package_manager_updates_run_beside_post_publish
 test_dispatcher_pin_is_pushed_to_main_with_the_app_token
 test_package_release_pr_is_merged_after_the_pin_stamp

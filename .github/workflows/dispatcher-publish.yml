@@ -413,32 +413,6 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: scripts/sync-release-please-package-releases.sh
 
-      - name: Update Homebrew formula
-        if: needs.build.outputs.should_publish == 'true'
-        working-directory: cli/release-automation
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: >-
-          go run ./cmd/update-homebrew-formula
-          --repo "${{ github.repository }}"
-          --tag "${{ needs.build.outputs.release_tag }}"
-          --tap-repo hatayama/homebrew-tap
-
-      - name: Open winget-pkgs pull request
-        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
-        working-directory: cli/release-automation
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
-          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
-        run: >-
-          go run ./cmd/update-winget-manifest
-          --repo "${GITHUB_REPOSITORY}"
-          --tag "${RELEASE_TAG}"
-          --fork-repo hatayama/winget-pkgs
-
       # Fresh installs follow the package pin, so a published stable dispatcher
       # only reaches new users once the pin records it. Pre-releases are never
       # stamped on main. The stamp is pushed to main directly: its content is
@@ -493,3 +467,55 @@ jobs:
           --repo "${GITHUB_REPOSITORY}"
           --base-branch main
           --dispatcher-tag "${RELEASE_TAG}"
+
+  # Homebrew and winget are secondary channels, so they run beside post-publish
+  # instead of inside it: a failure in either (for example a winget fork sync
+  # that needs a scope the token lacks) must not skip the pin stamp and the
+  # package release merge, and the package release merge can wait for checks
+  # long enough that it must not hold these updates back either. A failure here
+  # still fails the run, and re-running the failed job re-runs only these steps.
+  # Both write through their own tokens; GITHUB_TOKEN only reads release assets.
+  package-managers:
+    needs: [build, publish]
+    if: needs.build.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout approved event commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Update Homebrew formula
+        if: needs.build.outputs.should_publish == 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: >-
+          go run ./cmd/update-homebrew-formula
+          --repo "${{ github.repository }}"
+          --tag "${{ needs.build.outputs.release_tag }}"
+          --tap-repo hatayama/homebrew-tap
+
+      - name: Open winget-pkgs pull request
+        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+        run: >-
+          go run ./cmd/update-winget-manifest
+          --repo "${GITHUB_REPOSITORY}"
+          --tag "${RELEASE_TAG}"
+          --fork-repo hatayama/winget-pkgs
