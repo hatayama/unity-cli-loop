@@ -201,8 +201,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that a missing-member diagnostic naming a member hot reload added earlier
-        /// explains that an introduced type cannot see it, instead of reading as a typo.
+        /// Verifies that a missing-member diagnostic naming a member hot reload added explains
+        /// where a new type can and cannot call such an addition, instead of reading as a typo.
         /// </summary>
         [Test]
         public void Build_DiagnosticNamesAnActiveAddedMember_AppendsTheAddedMemberHint()
@@ -229,11 +229,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 rows[0].Reason,
                 Does.EndWith(
                     "One or more of the missing members share a name with a hot reload addition, "
-                    + "from this reload or an earlier one. If the missing member is that addition, "
-                    + "an introduced type cannot see it: it compiles against the compiled "
-                    + "assemblies and earlier introduced types only, so reloading the addition "
-                    + "first does not help. Run 'uloop compile' to make the added members "
-                    + "compiled, then rerun."));
+                    + "from this reload or an earlier one. A new type can call such an addition "
+                    + "only from its methods and get-only properties, and only when the file that "
+                    + "declares the addition belongs to the same assembly and is part of this "
+                    + "reload: passed, or unchanged since it was last applied. Constructors, "
+                    + "initializers, setters, indexers, operators, event accessors and "
+                    + "subscriptions to an added event cannot. Pass that file too or move the call "
+                    + "into a method, or run 'uloop compile' to make the added members compiled, "
+                    + "then rerun."));
         }
 
         /// <summary>

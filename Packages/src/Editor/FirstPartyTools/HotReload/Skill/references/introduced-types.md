@@ -61,7 +61,7 @@ When an edited body in the same run names a refused type, its shim compile fails
 CS0234, or CS0426, or with CS0103 or CS0117 when the body reads a static member of it. That `Failed` row's `Reason` then ends with a note that quotes the refusal
 and says `uloop compile` clears it.
 
-Three conditions produce a `Failed` row in `IntroducedTypes` instead, and a `Failed` row makes
+These conditions produce a `Failed` row in `IntroducedTypes` instead, and a `Failed` row makes
 `Success` false and leaves every file that shares an assembly with the refused declaration
 unapplied — no method body of those files is patched in that run, files in other assemblies still
 apply, and patches from earlier reloads stay active:
@@ -72,6 +72,7 @@ apply, and patches from earlier reloads stay active:
 | A member body of an already-introduced type changed and is neither an ordinary method body nor a getter-only property body | `Changed member body of introduced type requires a compile:` |
 | Two files of the reload declare the same type | `Introduced type <type> is declared in more than one file of the group:` |
 | The artifact assembly did not compile | `Introduced-type compilation failed:` |
+| This reload did not patch a body the artifact stubs (see "Calling members hot reload adds") | `Not introduced:` |
 
 ## Reading the response
 
@@ -139,17 +140,46 @@ applied as `Added` rows. Constructor, setter, init, indexer and event accessor b
 initializer bodies, member removals, signature changes, and added constructors, operators,
 events, indexers or nested types still require a compile.
 
+## Calling members hot reload adds
+
+A new type's ordinary methods and get-only properties can call a method, field or property that
+hot reload adds, in the same reload or an earlier one, to a compiled type of the same assembly or
+to a type an earlier reload introduced. The artifact compiles each such body as a stub that
+throws, and the same reload activates the type only when it holds a patch for every stub, then
+patches the real bodies in, so the response shows the type as `Introduced` and those bodies as
+`Patched` rows. Later reloads that
+include the file keep the type `AlreadyActive` and patch the body again. The file declaring the
+addition has to be in the reload: passed, or unchanged since it was last applied, which the
+reload pulls back in on its own.
+
+Constructors, initializers, setters, indexers, operators, event accessors and subscriptions to an
+added event cannot be patched, so a call from them still fails the artifact compile (CS1061 or
+CS0117) with a hint saying where such a call works. So does a call to an addition in another
+assembly, or in a file that changed since it was last applied and is not passed.
+
+- When this reload does not patch a stubbed body (a generic method, or a method of a struct, is
+  `Skipped`), no type of that artifact is introduced: the stubbed type's row reads `Not
+  introduced: <method> calls members that a hot reload added, …`, the other types of the batch
+  fail with it, and nothing of that assembly's files is applied.
+- Another type the same reload introduces cannot name such a type in its member signatures. The
+  run is refused with `Introduced type '<type>' calls members that a hot reload added, so its
+  method bodies run through hot reload patches, …`; run `uloop compile`, or name the type only
+  inside that other type's method bodies. Two types that both call additions this way may name
+  each other.
+- After `--revert-all`, or when the reload that introduces the type fails to apply one of those
+  patches (that method's row is `Failed`), a stubbed body runs its stub, which throws
+  `InvalidOperationException` naming the file to reload; reloading that file patches the body in
+  again.
+
 ## Still needs `uloop compile`
 
 Any refused shape above; use of the type from another assembly, from a file that is neither
 passed to this reload nor already hot-reloaded; anything
 that reaches the type through Unity (serialization, `[SerializeField]`, Inspector,
 `AddComponent`, `CreateInstance`, message discovery); a method body edit of an introduced
-struct, which is `Skipped` like any struct method; a call to a member an earlier or the same
-reload *added* to a compiled type or to an earlier introduced type, because introduced types
-compile against the compiled assemblies and retained artifacts only, so the compile fails naming
-the missing member and says a hot reload addition shares its name (reloading the addition first
-does not help); an added method that passes a type declared from source in this reload to a
+struct, which is `Skipped` like any struct method; a call to a member hot reload *added* from a
+new type's body that is not an ordinary method or get-only property, or to an addition this
+reload does not hold (see "Calling members hot reload adds"); an added method that passes a type declared from source in this reload to a
 member of an earlier introduced type whose signature was bound to the compiled copy, which is
 `Skipped` naming both types; and any new or changed `.asmdef` / `.asmref`. A snippet run by `uloop execute-dynamic-code` is
 the exception: every active artifact is referenced by that compilation, so the snippet can name an

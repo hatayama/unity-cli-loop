@@ -78,9 +78,16 @@ internal static class PlannedAddedMemberNames
         return names.ToArray();
     }
 
-    // Why only top-level types are looked up in the artifacts: hot reload introduces top-level
-    // types only, so a retained artifact never serves a nested one.
-    private static INamedTypeSymbol FindExistingType(
+    /// <summary>
+    /// The existing type a source type describes: its compiled counterpart, or the type a retained
+    /// artifact serves under it. Null for a type neither holds, which includes every type this run
+    /// introduces.
+    /// </summary>
+    /// <remarks>
+    /// Why only top-level types are looked up in the artifacts: hot reload introduces top-level
+    /// types only, so a retained artifact never serves a nested one.
+    /// </remarks>
+    internal static INamedTypeSymbol FindExistingType(
         INamedTypeSymbol sourceType,
         WorkerTypeHome home,
         CSharpCompilation compilation,

@@ -20,16 +20,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why this has to be spelled out: an introduced type compiles against the compiled
         // assemblies on disk and the retained artifacts, so a member hot reload added, in this
-        // reload or an earlier one, is genuinely absent there. The bare compiler error reads as a
-        // typo and sends the reader looking for one. Why worded as a condition: only the name is
-        // matched, so a missing member of another type can share it. Why splitting is ruled out:
-        // reloading the addition first still leaves it outside both, which is the obvious retry.
+        // reload or an earlier one, is genuinely absent there. A method or getter body naming it
+        // is compiled as a stub and patched in by the same reload, so the error only reaches a
+        // body no patch replaces, or a call whose declaring file the reload's compilation does
+        // not hold. The bare compiler error reads as a typo and sends the reader looking for one.
+        // Why worded as a condition: only the name is matched, so a missing member of another
+        // type can share it.
         private const string AddedMemberInvisibleHint =
             "One or more of the missing members share a name with a hot reload addition, from this "
-            + "reload or an earlier one. If the missing member is that addition, an introduced type "
-            + "cannot see it: it compiles against the compiled assemblies and earlier introduced "
-            + "types only, so reloading the addition first does not help. Run 'uloop compile' to "
-            + "make the added members compiled, then rerun.";
+            + "reload or an earlier one. A new type can call such an addition only from its methods "
+            + "and get-only properties, and only when the file that declares the addition belongs "
+            + "to the same assembly and is part of this reload: passed, or unchanged since it was "
+            + "last applied. Constructors, initializers, setters, indexers, operators, event "
+            + "accessors and subscriptions to an added event cannot. Pass that file too or move the "
+            + "call into a method, or run 'uloop compile' to make the added members compiled, then "
+            + "rerun.";
 
         // Why it points at the warning: the enum-member warning of the same run already carries
         // the cast that avoids the member, and repeating the value here would need the enum too.

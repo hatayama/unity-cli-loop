@@ -3383,6 +3383,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that preparation rejects a descriptor listing a blank stubbed method key, which
+        /// no entry of the run could ever match.
+        /// </summary>
+        [Test]
+        public void InterpretOutput_PrepareDescriptorBlankStubbedMethodKey_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            TransformWorkerOutputDto output = CreatePreparationValidationOutputWithStubbedKeys(
+                new[] { "Example.Introduced::Run()", " " });
+
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(input, output);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("stubbedMethodKeys"));
+        }
+
+        /// <summary>
+        /// Verifies that preparation rejects a descriptor listing one stubbed method key twice,
+        /// which would let one patch count for two stubs.
+        /// </summary>
+        [Test]
+        public void InterpretOutput_PrepareDescriptorRepeatedStubbedMethodKey_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            TransformWorkerOutputDto output = CreatePreparationValidationOutputWithStubbedKeys(
+                new[] { "Example.Introduced::Run()", "Example.Introduced::Run()" });
+
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(input, output);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("stubbedMethodKeys"));
+        }
+
+        /// <summary>
+        /// Verifies that preparation accepts a descriptor whose stubbed method keys are distinct
+        /// and hands them on unchanged.
+        /// </summary>
+        [Test]
+        public void InterpretOutput_PrepareDescriptorDistinctStubbedMethodKeys_ReturnsSuccess()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            string[] keys = { "Example.Introduced::Run()", "Example.Introduced::get_Value()" };
+            TransformWorkerOutputDto output = CreatePreparationValidationOutputWithStubbedKeys(keys);
+
+            TransformWorkerClientResult result = CreateOutputInterpreter().InterpretOutput(input, output);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes[0].stubbedMethodKeys, Is.EqualTo(keys));
+        }
+
+        /// <summary>
         /// Verifies that JSON containing a null preparation descriptor is rejected before a
         /// success-shaped response can reach artifact preparation.
         /// </summary>
@@ -3775,6 +3826,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
+        }
+
+        private static TransformWorkerOutputDto CreatePreparationValidationOutputWithStubbedKeys(
+            string[] stubbedMethodKeys)
+        {
+            TransformWorkerOutputDto output = CreatePreparationValidationOutput(
+                "Assembly",
+                "mvid",
+                "Assets/Edited.cs");
+            output.files[0].introducedTypes[0].stubbedMethodKeys = stubbedMethodKeys;
+            return output;
         }
     }
 }

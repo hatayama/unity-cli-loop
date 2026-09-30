@@ -435,7 +435,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             introducedType.metadataName,
                             introducedType.ownerProjectRelativePath,
                             introducedType.declarationFingerprint,
-                            introducedType.source));
+                            introducedType.source,
+                            introducedType.stubbedMethodKeys));
                 }
             }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -46,6 +47,14 @@ internal static class RetainedTypeSignatureReferenceFinder
             List<string> referrers = FindReferrers(BuildIdentity(verdict.Record), signatureIdentitiesByReferrer);
             List<string> retainedReferrers = referrers.FindAll(referrer => !preparedReferrers.Contains(referrer));
             List<string> sameRunReferrers = referrers.FindAll(referrer => preparedReferrers.Contains(referrer));
+            // Why before the other two: a stubbed type stays in the source on every run that
+            // holds its file, whatever that run changes in it, so neither the two steps nor the
+            // applied-changes reading describes what keeps it there.
+            if (sameRunReferrers.Count > 0 && HoldsStubbedBodies(verdict.Record))
+            {
+                return FormatStubbedTypeReferrerRefusal(verdict.MetadataName, retainedReferrers, sameRunReferrers);
+            }
+
             if (sameRunReferrers.Count > 0 && verdict.HoldsOnlyAppliedChanges)
             {
                 return FormatAppliedChangesReferrerRefusal(verdict.MetadataName, retainedReferrers, sameRunReferrers);
@@ -146,6 +155,45 @@ internal static class RetainedTypeSignatureReferenceFinder
             + " rather than in its member signatures"
             + retainedEdit
             + ".";
+    }
+
+    // A record holding stubbed bodies never matches its source, because its bodies reach the
+    // artifact only as patches, so the type is kept in the source and a type this run introduces,
+    // compiled against the artifact's definition, is split from it on every such run. Why a
+    // retained referrer adds an edit to the alternative: once the new type names the stubbed one
+    // only inside its bodies, the retained referrer still splits it unless this reload edits it.
+    private static string FormatStubbedTypeReferrerRefusal(
+        string metadataName,
+        List<string> retainedReferrers,
+        List<string> sameRunReferrers)
+    {
+        string sameRunList = FormatNameList(sameRunReferrers);
+        string retainedClause = retainedReferrers.Count == 0
+            ? string.Empty
+            : FormatNameList(retainedReferrers) + ", which an earlier reload retained and this edit leaves unchanged, and of ";
+        string retainedEdit = retainedReferrers.Count == 0
+            ? string.Empty
+            : " and also edit " + FormatNameList(retainedReferrers) + " in this same reload (a method body change is enough)";
+        return "Introduced type '" + metadataName
+            + "' calls members that a hot reload added, so its method bodies run through hot reload patches, "
+            + "and it appears in member signatures of "
+            + retainedClause
+            + sameRunList
+            + ". A type this reload introduces cannot name such a type in its signatures until 'uloop compile' runs. "
+            + "Run 'uloop compile' to apply this edit, or name '"
+            + metadataName
+            + "' only inside method bodies of "
+            + sameRunList
+            + retainedEdit
+            + ".";
+    }
+
+    private static bool HoldsStubbedBodies(WorkerIntroducedTypeArtifactType record)
+    {
+        return HotReloadIntroducedTypeFingerprint.TryParse(
+                record.DeclarationFingerprint,
+                out HotReloadIntroducedTypeFingerprint recorded)
+            && recorded.HoldsStubbedBodies;
     }
 
     private static string FormatNameList(List<string> names)

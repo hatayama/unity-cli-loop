@@ -94,6 +94,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 () => resolver.Resolve(fileHome, "EntryHomeResolverUnknownAssembly"));
         }
 
+        /// <summary>
+        /// What: a row that names the artifact this run prepared, which nothing has activated yet,
+        /// resolves to that artifact's home, so its body can be patched in before activation.
+        /// </summary>
+        [Test]
+        public void Resolve_RowNamesThePreparedArtifact_ReturnsThatArtifactHome()
+        {
+            HotReloadIntroducedTypeArtifact prepared = CreateArtifact();
+            _access.Domain.IntroducedTypes.RegisterPrepared(prepared);
+            HotReloadEntryHomeResolver resolver = new HotReloadEntryHomeResolver(
+                _access.Domain,
+                ResolveProjectRoot(),
+                prepared);
+            HotReloadTypeHome fileHome = HotReloadTypeHome.ScriptAssembliesUnderProject(
+                ResolveProjectRoot(),
+                ProjectAssemblyName);
+
+            HotReloadTypeHome home = resolver.Resolve(fileHome, prepared.Assembly.GetName().Name);
+
+            Assert.That(home.Kind, Is.EqualTo(HotReloadTypeHomeKind.RetainedArtifact));
+            Assert.That(home.DllPath, Is.EqualTo(prepared.DllPath));
+            HotReloadLoadedAssemblyResolution resolution = home.ResolveLoadedAssembly(
+                prepared.Assembly.ManifestModule.ModuleVersionId.ToString());
+            Assert.That(resolution.State, Is.EqualTo(HotReloadLoadedAssemblyState.Loaded));
+            Assert.That(resolution.Assembly, Is.SameAs(prepared.Assembly));
+        }
+
+        /// <summary>
+        /// What: without the prepared artifact handed in, a row naming it is refused like any
+        /// assembly this domain does not retain, because nothing has activated it.
+        /// </summary>
+        [Test]
+        public void Resolve_RowNamesAPreparedArtifactTheResolverWasNotGiven_Throws()
+        {
+            HotReloadIntroducedTypeArtifact prepared = CreateArtifact();
+            _access.Domain.IntroducedTypes.RegisterPrepared(prepared);
+            HotReloadEntryHomeResolver resolver = CreateResolver();
+            HotReloadTypeHome fileHome = HotReloadTypeHome.ScriptAssembliesUnderProject(
+                ResolveProjectRoot(),
+                ProjectAssemblyName);
+
+            Assert.Throws<InvalidOperationException>(
+                () => resolver.Resolve(fileHome, prepared.Assembly.GetName().Name));
+        }
+
         private HotReloadEntryHomeResolver CreateResolver()
         {
             return new HotReloadEntryHomeResolver(_access.Domain, ResolveProjectRoot());
@@ -101,7 +146,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private HotReloadIntroducedTypeArtifact ActivateArtifact()
         {
-            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifact();
+            _access.Domain.IntroducedTypes.RegisterPrepared(artifact);
+            _access.Domain.IntroducedTypes.Activate(artifact);
+            return artifact;
+        }
+
+        private static HotReloadIntroducedTypeArtifact CreateArtifact()
+        {
+            return new HotReloadIntroducedTypeArtifact(
                 CreateArtifactAssembly(),
                 ArtifactDllPath,
                 "entry-home-resolver-artifact.pdb",
@@ -115,9 +168,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "entry-home-resolver-fingerprint",
                         "public class Introduced { }")
                 });
-            _access.Domain.IntroducedTypes.RegisterPrepared(artifact);
-            _access.Domain.IntroducedTypes.Activate(artifact);
-            return artifact;
         }
 
         // Why a generated name: an artifact assembly is compiled under a name of its own, so a

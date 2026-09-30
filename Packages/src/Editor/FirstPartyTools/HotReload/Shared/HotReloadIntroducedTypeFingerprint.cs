@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 
 // This file is compiled twice: into the Unity editor assembly (host side) and into the
@@ -64,6 +65,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>Empty for a member that has no body at all, such as a field or an enum member.</summary>
         internal string BodyHash { get; }
+
+        /// <summary>
+        /// True when the body hash is the stub sentinel that
+        /// <see cref="HotReloadIntroducedTypeFingerprint.WithStubbedBodies"/> records for this key.
+        /// </summary>
+        internal bool HasStubbedBody =>
+            BodyHash.Length > 0
+            && string.Equals(
+                BodyHash,
+                HotReloadIntroducedTypeFingerprint.ComputeStubbedBodyHash(Key),
+                StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -101,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string FormatVersionLine = "v1";
         private const int HashLength = 64;
+        private const string StubbedBodyHashInputPrefix = "hot-reload-stub|";
 
         internal HotReloadIntroducedTypeFingerprint(
             string headerHash,
@@ -161,6 +174,88 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>Members in ascending ordinal key order, each key appearing once.</summary>
         internal IReadOnlyList<HotReloadIntroducedTypeMemberFingerprint> Members { get; }
+
+        /// <summary>True when any member carries the stub sentinel in place of its body hash.</summary>
+        internal bool HoldsStubbedBodies
+        {
+            get
+            {
+                for (int index = 0; index < Members.Count; index++)
+                {
+                    if (Members[index].HasStubbedBody)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns a copy in which each listed member's body hash is the stub sentinel for its key.
+        /// An artifact that stubs a body does not run the body its source spells, so its record must
+        /// not hash to that body: otherwise the unchanged source would compare Identical and the
+        /// stub would stay in place with nothing patching the real body in.
+        /// </summary>
+        internal HotReloadIntroducedTypeFingerprint WithStubbedBodies(IReadOnlyCollection<string> memberKeys)
+        {
+            if (memberKeys == null)
+            {
+                throw new ArgumentException("memberKeys must not be null.", nameof(memberKeys));
+            }
+
+            HashSet<string> remainingKeys = new HashSet<string>(memberKeys, StringComparer.Ordinal);
+            List<HotReloadIntroducedTypeMemberFingerprint> members =
+                new List<HotReloadIntroducedTypeMemberFingerprint>(Members.Count);
+            for (int index = 0; index < Members.Count; index++)
+            {
+                HotReloadIntroducedTypeMemberFingerprint member = Members[index];
+                if (!remainingKeys.Remove(member.Key))
+                {
+                    members.Add(member);
+                    continue;
+                }
+
+                // A member without a body has nothing an artifact could stub, so the request and
+                // this fingerprint describe different declarations.
+                if (member.BodyHash.Length == 0)
+                {
+                    throw new ArgumentException("memberKeys must name members that have a body: " + member.Key, nameof(memberKeys));
+                }
+
+                members.Add(new HotReloadIntroducedTypeMemberFingerprint(
+                    member.Key,
+                    member.DeclarationHash,
+                    ComputeStubbedBodyHash(member.Key)));
+            }
+
+            if (remainingKeys.Count > 0)
+            {
+                throw new ArgumentException(
+                    "memberKeys must name members of this fingerprint: " + string.Join(", ", remainingKeys),
+                    nameof(memberKeys));
+            }
+
+            return new HotReloadIntroducedTypeFingerprint(HeaderHash, DefinesHash, MemberOrderHash, members);
+        }
+
+        // The worker hashes a body as a list of "<raw kind>:<text>" token entries, so a real body
+        // input always starts with a digit. This input starts with a letter, which keeps the
+        // sentinel from ever being the hash of a body.
+        internal static string ComputeStubbedBodyHash(string memberKey)
+        {
+            byte[] inputBytes = Encoding.UTF8.GetBytes(StubbedBodyHashInputPrefix + memberKey);
+            using SHA256 sha256 = SHA256.Create();
+            byte[] hashBytes = sha256.ComputeHash(inputBytes);
+            StringBuilder builder = new StringBuilder(hashBytes.Length * 2);
+            for (int index = 0; index < hashBytes.Length; index++)
+            {
+                builder.Append(hashBytes[index].ToString("x2", CultureInfo.InvariantCulture));
+            }
+
+            return builder.ToString();
+        }
 
         /// <summary>
         /// Writes the canonical text that travels on the wire. Member keys are length prefixed, so

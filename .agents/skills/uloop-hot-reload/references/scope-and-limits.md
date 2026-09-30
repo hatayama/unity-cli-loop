@@ -95,12 +95,11 @@ by name through the wiring entry point, which is how a value or scene reference 
 into an added `[SerializeField]` without a compile — see
 [added-field-wiring.md](added-field-wiring.md).
 
-An introduced type cannot use members hot reload added to a compiled type, whether they
-were added in the same reload or an earlier one: its artifact compiles against the
-compiled assemblies and earlier introduced types only, so reloading the addition first
-does not help. Such a reference fails with CS1061/CS0117 on a `Failed` `IntroducedTypes`
-row, whose `Reason` notes that the missing name matches an addition; run `uloop compile`,
-then rerun (issue #2695).
+A type a reload introduces can call added members of a compiled type from its ordinary
+methods and get-only properties: its artifact compiles those bodies as stubs, and the same
+reload patches the real bodies in. From a constructor, initializer, setter, indexer,
+operator or event accessor such a reference still fails with CS1061/CS0117 and needs a
+compile — see [introduced-types.md](introduced-types.md).
 
 Added members are an Editor-session illusion. Any real compile or domain reload
 drops them all: added methods disappear from the ledger and added-field values are

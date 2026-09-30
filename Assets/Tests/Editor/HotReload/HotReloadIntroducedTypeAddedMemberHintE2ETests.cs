@@ -11,9 +11,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// End-to-end coverage of a new type whose body calls a member hot reload adds, in the same
-    /// reload or an earlier one, to a compiled type or to a type an earlier reload introduced. The
-    /// introduced-type compilation cannot see such a member, and the failure has to say so.
+    /// End-to-end coverage of a new type that names a member hot reload adds from a place no
+    /// patch can replace, such as a constructor body or an enum member. The introduced-type
+    /// compilation cannot see such a member, and the failure has to say so.
     /// </summary>
     /// <remarks>
     /// Why the owners are not fixtures on disk: a .cs under Assets/ is compiled into the test
@@ -21,19 +21,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </remarks>
     public class HotReloadIntroducedTypeAddedMemberHintE2ETests : HotReloadIntroducedTypeE2ETestBase
     {
-        private const string ValueOwnerPath =
-            "Assets/Tests/Editor/HotReload/UncompiledAddedMemberHintValueOwner.cs";
-
         private const string UserOwnerPath =
             "Assets/Tests/Editor/HotReload/UncompiledAddedMemberHintUserOwner.cs";
 
         private const string Namespace = "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload";
-        private const string ValueSimpleName = "HotReloadAddedMemberHintValue";
         private const string UserSimpleName = "HotReloadAddedMemberHintUser";
         private const string HostValueAnchor = "        public int Value()";
         private const string CompiledTypeAddedMethodName = "AddedInTheSameReload";
-        private const string IntroducedTypeAddedMethodName = "Pong";
-        private const string NoExtraMembers = "";
         private const string EnumLastMemberAnchor = "        Second = 2";
         private const string AddedEnumMemberName = "Third";
 
@@ -45,6 +39,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HintCore =
             "share a name with a hot reload addition, from this reload or an earlier one";
 
+        // The part of the hint that says a constructor is one of the places no patch can reach.
+        private const string UnpatchableBodiesHintCore =
+            "Constructors, initializers, setters, indexers, operators, event accessors and "
+            + "subscriptions to an added event cannot.";
+
         private static readonly string CompiledTypeAddedMember =
             "        public int " + CompiledTypeAddedMethodName + "()\n"
             + "        {\n"
@@ -52,20 +51,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        }\n"
             + "\n";
 
-        private static readonly string IntroducedTypeAddedMember =
-            "\n"
-            + "        public int " + IntroducedTypeAddedMethodName + "()\n"
-            + "        {\n"
-            + "            return 9;\n"
-            + "        }\n";
-
         /// <summary>
-        /// What: a new type calling a method the same reload adds to a compiled type fails to
-        /// compile, and the failure carries the hint that the introduced type cannot see a hot
-        /// reload addition, not only the bare CS1061.
+        /// What: a new type whose constructor calls a method the same reload adds to a compiled
+        /// type fails to compile, because no patch replaces a constructor body and the artifact
+        /// therefore cannot stub it, and the failure carries the hint rather than only the bare
+        /// CS1061.
         /// </summary>
         [Test]
-        public async Task Run_NewTypeCallsAMemberTheSameReloadAddsToACompiledType_FailsWithTheHint()
+        public async Task Run_NewTypeConstructorCallsAMemberTheSameReloadAdds_FailsWithTheHint()
         {
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
 
@@ -75,70 +68,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new Dictionary<string, string>
                     {
                         [hostPath] = InsertCompiledTypeMember(File.ReadAllText(hostPath)),
-                        [UserOwnerPath] = BuildUserSource(
+                        [UserOwnerPath] = BuildConstructorUserSource(
                             "new HotReloadCrossFileAddedMemberHost()." + CompiledTypeAddedMethodName + "()")
                     },
-                    "CompiledSameReload");
-
-                AssertFailsWithHint(result);
-            });
-        }
-
-        /// <summary>
-        /// What: a new type calling a method the same reload adds to a type an earlier reload
-        /// introduced fails to compile with the same hint.
-        /// </summary>
-        [Test]
-        public async Task Run_NewTypeCallsAMemberTheSameReloadAddsToAnIntroducedType_FailsWithTheHint()
-        {
-            await RunInIntroducedTypeDomainAsync(async _ =>
-            {
-                HotReloadOrchestratorResult introducing = await RunAsync(
-                    new Dictionary<string, string> { [ValueOwnerPath] = BuildValueSource(NoExtraMembers) },
-                    "IntroducedSameReloadIntroducing");
-                Assert.That(CountFailures(introducing), Is.EqualTo(0), DescribeOutcomes(introducing));
-
-                HotReloadOrchestratorResult result = await RunAsync(
-                    new Dictionary<string, string>
-                    {
-                        [ValueOwnerPath] = BuildValueSource(IntroducedTypeAddedMember),
-                        [UserOwnerPath] = BuildUserSource(
-                            "new " + ValueSimpleName + "()." + IntroducedTypeAddedMethodName + "()")
-                    },
-                    "IntroducedSameReload");
-
-                AssertFailsWithHint(result);
-            });
-        }
-
-        /// <summary>
-        /// What: splitting the edit does not help. Once an earlier reload has added the method to
-        /// an introduced type, a later reload introducing a new type that calls it still fails to
-        /// compile, with the same hint.
-        /// </summary>
-        [Test]
-        public async Task Run_NewTypeCallsAMemberAnEarlierReloadAddedToAnIntroducedType_FailsWithTheHint()
-        {
-            await RunInIntroducedTypeDomainAsync(async _ =>
-            {
-                HotReloadOrchestratorResult introducing = await RunAsync(
-                    new Dictionary<string, string> { [ValueOwnerPath] = BuildValueSource(NoExtraMembers) },
-                    "IntroducedSplitIntroducing");
-                Assert.That(CountFailures(introducing), Is.EqualTo(0), DescribeOutcomes(introducing));
-
-                HotReloadOrchestratorResult addition = await RunAsync(
-                    new Dictionary<string, string> { [ValueOwnerPath] = BuildValueSource(IntroducedTypeAddedMember) },
-                    "IntroducedSplitAddition");
-                Assert.That(CountFailures(addition), Is.EqualTo(0), DescribeOutcomes(addition));
-
-                HotReloadOrchestratorResult result = await RunAsync(
-                    new Dictionary<string, string>
-                    {
-                        [ValueOwnerPath] = BuildValueSource(IntroducedTypeAddedMember),
-                        [UserOwnerPath] = BuildUserSource(
-                            "new " + ValueSimpleName + "()." + IntroducedTypeAddedMethodName + "()")
-                    },
-                    "IntroducedSplit");
+                    "ConstructorSameReload");
 
                 AssertFailsWithHint(result);
             });
@@ -182,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string reason = FindIntroducedTypeFailureReason(result, "CS1061");
             Assert.That(reason, Does.Contain(HintCore), DescribeOutcomes(result));
+            Assert.That(reason, Does.Contain(UnpatchableBodiesHintCore), DescribeOutcomes(result));
         }
 
         private static string FindIntroducedTypeFailureReason(
@@ -270,22 +204,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
         }
 
-        private static string BuildValueSource(string extraMembers)
-        {
-            return
-                "namespace " + Namespace + "\n"
-                + "{\n"
-                + "    public sealed class " + ValueSimpleName + "\n"
-                + "    {\n"
-                + "        public int Ping()\n"
-                + "        {\n"
-                + "            return 4;\n"
-                + "        }\n"
-                + extraMembers
-                + "    }\n"
-                + "}\n";
-        }
-
         private static string BuildUserSource(string expression)
         {
             return
@@ -296,6 +214,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        public int Run()\n"
                 + "        {\n"
                 + "            return " + expression + ";\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        }
+
+        private static string BuildConstructorUserSource(string expression)
+        {
+            return
+                "namespace " + Namespace + "\n"
+                + "{\n"
+                + "    public sealed class " + UserSimpleName + "\n"
+                + "    {\n"
+                + "        private readonly int _value;\n"
+                + "\n"
+                + "        public " + UserSimpleName + "()\n"
+                + "        {\n"
+                + "            _value = " + expression + ";\n"
+                + "        }\n"
+                + "\n"
+                + "        public int Run()\n"
+                + "        {\n"
+                + "            return _value;\n"
                 + "        }\n"
                 + "    }\n"
                 + "}\n";

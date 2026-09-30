@@ -56,7 +56,7 @@ merely re-read from source after an earlier reload retained it. This includes pr
 and event accessors. An inaccessible internal base does not hide Unity object ancestry: those
 descendants still require a compile.
 
-Three conditions are reported as `Failed` rows in `IntroducedTypes` instead, because the run
+These conditions are reported as `Failed` rows in `IntroducedTypes` instead, because the run
 cannot proceed as if the declaration were absent. A `Failed` row stops that assembly before any
 of its method bodies is transformed: the files sharing the assembly report no `Methods` rows and
 nothing from them is applied, while files in other assemblies still apply.
@@ -67,6 +67,11 @@ nothing from them is applied, while files in other assemblies still apply.
 | A member body of a type this domain already introduced changed in a way that cannot be patched | `Changed member body of introduced type requires a compile: <type> Changed members: <keys>. Only ordinary method bodies and getter-only property bodies of an introduced type can be hot reloaded.` |
 | Two files of the same reload declare the same type | `Introduced type <type> is declared in more than one file of the group: <paths>.` |
 | The artifact assembly failed to compile | `Introduced-type compilation failed: <compiler output>` |
+
+One more `Failed` row comes later, after the method bodies are transformed: `Not introduced:
+<method> calls members that a hot reload added, …` when the reload leaves a body the artifact
+stubs unpatched (see "When a compile is still required"). The other types of that artifact fail
+with it, and nothing from that assembly's files is applied.
 
 ## Access to the target assembly's internals
 
@@ -172,16 +177,29 @@ recompiled rather than reused once that generation is gone.
 - Anything that reads the type through Unity: serialization, `[SerializeField]`, Inspector
   display, `AddComponent`, `ScriptableObject.CreateInstance`, Unity message discovery.
 - A new or changed `.asmdef` / `.asmref`. Assembly layout is decided at compile time.
-- A call to a member an earlier or the same reload *added* to a compiled type (an `Added` row).
+- A call to a member an earlier or the same reload *added* (an `Added` row) from a new type's
+  constructor, initializer, setter, indexer, operator or event accessor, or to an addition in
+  another assembly or in a file that is neither passed nor unchanged since it was applied.
   Introduced types compile against the compiled assemblies and the retained artifacts only, so
-  the artifact compilation fails with the compiler error naming the missing member.
+  the artifact compilation fails with the compiler error naming the missing member. Ordinary
+  methods and get-only properties can make the call: the artifact compiles their bodies as
+  throwing stubs, and the same reload activates the type only when it holds a patch for every
+  stub, then applies those patches right after the activation. If one of them fails to apply
+  there, the type stays active, that method's row is `Failed`, and the body runs its stub until
+  a later reload patches it in. A stubbed body the reload does not patch (a generic method, a struct method) is reported as
+  `Not introduced: <method> calls members that a hot reload added, …` and keeps every type of
+  that artifact out, and a type the same reload introduces cannot name a stubbed type in its
+  member signatures (`Introduced type '<type>' calls members that a hot reload added, so its
+  method bodies run through hot reload patches, …`).
 
 ## Lifecycle
 
 - `uloop hot-reload --revert-all` reverts patched methods and added members. It does **not**
   unload an introduced type: the response says how many stayed
   (`N introduced type(s) stay loaded until the next Domain Reload; a revert cannot unload the
-  assembly that carries them.`).
+  assembly that carries them.`). A body the reload patched over a stub runs the stub again,
+  which throws `InvalidOperationException` naming the file to reload until that file is
+  reloaded.
 - Auto Refresh stays held while any introduced type is active, so returning focus to the Editor
   does not recompile. `--revert-all` releases the hold only when no introduced type remains;
   `uloop compile` always releases it.

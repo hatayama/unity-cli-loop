@@ -457,6 +457,97 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(comparison.ChangedBodyKeys, Is.EqualTo(new List<string> { FieldKey, MethodKey }));
         }
 
+        /// <summary>
+        /// What: stubbing one member replaces only that member's body hash, with a canonical hash
+        /// the fingerprint recognises as a stub, and leaves every other hash as it was.
+        /// </summary>
+        [Test]
+        public void WithStubbedBodies_ListedMember_ReplacesOnlyThatBodyHash()
+        {
+            HotReloadIntroducedTypeFingerprint source = CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, BodyHash),
+                CreateMember(MethodKey, DeclarationHash, BodyHash));
+
+            HotReloadIntroducedTypeFingerprint stubbed = source.WithStubbedBodies(new[] { MethodKey });
+
+            Assert.That(stubbed.HeaderHash, Is.EqualTo(HeaderHash));
+            Assert.That(stubbed.DefinesHash, Is.EqualTo(DefinesHash));
+            Assert.That(stubbed.MemberOrderHash, Is.EqualTo(OrderHash));
+            Assert.That(stubbed.Members[0].Key, Is.EqualTo(FieldKey));
+            Assert.That(stubbed.Members[0].BodyHash, Is.EqualTo(BodyHash));
+            Assert.That(stubbed.Members[0].HasStubbedBody, Is.False);
+            Assert.That(stubbed.Members[1].Key, Is.EqualTo(MethodKey));
+            Assert.That(stubbed.Members[1].DeclarationHash, Is.EqualTo(DeclarationHash));
+            Assert.That(stubbed.Members[1].BodyHash, Is.Not.EqualTo(BodyHash));
+            Assert.That(HotReloadIntroducedTypeFingerprint.IsCanonicalHash(stubbed.Members[1].BodyHash), Is.True);
+            Assert.That(stubbed.Members[1].HasStubbedBody, Is.True);
+            Assert.That(stubbed.HoldsStubbedBodies, Is.True);
+            Assert.That(source.HoldsStubbedBodies, Is.False);
+        }
+
+        /// <summary>
+        /// What: the stub survives the wire, so a record read back in a later run still reports it.
+        /// </summary>
+        [Test]
+        public void WithStubbedBodies_AfterSerializeAndTryParse_StillHoldsTheStub()
+        {
+            HotReloadIntroducedTypeFingerprint stubbed = CreateFingerprint(
+                    CreateMember(FieldKey, DeclarationHash, string.Empty),
+                    CreateMember(MethodKey, DeclarationHash, BodyHash))
+                .WithStubbedBodies(new[] { MethodKey });
+
+            bool parsed = HotReloadIntroducedTypeFingerprint.TryParse(
+                stubbed.Serialize(),
+                out HotReloadIntroducedTypeFingerprint value);
+
+            Assert.That(parsed, Is.True);
+            Assert.That(value.HoldsStubbedBodies, Is.True);
+            Assert.That(value.Members[1].HasStubbedBody, Is.True);
+            Assert.That(value.Members[0].HasStubbedBody, Is.False);
+        }
+
+        /// <summary>
+        /// What: a stubbed record compared with the fingerprint of the source it was built from is a
+        /// body-only difference on the stubbed member, so the unchanged source never reads as Identical.
+        /// </summary>
+        [Test]
+        public void Compare_SourceAgainstItsStubbedRecord_ReturnsBodyOnlyWithTheStubbedKey()
+        {
+            HotReloadIntroducedTypeFingerprint source = CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, BodyHash),
+                CreateMember(MethodKey, DeclarationHash, BodyHash));
+            HotReloadIntroducedTypeFingerprint record = source.WithStubbedBodies(new[] { MethodKey });
+
+            HotReloadIntroducedTypeFingerprintComparison comparison = HotReloadIntroducedTypeFingerprint.Compare(record, source);
+
+            Assert.That(comparison.Kind, Is.EqualTo(HotReloadIntroducedTypeFingerprintDifference.BodyOnly));
+            Assert.That(comparison.ChangedBodyKeys, Is.EqualTo(new List<string> { MethodKey }));
+        }
+
+        /// <summary>
+        /// What: asking to stub a key the fingerprint does not hold is refused.
+        /// </summary>
+        [Test]
+        public void WithStubbedBodies_KeyThatNamesNoMember_Throws()
+        {
+            HotReloadIntroducedTypeFingerprint source = CreateFingerprint(CreateMember(MethodKey, DeclarationHash, BodyHash));
+
+            Assert.Throws<ArgumentException>(() => source.WithStubbedBodies(new[] { "type:Missing()" }));
+        }
+
+        /// <summary>
+        /// What: asking to stub a member that has no body is refused, since the artifact has no body to stub.
+        /// </summary>
+        [Test]
+        public void WithStubbedBodies_MemberWithoutBody_Throws()
+        {
+            HotReloadIntroducedTypeFingerprint source = CreateFingerprint(
+                CreateMember(FieldKey, DeclarationHash, string.Empty),
+                CreateMember(MethodKey, DeclarationHash, BodyHash));
+
+            Assert.Throws<ArgumentException>(() => source.WithStubbedBodies(new[] { FieldKey }));
+        }
+
         private static HotReloadIntroducedTypeFingerprint CreateFingerprint(
             params HotReloadIntroducedTypeMemberFingerprint[] members)
         {
