@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.10.2](https://github.com/hatayama/unity-cli-loop/compare/v3.10.1...v3.10.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* Agents pick hot-reload and other long-described tools more easily with shorter skill descriptions ([#3055](https://github.com/hatayama/unity-cli-loop/issues/3055)) ([b8cade7](https://github.com/hatayama/unity-cli-loop/commit/b8cade79987a9aaf78735f30072433076f01a40a))
+
 ## [3.10.1](https://github.com/hatayama/unity-cli-loop/compare/v3.10.0...v3.10.1) (2026-09-30)
 
 
