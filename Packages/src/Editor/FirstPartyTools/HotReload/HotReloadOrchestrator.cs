@@ -60,12 +60,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// can live under <c>Library/UloopHotReload/TestSources/</c> without provoking AssetDatabase).
         /// <paramref name="contentPathOverrideByFile"/> is the per-file form of that hook, keyed by
         /// the entry in <paramref name="files"/>; it wins over the single override.
+        /// <paramref name="isDefaultSelection"/> marks every input as chosen from compile snapshots,
+        /// which lets a group leave out a selected file the caller never named.
         /// </summary>
         public async Task<HotReloadOrchestratorResult> RunAsync(
             IReadOnlyList<string> files,
             string contentPathOverride,
             CancellationToken ct,
-            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null)
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null,
+            bool isDefaultSelection = false)
         {
             Debug.Assert(files != null, "files must not be null.");
             Debug.Assert(files.Count > 0, "files must not be empty.");
@@ -108,6 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     plannerInput);
             }
 
+            MarkDefaultSelectedInputs(slots, isDefaultSelection);
             IReadOnlyList<HotReloadFileGroupPlan> plans = HotReloadFileGroupPlanner.Plan(plannerInput);
             HashSet<string> pathsInRun = new HashSet<string>(
                 HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
@@ -190,6 +194,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             return run.BuildResult(correlationId);
+        }
+
+        // Why on the inputs only: a re-applied sibling joins a group later and was never selected,
+        // so it keeps the flag unset even in a default-selection run.
+        private void MarkDefaultSelectedInputs(HotReloadInputResolutionSlot[] slots, bool isDefaultSelection)
+        {
+            foreach (HotReloadInputResolutionSlot slot in slots)
+            {
+                // An input that failed resolution has no group file and never joins a group.
+                if (slot.GroupFile != null)
+                {
+                    slot.GroupFile.IsDefaultSelected = isDefaultSelection;
+                }
+            }
         }
 
         private async Task ProcessPlannedGroupAsync(

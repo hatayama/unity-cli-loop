@@ -272,12 +272,17 @@ internal static class MethodTransformDecider
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodBodyUnbound, diagnosticText);
         }
 
-        return WorkerReason.NamingCompiledTypes(
+        WorkerReason compiledSignatureReason = WorkerReason.NamingCompiledTypes(
             HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
             split.DeclaringTypeMetadataNames.ToArray(),
             diagnosticText,
             QuoteNames(split.SplitTypeMetadataNames),
             QuoteNames(split.DeclaringTypeMetadataNames));
+        // Why apart from the declaring files: the Editor places those from the compiled API's
+        // debug data, while only this compilation knows which of the run's files built the split
+        // type from source, which is the file a run can leave out instead.
+        compiledSignatureReason.SplitSourceFiles = split.SplitSourceFiles.ToArray();
+        return compiledSignatureReason;
     }
 
     private static string QuoteNames(List<string> names)
