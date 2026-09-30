@@ -138,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string filePath,
             string methodName,
             string declaringTypeMetadataName,
+            FieldInfo invocationCounter,
             int sourceStartLine = 0,
             int sourceEndLine = 0)
         {
@@ -147,6 +148,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 throw new ArgumentException(
                     "An added method is registered with its own name and its declaring type's metadata name.");
+            }
+
+            // Why checked in every build: --status reads this counter as the member's
+            // InvocationCount, so a member registered without one would fail there instead.
+            if (!HotReloadAddedMemberInfo.IsReadableInvocationCounter(invocationCounter))
+            {
+                throw new ArgumentException(
+                    "An added method is registered with the static long invocation counter beside its shim.",
+                    nameof(invocationCounter));
             }
 
             if (!HasAddedMemberGeneration)
@@ -163,7 +173,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     sourceStartLine,
                     sourceEndLine,
                     methodName,
-                    declaringTypeMetadataName);
+                    declaringTypeMetadataName,
+                    invocationCounter);
         }
 
         /// <summary>
@@ -457,6 +468,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal IReadOnlyList<string> ListActiveAddedMethodKeys()
         {
             return new List<string>(_addedMembersByMethodKey.Keys);
+        }
+
+        /// <summary>
+        /// The added member this generation registered under the key, or null when it registered
+        /// none.
+        /// </summary>
+        internal HotReloadAddedMemberInfo FindAddedMember(string methodKey)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
+            return _addedMembersByMethodKey.TryGetValue(methodKey, out HotReloadAddedMemberInfo member)
+                ? member
+                : null;
         }
 
         /// <summary>

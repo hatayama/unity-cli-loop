@@ -157,6 +157,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // in TransformWorker~/PatchKinds.cs.
         public const string PatchKindAddedMethod = "addedMethod";
 
+        // Appended to an added-method entry's shimMethodName to name the static long counter the
+        // worker declares beside the shim and increments each time the shim's body starts. Keep in
+        // sync with TransformWorkerProgramMarker.AddedMemberInvocationCounterSuffix in
+        // TransformWorker~/TransformWorkerProgramMarker.cs.
+        public const string AddedMemberInvocationCounterSuffix = "__uloopCalls";
+
         // --status Kind for rows sourced from a generation's added members (no compiled MethodBase).
         public const string AddedMemberStatusKind = "Added";
 
@@ -509,12 +515,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This declaration is bound from an assembly an earlier hot reload retained, so this "
             + "reload introduced nothing for it. It stays loaded until the next Domain Reload.";
 
-        public const string AddedMemberNotInstrumentedReason =
-            "Added-member calls are not instrumented, so InvocationCount is always 0 for this row.";
-
         public const string AlreadyActiveAddedMemberReason =
-            "Source is unchanged since the last applied hot reload; the existing added member stays available. "
-            + AddedMemberNotInstrumentedReason;
+            "Source is unchanged since the last applied hot reload; the existing added member stays "
+            + "available and keeps its InvocationCount. Edit and reload again to apply new changes.";
+
+        // Why the Reason names the callers: no compiled call site can reach an added member, so an
+        // InvocationCount of 0 is expected until a hot-reloaded body calls it, and the row has to
+        // say where a call can come from.
+        public const string AddedMemberNeverInvokedReason =
+            "Not invoked since this added member was applied. Compiled code cannot call a member that hot reload added, so it runs only when a hot-reloaded body that calls it runs, or, for a forwarded Unity message, when the hot-reload proxy delivers the message in Play Mode.";
 
         // Why: patching does not re-run calls that already finished (e.g. one-time
         // initialization); InvocationCount 0 on --status is the only runtime signal,
@@ -529,9 +538,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ActivePatchSupersededReasonFormat =
             "Superseded by a new declaration of {0}: the edited source now declares a different signature. This compiled signature stays patched so existing callers keep working; it is not the entry point for new calls.";
 
-        // Format: count of Active rows whose InvocationCount is 0.
-        public const string NeverInvokedActiveAggregatedMessageFormat =
-            "{0} change(s) have not been invoked since their patch was applied; see Methods[].Reason.";
+        // Format: count of Active and Added rows whose Reason says they have not run since they
+        // were applied.
+        public const string NeverInvokedAggregatedMessageFormat =
+            "{0} change(s) have not been invoked since they were applied; see Methods[].Reason.";
 
         public const string MultiWarningSingleCompileResolutionMessage =
             "A single 'uloop compile' clears all of them at once when you want them gone; none of them has to be cleared before you keep working.";

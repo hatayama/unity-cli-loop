@@ -120,18 +120,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             for (int index = 0; index < addedMembers.Count; index++)
             {
-                HotReloadAddedMemberInfo added = addedMembers[index];
-                methods.Add(
-                    new HotReloadMethodResult
-                    {
-                        Kind = HotReloadConstants.AddedMemberStatusKind,
-                        Method = added.MethodKey,
-                        FilePath = added.FilePath,
-                        // Why: --status does not compare source, so the AlreadyActive first
-                        // sentence would be a lie after a post-reload edit; only the
-                        // not-instrumented fact is always true.
-                        Reason = HotReloadConstants.AddedMemberNotInstrumentedReason
-                    });
+                HotReloadMethodResult row = BuildAddedMemberStatusRow(addedMembers[index]);
+                if (row.Reason == HotReloadConstants.AddedMemberNeverInvokedReason)
+                {
+                    neverInvokedCount++;
+                }
+
+                methods.Add(row);
             }
 
             int count = methods.Count;
@@ -146,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (neverInvokedCount > 0)
             {
                 message += " " + string.Format(
-                    HotReloadConstants.NeverInvokedActiveAggregatedMessageFormat,
+                    HotReloadConstants.NeverInvokedAggregatedMessageFormat,
                     neverInvokedCount);
             }
 
@@ -208,6 +203,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return string.Empty;
+        }
+
+        // Why the count alone decides the Reason: --status does not compare source, so the
+        // AlreadyActive sentence could be false after a post-reload edit, and an added member has
+        // no compiled signature that a later declaration could supersede.
+        private static HotReloadMethodResult BuildAddedMemberStatusRow(HotReloadAddedMemberInfo added)
+        {
+            long invocationCount = added.ReadInvocationCount();
+            return new HotReloadMethodResult
+            {
+                Kind = HotReloadConstants.AddedMemberStatusKind,
+                Method = added.MethodKey,
+                FilePath = added.FilePath,
+                InvocationCount = invocationCount,
+                Reason = invocationCount == 0L
+                    ? HotReloadConstants.AddedMemberNeverInvokedReason
+                    : string.Empty
+            };
         }
 
         private void AppendAddedFieldStatusRows(

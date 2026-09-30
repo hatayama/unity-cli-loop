@@ -10,8 +10,8 @@
 Re-running on the same method after a real edit replaces its previous patch;
 `ActivePatchTotal` tracks the ledger across runs. Reloading a file whose source is
 unchanged since the last fully applied reload (a run with no Skipped or Failed
-outcomes) is a no-op: each still-active method is reported
-as `AlreadyActive`, the existing patch stays in place, and the row carries the live `InvocationCount`.
+outcomes) is a no-op: each still-active method or added member is reported
+as `AlreadyActive`, the existing patch or added member stays in place, and the row carries its live `InvocationCount`.
 When another edited file of the same assembly is in the reload, that unchanged file is
 re-applied with the group instead, and other files of the assembly that hold active
 patches and are unchanged since they were applied are re-applied too, so every active

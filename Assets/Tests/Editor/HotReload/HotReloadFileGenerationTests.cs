@@ -86,8 +86,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetShimTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetShimTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
 
             List<HotReloadAddedMemberInfo> members = new List<HotReloadAddedMemberInfo>();
             generation.DescribeAddedMembers(members);
@@ -115,6 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixtureProjectRelativePath,
                 "AddedMember",
                 AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field,
                 sourceStartLine: 20,
                 sourceEndLine: 24);
 
@@ -142,6 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixtureProjectRelativePath,
                 "Step",
                 NestedCecilType,
+                HotReloadUnreadInvocationCounter.Field,
                 sourceStartLine: 10,
                 sourceEndLine: 12);
             generation.RegisterAddedMethod(
@@ -150,6 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixtureProjectRelativePath,
                 "AddedMember",
                 HostType,
+                HotReloadUnreadInvocationCounter.Field,
                 sourceStartLine: 20,
                 sourceEndLine: 24);
 
@@ -174,7 +189,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
 
             Assert.That(generation.FindAddedMethodContainingLine(0), Is.Null);
             Assert.That(generation.FindAddedMethodContainingLine(1), Is.Null);
@@ -189,7 +210,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
 
             Assert.That(generation.IsActiveMember(AddedMethodKey), Is.True);
             Assert.That(generation.IsActiveMember(OtherAddedMethodKey), Is.False);
@@ -205,7 +232,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
             generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null, null);
 
             generation.BeginAddedMemberGeneration();

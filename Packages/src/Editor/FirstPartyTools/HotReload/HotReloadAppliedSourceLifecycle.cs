@@ -56,13 +56,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 for (int index = 0; index < sortedLabels.Count; index++)
                 {
                     string label = sortedLabels[index];
-                    string reason = domain.IsActiveMember(
-                        projectRelativePath,
-                        label)
-                        ? HotReloadConstants.AlreadyActiveAddedMemberReason
-                        : HotReloadConstants.AlreadyActiveReason;
+                    // Why the added member wins when the label also names a patch: a return-type
+                    // change after an earlier body patch leaves both, and the patch then serves
+                    // only the superseded signature, not the declaration this source holds.
+                    HotReloadAddedMemberInfo addedMember = domain.FindAddedMember(projectRelativePath, label);
                     outcomes.Add(
-                        HotReloadMethodOutcome.AlreadyActive(label, assemblyResolvePath, reason));
+                        addedMember != null
+                            ? HotReloadMethodOutcome.AlreadyActiveAddedMember(addedMember, assemblyResolvePath)
+                            : HotReloadMethodOutcome.AlreadyActive(
+                                label,
+                                assemblyResolvePath,
+                                HotReloadConstants.AlreadyActiveReason));
                 }
 
                 return HotReloadUnchangedSourceDecision.ShortCircuited;

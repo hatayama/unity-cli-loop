@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -31,6 +32,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string DeclaringTypeMetadataName { get; }
 
+        /// <summary>
+        /// The static long field the shim increments each time its body starts, or null for a
+        /// member a test built without one.
+        /// </summary>
+        public FieldInfo InvocationCounter { get; }
+
         public HotReloadAddedMemberInfo(
             string methodKey,
             string filePath,
@@ -38,7 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int sourceStartLine = 0,
             int sourceEndLine = 0,
             string methodName = null,
-            string declaringTypeMetadataName = null)
+            string declaringTypeMetadataName = null,
+            FieldInfo invocationCounter = null)
         {
             MethodKey = methodKey ?? string.Empty;
             FilePath = filePath ?? string.Empty;
@@ -47,6 +55,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourceEndLine = sourceEndLine;
             MethodName = methodName ?? string.Empty;
             DeclaringTypeMetadataName = declaringTypeMetadataName ?? string.Empty;
+            InvocationCounter = invocationCounter;
+        }
+
+        /// <summary>
+        /// Whether a field can serve as an added member's invocation counter: a static long, the
+        /// shape the worker declares beside every added-member shim.
+        /// </summary>
+        internal static bool IsReadableInvocationCounter(FieldInfo field)
+        {
+            return field != null && field.IsStatic && field.FieldType == typeof(long);
+        }
+
+        /// <summary>
+        /// Calls that started the shim's body since this member was registered, read when asked so
+        /// calls made after the registration are included.
+        /// </summary>
+        internal long ReadInvocationCount()
+        {
+            if (InvocationCounter == null)
+            {
+                throw new InvalidOperationException(
+                    "The added member " + MethodKey + " was built without an invocation counter.");
+            }
+
+            // Why a plain read of a field the shim increments with Interlocked: the Editor is
+            // 64-bit, where reading an aligned long never observes half of an increment.
+            return (long)InvocationCounter.GetValue(null);
         }
 
         /// <summary>

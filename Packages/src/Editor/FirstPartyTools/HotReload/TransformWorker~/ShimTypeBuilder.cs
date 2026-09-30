@@ -18,6 +18,7 @@ using Microsoft.CodeAnalysis.Text;
 internal sealed class ShimTypeBuilder
 {
     private readonly List<MethodDeclarationSyntax> _methods = new List<MethodDeclarationSyntax>();
+    private readonly List<string> _invocationCounterFieldNames = new List<string>();
 
     public ShimTypeBuilder(
         string shimTypeName,
@@ -54,11 +55,32 @@ internal sealed class ShimTypeBuilder
         _methods.Add(named);
     }
 
+    /// <summary>
+    /// Adds the shim of a member hot reload added together with the static field that counts how
+    /// often its body starts, so no added-member shim can be emitted without its counter.
+    /// </summary>
+    public void AddAddedMemberMethod(
+        MethodDeclarationSyntax shimMethod,
+        string shimMethodName,
+        IMethodSymbol methodSymbol)
+    {
+        string counterFieldName = shimMethodName + TransformWorkerProgramMarker.AddedMemberInvocationCounterSuffix;
+        AddMethod(
+            ShimMethodFactory.PrependAddedMemberPreamble(shimMethod, methodSymbol, counterFieldName),
+            shimMethodName);
+        _invocationCounterFieldNames.Add(counterFieldName);
+    }
+
     public IEnumerable<MemberDeclarationSyntax> EmitMembers()
     {
         foreach (AccessorEntry accessor in AccessorPlan.Entries)
         {
             yield return accessor.EmitFieldDeclaration();
+        }
+
+        foreach (string counterFieldName in _invocationCounterFieldNames)
+        {
+            yield return EmitInvocationCounterField(counterFieldName);
         }
 
         if (AccessorPlan.Entries.Count > 0)
@@ -88,5 +110,19 @@ internal sealed class ShimTypeBuilder
                     SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                     SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
             .WithBody(SyntaxFactory.Block(statements));
+    }
+
+    private static FieldDeclarationSyntax EmitInvocationCounterField(string counterFieldName)
+    {
+        return SyntaxFactory.FieldDeclaration(
+                SyntaxFactory.VariableDeclaration(
+                        SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.LongKeyword)))
+                    .WithVariables(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.VariableDeclarator(counterFieldName))))
+            .WithModifiers(
+                SyntaxFactory.TokenList(
+                    SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                    SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
     }
 }

@@ -131,7 +131,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BindingFlags.Public | BindingFlags.Static);
             Assert.That(shim, Is.Not.Null, "The fixture shim method must exist.");
             _access.GetOrBeginAddedMemberGeneration(FixturePath)
-                .RegisterAddedMethod("Fixture.Update", shim, FixturePath, "Update", "Fixture");
+                .RegisterAddedMethod(
+                    "Fixture.Update",
+                    shim,
+                    FixturePath,
+                    "Update",
+                    "Fixture",
+                    HotReloadUnreadInvocationCounter.Field);
             _forwarding.Tick();
             Assert.That(
                 ProxiesOn(owner).Length,

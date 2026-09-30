@@ -101,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "1 change(s) currently active. 1 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+                    "1 change(s) currently active. 1 change(s) have not been invoked since they were applied; see Methods[].Reason."));
             Assert.That(response.DroppedByPlayModeEntryCount, Is.EqualTo(1));
             Assert.That(response.ShouldSerializeDroppedByPlayModeEntryCount(), Is.True);
             Assert.That(json.Value<int>("DroppedByPlayModeEntryCount"), Is.EqualTo(1));

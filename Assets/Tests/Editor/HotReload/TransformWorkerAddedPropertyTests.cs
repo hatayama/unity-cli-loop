@@ -1179,7 +1179,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 int openBrace = shimSource.IndexOf('{', declarationStart);
-                int nameIndex = shimSource.IndexOf(shimMethodName, declarationStart, StringComparison.Ordinal);
+                // Why the '(': an added member's shim type also declares its invocation counter,
+                // whose name starts with the shim method name.
+                int nameIndex = shimSource.IndexOf(shimMethodName + "(", declarationStart, StringComparison.Ordinal);
                 if (nameIndex >= declarationStart && nameIndex < openBrace)
                 {
                     return declarationStart;

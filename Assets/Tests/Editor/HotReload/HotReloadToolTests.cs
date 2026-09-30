@@ -29,12 +29,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private HotReloadDomainTestScope _scope;
 
+        // The counter the added members these tests register report as their InvocationCount.
+        // SetUp zeroes it, so a test that sets it sees only its own calls.
+        public static long StatusAddedMemberCalls;
+
         [SetUp]
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
             _scope = new HotReloadDomainTestScope();
             HotReloadAutoRefreshHold.SyncToActiveChanges();
+            StatusAddedMemberCalls = 0;
         }
 
         [TearDown]
@@ -188,11 +193,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: --status Added rows explain InvocationCount 0 with the not-instrumented Reason
-        /// only, not the AlreadyActive source-unchanged sentence.
+        /// What: a --status Added row whose member has not run since it was applied reports
+        /// InvocationCount 0 with the added-member never-invoked Reason, which says what can call
+        /// an added member, and not the AlreadyActive source-unchanged sentence.
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_Status_AddedRow_SetsNotInstrumentedReason()
+        public async Task ExecuteAsync_Status_NeverInvokedAddedRow_SetsNeverInvokedReason()
         {
             const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
             const string methodKey = "Host.NewHelper(System.Int32)";
@@ -203,11 +209,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadConstants.AddedMemberStatusKind,
                 methodKey);
 
+            Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
             Assert.That(
                 addedRow.Reason,
                 Is.EqualTo(
-                    "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
-            Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
+                    "Not invoked since this added member was applied. Compiled code cannot call a member that hot reload added, so it runs only when a hot-reloaded body that calls it runs, or, for a forwarded Unity message, when the hot-reload proxy delivers the message in Play Mode."));
+            Assert.That(addedRow.Reason, Is.EqualTo(HotReloadConstants.AddedMemberNeverInvokedReason));
+        }
+
+        /// <summary>
+        /// What: a --status Added row whose member has run reports the calls its counter holds
+        /// with an empty Reason, and Message leaves it out of the never-invoked count.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_InvokedAddedRow_LeavesReasonEmptyAndOutOfTheAggregate()
+        {
+            const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
+            const string methodKey = "Host.NewHelper(System.Int32)";
+            RegisterAddedMemberForStatus(filePath, methodKey);
+            StatusAddedMemberCalls = 1;
+
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+            HotReloadMethodResult addedRow = FindStatusRow(
+                response,
+                HotReloadConstants.AddedMemberStatusKind,
+                methodKey);
+
+            Assert.That(addedRow.InvocationCount, Is.EqualTo(1L));
+            Assert.That(addedRow.Reason, Is.EqualTo(string.Empty));
+            Assert.That(response.Message, Is.EqualTo("1 change(s) currently active."));
         }
 
         /// <summary>
@@ -243,7 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     response.Message,
                     Is.EqualTo(
-                        "1 change(s) currently active. 1 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+                        "1 change(s) currently active. 1 change(s) have not been invoked since they were applied; see Methods[].Reason."));
                 Assert.That(response.AutoRefreshHeld, Is.True);
             }
             finally
@@ -289,11 +319,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: --status Message counts never-invoked Active rows only, not added-member
-        /// rows, when both kinds are present.
+        /// What: --status Message counts the never-invoked Added rows together with the
+        /// never-invoked Active rows when both kinds are present.
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_Status_MixedActiveAndAdded_CountsOnlyNeverInvokedActiveInAggregate()
+        public async Task ExecuteAsync_Status_MixedActiveAndAdded_CountsNeverInvokedActiveAndAddedRows()
         {
             const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
             const string methodKey = "Host.NewHelper(System.Int32)";
@@ -319,11 +349,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     response.Message,
                     Is.EqualTo(
-                        "3 change(s) currently active. 2 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+                        "3 change(s) currently active. 3 change(s) have not been invoked since they were applied; see Methods[].Reason."));
                 Assert.That(
                     addedRow.Reason,
-                    Is.EqualTo(
-                        "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
+                    Is.EqualTo(HotReloadConstants.AddedMemberNeverInvokedReason));
             }
             finally
             {
@@ -466,17 +495,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: composing AlreadyActiveAddedMemberReason from the not-instrumented constant
-        /// keeps the historical AlreadyActive added-member sentence byte-identical.
+        /// What: an added member's AlreadyActive Reason says the member stays available and keeps
+        /// its InvocationCount, in the words a patch's AlreadyActive Reason uses for the patch.
         /// </summary>
         [Test]
-        public void AlreadyActiveAddedMemberReason_KeepsHistoricalWording()
+        public void AlreadyActiveAddedMemberReason_SaysTheMemberKeepsItsInvocationCount()
         {
             Assert.That(
                 HotReloadConstants.AlreadyActiveAddedMemberReason,
                 Is.EqualTo(
-                    "Source is unchanged since the last applied hot reload; the existing added member stays available. "
-                    + "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
+                    "Source is unchanged since the last applied hot reload; the existing added member stays "
+                    + "available and keeps its InvocationCount. Edit and reload again to apply new changes."));
         }
 
         /// <summary>
@@ -2971,14 +3000,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(applyResult.Success, Is.True, applyResult.ErrorMessage);
         }
 
-        // Registers one added-member ledger row the same way the added-row status test does.
+        // Registers one added-member ledger row that reports StatusAddedMemberCalls as its count.
         private static void RegisterAddedMemberForStatus(string filePath, string methodKey)
         {
             MethodInfo shim = typeof(HotReloadAddedMemberHost).GetMethod(
                 nameof(HotReloadAddedMemberHost.ExistingCaller),
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(shim, Is.Not.Null);
-            new HotReloadDomainTestAccess().RegisterAddedMember(filePath, methodKey, shim, filePath);
+            new HotReloadDomainTestAccess().RegisterAddedMember(
+                filePath,
+                methodKey,
+                shim,
+                filePath,
+                typeof(HotReloadToolTests).GetField(nameof(StatusAddedMemberCalls)));
         }
 
         private static async Task<HotReloadResponse> ExecuteStatusAsync(CancellationToken ct)

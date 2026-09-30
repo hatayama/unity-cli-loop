@@ -4712,11 +4712,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an unchanged reload after a fully applied added-method run reports the added
-        /// member as AlreadyActive with the added-member Reason and InvocationCount 0, while
-        /// the patched caller keeps the ordinary AlreadyActive Reason.
+        /// member as AlreadyActive with the added-member Reason and the calls its own counter
+        /// holds, while the patched caller keeps the ordinary AlreadyActive Reason and the
+        /// ledger's count.
         /// </summary>
         [Test]
-        public async Task Run_UnchangedReload_AlreadyActiveAddedMember_UsesAddedReasonAndZeroCount()
+        public async Task Run_UnchangedReload_AlreadyActiveAddedMember_CarriesTheAddedMembersCount()
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -4742,13 +4743,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 addedRow.Reason,
                 Is.EqualTo(HotReloadConstants.AlreadyActiveAddedMemberReason));
-            Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
+            Assert.That(addedRow.InvocationCount, Is.EqualTo(1L));
 
             HotReloadMethodResult patchedRow = FindResponseMethod(
                 response,
                 nameof(HotReloadAddedMethodApplyFixture.ExistingCaller));
             Assert.That(patchedRow.Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.AlreadyActive)));
             Assert.That(patchedRow.Reason, Is.EqualTo(HotReloadConstants.AlreadyActiveReason));
+            Assert.That(patchedRow.InvocationCount, Is.EqualTo(1L));
         }
 
         /// <summary>
