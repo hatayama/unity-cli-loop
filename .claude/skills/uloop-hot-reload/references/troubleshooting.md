@@ -54,3 +54,24 @@ warning did not apply to them — call sites you have not exercised may still ru
 code. Take both readings while the code is actually being driven — PlayMode running, or your own
 `uloop execute-dynamic-code` invocation for Editor-assembly methods; a count frozen during
 a pause is not evidence either way.
+
+## Stack Traces From Patched Methods
+
+A frame printed as `(wrapper dynamic-method) …` never carries a location, and a patched
+method prints as one: its body runs as a dynamic method, so its frame reads
+`(wrapper dynamic-method) MonoMod.Utils.DynamicMethodDefinition.<Type>.<Method>_Patch<n>(…)`,
+and the next frame with `(at <file>:<line>)` is its caller, not the failing statement.
+Frames from the shim assembly (a type named `<Type>_UloopHotReloadShims_<n>`, a method
+named `<Method>__shim<n>`) do carry the edited file and line. They appear above the
+patched frame, for instance when the patch forwards the body to its shim or the body calls
+a method a reload added (`Added` rows); the topmost of them names the failing statement.
+
+When no shim frame sits above the `_Patch<n>` frame, the failing statement is in that
+patched body, or in a call it made that left no frame of its own. Arm
+`uloop enable-pause-point --file <edited file> --line <N> --mode trace` on lines inside the
+edited body — such a line arms the patched body directly (see
+[pause-point-interaction.md](pause-point-interaction.md)) — drive the code again, and read
+the hits with `uloop pause-point-status`: the failing statement sits at or after the last
+marked line that records a hit, and before the first one that records none. A line inside
+an added method cannot hold a pause point until `uloop compile`, so mark the line that
+calls it instead.

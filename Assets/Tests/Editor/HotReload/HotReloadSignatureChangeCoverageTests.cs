@@ -365,34 +365,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: stale warnings de-duplicate only their displayed caller keys, preserving distinct
-        /// cross-assembly caller identities for coverage decisions.
+        /// What: the stale call sites of a removed signature keep the first hit of each uncovered
+        /// caller identity, so callers with the same wire key in two assemblies both reach the
+        /// run-end filter, and a removed signature without an uncovered caller records nothing.
         /// </summary>
         [Test]
-        public void FormatUncoveredCallerMethodKeys_CrossAssemblySameKey_DeduplicatesDisplayOnly()
+        public void CollectStaleSignatureCallSites_CrossAssemblySameKey_KeepsFirstHitPerIdentity()
         {
-            List<HotReloadQualifiedMethodIdentity> sameKeyCallers =
-                new List<HotReloadQualifiedMethodIdentity>
-                {
-                    new HotReloadQualifiedMethodIdentity(EditedAssemblyName, CallerKey),
-                    new HotReloadQualifiedMethodIdentity(ExternalAssemblyName, CallerKey)
-                };
-            List<HotReloadQualifiedMethodIdentity> differentKeyCallers =
-                new List<HotReloadQualifiedMethodIdentity>
-                {
-                    new HotReloadQualifiedMethodIdentity(EditedAssemblyName, CallerKey),
-                    new HotReloadQualifiedMethodIdentity(
-                        ExternalAssemblyName,
-                        "Example.OtherCaller::Call()")
-                };
+            HotReloadCallSiteScanner.CallSiteHit editedHit = CreateHit(EditedAssemblyName);
+            HotReloadCallSiteScanner.CallSiteHit repeatedEditedHit = CreateHit(EditedAssemblyName);
+            HotReloadCallSiteScanner.CallSiteHit externalHit = CreateHit(ExternalAssemblyName);
+            List<HotReloadCallSiteScanner.CallSiteHit> hits =
+                new List<HotReloadCallSiteScanner.CallSiteHit> { editedHit, repeatedEditedHit, externalHit };
+            Dictionary<string, List<HotReloadQualifiedMethodIdentity>> callersByTarget =
+                HotReloadSignatureChangeCoverage.CollectUncoveredCallersByTarget(
+                    hits,
+                    new HashSet<HotReloadQualifiedMethodIdentity>());
 
-            Assert.That(sameKeyCallers, Has.Count.EqualTo(2));
-            Assert.That(
-                CountOccurrences(CollectStaleWarning(sameKeyCallers), CallerKey),
-                Is.EqualTo(1));
-            Assert.That(
-                CollectStaleWarning(differentKeyCallers),
-                Does.Contain("Example.Caller::Call(), Example.OtherCaller::Call()"));
+            List<HotReloadStaleSignatureCallSites> callSites =
+                HotReloadSignatureChangeCoverage.CollectStaleSignatureCallSites(
+                    new[] { CreateTargetRemovedSignature("Call"), CreateTargetRemovedSignature("Uncalled") },
+                    hits,
+                    callersByTarget);
+
+            Assert.That(callSites, Has.Count.EqualTo(1));
+            Assert.That(callSites[0].RemovedMethodKey, Is.EqualTo(ReplacementKey));
+            Assert.That(callSites[0].Callers, Is.EqualTo(new[] { editedHit, externalHit }));
         }
 
         private static TransformWorkerEntryDto CreateReplacementEntry()
@@ -431,45 +429,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static string CollectStaleWarning(
-            List<HotReloadQualifiedMethodIdentity> callers)
+        private static TransformWorkerRemovedMethodSignatureDto CreateTargetRemovedSignature(string methodName)
         {
-            TransformWorkerRemovedMethodSignatureDto removedSignature =
-                new TransformWorkerRemovedMethodSignatureDto
-                {
-                    typeMetadataName = "Example.Target",
-                    methodName = "Call",
-                    parameterTypeFullNames = Array.Empty<string>(),
-                    genericArity = 0
-                };
-            Dictionary<string, List<HotReloadQualifiedMethodIdentity>> callersByTarget =
-                new Dictionary<string, List<HotReloadQualifiedMethodIdentity>>(StringComparer.Ordinal)
-                {
-                    { ReplacementKey, callers }
-                };
-
-            List<string> warnings = HotReloadSignatureChangeCoverage.CollectStaleSignatureWarnings(
-                new[] { removedSignature },
-                callersByTarget);
-
-            return warnings[0];
-        }
-
-        private static int CountOccurrences(string text, string value)
-        {
-            int count = 0;
-            int startIndex = 0;
-            while (true)
+            return new TransformWorkerRemovedMethodSignatureDto
             {
-                int occurrenceIndex = text.IndexOf(value, startIndex, StringComparison.Ordinal);
-                if (occurrenceIndex < 0)
-                {
-                    return count;
-                }
-
-                count++;
-                startIndex = occurrenceIndex + value.Length;
-            }
+                typeMetadataName = "Example.Target",
+                methodName = methodName,
+                parameterTypeFullNames = Array.Empty<string>(),
+                genericArity = 0
+            };
         }
 
         private static TransformWorkerEntryDto CreateOrdinaryEntry()

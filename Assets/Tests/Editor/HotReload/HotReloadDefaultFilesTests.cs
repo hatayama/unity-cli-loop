@@ -272,6 +272,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the tool starts the run as a default selection exactly when --files was omitted,
+        /// which is what lets a group leave out a selected file the caller never named.
+        /// </summary>
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task ExecuteAsync_MarksTheRunAsADefaultSelectionOnlyWhenFilesAreOmitted(bool filesOmitted)
+        {
+            using IDisposable detectorScope = BeginChangedFiles("Assets/Changed1.cs");
+            HotReloadStubOrchestrator orchestrator = new HotReloadStubOrchestrator((files, ignoredCt) =>
+                Task.FromResult(
+                    new HotReloadOrchestratorResult(
+                        new List<HotReloadMethodOutcome>
+                        {
+                            HotReloadMethodOutcome.Patched("Host.Selected()", "Assets/Changed1.cs")
+                        },
+                        new List<string>(),
+                        patchedTotal: 1,
+                        activePatchTotal: 1)));
+            using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(orchestrator);
+
+            await ExecuteAsync(
+                filesOmitted
+                    ? new JObject()
+                    : new JObject { ["Files"] = new JArray("Assets/Changed1.cs") });
+
+            Assert.That(orchestrator.ReceivedIsDefaultSelection, Is.EqualTo(filesOmitted));
+        }
+
+        /// <summary>
         /// What: a script listed twice in --files reaches the run once, as the first raw entry, and
         /// the response message starts with the sentence saying so.
         /// </summary>

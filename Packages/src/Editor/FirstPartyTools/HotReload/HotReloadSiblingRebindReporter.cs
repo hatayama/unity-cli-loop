@@ -51,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         new HotReloadFileSinks(
                             run.SiblingDerivedWarnings,
                             run.OneShotCallerNoteCandidates,
+                            run.StaleSignatureWarnings,
                             run.DisplayedRemovedMembers),
                         inclusion.Evidence,
                         run.SiblingBaselineNotices));

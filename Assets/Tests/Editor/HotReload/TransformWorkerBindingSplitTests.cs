@@ -137,6 +137,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the same row also names the run's file that builds the payload from source, apart
+        /// from the file declaring the compiled API, so the Editor can tell which file of the run
+        /// splits the type.
+        /// </summary>
+        [Test]
+        public async Task Run_HostWithThePayloadFile_NamesTheFileBuildingTheSplitTypeFromSource()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                new[] { HostFileName, PayloadFileName },
+                new[] { WithMethod(ReadOnDisk(HostFileName), WireMethod), ReadOnDisk(PayloadFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for Wire.\n" + FormatSkipped(result));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
+            Assert.That(
+                skipped.reason.splitSourceFiles,
+                Is.EqualTo(new[] { "Assets/Tests/Editor/HotReload/" + PayloadFileName }));
+            Assert.That(
+                skipped.reason.declaringFiles,
+                Is.EqualTo(new[] { "Assets/Tests/Editor/HotReload/" + RegistryFileName }));
+        }
+
+        /// <summary>
         /// What: passing the file that declares the compiled API as well lets the added method bind
         /// against the payload this run declares, so the method is applied, which is the recovery
         /// the skipped row recommends.

@@ -118,9 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new HotReloadLatestFileReload(fileChangedSince, record.UnappliedRows);
         }
 
-        // Why the label match is exact: a worker row spells a constructed generic parameter type
-        // the way Cecil does (List`1<System.Int32>) while a MethodBase spells it the way the CLR
-        // does (List`1[System.Int32]); such a method finds no row rather than a guessed one.
+        // Why the label match is exact: the label built from the MethodBase spells its parameter
+        // types the way the worker row does (List`1<System.Int32>), so a method whose row is
+        // absent finds none rather than a guessed one.
         public HotReloadUnappliedRow FindUnappliedRowForMethod(string file, MethodBase method)
         {
             if (method == null || method.DeclaringType == null)

@@ -10,10 +10,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal interface IHotReloadOrchestrator
     {
+        /// <param name="isDefaultSelection">True when the files were chosen from compile snapshots
+        /// because the caller omitted them.</param>
         Task<HotReloadOrchestratorResult> RunAsync(
             IReadOnlyList<string> files,
             string contentPathOverride,
             CancellationToken ct,
-            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null);
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null,
+            bool isDefaultSelection = false);
     }
 }

@@ -376,7 +376,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patches.Add(
                         new HotReloadActivePatchInfo(
                             HotReloadMethodKeys.FormatMethodLabel(methods[index]),
-                            pair.Value.Path));
+                            pair.Value.Path,
+                            methods[index].DeclaringType.Assembly.GetName().Name));
                 }
             }
 

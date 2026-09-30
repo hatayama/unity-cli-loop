@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -266,20 +267,53 @@ func queryCompileStatusFromUnity(ctx context.Context, connection unityipc.Connec
 	probeContext, cancel := context.WithTimeout(ctx, compileStatusProbeTimeout)
 	defer cancel()
 
-	response, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
+	outcome, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).SendWithProgressOutcome(
 		probeContext,
 		compileStatusCommandName,
 		map[string]any{compileRequestIDParam: requestID},
+		nil,
 	)
 	if err != nil {
-		return compileStatusResponse{}, err
+		return compileStatusResponse{}, classifyCompileStatusQueryError(outcome, err)
 	}
 
 	var status compileStatusResponse
-	if err := json.Unmarshal(response, &status); err != nil {
+	if err := json.Unmarshal(outcome.Result, &status); err != nil {
 		return compileStatusResponse{}, err
 	}
 	return status, nil
+}
+
+// compileStatusUnansweredError marks a status query that Unity acknowledged but did not answer
+// before the query ran out of time.
+type compileStatusUnansweredError struct {
+	cause error
+}
+
+func (err *compileStatusUnansweredError) Error() string {
+	return err.cause.Error()
+}
+
+func (err *compileStatusUnansweredError) Unwrap() error {
+	return err.cause
+}
+
+// classifyCompileStatusQueryError marks a status query that ran out of time after Unity's dispatch
+// ack. Unity writes that ack from its IPC thread before it switches to the main thread that answers
+// status queries, so an ack followed by the deadline shows a live server whose main thread stayed
+// blocked. A deadline before the ack shows neither and stays unmarked.
+func classifyCompileStatusQueryError(outcome unityipc.UnitySendOutcome, err error) error {
+	if outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err) {
+		return &compileStatusUnansweredError{cause: err}
+	}
+	return err
+}
+
+// isUnansweredStatusProbe reports whether a status query failed because Unity acknowledged it but
+// did not answer in time.
+func isUnansweredStatusProbe(err error) bool {
+	var unanswered *compileStatusUnansweredError
+	return errors.As(err, &unanswered)
 }
 
 func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bool {

@@ -19,16 +19,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal HotReloadValidationFailure ValidationFailure { get; }
 
+        // True when the files came from compile snapshots rather than from the caller, so the run
+        // may leave out a selected file the caller never named.
+        internal bool IsDefaultSelection { get; }
+
         internal HotReloadDefaultFileSelection(
             IReadOnlyList<string> files,
             IReadOnlyList<string> scanLimitWarnings,
             string selectionMessage,
-            HotReloadValidationFailure validationFailure)
+            HotReloadValidationFailure validationFailure,
+            bool isDefaultSelection)
         {
             Files = files ?? Array.Empty<string>();
             ScanLimitWarnings = scanLimitWarnings ?? Array.Empty<string>();
             SelectionMessage = selectionMessage ?? string.Empty;
             ValidationFailure = validationFailure;
+            IsDefaultSelection = isDefaultSelection;
         }
     }
 
@@ -85,7 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 distinctFiles,
                 Array.Empty<string>(),
                 BuildDuplicateFilesMessage(pathsInFirstSeenOrder, countByPath),
-                validationFailure: null);
+                validationFailure: null,
+                isDefaultSelection: false);
         }
 
         private static string BuildDuplicateFilesMessage(
@@ -132,7 +139,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         {
                             "Run 'uloop compile' to create source snapshots.",
                             HotReloadConstants.PassExplicitFilesNextAction
-                        }));
+                        }),
+                    isDefaultSelection: true);
             }
 
             IReadOnlyList<string> reselectedPaths = ExcludeChangedPaths(
@@ -151,7 +159,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         {
                             "Save the edited .cs files to disk, then run 'uloop hot-reload' again.",
                             HotReloadConstants.PassExplicitFilesNextAction
-                        }));
+                        }),
+                    isDefaultSelection: true);
             }
 
             List<string> selectedFiles = new List<string>(changedFiles.ChangedProjectRelativePaths);
@@ -160,7 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 selectedFiles,
                 changedFiles.ScanLimitWarnings,
                 BuildSelectionMessage(changedFiles.ChangedProjectRelativePaths, reselectedPaths),
-                validationFailure: null);
+                validationFailure: null,
+                isDefaultSelection: true);
         }
 
         // A discarded owner file the user has since edited is already a changed file, so only

@@ -976,11 +976,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a worker row spells a constructed generic parameter type the way Cecil does, so a
-        /// method taking one finds no row; the match is exact and does not convert the spelling.
+        /// What: a worker row spells a constructed generic parameter type the way metadata does, and
+        /// the label of the resolved method spells it the same way, so a method taking one finds
+        /// its own row.
         /// </summary>
         [Test]
-        public void FindUnappliedRowForMethod_MethodWithAConstructedGenericParameter_ReturnsNull()
+        public void FindUnappliedRowForMethod_MethodWithAConstructedGenericParameter_FindsItsWorkerRow()
         {
             string workerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 new HotReloadMetadataTypeName(typeof(RowLabelHost).FullName.Replace('+', '/')),
@@ -998,7 +999,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadUnappliedRow row = port.FindUnappliedRowForMethod(FileOne, RowLabelHostMethod(nameof(RowLabelHost.TakeList)));
 
-            Assert.That(row, Is.Null);
+            Assert.That(row, Is.Not.Null);
+            Assert.That(row.Label, Is.EqualTo(workerLabel));
         }
 
         // Why a generated name: an artifact assembly is compiled under a name of its own, so a

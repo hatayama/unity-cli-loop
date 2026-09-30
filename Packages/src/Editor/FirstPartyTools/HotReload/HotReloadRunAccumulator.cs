@@ -83,6 +83,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public HotReloadRunDisplayedRemovedMembers DisplayedRemovedMembers { get; } =
             new HotReloadRunDisplayedRemovedMembers();
 
+        /// <summary>Where each group's gate records stale call sites, turned into warnings once per run.</summary>
+        public HotReloadRunStaleSignatureWarnings StaleSignatureWarnings { get; } =
+            new HotReloadRunStaleSignatureWarnings();
+
         /// <summary>Where re-applied siblings report a missing baseline, summarized once per run.</summary>
         public HotReloadSiblingBaselineNotices SiblingBaselineNotices => _siblingBaselineNotices;
 
@@ -220,6 +224,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why first: the per-file warnings of the re-applied files were merged last, so the
             // summary of their missing baselines lands right after them.
             _siblingBaselineNotices.AppendTo(_warnings);
+            // Why the patches active now rather than at each gate: a later group can patch a
+            // caller in another assembly or peel its earlier patch, and only the state after the
+            // last group says which callers still run the compiled body.
+            StaleSignatureWarnings.AppendTo(_warnings, _patcher.DescribeActivePatches());
             AppendInlineRiskWarning();
             AppendAddedFieldsLifetimeWarning();
             AppendSerializedAddedFieldWarning();
