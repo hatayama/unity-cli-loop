@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.6.0...uloop-project-runner-v3.6.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* CLI Play no longer rewrites unsaved Scene files; --unsaved-changes chooses keep, save, or fail ([#3048](https://github.com/hatayama/unity-cli-loop/issues/3048)) ([e85f53d](https://github.com/hatayama/unity-cli-loop/commit/e85f53d30809f3cbe55a9e918a568bc9fd322bcd))
+
 ## [3.6.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.5.1...uloop-project-runner-v3.6.0) (2026-09-30)
 
 
