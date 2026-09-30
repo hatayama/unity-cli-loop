@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.6.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.5.1...uloop-project-runner-v3.6.0) (2026-09-30)
+
+
+### Features
+
+* Hot reload can wire values into added fields without a compile, and pause points use the edited file's lines after a hot reload ([#3008](https://github.com/hatayama/unity-cli-loop/issues/3008)) ([05bec46](https://github.com/hatayama/unity-cli-loop/commit/05bec468c523a8f94d25adb03bdd593bda43c99b))
+
+
+### Bug Fixes
+
+* Rerunning compile after COMPILE_WAIT_TIMEOUT now reattaches instead of failing as busy ([#3039](https://github.com/hatayama/unity-cli-loop/issues/3039)) ([77f5d08](https://github.com/hatayama/unity-cli-loop/commit/77f5d08dd3bb3559bef1900d0d9acc464e4461fb))
+* Timed-out Unity process lookups on Windows now report a timeout instead of a bare exit status ([#3029](https://github.com/hatayama/unity-cli-loop/issues/3029)) ([1be51a3](https://github.com/hatayama/unity-cli-loop/commit/1be51a3eb1f6bda7a1cfc524728f02f30a85bb8c))
+
 ## [3.5.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.5.0...uloop-project-runner-v3.5.1) (2026-09-25)
 
 
