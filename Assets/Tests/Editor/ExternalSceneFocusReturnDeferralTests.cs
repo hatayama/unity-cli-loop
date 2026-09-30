@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -36,54 +37,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ConsumeOnEnteredEditMode_WhenDeferred_ReturnsTrueOnceAndClears()
+        public void ShouldResolveOnPlayModeStateChange_WhenDeferralRestoredAfterReload_ResolvesOnceAndClears()
         {
-            // Verifies a deferred focus return runs exactly once after Play Mode ends.
+            // Verifies a deferral restored from SessionState after a Play Mode domain reload runs exactly once
+            // when Edit Mode returns, even though this instance never saw the Editor leave Edit Mode.
             ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: true);
 
-            bool firstConsume = deferral.ConsumeOnEnteredEditMode();
-            bool secondConsume = deferral.ConsumeOnEnteredEditMode();
+            bool firstResolve = deferral.ShouldResolveOnPlayModeStateChange(
+                PlayModeStateChange.EnteredEditMode,
+                isFocused: true);
+            bool secondResolve = deferral.ShouldResolveOnPlayModeStateChange(
+                PlayModeStateChange.EnteredEditMode,
+                isFocused: true);
 
-            Assert.That(firstConsume, Is.True);
-            Assert.That(secondConsume, Is.False);
+            Assert.That(firstResolve, Is.True);
+            Assert.That(secondResolve, Is.False);
             Assert.That(deferral.IsDeferred, Is.False);
         }
 
         [Test]
-        public void ConsumeOnEnteredEditMode_WhenNothingDeferred_ReturnsFalse()
+        public void ShouldResolveOnPlayModeStateChange_AfterAPlaySession_ResolvesOnceEvenWhenUnfocused()
         {
-            // Verifies leaving Play Mode without a skipped focus return does not trigger a resolve.
+            // Verifies every Play session runs one preflight when Edit Mode returns, without a focus return and
+            // while unfocused, because Unity's own post-Play import otherwise raises the reload dialog after Stop.
             ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
 
-            Assert.That(deferral.ConsumeOnEnteredEditMode(), Is.False);
+            bool resolvesOnExitingEditMode = deferral.ShouldResolveOnPlayModeStateChange(
+                PlayModeStateChange.ExitingEditMode,
+                isFocused: false);
+            bool resolvesOnEnteredPlayMode = deferral.ShouldResolveOnPlayModeStateChange(
+                PlayModeStateChange.EnteredPlayMode,
+                isFocused: false);
+            bool resolvesOnEnteredEditMode = deferral.ShouldResolveOnPlayModeStateChange(
+                PlayModeStateChange.EnteredEditMode,
+                isFocused: false);
+            bool resolvesOnSecondEnteredEditMode = deferral.ShouldResolveOnPlayModeStateChange(
+                PlayModeStateChange.EnteredEditMode,
+                isFocused: false);
+
+            Assert.That(resolvesOnExitingEditMode, Is.False);
+            Assert.That(resolvesOnEnteredPlayMode, Is.False);
+            Assert.That(resolvesOnEnteredEditMode, Is.True);
+            Assert.That(resolvesOnSecondEnteredEditMode, Is.False);
         }
 
         [Test]
-        public void DeferUntilEditMode_WhenLeavingEditMode_ResolvesOnceOnEnteredEditMode()
-        {
-            // Verifies every Play session schedules one preflight for its end, even without a focus return,
-            // because a file changed during Play otherwise reaches Unity's reload dialog right after Stop.
-            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
-
-            deferral.DeferUntilEditMode();
-
-            Assert.That(deferral.ConsumeOnEnteredEditMode(), Is.True);
-            Assert.That(deferral.ConsumeOnEnteredEditMode(), Is.False);
-        }
-
-        [Test]
-        public void DeferUntilEditMode_WhenPlayModeDomainReloadInitializes_KeepsTheRestoredFingerprints()
+        public void ShouldResolveOnPlayModeStateChange_WhenLeavingEditMode_KeepsFingerprintsAcrossPlayReloads()
         {
             // Verifies a domain reload while entering or leaving Play Mode keeps the pre-Play fingerprints,
             // so an external change made before or during Play is still detected when Edit Mode returns.
             ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
 
-            deferral.DeferUntilEditMode();
+            deferral.ShouldResolveOnPlayModeStateChange(PlayModeStateChange.ExitingEditMode, isFocused: true);
             bool shouldRecord = deferral.ShouldRecordBaselineOnInitialize(
                 isFocused: true,
                 restoredSceneSnapshots: true);
 
             Assert.That(shouldRecord, Is.False);
+            Assert.That(deferral.IsDeferred, Is.True);
+        }
+
+        [Test]
+        public void ShouldResolveOnPlayModeStateChange_WhenEditModeReturnsWithoutAPlaySession_DoesNotResolve()
+        {
+            // Verifies Edit Mode return resolves only for a scheduled preflight, not on every state change.
+            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
+
+            bool shouldResolve = deferral.ShouldResolveOnPlayModeStateChange(
+                PlayModeStateChange.EnteredEditMode,
+                isFocused: true);
+
+            Assert.That(shouldResolve, Is.False);
         }
 
         [Test]

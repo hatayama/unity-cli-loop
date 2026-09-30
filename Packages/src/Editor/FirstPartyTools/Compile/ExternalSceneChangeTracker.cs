@@ -102,14 +102,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.ExitingEditMode)
-            {
-                _focusReturnDeferral.DeferUntilEditMode();
-                // The deferral must outlive the domain reloads on both sides of Play Mode.
-                SessionState.SetBool(FocusReturnDeferredSessionStateKey, true);
-                return;
-            }
-
+            bool shouldResolve = _focusReturnDeferral.ShouldResolveOnPlayModeStateChange(
+                state,
+                EditorApplication.isFocused);
+            // The deferral must outlive the domain reloads on both sides of Play Mode.
+            SessionState.SetBool(FocusReturnDeferredSessionStateKey, _focusReturnDeferral.IsDeferred);
             if (state != PlayModeStateChange.EnteredEditMode)
             {
                 return;
@@ -123,15 +120,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SaveSceneSnapshotsToSessionState();
             }
 
-            bool shouldResolve = _focusReturnDeferral.ConsumeOnEnteredEditMode();
-            SessionState.SetBool(FocusReturnDeferredSessionStateKey, false);
             VibeLogger.LogInfo(
                 "external_scene_entered_edit_mode",
                 "Entered Edit Mode",
                 new { prunedScenePaths, shouldResolve },
                 includeStackTrace: false);
-            // Why not wait for focus: Unity's own post-Play refresh can import a changed Scene before any focus
-            // return, and the preflight's import-then-reload is what keeps the reload dialog from appearing.
             if (shouldResolve)
             {
                 ResolveForFocusReturn();
