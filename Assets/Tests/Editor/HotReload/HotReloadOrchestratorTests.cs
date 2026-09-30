@@ -4590,8 +4590,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// refused by the worker before any shim is compiled: the added method and its caller are
         /// Skipped with the worker's reasons, nothing fails, and the run deactivates the earlier
         /// AddedPing registration with one warning naming it and telling the reader to change what
-        /// the skip reason names before reloading. A third run with the body fixed
-        /// registers AddedPing again and the caller returns the new value.
+        /// the skip reason names before reloading, and names the caller's earlier patch as still
+        /// calling the retired AddedPing. A third run with the body fixed registers AddedPing
+        /// again, the caller returns the new value, and no call is named any more.
         /// </summary>
         [Test]
         public async Task Run_UnboundAddedMethodAfterSuccess_DeactivatesItUntilTheBodyBindsAgain()
@@ -4625,6 +4626,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertDeactivatedPatchesWarningsEqual(
                 second,
                 ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
+            Assert.That(
+                second.Warnings,
+                Does.Contain(
+                    HotReloadStaleAddedMemberCallsWarnings.Expected(
+                        HotReloadStaleAddedMemberCallsWarnings.Pair(
+                            HotReloadMethodKeys.FormatMethodLabel(
+                                typeof(HotReloadAddedMethodApplyFixture).GetMethod(
+                                    nameof(HotReloadAddedMethodApplyFixture.ExistingCaller))),
+                            AddedPingMethodLabel()))),
+                string.Join("\n", second.Warnings));
 
             string fixedBody = WithWorkingAddedPing(onDisk).Replace(
                 "            return value + 1;\n        }",
@@ -4638,6 +4649,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAdded(third, "AddedPing");
             Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
             Assert.That(new HotReloadAddedMethodApplyFixture().ExistingCaller(3), Is.EqualTo(8));
+            HotReloadStaleAddedMemberCallsWarnings.AssertNone(third.Warnings);
         }
 
         /// <summary>
@@ -4922,7 +4934,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: deleting a previously added method and restoring its caller does not emit
-        /// the added-member deactivation warning (intentional convergence).
+        /// the added-member deactivation warning (intentional convergence), nor name the caller as
+        /// still calling the deleted method, because the restored caller's patch is reverted.
         /// </summary>
         [Test]
         public async Task Run_DeleteAddedMethodAndRestoreCaller_DoesNotWarnDeactivatedAddedMembers()
@@ -4941,6 +4954,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoDeactivatedPatchesWarning(second);
+            HotReloadStaleAddedMemberCallsWarnings.AssertNone(second.Warnings);
         }
 
         /// <summary>

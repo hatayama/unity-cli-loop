@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
@@ -7,8 +8,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// One method's hot-reload patch as the owning file generation holds it: the shim whose call
-    /// replaced the body, whether Harmony has accepted the patch yet, the transplant LocalBuilders
-    /// in shim slot order, and how many instructions the latest rebuild prepended.
+    /// replaced the body, the added members that body calls, whether Harmony has accepted the patch
+    /// yet, the transplant LocalBuilders in shim slot order, and how many instructions the latest
+    /// rebuild prepended.
     /// </summary>
     /// <remarks>
     /// Why the transplant state is written before the patch is committed: the transpiler runs
@@ -19,18 +21,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </remarks>
     internal sealed class HotReloadActivePatchEntry
     {
-        internal HotReloadActivePatchEntry(MethodBase method, MethodInfo shim)
+        internal HotReloadActivePatchEntry(
+            MethodBase method,
+            MethodInfo shim,
+            IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers)
         {
             Debug.Assert(method != null, "method must not be null.");
             Debug.Assert(shim != null, "shim must not be null.");
 
             Method = method;
             Shim = shim;
+            CalledAddedMembers = calledAddedMembers ?? Array.Empty<HotReloadCalledAddedMember>();
         }
 
         internal MethodBase Method { get; }
 
         internal MethodInfo Shim { get; }
+
+        /// <summary>
+        /// The added members the shim's body calls, fixed when the patch opens: the body is compiled
+        /// by then, and a later reload that changes the calls opens a new patch.
+        /// </summary>
+        internal IReadOnlyList<HotReloadCalledAddedMember> CalledAddedMembers { get; }
 
         /// <summary>False while Harmony has not yet accepted the patch this entry describes.</summary>
         internal bool IsActive { get; private set; }

@@ -213,6 +213,9 @@ method: a copy the JIT inlined into another method before the patch, and a deleg
 the old method the caller created before it. A call inside a lambda or local function
 stays listed under its compiler-generated name even when the method declaring it is
 patched.
+An added member that a later reload re-signatures or deletes has no compiled callers, but a
+hot-reloaded caller that does not apply again in that reload keeps calling the member's
+earlier body; `Warnings` then names that call (see [troubleshooting.md](troubleshooting.md)).
 
 Field declarations are stricter: when a compiled field's type — or its `static`/
 `const` modifier — differs from the edited source, every edited method that reads

@@ -239,6 +239,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "The next reload of this assembly retries their file once while it stays unchanged, so "
             + "change what their Methods[].Reason names and reload, or run 'uloop compile'.";
 
+        // Format: each stale call as "caller calls member", joined with ", " in ordinal order.
+        // Why it names the pair: the member is gone from the ledger and from --status, and the
+        // caller that did not apply may have done so in an earlier run, so nothing else in the
+        // response ties the body that keeps running to the call that still reaches it.
+        public const string StaleAddedMemberCallsWarningFormat =
+            "Methods that earlier hot reloads patched or added still call added members that are no "
+            + "longer registered: {0}. Those calls still run the members' earlier bodies, which match "
+            + "neither the compiled assembly nor the source on disk. Reload until the calling methods "
+            + "apply again, or run 'uloop compile'.";
+
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/RemovedMemberKinds.cs.
         public const string RemovedMemberKindMethod = "method";

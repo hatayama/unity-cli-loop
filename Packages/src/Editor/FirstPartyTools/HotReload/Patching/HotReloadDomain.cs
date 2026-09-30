@@ -385,6 +385,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return patches;
         }
 
+        /// <summary>
+        /// Adds each call a live patch or a registered added member of any file makes into an added
+        /// member, in no particular order.
+        /// </summary>
+        internal void CollectAddedMemberCalls(List<HotReloadAddedMemberCall> calls)
+        {
+            Debug.Assert(calls != null, "calls must not be null.");
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                pair.Value.CollectAddedMemberCalls(calls);
+            }
+        }
+
         /// <summary>Active added members of one file, in no particular order.</summary>
         internal IReadOnlyList<HotReloadAddedMemberInfo> DescribeAddedMembersOfFile(string projectRelativePath)
         {

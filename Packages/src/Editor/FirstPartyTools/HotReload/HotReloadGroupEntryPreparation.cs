@@ -40,12 +40,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // same retained home no matter which file it came from.
             HotReloadEntryHomeResolver homeResolver =
                 new HotReloadEntryHomeResolver(collaborators.Domain, context.ProjectRoot);
+            // Why once for the group: a body can call an added member another file of the group
+            // declares, and only the whole group's entries name every added member it may call.
+            HotReloadAddedCalleeIndex addedCallees = new HotReloadAddedCalleeIndex(entriesToPatch);
             List<HotReloadPreparedGroupFile> prepared =
                 new List<HotReloadPreparedGroupFile>(context.Files.Count);
             foreach (HotReloadGroupFile file in context.Files)
             {
                 prepared.Add(
-                    PrepareFile(compileResult, homeResolver, file, entriesByFile, bindFailures));
+                    PrepareFile(compileResult, homeResolver, file, entriesByFile, bindFailures, addedCallees));
             }
 
             return prepared;
@@ -56,7 +59,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadEntryHomeResolver homeResolver,
             HotReloadGroupFile file,
             Dictionary<string, List<TransformWorkerEntryDto>> entriesByFile,
-            Dictionary<string, string> bindFailures)
+            Dictionary<string, string> bindFailures,
+            HotReloadAddedCalleeIndex addedCallees)
         {
             if (file.SkipApply)
             {
@@ -76,7 +80,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.AssemblyResolvePath,
                 compileResult.Assembly,
                 entries,
-                bindFailures);
+                bindFailures,
+                addedCallees);
             if (!resolution.AllResolved)
             {
                 return HotReloadPreparedGroupFile.ResolutionFailed(file, entries, resolution);

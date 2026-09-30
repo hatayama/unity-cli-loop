@@ -75,3 +75,18 @@ the hits with `uloop pause-point-status`: the failing statement sits at or after
 marked line that records a hit, and before the first one that records none. A line inside
 an added method cannot hold a pause point until `uloop compile`, so mark the line that
 calls it instead.
+
+## When Earlier Patches Still Call an Added Member That Is Gone
+
+A patched or added body keeps calling the added members it was applied against. When a later
+reload changes such a member's signature, deletes it, or reports it `Skipped`, the member is
+no longer registered and `--status` stops listing it, but a caller that did not apply again
+in that reload — its row is `Failed` or `Skipped`, or its file was not re-applied — still
+runs the member's earlier body, which matches neither the compiled assembly nor the source
+on disk. `Warnings` then carries one line naming each such call as `<Caller> calls <Member>`,
+with `<Member>` in the signature the caller was applied against.
+
+The line comes back on every reload that includes the caller's file or the member's file,
+and stops once the caller applies again: fix what the caller's row reported and reload its
+file together with the member's file, or run `uloop compile`. A reload that includes neither
+file does not repeat it.
