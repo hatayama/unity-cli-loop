@@ -359,6 +359,16 @@
             "type": "integer",
             "description": "Maximum seconds to wait for the requested play mode state",
             "default": 180
+          },
+          "UnsavedChanges": {
+            "type": "string",
+            "description": "How Play from Edit Mode handles unsaved Scene/Prefab Stage changes: keep enters Play Mode without saving (like the Editor's Play button); save writes them first; fail stops if any exist",
+            "enum": [
+              "keep",
+              "save",
+              "fail"
+            ],
+            "default": "keep"
           }
         }
       }
