@@ -51,28 +51,27 @@ internal static class ShimMethodFactory
     }
 
     /// <summary>
-    /// Makes the shim of an instance member hot reload added throw NullReferenceException on a
-    /// null receiver before its body runs, the way a call to a compiled member does.
+    /// Prepends the statements every shim of a member hot reload added starts with: for an
+    /// instance member, a check that throws NullReferenceException on a null receiver before the
+    /// body runs, the way a call to a compiled member does; then the increment of the shim's own
+    /// invocation counter, which the Editor reports as the member's InvocationCount.
     /// </summary>
     /// <remarks>
-    /// Why in the shim and not at the call site: compiled code evaluates the arguments before the
-    /// null receiver throws, and a check at the call site would throw before them. Why the object
-    /// cast: a UnityEngine.Object receiver would otherwise use Unity's == and also refuse a
-    /// destroyed object, which a compiled call still reaches. An async or iterator shim throws
-    /// when its body starts rather than at the call, which is still closer than running it.
+    /// Why the receiver check is in the shim and not at the call site: compiled code evaluates
+    /// the arguments before the null receiver throws, and a check at the call site would throw
+    /// before them. Why the object cast: a UnityEngine.Object receiver would otherwise use
+    /// Unity's == and also refuse a destroyed object, which a compiled call still reaches. An
+    /// async or iterator shim throws when its body starts rather than at the call, which is still
+    /// closer than running it. Why the increment follows the check: a call the check refuses
+    /// never started the body. An iterator shim therefore counts when enumeration starts rather
+    /// than at the call, because its whole body waits for the first MoveNext.
     /// </remarks>
-    public static MethodDeclarationSyntax GuardAddedMemberReceiver(
+    public static MethodDeclarationSyntax PrependAddedMemberPreamble(
         MethodDeclarationSyntax shim,
-        IMethodSymbol methodSymbol)
+        IMethodSymbol methodSymbol,
+        string invocationCounterFieldName)
     {
-        if (methodSymbol.IsStatic || methodSymbol.ContainingType.IsValueType)
-        {
-            return shim;
-        }
-
-        StatementSyntax guard = SyntaxFactory.ParseStatement(
-            "if ((object)" + TransformWorkerProgramMarker.InstanceParameterName
-            + " == null) throw new global::System.NullReferenceException();");
+        bool checksReceiver = !methodSymbol.IsStatic && !methodSymbol.ContainingType.IsValueType;
         if (shim.Body != null)
         {
             // Why the body as a fallback: a block-bodied accessor shim is built without a
@@ -81,7 +80,15 @@ internal static class ShimMethodFactory
                 ? (SyntaxNode)shim
                 : shim.Body;
             return shim.WithBody(shim.Body.WithStatements(
-                shim.Body.Statements.Insert(0, MapGuardToLine(guard, blockLineSource))));
+                shim.Body.Statements.InsertRange(
+                    0,
+                    BuildPreamble(checksReceiver, invocationCounterFieldName, blockLineSource))));
+        }
+
+        if (shim.ExpressionBody == null)
+        {
+            throw new InvalidOperationException(
+                "An added-member shim must have a block or expression body: " + shim.Identifier.ValueText);
         }
 
         ArrowExpressionClauseSyntax arrow = shim.ExpressionBody;
@@ -89,15 +96,39 @@ internal static class ShimMethodFactory
         // Why the annotations move to the statement: the #line mapping is injected from them. An
         // accessor arrow carries its own, which does not survive the change to a block; an
         // expression-bodied method carries the expression's line on the declaration instead,
-        // where it would now map the '{' and guard lines rather than the expression.
+        // where it would now map the '{' and preamble lines rather than the expression.
         SyntaxNode lineSource = arrow.HasAnnotations(TransformWorkerProgram.UloopLineAnnotationKind)
             ? (SyntaxNode)arrow
             : shim;
         bodyStatement = (StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(lineSource, bodyStatement);
+        List<StatementSyntax> statements = BuildPreamble(checksReceiver, invocationCounterFieldName, lineSource);
+        statements.Add(bodyStatement);
         return shim
             .WithExpressionBody(null)
             .WithSemicolonToken(default)
-            .WithBody(SyntaxFactory.Block(MapGuardToLine(guard, lineSource), bodyStatement));
+            .WithBody(SyntaxFactory.Block(statements));
+    }
+
+    // Why the increment is mapped as well, though it never throws: unmapped, it would continue the
+    // mapping of the '{' before it and take the line of the body's first statement.
+    private static List<StatementSyntax> BuildPreamble(
+        bool checksReceiver,
+        string invocationCounterFieldName,
+        SyntaxNode lineSource)
+    {
+        List<StatementSyntax> preamble = new List<StatementSyntax>(2);
+        if (checksReceiver)
+        {
+            StatementSyntax guard = SyntaxFactory.ParseStatement(
+                "if ((object)" + TransformWorkerProgramMarker.InstanceParameterName
+                + " == null) throw new global::System.NullReferenceException();");
+            preamble.Add(MapGuardToLine(guard, lineSource));
+        }
+
+        StatementSyntax increment = SyntaxFactory.ParseStatement(
+            "global::System.Threading.Interlocked.Increment(ref " + invocationCounterFieldName + ");");
+        preamble.Add((StatementSyntax)PropertyGetterEmitter.TransferUloopLineAnnotations(lineSource, increment));
+        return preamble;
     }
 
     // Why mapped at all: an unannotated guard continues the mapping before it, which is the '{'

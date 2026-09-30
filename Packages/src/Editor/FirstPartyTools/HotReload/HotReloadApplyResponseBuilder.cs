@@ -49,12 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Method = outcome.Method,
                         Reason = outcome.Reason ?? string.Empty,
                         FilePath = outcome.FilePath ?? string.Empty,
-                        // Why these two kinds: both describe a patch that was already installed
-                        // before this run, so the ledger counter is the only invocation figure
-                        // that means anything for them.
-                        InvocationCount = ReadsInvocationCountFromLedger(outcome.Kind)
-                            ? HotReloadInvocationRegistry.GetCount(outcome.Method)
-                            : 0L,
+                        InvocationCount = ReadInvocationCount(outcome),
                         LifecycleNote = outcome.LifecycleNote ?? string.Empty,
                         ReappliedFromSibling = reappliedSiblingFiles.Contains(outcome.FilePath)
                     });
@@ -201,6 +196,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 && !HotReloadCompileFallbackDecider.HasUnappliedEdit(result, activePatchSiblingFiles);
         }
 
+        // Why read here and not when the row was made: a run awaits the worker and the compile
+        // after it decides a file is unchanged, and Play Mode frames keep calling in meanwhile.
+        private static long ReadInvocationCount(HotReloadMethodOutcome outcome)
+        {
+            if (outcome.AddedMember != null)
+            {
+                return outcome.AddedMember.ReadInvocationCount();
+            }
+
+            return ReadsInvocationCountFromLedger(outcome.Kind)
+                ? HotReloadInvocationRegistry.GetCount(outcome.Method)
+                : 0L;
+        }
+
+        // Why these two kinds: both describe a patch that was already installed before this run,
+        // so the ledger counter is the only invocation figure that means anything for them.
         private static bool ReadsInvocationCountFromLedger(HotReloadMethodOutcomeKind kind)
         {
             return kind == HotReloadMethodOutcomeKind.AlreadyActive

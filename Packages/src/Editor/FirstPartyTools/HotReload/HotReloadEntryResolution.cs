@@ -16,13 +16,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Why bindFailures is passed in: one shim assembly serves every file of a group, so its
         // accessor binders run once for the group instead of once per file.
+        // Why addedCallees is passed in: a body can call an added member another file of the group
+        // declares, so one file's entries alone cannot name every call.
         internal static Result ResolveEntries(
             HotReloadTypeHome fileHome,
             HotReloadEntryHomeResolver homeResolver,
             string filePath,
             Assembly shimAssembly,
             TransformWorkerEntryDto[] entriesToPatch,
-            Dictionary<string, string> bindFailures)
+            Dictionary<string, string> bindFailures,
+            HotReloadAddedCalleeIndex addedCallees)
         {
             Debug.Assert(fileHome != null, "fileHome must not be null.");
             Debug.Assert(homeResolver != null, "homeResolver must not be null.");
@@ -30,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(shimAssembly != null, "shimAssembly must not be null.");
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
             Debug.Assert(bindFailures != null, "bindFailures must not be null.");
+            Debug.Assert(addedCallees != null, "addedCallees must not be null.");
 
             List<ResolvedEntry> resolvedEntries = new List<ResolvedEntry>();
             for (int index = 0; index < entriesToPatch.Length; index++)
@@ -40,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     homeResolver,
                     shimAssembly,
                     bindFailures,
+                    addedCallees,
                     filePath);
                 if (entryOutcome.IsFailure)
                 {
@@ -111,9 +116,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadEntryHomeResolver homeResolver,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
+            HotReloadAddedCalleeIndex addedCallees,
             string filePath)
         {
             string methodLabel = FormatEntryLabel(entry);
+            // Why a call the group declares no added member for fails the file like a missing shim
+            // does: every added member an applied body calls comes from the same worker output, so
+            // such a call means the worker and this Editor disagree, and recording the entry
+            // without it would hide the call from the check for retired callees.
+            (IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers, string calleeError) =
+                addedCallees.Resolve(entry);
+            if (calleeError != null)
+            {
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, calleeError, filePath));
+            }
+
             if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
             {
                 return TryResolveAddedMethod(
@@ -121,6 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     methodLabel,
                     shimAssembly,
                     bindFailures,
+                    calledAddedMembers,
                     filePath);
             }
 
@@ -131,6 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 homeResolver,
                 shimAssembly,
                 bindFailures,
+                calledAddedMembers,
                 filePath);
         }
 
@@ -139,6 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string methodLabel,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
+            IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers,
             string filePath)
         {
             if (bindFailures.TryGetValue(entry.shimTypeName ?? string.Empty, out string bindFailureReason))
@@ -154,6 +175,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Failed(methodLabel, shimError, filePath));
             }
 
+            (FieldInfo invocationCounter, string counterError) = FindInvocationCounter(shimMethod);
+            if (invocationCounter == null)
+            {
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, counterError, filePath));
+            }
+
             return ResolvedEntryOutcome.Succeeded(
                 new ResolvedEntry(
                     entry,
@@ -162,7 +190,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadPatchShape.Transplant,
                     originalMethod: null,
                     shimMethod,
-                    isAddedMethod: true));
+                    isAddedMethod: true,
+                    invocationCounter,
+                    calledAddedMembers));
+        }
+
+        // Why a missing counter fails the file like a missing shim does: the counter is what
+        // --status reports as the member's InvocationCount, and a shim without it means the worker
+        // and this Editor disagree on the shape of an added-member shim.
+        private static (FieldInfo InvocationCounter, string ErrorMessage) FindInvocationCounter(
+            MethodInfo shimMethod)
+        {
+            Type shimType = shimMethod.DeclaringType;
+            string counterName = shimMethod.Name + HotReloadConstants.AddedMemberInvocationCounterSuffix;
+            FieldInfo counter = shimType.GetField(
+                counterName,
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            if (counter == null)
+            {
+                return (null, "Invocation counter not found: " + shimType.Name + "." + counterName);
+            }
+
+            if (!HotReloadAddedMemberInfo.IsReadableInvocationCounter(counter))
+            {
+                return (null, "Invocation counter is not a static long: " + shimType.Name + "." + counterName);
+            }
+
+            return (counter, null);
         }
 
         private static ResolvedEntryOutcome TryResolveExistingMethod(
@@ -172,6 +226,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadEntryHomeResolver homeResolver,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
+            IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers,
             string filePath)
         {
             HotReloadPatchShape patchShape = entry.patchKind == HotReloadConstants.PatchKindDelegation
@@ -224,7 +279,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patchShape,
                     matchResult.Method,
                     shimMethod,
-                    isAddedMethod: false));
+                    isAddedMethod: false,
+                    invocationCounter: null,
+                    calledAddedMembers));
         }
 
         private static (MethodInfo ShimMethod, string ErrorMessage) FindShimMethod(
@@ -279,7 +336,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static string FormatEntryLabel(TransformWorkerEntryDto entry)
+        // Why internal: the added-callee index records calls in this same label, the one an added
+        // member is registered under, so the two cannot drift apart.
+        internal static string FormatEntryLabel(TransformWorkerEntryDto entry)
         {
             return HotReloadMethodKeys.FormatMethodLabelParts(
                 new HotReloadMetadataTypeName(entry.typeMetadataName),
@@ -301,6 +360,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public MethodInfo ShimMethod { get; }
             public bool IsAddedMethod { get; }
 
+            /// <summary>
+            /// The counter declared beside an added method's shim, or null for an entry that
+            /// patches an existing method.
+            /// </summary>
+            public FieldInfo InvocationCounter { get; }
+
+            /// <summary>The added members this entry's body calls; empty when it calls none.</summary>
+            public IReadOnlyList<HotReloadCalledAddedMember> CalledAddedMembers { get; }
+
             public ResolvedEntry(
                 TransformWorkerEntryDto entry,
                 string methodLabel,
@@ -308,8 +376,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPatchShape patchShape,
                 MethodBase originalMethod,
                 MethodInfo shimMethod,
-                bool isAddedMethod)
+                bool isAddedMethod,
+                FieldInfo invocationCounter,
+                IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers)
             {
+                Debug.Assert(calledAddedMembers != null, "calledAddedMembers must not be null.");
+
                 Entry = entry;
                 MethodLabel = methodLabel;
                 FilePath = filePath;
@@ -317,6 +389,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 OriginalMethod = originalMethod;
                 ShimMethod = shimMethod;
                 IsAddedMethod = isAddedMethod;
+                InvocationCounter = invocationCounter;
+                CalledAddedMembers = calledAddedMembers;
             }
         }
 

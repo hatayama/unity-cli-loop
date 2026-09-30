@@ -86,8 +86,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetShimTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetShimTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
 
             List<HotReloadAddedMemberInfo> members = new List<HotReloadAddedMemberInfo>();
             generation.DescribeAddedMembers(members);
@@ -115,6 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixtureProjectRelativePath,
                 "AddedMember",
                 AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field,
                 sourceStartLine: 20,
                 sourceEndLine: 24);
 
@@ -142,6 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixtureProjectRelativePath,
                 "Step",
                 NestedCecilType,
+                HotReloadUnreadInvocationCounter.Field,
                 sourceStartLine: 10,
                 sourceEndLine: 12);
             generation.RegisterAddedMethod(
@@ -150,6 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixtureProjectRelativePath,
                 "AddedMember",
                 HostType,
+                HotReloadUnreadInvocationCounter.Field,
                 sourceStartLine: 20,
                 sourceEndLine: 24);
 
@@ -174,7 +189,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
 
             Assert.That(generation.FindAddedMethodContainingLine(0), Is.Null);
             Assert.That(generation.FindAddedMethodContainingLine(1), Is.Null);
@@ -189,7 +210,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
 
             Assert.That(generation.IsActiveMember(AddedMethodKey), Is.True);
             Assert.That(generation.IsActiveMember(OtherAddedMethodKey), Is.False);
@@ -205,7 +232,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadFileGeneration generation = CreateGeneration();
             generation.BeginAddedMemberGeneration();
-            generation.RegisterAddedMethod(AddedMethodKey, GetAddedTarget(), FixtureProjectRelativePath, "AddedMember", AddedMethodType);
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
             generation.ReplaceAddedFields(new[] { HostType + ".alpha" }, null, null, null);
 
             generation.BeginAddedMemberGeneration();
@@ -334,6 +367,97 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(generation.IsPatchActive(GetShimTarget()), Is.True);
             Assert.That(generation.ActivePatchCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a patch keeps the added members it was opened with as its calls from pending
+        /// through live, deactivated, and reactivated, so a restored patch still says what it
+        /// calls.
+        /// </summary>
+        [Test]
+        public void BeginPatch_KeepsItsCalledAddedMembersThroughCommitDeactivateAndReactivate()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            BeginShimGeneration(generation);
+            RegisterShim(generation);
+            HotReloadCalledAddedMember[] calls = { CreateCall("Bar") };
+            generation.BeginPatch(GetShimTarget(), GetAddedTarget(), calls);
+            generation.CommitPatch(GetShimTarget());
+
+            generation.ReactivatePatch(generation.DeactivatePatch(GetShimTarget()));
+
+            Assert.That(generation.DeactivatePatch(GetShimTarget()).CalledAddedMembers, Is.EqualTo(calls));
+        }
+
+        /// <summary>
+        /// What: an added member keeps the added members it was registered as calling, and one
+        /// registered without any carries an empty list rather than null.
+        /// </summary>
+        [Test]
+        public void RegisterAddedMethod_KeepsItsCalledAddedMembers()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            generation.BeginAddedMemberGeneration();
+            HotReloadCalledAddedMember[] calls = { CreateCall("Bar") };
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field,
+                calledAddedMembers: calls);
+            generation.RegisterAddedMethod(
+                OtherAddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "OtherAddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field);
+
+            Assert.That(generation.FindAddedMember(AddedMethodKey).CalledAddedMembers, Is.EqualTo(calls));
+            Assert.That(generation.FindAddedMember(OtherAddedMethodKey).CalledAddedMembers, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: the calls a generation reports are those of its live patches, named by the
+        /// patched method's label, and those of its registered added members, named by their key,
+        /// each with the generation's path; a patch Harmony has not accepted yet reports none.
+        /// </summary>
+        [Test]
+        public void CollectAddedMemberCalls_ReportsLivePatchesAndAddedMembersButNotPendingPatches()
+        {
+            HotReloadFileGeneration generation = CreateGeneration();
+            BeginShimGeneration(generation);
+            RegisterShim(generation);
+            generation.RegisterShimMethod(
+                GetAddedTarget(),
+                new HotReloadShimMethodEntry(GetShimTarget(), false, 3, 4));
+            HotReloadCalledAddedMember livePatchCall = CreateCall("FromLivePatch");
+            generation.BeginPatch(GetShimTarget(), GetAddedTarget(), new[] { livePatchCall });
+            generation.CommitPatch(GetShimTarget());
+            generation.BeginPatch(GetAddedTarget(), GetShimTarget(), new[] { CreateCall("FromPendingPatch") });
+            generation.BeginAddedMemberGeneration();
+            HotReloadCalledAddedMember addedMemberCall = CreateCall("FromAddedMember");
+            generation.RegisterAddedMethod(
+                AddedMethodKey,
+                GetAddedTarget(),
+                FixtureProjectRelativePath,
+                "AddedMember",
+                AddedMethodType,
+                HotReloadUnreadInvocationCounter.Field,
+                calledAddedMembers: new[] { addedMemberCall });
+
+            List<HotReloadAddedMemberCall> calls = new List<HotReloadAddedMemberCall>();
+            generation.CollectAddedMemberCalls(calls);
+
+            Assert.That(calls.Count, Is.EqualTo(2));
+            Assert.That(calls[0].CallerLabel, Is.EqualTo(HotReloadMethodKeys.FormatMethodLabel(GetShimTarget())));
+            Assert.That(calls[0].CallerFilePath, Is.EqualTo(FixtureProjectRelativePath));
+            Assert.That(calls[0].Callee, Is.SameAs(livePatchCall));
+            Assert.That(calls[1].CallerLabel, Is.EqualTo(AddedMethodKey));
+            Assert.That(calls[1].CallerFilePath, Is.EqualTo(FixtureProjectRelativePath));
+            Assert.That(calls[1].Callee, Is.SameAs(addedMemberCall));
         }
 
         /// <summary>
@@ -600,6 +724,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static HotReloadFileGeneration CreateGeneration()
         {
             return new HotReloadFileGeneration(FixtureProjectRelativePath);
+        }
+
+        private static HotReloadCalledAddedMember CreateCall(string addedMethodName)
+        {
+            return new HotReloadCalledAddedMember(HostType + "." + addedMethodName + "()", "Assets/Host.cs");
         }
 
         // The store key spells nested types the metadata way, which is what the worker forms and

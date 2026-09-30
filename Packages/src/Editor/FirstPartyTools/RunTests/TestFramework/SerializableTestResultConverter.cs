@@ -47,8 +47,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int failedTests = CountFailedTests(result);
             int skippedTests = CountSkippedTests(result);
             int inconclusiveTests = CountInconclusiveTests(result);
+            SerializableTestResult.FailedTestDetail[] failedSuites = CollectFailedSuiteDetails(result);
             bool noTestsFound = totalTests == 0;
-            bool hasFailures = failedTests > 0;
+            bool hasFailures = failedTests > 0 || failedSuites != null;
             RunTestsResultClassification classification = Classify(
                 result,
                 totalTests,
@@ -82,17 +83,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 xmlPath = null,
                 failedTests = CollectFailedTestDetails(result),
                 skippedTests = CollectSkippedTestFullNames(result),
-                inconclusiveTests = CollectInconclusiveTestDetails(result)
+                inconclusiveTests = CollectInconclusiveTestDetails(result),
+                failedSuites = failedSuites
             };
         }
 
         /// <summary>
         /// Whether a finished run leaves anything to read in the NUnit XML: a failed or an
-        /// inconclusive leaf.
+        /// inconclusive leaf, or a suite that failed outside its tests.
         /// </summary>
         internal static bool ShouldSaveResultXml(SerializableTestResult result)
         {
-            return result.failedCount > 0 || result.inconclusiveCount > 0;
+            return result.failedCount > 0
+                || result.inconclusiveCount > 0
+                || (result.failedSuites != null && result.failedSuites.Length > 0);
         }
 
         private static RunTestsResultClassification Classify(
@@ -287,6 +291,90 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 File = file,
                 Line = line
             };
+        }
+
+        private static SerializableTestResult.FailedTestDetail[] CollectFailedSuiteDetails(ITestResultAdaptor result)
+        {
+            List<SerializableTestResult.FailedTestDetail> details =
+                new List<SerializableTestResult.FailedTestDetail>();
+            AppendFailedSuiteDetails(result, details);
+            if (details.Count == 0)
+            {
+                return null;
+            }
+
+            return details.ToArray();
+        }
+
+        private static void AppendFailedSuiteDetails(
+            ITestResultAdaptor result,
+            List<SerializableTestResult.FailedTestDetail> details)
+        {
+            if (details.Count >= RunTestsConstants.FailedTestDetailsLimit)
+            {
+                return;
+            }
+
+            if (!result.Test.IsSuite || result.TestStatus != TestStatus.Failed)
+            {
+                return;
+            }
+
+            if (FailedOutsideItsTests(result))
+            {
+                details.Add(CreateFailedTestDetail(result));
+            }
+
+            if (result.Children == null)
+            {
+                return;
+            }
+
+            foreach (ITestResultAdaptor child in result.Children)
+            {
+                AppendFailedSuiteDetails(child, details);
+            }
+        }
+
+        // Why two rules: NUnit records a OneTimeSetUp or OneTimeTearDown error on the suite's own
+        // result state at the SetUp or TearDown site and rolls it into every ancestor at the Child
+        // site, so that site marks where the failure started even when some tests failed too. A
+        // Failed suite with neither site and nothing Failed beneath it, such as a cancelled one,
+        // would otherwise leave a Failed run with nothing that explains it.
+        private static bool FailedOutsideItsTests(ITestResultAdaptor suite)
+        {
+            if (HasSetUpOrTearDownSite(suite.ResultState))
+            {
+                return true;
+            }
+
+            return !HasFailedChildSuite(suite) && CountFailedTests(suite) == 0;
+        }
+
+        // Why the text: ITestResultAdaptor exposes the site only through NUnit's ResultState
+        // string, which renders as Status[:Label][(Site)].
+        private static bool HasSetUpOrTearDownSite(string resultState)
+        {
+            return resultState.EndsWith("(SetUp)", StringComparison.Ordinal)
+                || resultState.EndsWith("(TearDown)", StringComparison.Ordinal);
+        }
+
+        private static bool HasFailedChildSuite(ITestResultAdaptor suite)
+        {
+            if (suite.Children == null)
+            {
+                return false;
+            }
+
+            foreach (ITestResultAdaptor child in suite.Children)
+            {
+                if (child.Test.IsSuite && child.TestStatus == TestStatus.Failed)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static string[] CollectSkippedTestFullNames(ITestResultAdaptor result)

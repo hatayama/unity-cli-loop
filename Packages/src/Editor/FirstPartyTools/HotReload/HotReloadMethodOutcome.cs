@@ -1,3 +1,5 @@
+using System;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -14,13 +16,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The facts Reason was built from when a worker reported it. Null for every other row.
         public HotReloadWorkerReasonFacts WorkerReason { get; }
 
+        // The added member an AlreadyActive row left in place, whose own counter is the row's
+        // InvocationCount. Null for every other row.
+        public HotReloadAddedMemberInfo AddedMember { get; }
+
         private HotReloadMethodOutcome(
             HotReloadMethodOutcomeKind kind,
             string method,
             string reason,
             string filePath,
             string lifecycleNote,
-            HotReloadWorkerReasonFacts workerReason = null)
+            HotReloadWorkerReasonFacts workerReason = null,
+            HotReloadAddedMemberInfo addedMember = null)
         {
             Kind = kind;
             Method = method;
@@ -28,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FilePath = filePath;
             LifecycleNote = lifecycleNote ?? string.Empty;
             WorkerReason = workerReason;
+            AddedMember = addedMember;
         }
 
         public static HotReloadMethodOutcome Patched(
@@ -91,6 +99,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string.Empty);
         }
 
+        // An added member left in place because its file's source is unchanged. Why the member and
+        // not its count: the ledger never counts an added member, and the response reads the
+        // member's own counter when it is built, as it reads the ledger for a patch's row.
+        public static HotReloadMethodOutcome AlreadyActiveAddedMember(
+            HotReloadAddedMemberInfo member,
+            string filePath)
+        {
+            if (member == null)
+            {
+                throw new ArgumentNullException(nameof(member));
+            }
+
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.AlreadyActive,
+                member.MethodKey,
+                HotReloadConstants.AlreadyActiveAddedMemberReason,
+                filePath,
+                string.Empty,
+                addedMember: member);
+        }
+
         // A patch that outlived the method it replaced: the edited source no longer declares it,
         // so compiled callers keep running the patched body until 'uloop compile', '--revert-all',
         // or a later reload whose source restores the method to the compiled baseline reverts it.
@@ -107,17 +136,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public HotReloadMethodOutcome WithLifecycleNote(string lifecycleNote)
         {
-            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote, WorkerReason);
+            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote, WorkerReason, AddedMember);
         }
 
         public HotReloadMethodOutcome WithReason(string reason)
         {
-            return new HotReloadMethodOutcome(Kind, Method, reason, FilePath, LifecycleNote, WorkerReason);
+            return new HotReloadMethodOutcome(Kind, Method, reason, FilePath, LifecycleNote, WorkerReason, AddedMember);
         }
 
         public HotReloadMethodOutcome WithWorkerReason(HotReloadWorkerReasonFacts workerReason)
         {
-            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, LifecycleNote, workerReason);
+            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, LifecycleNote, workerReason, AddedMember);
         }
     }
 }

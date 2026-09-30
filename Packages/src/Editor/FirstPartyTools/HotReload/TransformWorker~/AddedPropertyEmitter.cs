@@ -69,10 +69,11 @@ internal static class AddedPropertyEmitter
         MethodDeclarationSyntax method = isGetter
             ? BuildStoreGetter(binding, accessor)
             : BuildStoreSetter(binding, accessor);
-        method = ShimMethodFactory.ToShimMethod(
-            method,
-            isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod);
-        typeState.CurrentShimType.AddMethod(method, accessor.ShimMethodName);
+        IMethodSymbol accessorSymbol = isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod;
+        method = ShimMethodFactory.ToShimMethod(method, accessorSymbol);
+        // Why the receiver check here too, though the store already refuses a null instance: the
+        // check must come before the counter, or a null-receiver call would count as a run.
+        typeState.CurrentShimType.AddAddedMemberMethod(method, accessor.ShimMethodName, accessorSymbol);
         entries.Add(CreateAccessorEntry(typeState, binding, accessor, Array.Empty<string>()));
     }
 
@@ -171,7 +172,10 @@ internal static class AddedPropertyEmitter
             addedPropertyCatalog,
             addedMethodCatalog,
             addedFieldCatalog);
-        typeState.CurrentShimType.AddMethod(shimMethod, accessor.ShimMethodName);
+        typeState.CurrentShimType.AddAddedMemberMethod(
+            shimMethod,
+            accessor.ShimMethodName,
+            isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod);
         entries.Add(CreateAccessorEntry(
             typeState,
             binding,
@@ -245,9 +249,7 @@ internal static class AddedPropertyEmitter
             .WithParameterList(isGetter ? SyntaxFactory.ParameterList() : CreateSetterParameterList(binding));
         method = ApplyBody(method, rewrittenBody);
         IMethodSymbol accessorSymbol = isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod;
-        return ShimMethodFactory.GuardAddedMemberReceiver(
-            ShimMethodFactory.ToShimMethod(method, accessorSymbol),
-            accessorSymbol);
+        return ShimMethodFactory.ToShimMethod(method, accessorSymbol);
     }
 
     private static ParameterListSyntax CreateSetterParameterList(AddedPropertyBinding binding)

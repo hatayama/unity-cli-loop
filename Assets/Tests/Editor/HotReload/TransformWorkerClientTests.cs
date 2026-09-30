@@ -450,7 +450,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 return (false, -1, -1);
             }
 
-            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
+            // Why the '(': an added member's shim type also declares its invocation counter, whose
+            // name starts with the shim method name.
+            int nameIndex = shimSource.IndexOf(shimMethodName + "(", StringComparison.Ordinal);
             if (nameIndex < 0)
             {
                 return (false, -1, -1);

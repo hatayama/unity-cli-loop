@@ -407,6 +407,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // compiled assembly's debug data. A type neither can place is left out. Null until one of
         // them resolves the types, and for a reason that names none.
         public string[] declaringFiles;
+
+        // Project-relative forward-slash paths of the run's files that build the split types from
+        // source, for a reason whose compiled signature still names the compiled copies. Apart from
+        // declaringFiles, which name the files of the compiled API instead. Null for other reasons.
+        public string[] splitSourceFiles;
     }
 
     [Serializable]

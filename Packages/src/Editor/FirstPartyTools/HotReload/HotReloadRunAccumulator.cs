@@ -26,6 +26,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<string> _addedConsts = new List<string>();
         private readonly List<string> _siblingDerivedWarnings = new List<string>();
         private readonly List<string> _reappliedSiblingPaths = new List<string>();
+        private readonly List<string> _pathsInRun = new List<string>();
+        private readonly HotReloadStaleAddedMemberCallers _staleAddedMemberCallers =
+            new HotReloadStaleAddedMemberCallers();
         private readonly HotReloadSiblingBaselineNotices _siblingBaselineNotices =
             new HotReloadSiblingBaselineNotices();
         // Why appended without deduplication: one row per declaration is what the report means,
@@ -83,6 +86,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public HotReloadRunDisplayedRemovedMembers DisplayedRemovedMembers { get; } =
             new HotReloadRunDisplayedRemovedMembers();
 
+        /// <summary>Where each group's gate records stale call sites, turned into warnings once per run.</summary>
+        public HotReloadRunStaleSignatureWarnings StaleSignatureWarnings { get; } =
+            new HotReloadRunStaleSignatureWarnings();
+
         /// <summary>Where re-applied siblings report a missing baseline, summarized once per run.</summary>
         public HotReloadSiblingBaselineNotices SiblingBaselineNotices => _siblingBaselineNotices;
 
@@ -115,6 +122,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _outcomes.AddRange(fileResult.Outcomes);
             _warnings.AddRange(fileResult.Warnings);
+            // Why every merged file, short-circuited inputs and siblings included: a call left
+            // running into a retired added member is reported on every run that touches either end.
+            // Why the empty check: the run-wide path set skips an input that resolved to no path.
+            if (!string.IsNullOrEmpty(projectRelativePath))
+            {
+                _pathsInRun.Add(projectRelativePath);
+            }
+
             HotReloadOutcomeAggregation.AppendDistinct(_suppressedPausePointIds, fileResult.SuppressedPausePointIds);
             HotReloadOutcomeAggregation.AppendDistinct(_retargetedPausePointIds, fileResult.RetargetedPausePointIds);
             HotReloadOutcomeAggregation.AppendDistinct(_inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
@@ -220,10 +235,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why first: the per-file warnings of the re-applied files were merged last, so the
             // summary of their missing baselines lands right after them.
             _siblingBaselineNotices.AppendTo(_warnings);
+            // Why the patches active now rather than at each gate: a later group can patch a
+            // caller in another assembly or peel its earlier patch, and only the state after the
+            // last group says which callers still run the compiled body.
+            StaleSignatureWarnings.AppendTo(_warnings, _patcher.DescribeActivePatches());
             AppendInlineRiskWarning();
             AppendAddedFieldsLifetimeWarning();
             AppendSerializedAddedFieldWarning();
             AppendUnforwardedUnityMessageWarning();
+            AppendStaleAddedMemberCallsWarning();
             // Why at the end of the run and on the main thread: the added methods this run brought
             // in are in the domain by now, and building a proxy type touches Unity APIs that only
             // answer on the main thread. A type whose proxy cannot be built reports here, so the
@@ -291,6 +311,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private HotReloadCarriedInState DescribeCarriedInState(string projectRelativePath)
         {
             return _siblingLedgerUpdates.DescribeAfterApply(new HotReloadDomainCarriedInLookup(_domain), projectRelativePath);
+        }
+
+        // Why after every group: a call is stale only once no generation registers its member, and
+        // a later group of the same run can register it again or retire it.
+        private void AppendStaleAddedMemberCallsWarning()
+        {
+            List<HotReloadAddedMemberCall> calls = new List<HotReloadAddedMemberCall>();
+            _domain.CollectAddedMemberCalls(calls);
+            string warning = _staleAddedMemberCallers.DescribeOrNull(calls, _domain.DescribeAddedMembers(), _pathsInRun);
+            if (warning != null)
+            {
+                _warnings.Add(warning);
+            }
         }
 
         private void AppendInlineRiskWarning()

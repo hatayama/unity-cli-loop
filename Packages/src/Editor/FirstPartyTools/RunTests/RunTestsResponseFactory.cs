@@ -57,6 +57,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 response.InconclusiveTests = result.inconclusiveTests;
             }
+
+            if (result.failedSuites != null && result.failedSuites.Length > 0)
+            {
+                response.FailedSuites = result.failedSuites;
+            }
         }
     }
 }

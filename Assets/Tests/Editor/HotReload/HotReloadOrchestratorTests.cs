@@ -3283,7 +3283,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compilationAssembly,
                 HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, assemblyName),
                 projectRoot,
-                new HotReloadFileSinks(new List<string>(), null))
+                new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings()))
             {
                 FileOutput = workerOutput.files[0],
                 SnapshotLabels = new HashSet<string>(),
@@ -4590,8 +4590,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// refused by the worker before any shim is compiled: the added method and its caller are
         /// Skipped with the worker's reasons, nothing fails, and the run deactivates the earlier
         /// AddedPing registration with one warning naming it and telling the reader to change what
-        /// the skip reason names before reloading. A third run with the body fixed
-        /// registers AddedPing again and the caller returns the new value.
+        /// the skip reason names before reloading, and names the caller's earlier patch as still
+        /// calling the retired AddedPing. A third run with the body fixed registers AddedPing
+        /// again, the caller returns the new value, and no call is named any more.
         /// </summary>
         [Test]
         public async Task Run_UnboundAddedMethodAfterSuccess_DeactivatesItUntilTheBodyBindsAgain()
@@ -4625,6 +4626,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertDeactivatedPatchesWarningsEqual(
                 second,
                 ExpectedDeactivatedSkippedAddedMembersWarning(AddedPingMethodLabel()));
+            Assert.That(
+                second.Warnings,
+                Does.Contain(
+                    HotReloadStaleAddedMemberCallsWarnings.Expected(
+                        HotReloadStaleAddedMemberCallsWarnings.Pair(
+                            HotReloadMethodKeys.FormatMethodLabel(
+                                typeof(HotReloadAddedMethodApplyFixture).GetMethod(
+                                    nameof(HotReloadAddedMethodApplyFixture.ExistingCaller))),
+                            AddedPingMethodLabel()))),
+                string.Join("\n", second.Warnings));
 
             string fixedBody = WithWorkingAddedPing(onDisk).Replace(
                 "            return value + 1;\n        }",
@@ -4638,6 +4649,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAdded(third, "AddedPing");
             Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
             Assert.That(new HotReloadAddedMethodApplyFixture().ExistingCaller(3), Is.EqualTo(8));
+            HotReloadStaleAddedMemberCallsWarnings.AssertNone(third.Warnings);
         }
 
         /// <summary>
@@ -4712,11 +4724,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an unchanged reload after a fully applied added-method run reports the added
-        /// member as AlreadyActive with the added-member Reason and InvocationCount 0, while
-        /// the patched caller keeps the ordinary AlreadyActive Reason.
+        /// member as AlreadyActive with the added-member Reason and the calls its own counter
+        /// holds, while the patched caller keeps the ordinary AlreadyActive Reason and the
+        /// ledger's count.
         /// </summary>
         [Test]
-        public async Task Run_UnchangedReload_AlreadyActiveAddedMember_UsesAddedReasonAndZeroCount()
+        public async Task Run_UnchangedReload_AlreadyActiveAddedMember_CarriesTheAddedMembersCount()
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -4742,13 +4755,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 addedRow.Reason,
                 Is.EqualTo(HotReloadConstants.AlreadyActiveAddedMemberReason));
-            Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
+            Assert.That(addedRow.InvocationCount, Is.EqualTo(1L));
 
             HotReloadMethodResult patchedRow = FindResponseMethod(
                 response,
                 nameof(HotReloadAddedMethodApplyFixture.ExistingCaller));
             Assert.That(patchedRow.Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.AlreadyActive)));
             Assert.That(patchedRow.Reason, Is.EqualTo(HotReloadConstants.AlreadyActiveReason));
+            Assert.That(patchedRow.InvocationCount, Is.EqualTo(1L));
         }
 
         /// <summary>
@@ -4920,7 +4934,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: deleting a previously added method and restoring its caller does not emit
-        /// the added-member deactivation warning (intentional convergence).
+        /// the added-member deactivation warning (intentional convergence), nor name the caller as
+        /// still calling the deleted method, because the restored caller's patch is reverted.
         /// </summary>
         [Test]
         public async Task Run_DeleteAddedMethodAndRestoreCaller_DoesNotWarnDeactivatedAddedMembers()
@@ -4939,6 +4954,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoDeactivatedPatchesWarning(second);
+            HotReloadStaleAddedMemberCallsWarnings.AssertNone(second.Warnings);
         }
 
         /// <summary>
@@ -5549,6 +5565,116 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string allWarnings = "Warnings were:\n" + string.Join("\n", second.Warnings);
             Assert.That(writerWarnings, Has.Count.EqualTo(1), allWarnings);
             Assert.That(writerWarnings[0], Does.Contain("an earlier hot reload applied " + targetLabel), allWarnings);
+            Assert.That(
+                writerWarnings[0],
+                Does.Not.Contain("reads it; the property keeps its default value"),
+                allWarnings);
+        }
+
+        /// <summary>
+        /// What: when the skipped writer with an earlier patch takes a constructed generic
+        /// parameter, the skipped-writer warning still names the earlier patch: the Editor's
+        /// active-patch label spells the parameter the way the worker's skipped row does.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedWriterTakingAConstructedGeneric_WarningNamesTheEarlierPatch()
+        {
+            await AssertSkippedWriterWarningNamesTheEarlierPatch(
+                nameof(HotReloadLabelShapeWriterHost.WriteFromList),
+                "List<int> values",
+                "values.Count",
+                host => host.WriteFromList(new List<int> { 1, 2, 3 }),
+                3);
+        }
+
+        /// <summary>
+        /// What: when the skipped writer with an earlier patch takes a multidimensional array,
+        /// the skipped-writer warning still names the earlier patch: the Editor's active-patch
+        /// label spells the array rank the way the worker's skipped row does.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedWriterTakingAMultidimensionalArray_WarningNamesTheEarlierPatch()
+        {
+            await AssertSkippedWriterWarningNamesTheEarlierPatch(
+                nameof(HotReloadLabelShapeWriterHost.WriteFromGrid),
+                "int[,] values",
+                "values.Length",
+                host => host.WriteFromGrid(new int[2, 3]),
+                6);
+        }
+
+        // Runs the two reloads of the skipped-writer-with-earlier-patch case against one writer
+        // of the label-shape host: the first applies the writer assigning an added auto-property
+        // that Read reads, the second makes the worker skip that writer.
+        private static async Task AssertSkippedWriterWarningNamesTheEarlierPatch(
+            string writerName,
+            string writerParameterList,
+            string writerResult,
+            Func<HotReloadLabelShapeWriterHost, int> invokeWriter,
+            int expectedAssigned)
+        {
+            string fixturePath = ResolveLabelShapeWriterHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string writerHeader = "        public int " + writerName + "(" + writerParameterList + ")\n        {\n";
+            string writerOriginal = writerHeader + "            return " + writerResult + ";\n        }";
+            const string readOriginal =
+                "        public int Read(int value)\n        {\n            return value;\n        }";
+            const string readingRead =
+                "        public int Read(int value)\n        {\n            return AddedCount + value;\n        }\n\n"
+                + "        public int AddedCount { get; private set; }";
+            Assert.That(onDisk, Does.Contain(writerOriginal), "Precondition: the writer must be on disk as written.");
+            Assert.That(onDisk, Does.Contain(readOriginal), "Precondition: Read must be on disk as written.");
+            string firstEdit = onDisk
+                .Replace(
+                    writerOriginal,
+                    writerHeader + "            AddedCount = " + writerResult + ";\n"
+                    + "            return " + writerResult + ";\n        }",
+                    StringComparison.Ordinal)
+                .Replace(readOriginal, readingRead, StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("LabelShape" + writerName + "1.cs", firstEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, writerName);
+
+            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
+            // sees this writer as skipped while the first run's patch stays what runs.
+            string secondEdit = onDisk
+                .Replace(
+                    writerOriginal,
+                    writerHeader + "            AddedCount = " + writerResult + ";\n"
+                    + "            return " + writerResult + " + base.GetHashCode() * 0;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(readOriginal, readingRead, StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("LabelShape" + writerName + "2.cs", secondEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(FindSkippedReason(second, writerName), Is.Not.Null, FormatOutcomes(second));
+
+            // The first run's writer patch still assigns the property the applied Read reads.
+            HotReloadLabelShapeWriterHost host = new HotReloadLabelShapeWriterHost();
+            invokeWriter(host);
+            Assert.That(host.Read(0), Is.EqualTo(expectedAssigned));
+
+            string writerLabel = HotReloadMethodKeys.FormatMethodLabel(
+                typeof(HotReloadLabelShapeWriterHost).GetMethod(writerName));
+            List<string> writerWarnings = new List<string>();
+            foreach (string warning in second.Warnings)
+            {
+                if (warning.Contains("'AddedCount'", StringComparison.Ordinal))
+                {
+                    writerWarnings.Add(warning);
+                }
+            }
+
+            string allWarnings = "Warnings were:\n" + string.Join("\n", second.Warnings);
+            Assert.That(writerWarnings, Has.Count.EqualTo(1), allWarnings);
+            Assert.That(writerWarnings[0], Does.Contain("an earlier hot reload applied " + writerLabel), allWarnings);
             Assert.That(
                 writerWarnings[0],
                 Does.Not.Contain("reads it; the property keeps its default value"),
@@ -7759,6 +7885,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change external host source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveLabelShapeWriterHostPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadLabelShapeWriterHost.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Label-shape writer host source missing: " + path);
             return Path.GetFullPath(path);
         }
 

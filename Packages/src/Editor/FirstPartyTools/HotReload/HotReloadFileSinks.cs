@@ -10,16 +10,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <remarks>
     /// Why separate from HotReloadApplyContext: these are the mutable half. Keeping them apart
     /// makes it visible at each call site which stage writes results and which only reads inputs.
-    /// The two injected lists span the whole run, not one file, so the caller owns them.
+    /// The injected collections span the whole run, not one file, so the caller owns them.
     /// </remarks>
     internal sealed class HotReloadFileSinks
     {
         internal HotReloadFileSinks(
             List<string> siblingDerivedWarnings,
             List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates,
+            HotReloadRunStaleSignatureWarnings staleSignatureWarnings,
             HotReloadRunDisplayedRemovedMembers displayedRemovedMembers = null)
         {
             Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
+            Debug.Assert(staleSignatureWarnings != null, "staleSignatureWarnings must not be null.");
 
             Outcomes = new List<HotReloadMethodOutcome>();
             Warnings = new List<string>();
@@ -29,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IntroducedTypes = new List<HotReloadIntroducedTypeOutcome>();
             SiblingDerivedWarnings = siblingDerivedWarnings;
             OneShotCallerNoteCandidates = oneShotCallerNoteCandidates;
+            StaleSignatureWarnings = staleSignatureWarnings;
             DisplayedRemovedMembers = displayedRemovedMembers;
         }
 
@@ -60,6 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Shared across the whole run; null when the caller collects no one-shot caller notes.
         internal List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates { get; }
+
+        // Shared across the whole run so the warning reflects the patches active when it ends.
+        internal HotReloadRunStaleSignatureWarnings StaleSignatureWarnings { get; }
 
         // Shared across the whole run so the removed-member record is written once the run ends;
         // null when the caller keeps no such record.

@@ -138,8 +138,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string filePath,
             string methodName,
             string declaringTypeMetadataName,
+            FieldInfo invocationCounter,
             int sourceStartLine = 0,
-            int sourceEndLine = 0)
+            int sourceEndLine = 0,
+            IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
             Debug.Assert(shimMethod != null, "shimMethod must not be null.");
@@ -147,6 +149,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 throw new ArgumentException(
                     "An added method is registered with its own name and its declaring type's metadata name.");
+            }
+
+            // Why checked in every build: --status reads this counter as the member's
+            // InvocationCount, so a member registered without one would fail there instead.
+            if (!HotReloadAddedMemberInfo.IsReadableInvocationCounter(invocationCounter))
+            {
+                throw new ArgumentException(
+                    "An added method is registered with the static long invocation counter beside its shim.",
+                    nameof(invocationCounter));
             }
 
             if (!HasAddedMemberGeneration)
@@ -163,7 +174,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     sourceStartLine,
                     sourceEndLine,
                     methodName,
-                    declaringTypeMetadataName);
+                    declaringTypeMetadataName,
+                    invocationCounter,
+                    calledAddedMembers);
         }
 
         /// <summary>
@@ -233,10 +246,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Opens a patch of <paramref name="method"/> with <paramref name="shim"/>, pending until
-        /// Harmony accepts it. The shim has to be registered first: that is what makes every patch
-        /// this generation holds a patch of a method the edited source still declares.
+        /// Harmony accepts it, calling <paramref name="calledAddedMembers"/>. The shim has to be
+        /// registered first: that is what makes every patch this generation holds a patch of a
+        /// method the edited source still declares.
         /// </summary>
-        internal void BeginPatch(MethodBase method, MethodInfo shim)
+        internal void BeginPatch(
+            MethodBase method,
+            MethodInfo shim,
+            IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers = null)
         {
             Debug.Assert(method != null, "method must not be null.");
             Debug.Assert(shim != null, "shim must not be null.");
@@ -252,7 +269,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "This method already holds a pending or active patch.");
             }
 
-            _patchesByMethod[method] = new HotReloadActivePatchEntry(method, shim);
+            _patchesByMethod[method] = new HotReloadActivePatchEntry(method, shim, calledAddedMembers);
         }
 
         /// <summary>Turns this method's pending patch into the live one, keeping what the rebuild recorded.</summary>
@@ -460,6 +477,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// The added member this generation registered under the key, or null when it registered
+        /// none.
+        /// </summary>
+        internal HotReloadAddedMemberInfo FindAddedMember(string methodKey)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
+            return _addedMembersByMethodKey.TryGetValue(methodKey, out HotReloadAddedMemberInfo member)
+                ? member
+                : null;
+        }
+
+        /// <summary>
         /// The added method whose source range holds the 1-based line, or null when no added method
         /// of this file covers it.
         /// </summary>
@@ -474,6 +503,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Adds each call this generation's live patches and registered added members make into an
+        /// added member, named by the caller's label and this generation's path.
+        /// </summary>
+        /// <remarks>
+        /// Why a pending patch is left out: Harmony has not accepted it, so nothing runs its calls.
+        /// </remarks>
+        internal void CollectAddedMemberCalls(List<HotReloadAddedMemberCall> calls)
+        {
+            Debug.Assert(calls != null, "calls must not be null.");
+            foreach (KeyValuePair<MethodBase, HotReloadActivePatchEntry> pair in _patchesByMethod)
+            {
+                if (!pair.Value.IsActive)
+                {
+                    continue;
+                }
+
+                AddCalls(HotReloadMethodKeys.FormatMethodLabel(pair.Key), pair.Value.CalledAddedMembers, calls);
+            }
+
+            foreach (KeyValuePair<string, HotReloadAddedMemberInfo> pair in _addedMembersByMethodKey)
+            {
+                AddCalls(pair.Key, pair.Value.CalledAddedMembers, calls);
+            }
+        }
+
+        private void AddCalls(
+            string callerLabel,
+            IReadOnlyList<HotReloadCalledAddedMember> callees,
+            List<HotReloadAddedMemberCall> calls)
+        {
+            foreach (HotReloadCalledAddedMember callee in callees)
+            {
+                calls.Add(new HotReloadAddedMemberCall(callerLabel, Path, callee));
+            }
         }
 
         internal void DescribeAddedMembers(List<HotReloadAddedMemberInfo> members)

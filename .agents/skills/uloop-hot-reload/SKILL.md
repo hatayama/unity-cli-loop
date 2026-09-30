@@ -44,8 +44,8 @@ automatically — pass it with `--files`.
 
 `uloop hot-reload --status` lists the currently active changes; it cannot be combined with
 `--files` or `--revert-all`. Every change is static Editor state, so after a domain reload
-it reports zero. Each `Active` row's `InvocationCount` counts calls
-into the patched body since it was applied — a reachability signal only while the code is
+it reports zero. Each `Active`/`Added` row's `InvocationCount` counts calls
+into its body since it was applied — a reachability signal only while the code is
 being driven.
 
 ## How It Works
@@ -71,9 +71,9 @@ changed are patched (`UnchangedTotal` counts the rest).
   refused with a `Warnings` line naming the reason. Use from another assembly or from files
   outside the reload, reflection, serialization, and Unity message discovery still need
   `uloop compile`.
-- Signature changes: a return-type change is `Skipped` unless this reload or an earlier one
-  patched every live compiled caller of the old signature; a rename or parameter change
-  applies as an added method and warns about the call sites left on the old signature.
+- Signature changes: a return-type change is `Skipped` unless this or an earlier reload
+  patched every live compiled caller, none in another assembly; a rename or parameter change
+  applies as an added method and warns about call sites left on the old signature.
 - Constructors, operators, struct methods, compiled setter/init/indexer accessors, and event
   accessors are `Skipped`; finalizers and interface members are silently not applied.
 - A reload applies each file all-or-nothing: a `Failed` method leaves that file unapplied,
@@ -98,7 +98,7 @@ All files live in `references/` beside this skill; read the one whose trigger ma
 
 - `references/scope-and-limits.md` — full scope rules: added members, signature changes, `Skipped`/`Failed` tables, source baselines, one-shot code, tunable getters.
 - `references/mechanism-and-lifecycle.md` — patch mechanism, convergence, what survives which reload, Editor-code iteration without PlayMode.
-- `references/troubleshooting.md` — `Patched` but no behavior change, JIT inlining, reading `--status` and `InvocationCount`.
+- `references/troubleshooting.md` — `Patched` but no behavior change, JIT inlining, `--status`, stack frames without lines.
 - `references/pause-point-interaction.md` — how patches re-target or suppress armed pause points; one-way reachability checks.
 - `references/introduced-types.md` — types a reload can introduce: supported shapes, internal access, refusal wording, identity and lifetime, why a new file is never selected automatically.
 - `references/added-field-wiring.md` — putting a value into an added field without a compile.

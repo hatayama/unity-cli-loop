@@ -311,6 +311,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// The added member the file's generation registered under the key, or null when the file
+        /// has no generation or its generation registered none. Keyed by path for the reason
+        /// IsActiveMember is.
+        /// </summary>
+        internal HotReloadAddedMemberInfo FindAddedMember(string projectRelativePath, string methodKey)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
+            return FindGeneration(projectRelativePath)?.FindAddedMember(methodKey);
+        }
+
+        /// <summary>
         /// The live patches this domain holds on the methods one assembly declares on one type,
         /// which is what a run peels when an edited body matches that assembly's own code again.
         /// </summary>
@@ -364,12 +376,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patches.Add(
                         new HotReloadActivePatchInfo(
                             HotReloadMethodKeys.FormatMethodLabel(methods[index]),
-                            pair.Value.Path));
+                            pair.Value.Path,
+                            methods[index].DeclaringType.Assembly.GetName().Name));
                 }
             }
 
             patches.Sort((left, right) => string.CompareOrdinal(left.MethodKey, right.MethodKey));
             return patches;
+        }
+
+        /// <summary>
+        /// Adds each call a live patch or a registered added member of any file makes into an added
+        /// member, in no particular order.
+        /// </summary>
+        internal void CollectAddedMemberCalls(List<HotReloadAddedMemberCall> calls)
+        {
+            Debug.Assert(calls != null, "calls must not be null.");
+            foreach (KeyValuePair<string, HotReloadFileGeneration> pair in _generationsByPath)
+            {
+                pair.Value.CollectAddedMemberCalls(calls);
+            }
         }
 
         /// <summary>Active added members of one file, in no particular order.</summary>

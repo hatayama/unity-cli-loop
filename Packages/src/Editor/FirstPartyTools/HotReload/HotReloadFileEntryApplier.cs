@@ -408,8 +408,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolved.FilePath,
                     resolved.Entry.methodName,
                     resolved.Entry.typeMetadataName,
+                    resolved.InvocationCounter,
                     resolved.Entry.sourceStartLine,
-                    resolved.Entry.sourceEndLine);
+                    resolved.Entry.sourceEndLine,
+                    resolved.CalledAddedMembers);
                 return HotReloadMethodOutcome.Added(
                     resolved.MethodLabel,
                     resolved.FilePath,
@@ -429,7 +431,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolved.OriginalMethod,
                 resolved.ShimMethod,
                 resolved.PatchShape,
-                projectRelativePath);
+                projectRelativePath,
+                resolved.CalledAddedMembers);
             if (!patchResult.Success)
             {
                 generation.RemoveShimMethod(resolved.OriginalMethod);
