@@ -102,6 +102,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
+            if (state == PlayModeStateChange.ExitingEditMode)
+            {
+                _focusReturnDeferral.DeferUntilEditMode();
+                // The deferral must outlive the domain reloads on both sides of Play Mode.
+                SessionState.SetBool(FocusReturnDeferredSessionStateKey, true);
+                return;
+            }
+
             if (state != PlayModeStateChange.EnteredEditMode)
             {
                 return;
@@ -122,8 +130,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Entered Edit Mode",
                 new { prunedScenePaths, shouldResolve },
                 includeStackTrace: false);
-            // An unfocused Editor gets the same preflight from its next focus return.
-            if (shouldResolve && EditorApplication.isFocused)
+            // Why not wait for focus: Unity's own post-Play refresh can import a changed Scene before any focus
+            // return, and the preflight's import-then-reload is what keeps the reload dialog from appearing.
+            if (shouldResolve)
             {
                 ResolveForFocusReturn();
             }

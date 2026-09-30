@@ -59,6 +59,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void DeferUntilEditMode_WhenLeavingEditMode_ResolvesOnceOnEnteredEditMode()
+        {
+            // Verifies every Play session schedules one preflight for its end, even without a focus return,
+            // because a file changed during Play otherwise reaches Unity's reload dialog right after Stop.
+            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
+
+            deferral.DeferUntilEditMode();
+
+            Assert.That(deferral.ConsumeOnEnteredEditMode(), Is.True);
+            Assert.That(deferral.ConsumeOnEnteredEditMode(), Is.False);
+        }
+
+        [Test]
+        public void DeferUntilEditMode_WhenPlayModeDomainReloadInitializes_KeepsTheRestoredFingerprints()
+        {
+            // Verifies a domain reload while entering or leaving Play Mode keeps the pre-Play fingerprints,
+            // so an external change made before or during Play is still detected when Edit Mode returns.
+            ExternalSceneFocusReturnDeferral deferral = new ExternalSceneFocusReturnDeferral(isDeferred: false);
+
+            deferral.DeferUntilEditMode();
+            bool shouldRecord = deferral.ShouldRecordBaselineOnInitialize(
+                isFocused: true,
+                restoredSceneSnapshots: true);
+
+            Assert.That(shouldRecord, Is.False);
+        }
+
+        [Test]
         public void RemoveSnapshotsForScenesNotOpen_RemovesRuntimeLoadedScenesAndKeepsOpenOnes()
         {
             // Verifies fingerprints recorded for Scenes loaded only at runtime do not survive into Edit Mode.

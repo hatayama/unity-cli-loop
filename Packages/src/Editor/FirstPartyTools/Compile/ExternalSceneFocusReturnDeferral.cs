@@ -1,7 +1,8 @@
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Remembers that a focus-return Scene preflight was skipped during Play Mode so it can run once Edit Mode returns.
+    /// Remembers that the Scene preflight must run once Edit Mode returns: for a focus return skipped during
+    /// Play Mode, and for every Play session.
     /// </summary>
     internal sealed class ExternalSceneFocusReturnDeferral
     {
@@ -26,6 +27,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             IsDeferred = true;
             return false;
+        }
+
+        /// <summary>
+        /// Schedules one preflight for when Edit Mode returns. Called when the Editor leaves Edit Mode, because
+        /// a file changed during Play (or while the Editor stayed focused) is followed by no focus return, and
+        /// with Auto Refresh enabled Unity imports it right after Play Mode ends and raises its reload dialog.
+        /// </summary>
+        public void DeferUntilEditMode()
+        {
+            IsDeferred = true;
         }
 
         /// <summary>

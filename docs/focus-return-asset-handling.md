@@ -44,9 +44,17 @@ Scene kept the exception firing on every later focus return.
 
 On `PlayModeStateChange.EnteredEditMode` the tracker first drops fingerprints for Scenes that
 are no longer open in the Editor (runtime-loaded Scenes never get a lasting baseline), then
-runs the preflight once if a focus return was deferred and the Editor is focused. An unfocused
-Editor leaves it to the next focus return instead. The deferral flag lives in `SessionState`
-because leaving Play Mode can trigger a domain reload. The decision is isolated in
+runs the preflight once. It does so after every Play session, not only when a focus return
+was deferred, and whether or not the Editor is focused: `ExitingEditMode` schedules it. A
+Scene file changed during Play Mode, or while the Editor stayed focused, is followed by no
+focus return. With Auto Refresh enabled, Unity imports it right after Play Mode ends and
+raises the "modified externally" dialog, which also blocks `control-play-mode --action Stop`.
+The preflight's import-then-reload keeps the dialog away. This was confirmed on Unity
+2022.3.62f3 with domain reload on Play both disabled and enabled (#3047).
+
+The deferral flag lives in `SessionState` because entering and leaving Play Mode can trigger a
+domain reload. While it is set, `Initialize` keeps the restored fingerprints instead of
+recording the current disk state, so a change made before or during Play is still detected. The decision is isolated in
 `ExternalSceneFocusReturnDeferral` and `ExternalSceneSnapshotPruner`
 (`Assets/Tests/Editor/ExternalSceneFocusReturnDeferralTests.cs`).
 
