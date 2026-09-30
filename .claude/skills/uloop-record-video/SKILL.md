@@ -1,7 +1,7 @@
 ---
 name: uloop-record-video
 toolName: record-video
-description: "Record the Unity Game View or any Editor window (Scene, Inspector, Console, ...) to a video file (H.264 .mp4, or VP8 .webm). Use when a still screenshot is not enough: motion, animation, transitions, physics, a gameplay sequence, or an Editor window changing over time. `start` returns at once and other uloop commands keep working while it records."
+description: "Record the Game View or any Editor window (Scene, Inspector, ...) to an .mp4 or .webm video. Use when a screenshot is not enough: motion, animation, physics, or a gameplay sequence."
 ---
 
 # Task
