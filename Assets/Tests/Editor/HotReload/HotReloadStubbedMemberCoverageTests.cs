@@ -212,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindCompilationAssembly(),
                 HotReloadTypeHome.ScriptAssembliesUnderProject(ProjectRoot, AssemblyName),
                 ProjectRoot,
-                new HotReloadFileSinks(new List<string>(), null));
+                new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings()));
         }
 
         private static string ProjectRoot =>
