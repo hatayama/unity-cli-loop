@@ -3,6 +3,7 @@ name: Release Failure Notify
 on:
   workflow_run:
     workflows:
+      - dispatcher-publish
       - native-cli-publish
       - release-please
     types:
