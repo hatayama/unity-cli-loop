@@ -114,8 +114,9 @@ scope and is reported as `Skipped`, same as edits to them. With a verified
 baseline, event declarations are compared per accessor, so only the edited
 add or remove appears as a `Skipped` row. A newly added explicit event, or
 an edit before the first compile snapshot, still reports both accessors.
-Adding a type
-(`class`, `struct`, `enum`, `record`), an event, or an indexer is still out of scope.
+Adding a nested type, an event, or an indexer to a compiled type is still out of scope.
+A new top-level `class`, `struct`, `enum`, or `interface` is introduced instead, within the
+limits in [introduced-types.md](introduced-types.md); a `record` is refused there.
 A member added to a compiled enum is out of scope too: it is not folded like an added
 `const`, so every body that names it fails with CS0117, including bodies in the same
 reload. Write the underlying value as a cast (`(MyEnum)3`) or run `uloop compile`.
