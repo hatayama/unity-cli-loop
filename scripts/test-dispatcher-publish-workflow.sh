@@ -3,6 +3,7 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 WORKFLOW="$ROOT_DIR/.github/workflows/dispatcher-publish.yml"
+FAILURE_NOTIFY_WORKFLOW="$ROOT_DIR/.github/workflows/release-failure-notify.yml"
 
 assert_contains() {
   expected=$1
@@ -315,6 +316,28 @@ test_package_manager_updates_run_beside_post_publish() {
   fi
 }
 
+failure_notify_watched_workflows() {
+  awk '
+    /^    workflows:$/ { printing = 1; next }
+    printing && /^      - / { sub(/^      - /, ""); print; next }
+    printing { exit }
+  ' "$FAILURE_NOTIFY_WORKFLOW"
+}
+
+# Verifies the release failure notifier watches this workflow by its name: a failed
+# package-managers job no longer skips the pin stamp, so a stale pin on main no longer reports it.
+test_release_failure_notifier_watches_dispatcher_publish() {
+  workflow_name=$(sed -n 's/^name: //p' "$WORKFLOW" | head -n 1)
+  if [ -z "$workflow_name" ]; then
+    echo "dispatcher-publish.yml must declare a workflow name." >&2
+    exit 1
+  fi
+  if ! failure_notify_watched_workflows | grep -x -F -- "$workflow_name" >/dev/null 2>&1; then
+    echo "Release Failure Notify must watch '$workflow_name', or a failed package-managers job reaches nobody." >&2
+    exit 1
+  fi
+}
+
 step_section() {
   step_name=$1
   awk -v step="      - name: $step_name" '
@@ -417,5 +440,6 @@ test_dispatcher_build_preserves_release_checks
 test_dispatcher_release_target_and_prerelease_state_remain_verified
 test_winget_pull_request_follows_homebrew_update_for_stable_releases
 test_package_manager_updates_run_beside_post_publish
+test_release_failure_notifier_watches_dispatcher_publish
 test_dispatcher_pin_is_pushed_to_main_with_the_app_token
 test_package_release_pr_is_merged_after_the_pin_stamp

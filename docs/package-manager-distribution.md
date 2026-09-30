@@ -27,8 +27,10 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
 - Both updates run in the `package-managers` job, beside `post-publish` rather
   than inside it. A red Homebrew or winget step affects neither the
   already-uploaded release assets nor the pin stamp and the Unity package
-  release merge in `post-publish`. Re-run only the failed job; formula updates
-  are idempotent, and the winget command skips a version it already submitted.
+  release merge in `post-publish`. The run still fails, and Release Failure
+  Notify opens or comments on a `release-failure` issue for it. Re-run only the
+  failed job; formula updates are idempotent, and the winget command skips a
+  version it already submitted.
 - When `WINGET_PKGS_TOKEN` is unset, the winget update command logs an explicit
   skip and exits 0. It also skips prereleases, versions that already exist
   upstream, and versions with an open submission pull request.
