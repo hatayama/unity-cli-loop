@@ -306,7 +306,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 _compilationAssembly,
                 HotReloadTypeHome.ScriptAssembliesUnderProject(_projectRoot, AssemblyName),
                 _projectRoot,
-                new HotReloadFileSinks(new List<string>(), null, null));
+                new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings()));
             file.IsDefaultSelected = true;
             return file;
         }
@@ -317,7 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 template,
                 path,
                 WriteWorkerSource(path),
-                new HotReloadFileSinks(new List<string>(), null, null),
+                new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings()),
                 null,
                 new HotReloadSiblingBaselineNotices());
         }
