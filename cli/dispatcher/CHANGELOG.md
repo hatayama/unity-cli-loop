@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.6.1...dispatcher-v3.6.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* Timed-out Unity process lookups on Windows now report a timeout instead of a bare exit status ([#3029](https://github.com/hatayama/unity-cli-loop/issues/3029)) ([1be51a3](https://github.com/hatayama/unity-cli-loop/commit/1be51a3eb1f6bda7a1cfc524728f02f30a85bb8c))
+
 ## [3.6.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.6.0...dispatcher-v3.6.1) (2026-09-25)
 
 
