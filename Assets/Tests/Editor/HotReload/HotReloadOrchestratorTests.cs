@@ -3283,7 +3283,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compilationAssembly,
                 HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, assemblyName),
                 projectRoot,
-                new HotReloadFileSinks(new List<string>(), null))
+                new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings()))
             {
                 FileOutput = workerOutput.files[0],
                 SnapshotLabels = new HashSet<string>(),
