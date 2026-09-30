@@ -95,6 +95,7 @@ the hold is active.
   The compile preflight imports those changed Scene assets synchronously before reloading them.
   Reloading first leaves the loaded Scene tied to the stale import, so the following
   `AssetDatabase.Refresh` raises Unity's "modified externally" dialog.
-- `uloop run-tests` and `uloop control-play-mode` save unsaved Scene and Prefab Stage changes
-  before starting by default; that is an explicit, documented step in those tools, not part of
-  focus return.
+- `uloop run-tests` saves unsaved Scene and Prefab Stage changes before starting by default,
+  and `uloop control-play-mode --action Play --unsaved-changes save` does so on request (its
+  default `keep` saves nothing); that is an explicit, documented step in those tools, not part
+  of focus return.

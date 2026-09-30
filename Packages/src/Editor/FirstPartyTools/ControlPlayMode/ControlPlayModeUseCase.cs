@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -12,10 +13,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public const int DefaultTimeoutSeconds = 180;
 
+        internal const string SavedUnsavedChangesWarningPrefix =
+            "Saved unsaved changes before entering Play Mode (--unsaved-changes save):";
+
         private const string UnsavedEditorChangesSaveFailureMessage =
-            "Play mode could not start because unsaved scene or prefab changes could not be saved.";
+            "Play mode could not start because unsaved scene or prefab changes could not be saved. "
+            + "Pass --unsaved-changes keep to enter Play Mode without saving them.";
         private const string UnsavedEditorChangesRemainingFailureMessage =
-            "Play mode could not start while the editor has unsaved scene or prefab changes.";
+            "Play mode could not start while the editor has unsaved scene or prefab changes. "
+            + "Pass --unsaved-changes keep to enter Play Mode without saving them.";
+        private const string UnsavedEditorChangesFailModeMessage =
+            "Play mode did not start because --unsaved-changes fail found unsaved scene or prefab changes. "
+            + "Pass --unsaved-changes keep to enter Play Mode without saving them, or save to write them first.";
 
         // A fresh Play start looks identical to a resume in the response's "changed"/"message"
         // fields unless callers already know they expected a resume; this makes the distinction
@@ -72,7 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return Task.FromResult(CreateStatusOnlyResponse(parameters));
             }
 
-            ControlPlayModeActionResult actionResult = ExecuteRequestedPlayModeAction(parameters.Action);
+            ControlPlayModeActionResult actionResult =
+                ExecuteRequestedPlayModeAction(parameters.Action, parameters.UnsavedChanges);
             if (actionResult.HasResponse)
             {
                 return Task.FromResult(actionResult.Response);
@@ -99,7 +109,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return CreateResponse("Play mode status", false, false, action: parameters.Action);
         }
 
-        private ControlPlayModeActionResult ExecuteRequestedPlayModeAction(PlayModeAction action)
+        private ControlPlayModeActionResult ExecuteRequestedPlayModeAction(
+            PlayModeAction action,
+            ControlPlayModeUnsavedChangesMode unsavedChangesMode)
         {
             string message;
             bool wasPaused = _editorStateService.IsPaused;
@@ -109,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 case PlayModeAction.Play:
                 case PlayModeAction.Resume:
-                    return ExecutePlayModeStart(wasPaused, wasPlaying);
+                    return ExecutePlayModeStart(wasPaused, wasPlaying, unsavedChangesMode);
 
                 case PlayModeAction.Stop:
                     return ExecutePlayModeStop(wasPaused, wasPlaying);
@@ -162,7 +174,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _compilationFailureGate.HasScriptCompilationFailed();
         }
 
-        private ControlPlayModeActionResult ExecutePlayModeStart(bool wasPaused, bool wasPlaying)
+        private ControlPlayModeActionResult ExecutePlayModeStart(
+            bool wasPaused,
+            bool wasPlaying,
+            ControlPlayModeUnsavedChangesMode unsavedChangesMode)
         {
             // Captured before this method mutates editor state, so the warning reflects the
             // request-start snapshot the same way CompileUseCase does.
@@ -194,13 +209,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why only when entering Play from Edit: SaveScene does not work while already playing,
             // and resume-from-pause must not rewrite Scene assets.
+            string savedChangesWarning = string.Empty;
             if (!wasPlaying)
             {
-                ControlPlayModeActionResult saveResult = SaveDirtyEditorChangesBeforePlayStart();
-                if (saveResult.HasResponse)
+                ControlPlayModeActionResult unsavedChangesResult =
+                    HandleUnsavedEditorChangesBeforePlayStart(unsavedChangesMode);
+                if (unsavedChangesResult.HasResponse)
                 {
-                    return saveResult;
+                    return unsavedChangesResult;
                 }
+
+                savedChangesWarning = unsavedChangesResult.Warning;
             }
 
             if (wasPaused)
@@ -220,7 +239,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool resumedFromPause = wasPaused && wasPlaying;
             string message = wasPaused ? "Play mode resumed" : "Play mode started";
             string warning = JoinWarnings(
-                wasPlaying ? string.Empty : FreshPlayStartFromNewSessionWarning,
+                savedChangesWarning,
+                wasPlaying ? string.Empty : FreshPlayStartFromNewSessionWarning);
+            warning = JoinWarnings(
+                warning,
                 PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                     wasPlaying,
                     isDomainReloadDisabledOnEnterPlayMode,
@@ -245,14 +267,63 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return first + " " + second;
         }
 
+        // Why keep is the default: Unity itself enters Play Mode with dirty Scenes kept in memory and
+        // restores them afterwards, and it shows no save prompt for them, so saving only rewrites
+        // Scene files (and can overwrite a file that git changed on disk) without preventing a dialog.
+        private ControlPlayModeActionResult HandleUnsavedEditorChangesBeforePlayStart(
+            ControlPlayModeUnsavedChangesMode unsavedChangesMode)
+        {
+            switch (unsavedChangesMode)
+            {
+                case ControlPlayModeUnsavedChangesMode.keep:
+                    return ControlPlayModeActionResult.FromState(string.Empty, false, false);
+                case ControlPlayModeUnsavedChangesMode.save:
+                    return SaveDirtyEditorChangesBeforePlayStart();
+                case ControlPlayModeUnsavedChangesMode.fail:
+                    return FailOnUnsavedEditorChangesBeforePlayStart();
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(unsavedChangesMode),
+                        unsavedChangesMode,
+                        "Unknown unsaved changes mode");
+            }
+        }
+
+        private ControlPlayModeActionResult FailOnUnsavedEditorChangesBeforePlayStart()
+        {
+            string[] unsavedChanges = _unsavedChangesQuietSaver.DetectUnsavedEditorChanges();
+            Debug.Assert(unsavedChanges != null, "Unsaved editor change detection must return an array");
+            if (unsavedChanges.Length > 0)
+            {
+                return ControlPlayModeActionResult.FromResponse(
+                    CreateUnsavedChangesBlockedResponse(
+                        UnsavedEditorChangesFailModeMessage,
+                        unsavedChanges,
+                        Array.Empty<string>()),
+                    false);
+            }
+
+            return ControlPlayModeActionResult.FromState(string.Empty, false, false);
+        }
+
         private ControlPlayModeActionResult SaveDirtyEditorChangesBeforePlayStart()
         {
+            string[] unsavedChanges = _unsavedChangesQuietSaver.DetectUnsavedEditorChanges();
+            Debug.Assert(unsavedChanges != null, "Unsaved editor change detection must return an array");
+            if (unsavedChanges.Length == 0)
+            {
+                return ControlPlayModeActionResult.FromState(string.Empty, false, false);
+            }
+
             string[] failedChanges = _unsavedChangesQuietSaver.SaveUnsavedEditorChanges();
             Debug.Assert(failedChanges != null, "Unsaved editor change save must return an array");
             if (failedChanges.Length > 0)
             {
                 return ControlPlayModeActionResult.FromResponse(
-                    CreateSaveFailedResponse(UnsavedEditorChangesSaveFailureMessage, failedChanges),
+                    CreateUnsavedChangesBlockedResponse(
+                        UnsavedEditorChangesSaveFailureMessage,
+                        failedChanges,
+                        ExcludeChanges(unsavedChanges, failedChanges)),
                     false);
             }
 
@@ -261,11 +332,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (remainingChanges.Length > 0)
             {
                 return ControlPlayModeActionResult.FromResponse(
-                    CreateSaveFailedResponse(UnsavedEditorChangesRemainingFailureMessage, remainingChanges),
+                    CreateUnsavedChangesBlockedResponse(
+                        UnsavedEditorChangesRemainingFailureMessage,
+                        remainingChanges,
+                        unsavedChanges),
                     false);
             }
 
-            return ControlPlayModeActionResult.FromState(string.Empty, false, false);
+            // Why a warning: callers must notice that Scene files on disk were rewritten.
+            string savedChangesWarning =
+                SavedUnsavedChangesWarningPrefix + " " + string.Join(", ", unsavedChanges) + ".";
+            return ControlPlayModeActionResult.FromState(string.Empty, false, false, warning: savedChangesWarning);
         }
 
         private ControlPlayModeActionResult ExecutePlayModeStop(bool wasPaused, bool wasPlaying)
@@ -333,13 +410,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        private ControlPlayModeResponse CreateSaveFailedResponse(string messagePrefix, string[] failedChanges)
+        private static string[] ExcludeChanges(string[] changes, string[] excludedChanges)
+        {
+            return changes.Where(change => !excludedChanges.Contains(change)).ToArray();
+        }
+
+        // Why savedChanges on a blocked response: a partial save has already rewritten those files,
+        // and the CLI error envelope carries only Message, so the list has to live there.
+        private ControlPlayModeResponse CreateUnsavedChangesBlockedResponse(
+            string messagePrefix,
+            string[] failedChanges,
+            string[] savedChanges)
         {
             Debug.Assert(!string.IsNullOrEmpty(messagePrefix), "messagePrefix must not be null or empty");
             Debug.Assert(failedChanges != null, "failedChanges must not be null");
             Debug.Assert(failedChanges.Length > 0, "failedChanges must not be empty");
+            Debug.Assert(savedChanges != null, "savedChanges must not be null");
 
-            string message = messagePrefix + " Unsaved changes: " + string.Join(", ", failedChanges);
+            string message = messagePrefix + " Unsaved changes: " + string.Join(", ", failedChanges) + ".";
+            if (savedChanges.Length > 0)
+            {
+                message += " Already saved: " + string.Join(", ", savedChanges) + ".";
+            }
+
             ControlPlayModeResponse response = CreateResponse(message, false, false);
             response.BlockedByUnsavedChanges = true;
             return response;

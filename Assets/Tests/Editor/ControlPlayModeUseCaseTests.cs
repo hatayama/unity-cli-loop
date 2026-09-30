@@ -473,7 +473,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(EditorApplication.isPlaying, Is.False);
             StubEditorUnsavedChangesQuietSaver quietSaver = new(
                 saveFailures: new[] { "Scene: Assets/Scenes/Sample.unity" },
-                remainingAfterSave: System.Array.Empty<string>());
+                remainingAfterSave: System.Array.Empty<string>(),
+                unsavedBeforeSave: new[]
+                {
+                    "Scene: Assets/Scenes/Sample.unity",
+                    "Scene: Assets/Scenes/Other.unity"
+                });
             ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
                 new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
                 new StubCompilationFailureGate(false),
@@ -481,6 +486,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.save,
             };
 
             ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
@@ -491,7 +497,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.IsPlaying, Is.False);
             Assert.That(response.BlockedByUnsavedChanges, Is.True);
             Assert.That(response.Message, Does.Contain("could not be saved"));
-            Assert.That(response.Message, Does.Contain("Scene: Assets/Scenes/Sample.unity"));
+            Assert.That(response.Message, Does.Contain("Unsaved changes: Scene: Assets/Scenes/Sample.unity."));
+            // The other Scene was written to disk before the failure, so the caller must still learn about it.
+            Assert.That(response.Message, Does.EndWith("Already saved: Scene: Assets/Scenes/Other.unity."));
         }
 
         [Test]
@@ -509,17 +517,181 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.save,
             };
 
             ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
 
             Assert.That(quietSaver.SaveCallCount, Is.EqualTo(1));
-            Assert.That(quietSaver.DetectCallCount, Is.EqualTo(1));
+            Assert.That(quietSaver.DetectCallCount, Is.EqualTo(2));
             Assert.That(EditorApplication.isPlaying, Is.False);
             Assert.That(response.Changed, Is.False);
             Assert.That(response.BlockedByUnsavedChanges, Is.True);
             Assert.That(response.Message, Does.Contain("unsaved scene or prefab changes"));
             Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
+            // The save itself succeeded, so the file on disk was rewritten even though Play did not start.
+            Assert.That(response.Message, Does.EndWith("Already saved: Prefab Stage: Assets/Prefabs/Hud.prefab."));
+        }
+
+        [Test]
+        public void ControlPlayModeSchema_WhenCreated_KeepsUnsavedChanges()
+        {
+            // Verifies Play defaults to Unity's native behavior of entering Play Mode without saving.
+            ControlPlayModeSchema schema = new ControlPlayModeSchema();
+
+            Assert.That(schema.UnsavedChanges, Is.EqualTo(ControlPlayModeUnsavedChangesMode.keep));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartKeepsUnsavedChanges_EntersPlayModeWithoutSaving()
+        {
+            // Verifies keep enters Play Mode with dirty Scenes left unsaved, without inspecting or rewriting them.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>(),
+                unsavedBeforeSave: new[] { "Scene: Assets/Scenes/Sample.unity" });
+            ControlPlayModeUseCase useCase = CreatePlayStartUseCase(quietSaver, editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.keep,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(editorState.IsPlaying, Is.True);
+            Assert.That(response.Message, Is.EqualTo("Play mode started"));
+            Assert.That(response.BlockedByUnsavedChanges, Is.False);
+            Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+            Assert.That(quietSaver.DetectCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartSavesUnsavedChanges_ReportsSavedItemsInWarning()
+        {
+            // Verifies save writes dirty items before Play and names every saved item so callers notice the rewrite.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>(),
+                unsavedBeforeSave: new[]
+                {
+                    "Scene: Assets/Scenes/Sample.unity",
+                    "Prefab Stage: Assets/Prefabs/Hud.prefab"
+                });
+            ControlPlayModeUseCase useCase = CreatePlayStartUseCase(quietSaver, editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.save,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(editorState.IsPlaying, Is.True);
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(1));
+            Assert.That(response.Warning, Does.StartWith(ControlPlayModeUseCase.SavedUnsavedChangesWarningPrefix));
+            Assert.That(response.Warning, Does.Contain("Scene: Assets/Scenes/Sample.unity"));
+            Assert.That(response.Warning, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
+            Assert.That(response.Warning, Does.Contain(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartSaveModeHasNothingToSave_DoesNotReportASave()
+        {
+            // Verifies save does not claim a rewrite when no Scene or Prefab Stage was dirty.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = CreatePlayStartUseCase(quietSaver, editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.save,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(editorState.IsPlaying, Is.True);
+            Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartFailsOnUnsavedChanges_ListsThemWithoutSavingOrPlaying()
+        {
+            // Verifies fail stops before Play Mode, leaves the dirty items untouched, and lists them.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>(),
+                unsavedBeforeSave: new[] { "Scene: Assets/Scenes/Sample.unity" });
+            RecordingRunInBackgroundStarter runInBackgroundStarter = new();
+            ControlPlayModeUseCase useCase = CreatePlayStartUseCase(quietSaver, editorState, runInBackgroundStarter);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.fail,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(runInBackgroundStarter.EnableCallCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.IsPlaying, Is.False);
+            Assert.That(response.BlockedByUnsavedChanges, Is.True);
+            Assert.That(response.Message, Does.Contain("--unsaved-changes fail"));
+            Assert.That(response.Message, Does.Contain("Scene: Assets/Scenes/Sample.unity"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartFailModeHasNoUnsavedChanges_EntersPlayMode()
+        {
+            // Verifies fail only blocks when something is actually unsaved.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = CreatePlayStartUseCase(quietSaver, editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.fail,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(editorState.IsPlaying, Is.True);
+            Assert.That(response.BlockedByUnsavedChanges, Is.False);
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenResumingFromPauseWithFailMode_IgnoresUnsavedChanges()
+        {
+            // Verifies a resume never checks unsaved changes, because it does not enter Play Mode from Edit Mode.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: new[] { "Scene: Assets/Scenes/Sample.unity" },
+                unsavedBeforeSave: new[] { "Scene: Assets/Scenes/Sample.unity" });
+            ControlPlayModeUseCase useCase = CreatePlayStartUseCase(quietSaver, editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                UnsavedChanges = ControlPlayModeUnsavedChangesMode.fail,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode resumed"));
+            Assert.That(response.BlockedByUnsavedChanges, Is.False);
+            Assert.That(quietSaver.DetectCallCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -1021,6 +1193,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        private static ControlPlayModeUseCase CreatePlayStartUseCase(
+            StubEditorUnsavedChangesQuietSaver quietSaver,
+            FakeControlPlayModeEditorStateService editorState,
+            RecordingRunInBackgroundStarter runInBackgroundStarter = null)
+        {
+            return new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider(),
+                runInBackgroundStarter: runInBackgroundStarter ?? new RecordingRunInBackgroundStarter());
+        }
+
         private sealed class RecordingRunInBackgroundStarter : ICliPlayModeRunInBackgroundStarter
         {
             public int EnableCallCount { get; private set; }
@@ -1131,16 +1317,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public int SaveCallCount { get; private set; }
             public int DetectCallCount { get; private set; }
 
-            public StubEditorUnsavedChangesQuietSaver(string[] saveFailures, string[] remainingAfterSave)
+            private readonly string[] _unsavedBeforeSave;
+
+            public StubEditorUnsavedChangesQuietSaver(
+                string[] saveFailures,
+                string[] remainingAfterSave,
+                string[] unsavedBeforeSave = null)
             {
                 _saveFailures = saveFailures;
                 _remainingAfterSave = remainingAfterSave;
+                _unsavedBeforeSave = unsavedBeforeSave ?? remainingAfterSave;
             }
 
+            // Before a save the stub reports what is dirty; after it, what the save left behind.
             public string[] DetectUnsavedEditorChanges()
             {
                 DetectCallCount++;
-                return _remainingAfterSave;
+                return SaveCallCount == 0 ? _unsavedBeforeSave : _remainingAfterSave;
             }
 
             public string[] SaveUnsavedEditorChanges()

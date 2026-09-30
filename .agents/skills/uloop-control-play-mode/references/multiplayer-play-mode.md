@@ -59,5 +59,6 @@ main Editor) do not block each other.
   "Play Mode Scenario - Scenario Setup Error". The CLI cannot see that failure and waits for Play
   Mode until `--timeout-seconds` expires. Close the dialog in the Editor and read the Console
   errors (`uloop get-logs --log-type Error`).
-- Unsaved scenes are saved quietly before `Play`, as with the default configuration. An Untitled
-  scene still fails with `CONTROL_PLAY_MODE_UNSAVED_CHANGES`.
+- `--unsaved-changes` applies as with the default configuration: `keep` (the default) starts
+  without saving, `save` writes unsaved scenes first (an Untitled scene then fails with
+  `CONTROL_PLAY_MODE_UNSAVED_CHANGES`), and `fail` stops if any exist.
