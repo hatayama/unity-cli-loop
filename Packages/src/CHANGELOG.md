@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.1](https://github.com/hatayama/unity-cli-loop/compare/v3.10.0...v3.10.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* CLI Play no longer rewrites unsaved Scene files; --unsaved-changes chooses keep, save, or fail ([#3048](https://github.com/hatayama/unity-cli-loop/issues/3048)) ([e85f53d](https://github.com/hatayama/unity-cli-loop/commit/e85f53d30809f3cbe55a9e918a568bc9fd322bcd))
+* Stopping Play Mode no longer shows Unity's modified-externally Scene dialog after a git change ([#3052](https://github.com/hatayama/unity-cli-loop/issues/3052)) ([c2da26f](https://github.com/hatayama/unity-cli-loop/commit/c2da26fa45fa0a172351aabc0fa2693ed0ff0e7d))
+
 ## [3.10.0](https://github.com/hatayama/unity-cli-loop/compare/v3.9.1...v3.10.0) (2026-09-30)
 
 
