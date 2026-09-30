@@ -83,6 +83,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Only ForActiveSibling sets the notices, so they mark a file the run pulled in itself.
         internal bool ReappliedSibling => SiblingBaselineNotices != null;
 
+        // Set for an input the run chose from compile snapshots because the caller omitted the
+        // files; never for a re-applied sibling. Only such a file may be left out of its group,
+        // because the caller did not choose to pass it.
+        internal bool IsDefaultSelected { get; set; }
+
         // The path the caller asked to reload, used as the outcome file path.
         internal string AssemblyResolvePath { get; }
 

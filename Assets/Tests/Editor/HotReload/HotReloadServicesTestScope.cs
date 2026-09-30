@@ -159,12 +159,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _run = run;
         }
 
+        // Whether the last run was started as a default selection; null until a run starts.
+        internal bool? ReceivedIsDefaultSelection { get; private set; }
+
         public Task<HotReloadOrchestratorResult> RunAsync(
             IReadOnlyList<string> files,
             string contentPathOverride,
             CancellationToken ct,
-            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null)
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null,
+            bool isDefaultSelection = false)
         {
+            ReceivedIsDefaultSelection = isDefaultSelection;
             return _run(files, ct);
         }
     }

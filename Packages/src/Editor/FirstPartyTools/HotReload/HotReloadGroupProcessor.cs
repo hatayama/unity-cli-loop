@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadFileEntryApplier _fileEntryApplier;
         private readonly HotReloadEntryApplier _entryApplier;
         private readonly HotReloadGroupCommitStage _commitStage;
+        private readonly HotReloadEnumMemberOnlyLeaveOut _leaveOut = new HotReloadEnumMemberOnlyLeaveOut();
 
         internal HotReloadGroupProcessor(
             HotReloadGroupProcessorDependencies dependencies,
@@ -61,6 +62,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SnapshotGroupState(files);
+            // Why here and not at the leave-out decision: the ledgers need the main thread, which
+            // the worker await leaves, and nothing changes which files hold changes before the
+            // decision — the domain changes only after it, and a prepared type is not active.
+            HashSet<string> activePaths = new HotReloadDomainCarriedInLookup(_domain).ListActivePaths();
 
             HotReloadChangedSiblingScanResult siblingScan = HotReloadChangedSiblingSourceDetector.Detect(
                 firstFile.ProjectRoot,
@@ -117,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadRefusedIntroducedType.CollectFrom(preparation.Notices);
             if (preparation.Prepared == null)
             {
-                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, correlationId, ct)
+                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, activePaths, correlationId, ct)
                     .ConfigureAwait(false);
             }
 
@@ -126,6 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerInput,
                 preparation.Prepared,
                 refusedTypes,
+                activePaths,
                 correlationId,
                 ct).ConfigureAwait(false);
         }
@@ -149,6 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerInputDto workerInput,
             HotReloadPreparedIntroducedTypes prepared,
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
+            HashSet<string> activePaths,
             string correlationId,
             CancellationToken ct)
         {
@@ -172,8 +179,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // the membership again, so registering anywhere the finally does not cover
                     // would leave the run's membership behind when the scope itself throws.
                     registry.RegisterPrepared(artifact);
-                    return await TransformAndApplyGroupAsync(files, workerInput, prepared, refusedTypes, correlationId, ct)
-                        .ConfigureAwait(false);
+                    return await TransformAndApplyGroupAsync(
+                        files,
+                        workerInput,
+                        prepared,
+                        refusedTypes,
+                        activePaths,
+                        correlationId,
+                        ct).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -184,26 +197,132 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Transforms the group, and when a default selection holds a file whose added enum
+        /// members split a type the other files bind to, transforms the rest again without it.
+        /// </summary>
+        /// <remarks>
+        /// Why decide after the first run and before anything else: only the worker names the
+        /// file behind a split, and the decision must come before the first per-file notice and
+        /// the first change to the domain so the rest are processed as if it was never passed.
+        /// </remarks>
         private async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
+            HotReloadPreparedIntroducedTypes prepared,
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
+            HashSet<string> activePaths,
+            string correlationId,
+            CancellationToken ct)
+        {
+            TransformWorkerClientResult workerResult = await RunWorkerAsync(workerInput, correlationId, ct)
+                .ConfigureAwait(false);
+            if (!workerResult.Success)
+            {
+                return FailGroup(files, workerResult.ErrorMessage);
+            }
+
+            TransformWorkerOutputDto workerOutput = workerResult.Output;
+            Debug.Assert(
+                workerOutput.files.Length == files.Count,
+                "A group worker run must return one per-file output per edited file.");
+            IReadOnlyList<string> leftOutPaths = _leaveOut.FindLeftOutPaths(
+                DescribeLeaveOutFiles(files),
+                workerOutput,
+                activePaths);
+            if (leftOutPaths.Count == 0)
+            {
+                return await ApplyTransformedGroupAsync(files, workerInput, workerOutput, prepared, refusedTypes, correlationId, ct)
+                    .ConfigureAwait(false);
+            }
+
+            // Why the rerun input first: it refuses a leave-out the sources do not match before
+            // anything is written to the left-out files.
+            TransformWorkerInputDto retryInput = _leaveOut.BuildRetryInput(workerInput, leftOutPaths);
+            HotReloadGroupLeaveOutSplit split = new HotReloadGroupLeaveOutSplit(files, leftOutPaths);
+            List<HotReloadFileProcessResult> leftOutResults = BuildLeftOutResults(split, files, workerOutput);
+            TransformWorkerClientResult retryResult = await RunWorkerAsync(retryInput, correlationId, ct)
+                .ConfigureAwait(false);
+            IReadOnlyList<HotReloadFileProcessResult> remainingResults = retryResult.Success
+                ? await ApplyTransformedGroupAsync(
+                    split.RemainingFiles,
+                    retryInput,
+                    retryResult.Output,
+                    prepared,
+                    refusedTypes,
+                    correlationId,
+                    ct).ConfigureAwait(false)
+                : FailGroup(split.RemainingFiles, retryResult.ErrorMessage);
+            return split.Splice(leftOutResults, remainingResults);
+        }
+
+        private async Task<TransformWorkerClientResult> RunWorkerAsync(
+            TransformWorkerInputDto workerInput,
+            string correlationId,
+            CancellationToken ct)
+        {
+            TransformWorkerClientResult workerResult = await _dependencies
+                .RunWorker(workerInput, ct)
+                .ConfigureAwait(false);
+            HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
+            return workerResult;
+        }
+
+        private List<HotReloadFileProcessResult> FailGroup(IReadOnlyList<HotReloadGroupFile> files, string errorMessage)
+        {
+            HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", errorMessage);
+            return _fileEntryApplier.BuildUnappliedGroupResults(files);
+        }
+
+        // Why a file that declares a new type never counts as enum-only: its artifact is prepared
+        // against the whole group, and leaving its owner out would drop it from the commit.
+        private static List<HotReloadLeaveOutFile> DescribeLeaveOutFiles(IReadOnlyList<HotReloadGroupFile> files)
+        {
+            List<HotReloadLeaveOutFile> leaveOutFiles = new List<HotReloadLeaveOutFile>(files.Count);
+            foreach (HotReloadGroupFile file in files)
+            {
+                leaveOutFiles.Add(new HotReloadLeaveOutFile(
+                    file.ProjectRelativePath,
+                    file.IsDefaultSelected,
+                    file.DeclaresIntroducedType || file.DeclaresRefusedIntroducedType));
+            }
+
+            return leaveOutFiles;
+        }
+
+        // Why the first run's rows: the left-out file gets the notices, hash and counts it would
+        // have had in the run, so only the added members of the other files change.
+        private List<HotReloadFileProcessResult> BuildLeftOutResults(
+            HotReloadGroupLeaveOutSplit split,
+            IReadOnlyList<HotReloadGroupFile> files,
+            TransformWorkerOutputDto firstOutput)
+        {
+            HotReloadWorkerRowsByFile firstRows = HotReloadWorkerRowsByFile.Build(
+                firstOutput,
+                CollectProjectRelativePaths(files));
+            HotReloadGroupNotices.AppendPerFileWorkerNotices(split.LeftOutFiles, firstRows);
+            List<HotReloadFileProcessResult> results = new List<HotReloadFileProcessResult>(split.LeftOutFiles.Count);
+            foreach (HotReloadGroupFile file in split.LeftOutFiles)
+            {
+                file.Sinks.Warnings.Add(_leaveOut.FormatLeftOutWarning(
+                    file.ProjectRelativePath,
+                    file.FileOutput.addedEnumMemberNames));
+                results.Add(_fileEntryApplier.BuildUnappliedResult(file));
+            }
+
+            return results;
+        }
+
+        private async Task<IReadOnlyList<HotReloadFileProcessResult>> ApplyTransformedGroupAsync(
+            IReadOnlyList<HotReloadGroupFile> files,
+            TransformWorkerInputDto workerInput,
+            TransformWorkerOutputDto workerOutput,
             HotReloadPreparedIntroducedTypes prepared,
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             string correlationId,
             CancellationToken ct)
         {
             HotReloadGroupFile firstFile = files[0];
-            TransformWorkerClientResult workerResult = await _dependencies
-                .RunWorker(workerInput, ct)
-                .ConfigureAwait(false);
-            HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
-            if (!workerResult.Success)
-            {
-                HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", workerResult.ErrorMessage);
-                return _fileEntryApplier.BuildUnappliedGroupResults(files);
-            }
-
-            TransformWorkerOutputDto workerOutput = workerResult.Output;
             Debug.Assert(
                 workerOutput.files.Length == files.Count,
                 "A group worker run must return one per-file output per edited file.");
@@ -301,9 +420,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadGroupOutcomeRouter.AppendByFilePath(files, gateResult.SkippedOutcomes);
-            // Why one file's warning list: gate warnings name compiled call sites across the
-            // assembly, not one edited file, and the run merges every file's warnings anyway.
-            gateWarningSink.Sinks.Warnings.AddRange(gateResult.Warnings);
+            // Why the run's record rather than a warning now: a stale call site in another assembly
+            // may be patched by a later group of this run, so the warning is only built once every
+            // group has applied.
+            gateWarningSink.Sinks.StaleSignatureWarnings.AddRange(gateResult.StaleSignatureCallSites);
 
             HotReloadGroupCompileResult compile = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
                 collaborators,
