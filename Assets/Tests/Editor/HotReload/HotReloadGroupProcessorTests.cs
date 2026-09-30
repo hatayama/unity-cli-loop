@@ -1065,7 +1065,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static HotReloadSignatureChangeGate.SignatureChangeGateResult CreateGateResultWithoutExemptions()
         {
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
-                new List<string>(),
+                new List<HotReloadStaleSignatureCallSites>(),
                 new List<HotReloadCallSiteScanner.CallSiteHit>
                 {
                     new HotReloadCallSiteScanner.CallSiteHit
@@ -1084,7 +1084,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static HotReloadSignatureChangeGate.SignatureChangeGateResult CreateEmptyGateResult()
         {
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
-                new List<string>(),
+                new List<HotReloadStaleSignatureCallSites>(),
                 new List<HotReloadCallSiteScanner.CallSiteHit>(),
                 new HashSet<HotReloadQualifiedMethodIdentity>());
         }
@@ -1097,7 +1097,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new HotReloadQualifiedMethodIdentity(AssemblyName, CallerKey)
                 };
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
-                new List<string>(),
+                new List<HotReloadStaleSignatureCallSites>(),
                 new List<HotReloadCallSiteScanner.CallSiteHit>
                 {
                     new HotReloadCallSiteScanner.CallSiteHit
@@ -1644,7 +1644,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadGroupFile file = new HotReloadGroupFile(
                 path, workerSourcePath, path, AssemblyName, compilationAssembly,
                 HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, AssemblyName),
-                projectRoot, new HotReloadFileSinks(new List<string>(), null, displayedRemovedMembers),
+                projectRoot, new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings(), displayedRemovedMembers),
                 newSourceMembershipEvidence);
             file.FileOutput = new TransformWorkerFileOutputDto
             {
@@ -1781,7 +1781,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadSignatureChangeGate.SignatureChangeGateResult.Retried(
                     null,
                     new List<HotReloadMethodOutcome>(),
-                    new List<string>(),
+                    new List<HotReloadStaleSignatureCallSites>(),
                     new List<HotReloadCallSiteScanner.CallSiteHit>(),
                     new HashSet<HotReloadQualifiedMethodIdentity>(),
                     new List<string>());

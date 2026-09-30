@@ -5,7 +5,6 @@ package unityprocess
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"time"
@@ -125,14 +124,4 @@ func runFocusCommandNoOutputWithin(ctx context.Context, timeout time.Duration, n
 	command.Stderr = &stderr
 	err := command.Run()
 	return focusCommandError(commandContext.Err(), err, stderr.String())
-}
-
-// exitErrorStderr returns what Output captured on stderr, which it only exposes
-// through the returned *exec.ExitError.
-func exitErrorStderr(err error) string {
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return string(exitErr.Stderr)
-	}
-	return ""
 }

@@ -3283,7 +3283,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compilationAssembly,
                 HotReloadTypeHome.ScriptAssembliesUnderProject(projectRoot, assemblyName),
                 projectRoot,
-                new HotReloadFileSinks(new List<string>(), null))
+                new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings()))
             {
                 FileOutput = workerOutput.files[0],
                 SnapshotLabels = new HashSet<string>(),
@@ -5556,6 +5556,116 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the skipped writer with an earlier patch takes a constructed generic
+        /// parameter, the skipped-writer warning still names the earlier patch: the Editor's
+        /// active-patch label spells the parameter the way the worker's skipped row does.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedWriterTakingAConstructedGeneric_WarningNamesTheEarlierPatch()
+        {
+            await AssertSkippedWriterWarningNamesTheEarlierPatch(
+                nameof(HotReloadLabelShapeWriterHost.WriteFromList),
+                "List<int> values",
+                "values.Count",
+                host => host.WriteFromList(new List<int> { 1, 2, 3 }),
+                3);
+        }
+
+        /// <summary>
+        /// What: when the skipped writer with an earlier patch takes a multidimensional array,
+        /// the skipped-writer warning still names the earlier patch: the Editor's active-patch
+        /// label spells the array rank the way the worker's skipped row does.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedWriterTakingAMultidimensionalArray_WarningNamesTheEarlierPatch()
+        {
+            await AssertSkippedWriterWarningNamesTheEarlierPatch(
+                nameof(HotReloadLabelShapeWriterHost.WriteFromGrid),
+                "int[,] values",
+                "values.Length",
+                host => host.WriteFromGrid(new int[2, 3]),
+                6);
+        }
+
+        // Runs the two reloads of the skipped-writer-with-earlier-patch case against one writer
+        // of the label-shape host: the first applies the writer assigning an added auto-property
+        // that Read reads, the second makes the worker skip that writer.
+        private static async Task AssertSkippedWriterWarningNamesTheEarlierPatch(
+            string writerName,
+            string writerParameterList,
+            string writerResult,
+            Func<HotReloadLabelShapeWriterHost, int> invokeWriter,
+            int expectedAssigned)
+        {
+            string fixturePath = ResolveLabelShapeWriterHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string writerHeader = "        public int " + writerName + "(" + writerParameterList + ")\n        {\n";
+            string writerOriginal = writerHeader + "            return " + writerResult + ";\n        }";
+            const string readOriginal =
+                "        public int Read(int value)\n        {\n            return value;\n        }";
+            const string readingRead =
+                "        public int Read(int value)\n        {\n            return AddedCount + value;\n        }\n\n"
+                + "        public int AddedCount { get; private set; }";
+            Assert.That(onDisk, Does.Contain(writerOriginal), "Precondition: the writer must be on disk as written.");
+            Assert.That(onDisk, Does.Contain(readOriginal), "Precondition: Read must be on disk as written.");
+            string firstEdit = onDisk
+                .Replace(
+                    writerOriginal,
+                    writerHeader + "            AddedCount = " + writerResult + ";\n"
+                    + "            return " + writerResult + ";\n        }",
+                    StringComparison.Ordinal)
+                .Replace(readOriginal, readingRead, StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("LabelShape" + writerName + "1.cs", firstEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, writerName);
+
+            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
+            // sees this writer as skipped while the first run's patch stays what runs.
+            string secondEdit = onDisk
+                .Replace(
+                    writerOriginal,
+                    writerHeader + "            AddedCount = " + writerResult + ";\n"
+                    + "            return " + writerResult + " + base.GetHashCode() * 0;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(readOriginal, readingRead, StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("LabelShape" + writerName + "2.cs", secondEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            Assert.That(FindSkippedReason(second, writerName), Is.Not.Null, FormatOutcomes(second));
+
+            // The first run's writer patch still assigns the property the applied Read reads.
+            HotReloadLabelShapeWriterHost host = new HotReloadLabelShapeWriterHost();
+            invokeWriter(host);
+            Assert.That(host.Read(0), Is.EqualTo(expectedAssigned));
+
+            string writerLabel = HotReloadMethodKeys.FormatMethodLabel(
+                typeof(HotReloadLabelShapeWriterHost).GetMethod(writerName));
+            List<string> writerWarnings = new List<string>();
+            foreach (string warning in second.Warnings)
+            {
+                if (warning.Contains("'AddedCount'", StringComparison.Ordinal))
+                {
+                    writerWarnings.Add(warning);
+                }
+            }
+
+            string allWarnings = "Warnings were:\n" + string.Join("\n", second.Warnings);
+            Assert.That(writerWarnings, Has.Count.EqualTo(1), allWarnings);
+            Assert.That(writerWarnings[0], Does.Contain("an earlier hot reload applied " + writerLabel), allWarnings);
+            Assert.That(
+                writerWarnings[0],
+                Does.Not.Contain("reads it; the property keeps its default value"),
+                allWarnings);
+        }
+
+        /// <summary>
         /// What: when the only writer of an added field is an added method that an earlier
         /// reload added and this reload skips, the skipped-writer warning names that earlier
         /// added method instead of claiming the field keeps its default value, because the
@@ -7759,6 +7869,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change external host source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveLabelShapeWriterHostPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadLabelShapeWriterHost.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Label-shape writer host source missing: " + path);
             return Path.GetFullPath(path);
         }
 

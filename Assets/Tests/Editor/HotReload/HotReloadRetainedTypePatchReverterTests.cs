@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static HotReloadGroupFile CreateFileBoundToTheRetainedDeclaration()
         {
-            HotReloadFileSinks sinks = new HotReloadFileSinks(new List<string>(), null);
+            HotReloadFileSinks sinks = new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings());
             // The row the preparation leaves for a declaration a retained artifact serves and
             // whose method bodies the edited source matches again.
             sinks.IntroducedTypes.Add(

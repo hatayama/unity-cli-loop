@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 original, shim, HotReloadPatchShape.Transplant, OwnerPath);
             Assert.That(patch.Success, Is.True, patch.ErrorMessage);
 
-            HotReloadFileSinks sinks = new HotReloadFileSinks(new List<string>(), null);
+            HotReloadFileSinks sinks = new HotReloadFileSinks(new List<string>(), null, new HotReloadRunStaleSignatureWarnings());
             return new HotReloadGroupFile(
                 OwnerPath,
                 OwnerPath,

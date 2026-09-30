@@ -95,9 +95,12 @@ by name through the wiring entry point, which is how a value or scene reference 
 into an added `[SerializeField]` without a compile — see
 [added-field-wiring.md](added-field-wiring.md).
 
-A type introduced in the same reload cannot use added members of a compiled type: its
-artifact is compiled against the compiled assemblies, so such a reference fails with
-CS1061/CS0117 and needs a compile (issue #2695).
+An introduced type cannot use members hot reload added to a compiled type, whether they
+were added in the same reload or an earlier one: its artifact compiles against the
+compiled assemblies and earlier introduced types only, so reloading the addition first
+does not help. Such a reference fails with CS1061/CS0117 on a `Failed` `IntroducedTypes`
+row, whose `Reason` notes that the missing name matches an addition; run `uloop compile`,
+then rerun (issue #2695).
 
 Added members are an Editor-session illusion. Any real compile or domain reload
 drops them all: added methods disappear from the ledger and added-field values are
@@ -182,25 +185,34 @@ the assembly, the Editor-session illusion, and the `virtual`/generic/interface
 exclusions.
 
 A gate protects compiled callers: the change applies only when every live compiled
-call site of the old signature is patched by the same reload. A caller this reload
-did not edit — in another file, in another assembly, or an *unedited* method in the
+call site of the old signature is in the same assembly and patched by the same reload.
+A caller this reload did not edit — in another file or an *unedited* method in the
 edited file itself (an implicit `int`→`long` widening can leave a caller's source
 untouched) — would keep calling the old method silently, so the run reports the
 changed method and its edited callers as `Skipped` instead; land the change with
-`uloop compile`. When every uncovered caller is in the edited file itself, the
+`uloop compile`. A caller in another assembly gates the change even when this or an
+earlier reload patched it: that patch is compiled against the compiled assembly, where
+the old signature still exists. When every uncovered caller is in the edited file itself, the
 `Skipped` reason names those callers: editing their bodies and reloading again
 applies them together without `uloop compile`.
 Call sites inside methods that the same edit removes or
 re-signatures do not gate: those compiled bodies are already stale, and anything
 still reaching them stays on the consistent old behavior.
-If an earlier reload already patched the compiled call sites, a later signature change applies without editing the callers; the response then carries a warning naming the call sites this run re-applied on the new signature.
+If an earlier reload already patched the compiled call sites in the same assembly, a later signature change applies without editing the callers; the response then carries a warning naming the call sites this run re-applied on the new signature.
 
 Renaming a method or changing its parameter list follows the delete rules rather
 than the gate: the new signature is an ordinary added method, the old one is
 reported removed, and a `Warnings` entry names each compiled call site of the old
 signature that the reload leaves unpatched — those call sites keep the previous
 behavior until `uloop compile`. Deleting a method emits the same warning when
-compiled callers remain.
+compiled callers remain. A caller whose patch is active when the reload ends —
+patched by this reload in any assembly, or kept from an earlier reload — is left out,
+because it no longer runs its compiled body. The warning does not check what the
+patched body calls, and two leftovers of the compiled caller can still reach the old
+method: a copy the JIT inlined into another method before the patch, and a delegate to
+the old method the caller created before it. A call inside a lambda or local function
+stays listed under its compiler-generated name even when the method declaring it is
+patched.
 
 Field declarations are stricter: when a compiled field's type — or its `static`/
 `const` modifier — differs from the edited source, every edited method that reads

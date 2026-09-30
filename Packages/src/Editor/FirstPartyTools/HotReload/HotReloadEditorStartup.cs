@@ -1,4 +1,7 @@
+using System.IO;
+
 using UnityEditor;
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -19,6 +22,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 EditorApplication.update -= CaptureOnFirstUpdateTick;
                 HotReloadSourceSnapshotter.CaptureAfterDomainReload();
+            }
+
+            // Why a callback of its own rather than a line in the capture above: an exception in
+            // one of the two must not keep the other from running. Why unsubscribe first: a sweep
+            // that throws is then not retried on every later tick.
+            void SweepArtifactsOnFirstUpdateTick()
+            {
+                EditorApplication.update -= SweepArtifactsOnFirstUpdateTick;
+                HotReloadIntroducedTypePreparation.SweepArtifactsOfEarlierDomains(
+                    Path.GetFullPath(Path.Combine(Application.dataPath, "..")));
             }
 
             // The services are rebuilt here rather than on first use because the introduced type
@@ -43,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadWiredValueEditorHooks.GetPersistence =
                 () => HotReloadCompositionRoot.Services.WiredValuePersistence;
             EditorApplication.update += CaptureOnFirstUpdateTick;
+            EditorApplication.update += SweepArtifactsOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();
             HotReloadUnityMessageForwardingEditorHooks.Initialize();

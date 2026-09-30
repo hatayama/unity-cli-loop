@@ -420,9 +420,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadGroupOutcomeRouter.AppendByFilePath(files, gateResult.SkippedOutcomes);
-            // Why one file's warning list: gate warnings name compiled call sites across the
-            // assembly, not one edited file, and the run merges every file's warnings anyway.
-            gateWarningSink.Sinks.Warnings.AddRange(gateResult.Warnings);
+            // Why the run's record rather than a warning now: a stale call site in another assembly
+            // may be patched by a later group of this run, so the warning is only built once every
+            // group has applied.
+            gateWarningSink.Sinks.StaleSignatureWarnings.AddRange(gateResult.StaleSignatureCallSites);
 
             HotReloadGroupCompileResult compile = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
                 collaborators,
