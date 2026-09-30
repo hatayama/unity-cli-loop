@@ -474,7 +474,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             StubEditorUnsavedChangesQuietSaver quietSaver = new(
                 saveFailures: new[] { "Scene: Assets/Scenes/Sample.unity" },
                 remainingAfterSave: System.Array.Empty<string>(),
-                unsavedBeforeSave: new[] { "Scene: Assets/Scenes/Sample.unity" });
+                unsavedBeforeSave: new[]
+                {
+                    "Scene: Assets/Scenes/Sample.unity",
+                    "Scene: Assets/Scenes/Other.unity"
+                });
             ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
                 new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
                 new StubCompilationFailureGate(false),
@@ -493,7 +497,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.IsPlaying, Is.False);
             Assert.That(response.BlockedByUnsavedChanges, Is.True);
             Assert.That(response.Message, Does.Contain("could not be saved"));
-            Assert.That(response.Message, Does.Contain("Scene: Assets/Scenes/Sample.unity"));
+            Assert.That(response.Message, Does.Contain("Unsaved changes: Scene: Assets/Scenes/Sample.unity."));
+            // The other Scene was written to disk before the failure, so the caller must still learn about it.
+            Assert.That(response.Message, Does.EndWith("Already saved: Scene: Assets/Scenes/Other.unity."));
         }
 
         [Test]
@@ -523,6 +529,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.BlockedByUnsavedChanges, Is.True);
             Assert.That(response.Message, Does.Contain("unsaved scene or prefab changes"));
             Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
+            // The save itself succeeded, so the file on disk was rewritten even though Play did not start.
+            Assert.That(response.Message, Does.EndWith("Already saved: Prefab Stage: Assets/Prefabs/Hud.prefab."));
         }
 
         [Test]

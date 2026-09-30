@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -295,7 +296,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (unsavedChanges.Length > 0)
             {
                 return ControlPlayModeActionResult.FromResponse(
-                    CreateUnsavedChangesBlockedResponse(UnsavedEditorChangesFailModeMessage, unsavedChanges),
+                    CreateUnsavedChangesBlockedResponse(
+                        UnsavedEditorChangesFailModeMessage,
+                        unsavedChanges,
+                        Array.Empty<string>()),
                     false);
             }
 
@@ -316,7 +320,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (failedChanges.Length > 0)
             {
                 return ControlPlayModeActionResult.FromResponse(
-                    CreateUnsavedChangesBlockedResponse(UnsavedEditorChangesSaveFailureMessage, failedChanges),
+                    CreateUnsavedChangesBlockedResponse(
+                        UnsavedEditorChangesSaveFailureMessage,
+                        failedChanges,
+                        ExcludeChanges(unsavedChanges, failedChanges)),
                     false);
             }
 
@@ -325,7 +332,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (remainingChanges.Length > 0)
             {
                 return ControlPlayModeActionResult.FromResponse(
-                    CreateUnsavedChangesBlockedResponse(UnsavedEditorChangesRemainingFailureMessage, remainingChanges),
+                    CreateUnsavedChangesBlockedResponse(
+                        UnsavedEditorChangesRemainingFailureMessage,
+                        remainingChanges,
+                        unsavedChanges),
                     false);
             }
 
@@ -400,13 +410,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        private ControlPlayModeResponse CreateUnsavedChangesBlockedResponse(string messagePrefix, string[] failedChanges)
+        private static string[] ExcludeChanges(string[] changes, string[] excludedChanges)
+        {
+            return changes.Where(change => !excludedChanges.Contains(change)).ToArray();
+        }
+
+        // Why savedChanges on a blocked response: a partial save has already rewritten those files,
+        // and the CLI error envelope carries only Message, so the list has to live there.
+        private ControlPlayModeResponse CreateUnsavedChangesBlockedResponse(
+            string messagePrefix,
+            string[] failedChanges,
+            string[] savedChanges)
         {
             Debug.Assert(!string.IsNullOrEmpty(messagePrefix), "messagePrefix must not be null or empty");
             Debug.Assert(failedChanges != null, "failedChanges must not be null");
             Debug.Assert(failedChanges.Length > 0, "failedChanges must not be empty");
+            Debug.Assert(savedChanges != null, "savedChanges must not be null");
 
-            string message = messagePrefix + " Unsaved changes: " + string.Join(", ", failedChanges);
+            string message = messagePrefix + " Unsaved changes: " + string.Join(", ", failedChanges) + ".";
+            if (savedChanges.Length > 0)
+            {
+                message += " Already saved: " + string.Join(", ", savedChanges) + ".";
+            }
+
             ControlPlayModeResponse response = CreateResponse(message, false, false);
             response.BlockedByUnsavedChanges = true;
             return response;
