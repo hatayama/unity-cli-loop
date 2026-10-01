@@ -152,8 +152,7 @@ include the file keep the type `AlreadyActive` and patch the body again. The fil
 addition has to be in the reload: passed, or unchanged since it was last applied, which the
 reload pulls back in on its own.
 
-Constructors, initializers, setters, indexers, operators, event accessors and subscriptions to an
-added event cannot be patched, so a call from them still fails the artifact compile (CS1061 or
+Constructors, initializers, setters, indexers, operators and event accessors cannot be patched, so a call from them still fails the artifact compile (CS1061 or
 CS0117) with a hint saying where such a call works. So does a call to an addition in another
 assembly, or in a file that changed since it was last applied and is not passed.
 
