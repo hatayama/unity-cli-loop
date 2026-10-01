@@ -254,10 +254,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertPatched(second, ".Raise(");
             target.Raise(9);
             Assert.That(listener.Received, Is.EqualTo(0), FormatOutcomes(second));
+            string changedName = typeof(HotReloadAddedEventApplyPublisher).FullName + ".Changed";
             Assert.That(
                 second.Warnings ?? new List<string>(),
-                Has.Some.Contains(DeclaredTypeChangedToken)
-                    .And.Some.Contains(typeof(HotReloadAddedEventApplyPublisher).FullName + ".Changed"),
+                Has.Some.Matches<string>(
+                    warning => warning.Contains(DeclaredTypeChangedToken) && warning.Contains(changedName)),
                 FormatOutcomes(second));
         }
 

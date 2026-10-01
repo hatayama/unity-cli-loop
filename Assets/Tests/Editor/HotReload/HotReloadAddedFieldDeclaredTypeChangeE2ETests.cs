@@ -54,11 +54,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult second = await RunAsync(
                 WithAddedMember("private string _addedCount = \"ab\";", "return _addedCount.Length;"));
 
+            // Why one element must carry both: the initializer also changes, so the
+            // initializer-changed warning names the same field on its own.
+            string changedName = typeof(HotReloadAddedFieldApplyFixture).FullName + "._addedCount";
             Assert.That(
                 second.Warnings ?? new List<string>(),
-                Has.Some.Contains(DeclaredTypeChangedToken)
-                    .And.Some.Contains(typeof(HotReloadAddedFieldApplyFixture).FullName + "._addedCount"),
+                Has.Some.Matches<string>(
+                    warning => warning.Contains(DeclaredTypeChangedToken) && warning.Contains(changedName)),
                 FormatOutcomes(second));
+            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(2), FormatOutcomes(second));
         }
 
         /// <summary>
