@@ -337,7 +337,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AddedFieldDeclaredTypeChangedWarningFormat =
             "A previous reload already added these fields with a different type, so a value stored "
             + "under the old type is replaced by the initializer (or the default) wherever the new "
-            + "type cannot hold it; an added event loses its subscribers: {0}. Assign or subscribe "
+            + "type cannot hold it; an added event loses its subscribers unless the new delegate type "
+            + "can still be read from the old one: {0}. Assign or subscribe "
             + "again inside a patched method, or run 'uloop compile'.";
 
         public const string MissingUsingCompileHint =
