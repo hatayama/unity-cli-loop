@@ -305,6 +305,13 @@ internal static class AddedFieldSkipEvaluator
             return false;
         }
 
+        // Why an anonymous function is let through: it is not a member of the host but a value
+        // the static lambda creates, and every name inside its body is checked on its own node.
+        if (symbol is IMethodSymbol { MethodKind: MethodKind.AnonymousFunction })
+        {
+            return false;
+        }
+
         if (!symbol.IsStatic)
         {
             return true;

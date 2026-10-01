@@ -9,6 +9,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private int _received;
 
+        private HotReloadAddedEventPublisher _publisher = new HotReloadAddedEventPublisher();
+
         public int Received => _received;
 
         [MethodImpl(MethodImplOptions.NoInlining)]

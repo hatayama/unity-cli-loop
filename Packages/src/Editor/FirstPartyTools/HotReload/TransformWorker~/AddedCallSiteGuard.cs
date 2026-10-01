@@ -77,6 +77,7 @@ internal static class AddedCallSiteGuard
                         continue;
                     }
 
+                    AddedEventStorePolicy.RequireBindings(bodyNode, semanticModel, typeState.AddedEvents, addedFieldCatalog);
                     remaining.Add(queued);
                 }
 

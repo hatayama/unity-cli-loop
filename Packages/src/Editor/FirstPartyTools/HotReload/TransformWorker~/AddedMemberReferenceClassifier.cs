@@ -36,9 +36,10 @@ internal sealed class AddedMemberReferenceClassifier
     }
 
     /// <summary>
-    /// Event when any name in the bodies is an added event, otherwise whether any names an added
-    /// method, field or property. An added event wins because a body that uses one is never
-    /// transformed, so it has to keep failing the way it fails without a stub.
+    /// Event when any name in the bodies is an added event the store cannot keep, otherwise
+    /// whether any names an added method, field, property, or store-kept event. Such an event
+    /// wins because a body that uses one is never transformed, so it has to keep failing the way
+    /// it fails without a stub.
     /// </summary>
     internal AddedMemberUse Classify(IReadOnlyList<SyntaxNode> bodyNodes, SemanticModel semanticModel)
     {
@@ -135,8 +136,15 @@ internal sealed class AddedMemberReferenceClassifier
                     ? AddedMemberUse.None
                     : AddedMemberUse.MethodsFieldsOrProperties;
             case IEventSymbol addedEvent:
-                return HoldsMemberOfKind(existingType, addedEvent.Name, SymbolKind.Event)
-                    ? AddedMemberUse.None
+                if (HoldsMemberOfKind(existingType, addedEvent.Name, SymbolKind.Event))
+                {
+                    return AddedMemberUse.None;
+                }
+
+                // An event the store keeps is patched like an added field, so the body is
+                // stubbed as one; any other added event keeps failing the way it does unstubbed.
+                return AddedEventStorePolicy.IsStoreBacked(addedEvent, existingType)
+                    ? AddedMemberUse.MethodsFieldsOrProperties
                     : AddedMemberUse.Event;
             default:
                 return AddedMemberUse.None;

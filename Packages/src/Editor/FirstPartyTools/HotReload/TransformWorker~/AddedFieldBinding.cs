@@ -36,6 +36,9 @@ internal sealed class AddedFieldBinding
 
     public bool IsConst { get; set; }
 
+    // A field-like event kept in the store: '+=' and '-=' combine delegates instead of adding.
+    public bool IsEvent { get; set; }
+
     // Why only recorded, never warned about here: whether the field ever becomes active is
     // decided by the Editor's apply, so the Editor is what names it.
     public bool HasSerializationAttribute { get; set; }

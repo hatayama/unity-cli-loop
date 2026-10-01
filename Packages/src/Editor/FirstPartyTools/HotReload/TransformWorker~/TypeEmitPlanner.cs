@@ -84,7 +84,8 @@ internal static class TypeEmitPlanner
             typeState.AddedMemberAccess = new AddedMemberAccessLookup(
                 typeSymbol,
                 typeState.CompiledType,
-                addedPropertyCatalog);
+                addedPropertyCatalog,
+                typeState.AddedEvents);
 
             // Existing property setters/init and all indexer accessors with bodies stay Skipped.
             // Added properties were classified above and must not receive duplicate skip rows.

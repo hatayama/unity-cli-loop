@@ -360,7 +360,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver,
                 NoArgs,
-                "Assignment to an added field would evaluate a receiver with possible side effects twice. "
+                "Assignment to an added field or event would evaluate a receiver with possible side effects twice. "
                 + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,

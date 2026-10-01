@@ -138,12 +138,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// Verifies that a body of an already introduced type that subscribes to an event the same
-        /// reload adds to a compiled type is skipped with the added-event reason. The introduced
+        /// reload adds to a compiled type is patched through the added-field store. The introduced
         /// type is served by the retained assembly, which never holds the compiled type, so the
         /// event has to be looked up where the compiled type is served.
         /// </summary>
         [Test]
-        public async Task Run_IntroducedTypeBodySubscribesToEventAddedOnCompiledType_SkipsNamingTheEvent()
+        public async Task Run_IntroducedTypeBodySubscribesToEventAddedOnCompiledType_IsPatched()
         {
             string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
             string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
@@ -165,14 +165,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(compute, Is.Not.Null, "Missing Compute() row.\n" + DescribeOutcomes(second));
                 Assert.That(
                     compute.Kind,
-                    Is.EqualTo(HotReloadMethodOutcomeKind.Skipped),
+                    Is.EqualTo(HotReloadMethodOutcomeKind.Patched),
                     DescribeOutcomes(second));
-                Assert.That(
-                    compute.Reason,
-                    Does.Contain(
-                        "Subscribes to the event '" + HostTypeFullName + "." + AddedHostEventName
-                        + "', which this edit adds"),
-                    DescribeOutcomes(second));
+                AssertComputedValue(
+                    readArtifact(),
+                    IntroducedSeed,
+                    "The patched body subscribes and still returns the seed.");
             });
         }
 

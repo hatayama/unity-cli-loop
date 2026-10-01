@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver,
                 Plain(
-                    "Assignment to an added field would evaluate a receiver with possible side effects twice.",
+                    "Assignment to an added field or event would evaluate a receiver with possible side effects twice.",
                     0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,

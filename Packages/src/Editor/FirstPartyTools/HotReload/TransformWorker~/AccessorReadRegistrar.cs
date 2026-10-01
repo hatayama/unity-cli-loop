@@ -37,6 +37,13 @@ internal static class AccessorReadRegistrar
 
         if (symbol is IEventSymbol eventSymbol)
         {
+            // An added event the store keeps has no backing field to reach; its reads become
+            // store calls any assembly can compile.
+            if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
+            {
+                return false;
+            }
+
             plan.GetOrAddEventBackingField(eventSymbol);
             return true;
         }

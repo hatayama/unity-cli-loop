@@ -959,8 +959,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an existing method of a file brought back to re-bind its active patches, whose
-        /// body subscribes to an event the host added, is Skipped rather than Failed once a later
-        /// reload no longer brings the host back, and its reason names the host file to pass.
+        /// body subscribes an added method group to an event the host added, is Skipped rather
+        /// than Failed once a later reload no longer brings the host back, and its reason names
+        /// the host file to pass. The host's raiser is kept Skipped (nameof of the event) so the
+        /// host has nothing active and comes back only for its retry.
         /// </summary>
         [Test]
         public async Task Run_ReappliedSiblingBodyNoLongerBinds_IsSkippedAndNamesTheMissingFile()
@@ -976,14 +978,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
                     "ReappliedUnboundHost.cs",
                     InsertHostMember(
-                        "        public event System.Action Hit;\n\n        public void RaiseHit()\n        {\n            Hit?.Invoke();\n        }\n\n")),
+                        "        public event System.Action Hit;\n\n        public void RaiseHit()\n        {\n            Hit?.Invoke();\n            System.Console.WriteLine(nameof(Hit));\n        }\n\n")),
                 [callerPath] = HotReloadTestSourceWriter.WriteEditedSource("ReappliedUnboundCaller.cs", callerSource)
             };
 
             HotReloadOrchestratorResult first = await RunWithOverridesAsync(new[] { hostPath, callerPath }, overrides);
             Assert.That(
                 FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".Call(").WorkerReason?.Code,
-                Is.EqualTo(HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent),
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodMethodGroupReference),
                 FormatOutcomes(first));
             FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".RaiseHit(");
             FindOutcome(first, HotReloadMethodOutcomeKind.Patched, ".Other(");

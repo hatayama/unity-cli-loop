@@ -195,11 +195,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// A body that uses an added event is not stubbed, even when it also calls an added method:
-        /// the transform never patches such a body, so a stub would stay in place.
+        /// A body that only subscribes to an added event is stubbed like one that uses an added
+        /// field: the transform patches it through the added-field store.
         /// </summary>
         [Test]
-        public async Task PrepareIntroducedTypes_BodyUsingAnAddedEvent_IsNotStubbed()
+        public async Task PrepareIntroducedTypes_BodyUsingAnAddedEvent_IsStubbed()
         {
             TransformWorkerIntroducedTypeDto introducedType = await PrepareSingleTypeAsync(
                 "AddedEvent",
@@ -212,13 +212,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        {\n"
                 + "            HotReloadCrossFileAddedMemberHost host = new HotReloadCrossFileAddedMemberHost();\n"
                 + "            host.AddedEvent += () => { };\n"
-                + "            return host.AddedValue();\n"
+                + "            return 1;\n"
                 + "        }\n"
                 + "    }\n"
                 + "}\n");
 
-            Assert.That(introducedType.stubbedMethodKeys, Is.Empty);
-            Assert.That(introducedType.source, Does.Contain("host.AddedEvent += () => { };"));
+            Assert.That(introducedType.stubbedMethodKeys, Is.EqualTo(new[] { "Example.Stubs.Caller::Subscribes()" }));
+            Assert.That(introducedType.source, Does.Not.Contain("host.AddedEvent += () => { };"));
         }
 
         /// <summary>

@@ -29,13 +29,14 @@ internal static class AddedFieldBodyScan
                 continue;
             }
 
-            IFieldSymbol field = TryGetFieldSymbolOrCandidate(semanticModel, node);
-            if (field == null)
+            string storeKey = FormatAddedStoreKeyOrNull(TryGetFieldSymbolOrCandidate(semanticModel, node))
+                ?? FormatAddedStoreKeyOrNull(semanticModel.GetSymbolInfo(node).Symbol as IEventSymbol);
+            if (storeKey == null)
             {
                 continue;
             }
 
-            AddedFieldBinding binding = addedFieldCatalog.FindOrNull(FormatAddedFieldKeyFromSymbol(field));
+            AddedFieldBinding binding = addedFieldCatalog.FindOrNull(storeKey);
             if (binding != null && binding.UnavailableReason != null)
             {
                 return binding.UnavailableReason;
@@ -322,19 +323,14 @@ internal static class AddedFieldBodyScan
             || kind == SyntaxKind.PostDecrementExpression;
     }
 
+    // Fields and field-like events alike: an added event the store keeps is written and read
+    // through the same store calls, so it is refused for the same shapes.
     internal static bool IsStoreAddedField(
         SemanticModel semanticModel,
         ExpressionSyntax expression,
         AddedFieldCatalog addedFieldCatalog)
     {
-        IFieldSymbol field = TryGetFieldSymbol(semanticModel, expression);
-        if (field == null)
-        {
-            return false;
-        }
-
-        AddedFieldBinding binding = addedFieldCatalog.FindOrNull(FormatAddedFieldKeyFromSymbol(field));
-        return binding != null && binding.IsStoreRewriteable;
+        return FindStoreBinding(semanticModel, expression, addedFieldCatalog) != null;
     }
 
     internal static bool IsStoreAddedInstanceField(
@@ -342,14 +338,25 @@ internal static class AddedFieldBodyScan
         ExpressionSyntax expression,
         AddedFieldCatalog addedFieldCatalog)
     {
-        IFieldSymbol field = TryGetFieldSymbol(semanticModel, expression);
-        if (field == null || field.IsStatic)
+        AddedFieldBinding binding = FindStoreBinding(semanticModel, expression, addedFieldCatalog);
+        return binding != null && !binding.IsStatic;
+    }
+
+    private static AddedFieldBinding FindStoreBinding(
+        SemanticModel semanticModel,
+        ExpressionSyntax expression,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        if (expression == null)
         {
-            return false;
+            return null;
         }
 
-        AddedFieldBinding binding = addedFieldCatalog.FindOrNull(FormatAddedFieldKeyFromSymbol(field));
-        return binding != null && binding.IsStoreRewriteable;
+        // Why unparenthesized: '(E) += h' writes E, and the symbol of the parentheses is not E's.
+        ExpressionSyntax target = AssignmentTargetRules.Unparenthesized(expression);
+        AddedFieldBinding binding = addedFieldCatalog.FindOrNull(
+            FormatAddedStoreKeyOrNull(semanticModel.GetSymbolInfo(target).Symbol));
+        return binding != null && binding.IsStoreRewriteable ? binding : null;
     }
 
     internal static bool IsStoreAddedValueTypeField(
@@ -401,6 +408,27 @@ internal static class AddedFieldBodyScan
             {
                 return candidateField;
             }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The store key of an added field or field-like event, or null for any other symbol. Both
+    /// are keyed by the declaring type's metadata name, whichever type the use is emitted from.
+    /// </summary>
+    internal static string FormatAddedStoreKeyOrNull(ISymbol symbol)
+    {
+        if (symbol is IFieldSymbol fieldSymbol)
+        {
+            return FormatAddedFieldKeyFromSymbol(fieldSymbol);
+        }
+
+        if (symbol is IEventSymbol eventSymbol && eventSymbol.ContainingType != null)
+        {
+            return AddedFieldClassifier.FormatAddedFieldStoreKey(
+                CecilTypeNames.ToMetadataName(eventSymbol.ContainingType.OriginalDefinition),
+                eventSymbol.Name);
         }
 
         return null;

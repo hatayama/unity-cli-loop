@@ -46,6 +46,19 @@ internal sealed class AddedEventLookup
         return true;
     }
 
+    /// <summary>Whether an event's uses are rewritten to the added-field store.</summary>
+    internal bool IsStoreBacked(IEventSymbol eventSymbol)
+    {
+        if (eventSymbol.DeclaringSyntaxReferences.IsEmpty)
+        {
+            return false;
+        }
+
+        return AddedEventStorePolicy.IsStoreBacked(
+            eventSymbol,
+            FindCompiledDeclaringType(eventSymbol.ContainingType.OriginalDefinition));
+    }
+
     // Why not the subscribing type's compiled counterpart and its assembly: when a retained
     // artifact serves the subscribing type, that assembly is the artifact, which never holds a
     // type the patch target compiled. The declaring type is looked up where it is served instead:

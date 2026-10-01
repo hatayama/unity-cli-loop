@@ -24,15 +24,11 @@ internal sealed class AddedFieldShimRewrite
         _rewriter = rewriter;
     }
 
+    // Fields and the field-like events the store keeps share the bindings and the store calls.
     internal AddedFieldBinding FindStoreBinding(ISymbol symbol)
     {
-        if (symbol is not IFieldSymbol fieldSymbol)
-        {
-            return null;
-        }
-
         AddedFieldBinding binding = _rewriter._addedFieldCatalog.FindOrNull(
-            AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol));
+            AddedFieldBodyScan.FormatAddedStoreKeyOrNull(symbol));
         if (binding == null || !binding.IsStoreRewriteable)
         {
             return null;
@@ -43,13 +39,7 @@ internal sealed class AddedFieldShimRewrite
 
     internal AddedFieldBinding FindAnyAddedBinding(ISymbol symbol)
     {
-        if (symbol is not IFieldSymbol fieldSymbol)
-        {
-            return null;
-        }
-
-        return _rewriter._addedFieldCatalog.FindOrNull(
-            AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol));
+        return _rewriter._addedFieldCatalog.FindOrNull(AddedFieldBodyScan.FormatAddedStoreKeyOrNull(symbol));
     }
 
     internal SyntaxNode TryRewriteAddedFieldRead(
@@ -104,8 +94,17 @@ internal sealed class AddedFieldShimRewrite
             return CreateAddedFieldSet(binding, receiver, visitedRight).WithTriviaFrom(node);
         }
 
-        SyntaxKind binaryKind = ShimBodyRewriter.GetCompoundAssignmentBinaryKind(node.Kind());
         ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
+        if (binding.IsEvent)
+        {
+            return CreateAddedFieldSet(
+                    binding,
+                    receiver,
+                    CombineDelegates(node.Kind(), getCall, visitedRight, binding.FieldType))
+                .WithTriviaFrom(node);
+        }
+
+        SyntaxKind binaryKind = ShimBodyRewriter.GetCompoundAssignmentBinaryKind(node.Kind());
         ExpressionSyntax combined = CombineCompoundOperands(binaryKind, getCall, visitedRight);
         return CreateAddedFieldSet(
                 binding,
@@ -135,6 +134,30 @@ internal sealed class AddedFieldShimRewrite
                 receiver,
                 CastToAssignedType(combined, binding.FieldType))
             .WithTriviaFrom(triviaSource);
+    }
+
+    // Why Delegate.Combine and not '+': a lambda or a method group has no type of its own, and C#
+    // only converts it to the event's delegate type on '+=' to an event, never on a binary '+'.
+    // The handler is cast to that type so either converts, and the result is cast back because
+    // Combine and Remove return Delegate.
+    private static ExpressionSyntax CombineDelegates(
+        SyntaxKind assignmentKind,
+        ExpressionSyntax getCall,
+        ExpressionSyntax handler,
+        ITypeSymbol delegateType)
+    {
+        string methodName = assignmentKind == SyntaxKind.SubtractAssignmentExpression ? "Remove" : "Combine";
+        ExpressionSyntax combineAccess = SyntaxFactory.ParseExpression("global::System.Delegate." + methodName);
+        InvocationExpressionSyntax combined = SyntaxFactory.InvocationExpression(
+            combineAccess,
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SeparatedList(
+                    new[]
+                    {
+                        SyntaxFactory.Argument(getCall),
+                        SyntaxFactory.Argument(CastToAssignedType(handler, delegateType))
+                    })));
+        return CastToAssignedType(combined, delegateType);
     }
 
     internal static bool IsDecrementNode(SyntaxNode node)

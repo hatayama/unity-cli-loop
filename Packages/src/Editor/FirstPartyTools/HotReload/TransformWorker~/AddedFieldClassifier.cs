@@ -47,6 +47,69 @@ internal static class AddedFieldClassifier
                     fieldMatch);
             }
         }
+
+        ClassifyAddedEvents(typeState, semanticModel, home, addedFieldCatalog);
+    }
+
+    /// <summary>
+    /// What: registers a store binding for each field-like event the store keeps, under the key an
+    /// added field of that name would get, so every use of it is rewritten like an added field.
+    /// </summary>
+    private static void ClassifyAddedEvents(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        WorkerTypeHome home,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (EventFieldDeclarationSyntax eventDeclaration in typeState.TypeDeclaration.Members
+            .OfType<EventFieldDeclarationSyntax>())
+        {
+            foreach (VariableDeclaratorSyntax variable in eventDeclaration.Declaration.Variables)
+            {
+                IEventSymbol eventSymbol = semanticModel.GetDeclaredSymbol(variable) as IEventSymbol;
+                if (eventSymbol == null || !typeState.AddedEvents.IsStoreBacked(eventSymbol))
+                {
+                    continue;
+                }
+
+                ClassifyOneAddedEvent(typeState, semanticModel, home, variable, eventSymbol, addedFieldCatalog);
+            }
+        }
+    }
+
+    // Why a binding even when the store cannot hold the event: the use sites were already let
+    // through as store-backed, and the binding's reason is what the guard stage skips them with.
+    private static void ClassifyOneAddedEvent(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        WorkerTypeHome home,
+        VariableDeclaratorSyntax variable,
+        IEventSymbol eventSymbol,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, eventSymbol.Name);
+        addedFieldCatalog.AddAddedSyntaxKey(syntaxKey);
+        AddedFieldBinding binding = new AddedFieldBinding
+        {
+            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
+            FieldKey = AddedFieldBodyScan.FormatAddedStoreKeyOrNull(eventSymbol),
+            SyntaxKey = syntaxKey,
+            FieldName = eventSymbol.Name,
+            FieldType = eventSymbol.Type,
+            IsStatic = eventSymbol.IsStatic,
+            IsEvent = true,
+            Initializer = variable.Initializer != null ? variable.Initializer.Value : null
+        };
+        AddedFieldStoreAvailability availability = EvaluateStoreAvailability(
+            typeState.TypeSymbol,
+            semanticModel,
+            home,
+            eventSymbol.Type,
+            binding.Initializer,
+            typeState.SourceUnit,
+            out ITypeSymbol unresolvedStoreType);
+        binding.UnavailableReason = DescribeStoreAvailability(availability, unresolvedStoreType, eventSymbol.Name);
+        addedFieldCatalog.Register(binding);
     }
 
     internal static void ClassifyOneAddedField(

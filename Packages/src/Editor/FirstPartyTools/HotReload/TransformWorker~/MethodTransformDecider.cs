@@ -67,7 +67,7 @@ internal static class MethodTransformDecider
             && InaccessibleAccessScanner.SubtreeHasInaccessibleMemberAccess(semanticModel, new[] { bodyNode });
         // Why delegation is forced: a transplanted shim body still has to compile as C#, and C#
         // rejects raising or reading an event outside its declaring type whatever its visibility.
-        bool eventAccessorsRequired = EventAccessorRules.BodyRequiresEventAccessors(bodyNode, semanticModel);
+        bool eventAccessorsRequired = EventAccessorRules.BodyRequiresEventAccessors(bodyNode, semanticModel, addedEvents);
 
         if (!closureInaccessible && !asyncIteratorInaccessible && !eventAccessorsRequired)
         {

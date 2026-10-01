@@ -331,6 +331,12 @@ internal static class AccessorAccessRegistrar
 
         if (leftSymbol is IEventSymbol eventSymbol)
         {
+            // An added event the store keeps is written through the store, never a backing field.
+            if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
+            {
+                return false;
+            }
+
             if (EventAccessorRules.IsSubscriptionAssignment(assignment))
             {
                 // += / -= stay on the publicized add/remove accessors, which keep the
