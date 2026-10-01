@@ -160,14 +160,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an initializer the store can run is emitted with the event, and one it cannot run
-        /// skips the using body with the added-field initializer reason instead of failing.
+        /// skips the using body with the added-field initializer reason instead of failing. The
+        /// lambda that calls a private static of the host pins that a lambda's body is still
+        /// checked name by name, not let through because it is an anonymous function.
         /// </summary>
-        [TestCase("delegate { }", true)]
-        [TestCase("new Action<int>(RaiseExisting)", false)]
-        public async Task Classify_EventInitializer_FollowsTheFieldInitializerRules(string initializer, bool emittable)
+        [TestCase("delegate { }", "", true)]
+        [TestCase("new Action<int>(RaiseExisting)", "", false)]
+        [TestCase(
+            "v => HostPrivateStatic(v)",
+            "\n        private static void HostPrivateStatic(int value)\n        {\n        }\n",
+            false)]
+        public async Task Classify_EventInitializer_FollowsTheFieldInitializerRules(
+            string initializer,
+            string extraMember,
+            bool emittable)
         {
             string publisher = WithRaiseBody(
-                WithAddedEvent("\n        public event Action<int> Changed = " + initializer + ";"),
+                WithAddedEvent(extraMember + "\n        public event Action<int> Changed = " + initializer + ";"),
                 "Changed?.Invoke(value);");
             TransformWorkerClientResult result = await RunAsync(publisher, ReadOnDisk(SubscriberFileName));
 
