@@ -21,7 +21,9 @@ internal static class AddedEventStorePolicy
             return false;
         }
 
-        if (!IsFieldLike(eventSymbol) || !HasStoreHost(eventSymbol.ContainingType))
+        if (!IsFieldLike(eventSymbol)
+            || !HasStoreHost(eventSymbol.ContainingType)
+            || HasTypeArgumentsInHostChain(eventSymbol.ContainingType))
         {
             return false;
         }
@@ -82,6 +84,22 @@ internal static class AddedEventStorePolicy
         }
 
         return true;
+    }
+
+    // Why the outer types too: the store key names the open definition, so Host<int>.E and
+    // Host<string>.E, or Outer<int>.Inner.E and Outer<string>.Inner.E, would share one slot
+    // where the CLR gives each closed instantiation its own event.
+    private static bool HasTypeArgumentsInHostChain(INamedTypeSymbol containingType)
+    {
+        for (INamedTypeSymbol current = containingType; current != null; current = current.ContainingType)
+        {
+            if (current.TypeParameters.Length > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Why a struct is let through: its event gets a binding the classifier marks unavailable, so

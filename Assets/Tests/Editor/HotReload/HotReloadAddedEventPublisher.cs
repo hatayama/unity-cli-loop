@@ -20,6 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return this;
         }
 
+        // Private, so a body calling it goes through accessor delegates.
+        private int Secret()
+        {
+            return 2;
+        }
+
         public void RaiseExisting(int value)
         {
             Existing?.Invoke(value);
@@ -46,6 +52,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 InnerExisting?.Invoke(value);
             }
         }
+    }
+
+    /// <summary>
+    /// Generic publisher, because the added-field store keys an event by the open definition, so
+    /// every closed instantiation would share one slot.
+    /// </summary>
+    public sealed class HotReloadAddedEventGenericHost<T>
+    {
+        public static int Marker;
     }
 
     /// <summary>

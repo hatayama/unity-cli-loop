@@ -35,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CountAnchor = "        public int Count => 0;";
         private const string PayloadAnchor = "            public int Value;";
         private const string ClashAnchor = "        public int Clash;";
+        private const string GenericMarkerAnchor = "        public static int Marker;";
         private const string SubscriberMethodAnchor = "        public int Received => _received;";
         private const string WireBody = "            publisher.Existing += Accept;";
         private const string AddedEvent = "\n        public event Action<int> Changed;";
@@ -55,6 +56,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ReadOnDisk(SubscriberFileName));
 
             AssertEmittedThroughStore(result, PublisherTypeMetadataName, "RaiseExisting", ChangedKey);
+        }
+
+        /// <summary>
+        /// What: an added property's getter that calls a private member, so its body is planned
+        /// through accessor delegates, raises the added event through the store and the plan
+        /// holds no backing-field accessor for the event, which the compiled class does not have.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_AddedGetterWithPrivateAccess_PlansNoBackingFieldForTheEvent()
+        {
+            string publisher = WithAddedEvent(
+                AddedEvent + "\n\n        public int Fire\n        {\n            get\n            {\n"
+                + "                Changed?.Invoke(Secret());\n                return 1;\n            }\n        }");
+            TransformWorkerClientResult result = await RunAsync(publisher, ReadOnDisk(SubscriberFileName));
+
+            AssertEmittedThroughStore(result, PublisherTypeMetadataName, "get_Fire", ChangedKey);
+            Assert.That(result.Output.shimSource, Does.Not.Contain("__EV_Changed"));
+        }
+
+        /// <summary>
+        /// What: a static event added to a generic class keeps today's refusal when another type
+        /// subscribes through a closed instantiation, because one store slot would serve every
+        /// instantiation the CLR keeps apart.
+        /// </summary>
+        [Test]
+        public async Task Classify_EventOnGenericHost_StaysRefused()
+        {
+            string publisher = ReplaceInSource(
+                ReadOnDisk(PublisherFileName),
+                GenericMarkerAnchor,
+                GenericMarkerAnchor + "\n\n        public static event Action<int> GenericChanged;");
+            TransformWorkerClientResult result = await RunAsync(
+                publisher,
+                WithSubscriberMethod(
+                    "public void WireGeneric()\n        {\n"
+                    + "            HotReloadAddedEventGenericHost<int>.GenericChanged += Accept;\n        }"));
+
+            AssertSkippedWith(result, "WireGeneric", HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent);
         }
 
         /// <summary>
