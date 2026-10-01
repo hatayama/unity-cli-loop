@@ -41,8 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // The part of the hint that says a constructor is one of the places no patch can reach.
         private const string UnpatchableBodiesHintCore =
-            "Constructors, initializers, setters, indexers, operators, event accessors and "
-            + "subscriptions to an added event cannot.";
+            "Constructors, initializers, setters, indexers, operators and event accessors cannot.";
 
         private static readonly string CompiledTypeAddedMember =
             "        public int " + CompiledTypeAddedMethodName + "()\n"

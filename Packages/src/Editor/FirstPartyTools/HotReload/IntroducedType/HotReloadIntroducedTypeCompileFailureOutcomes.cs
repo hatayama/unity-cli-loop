@@ -31,8 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "reload or an earlier one. A new type can call such an addition only from its methods "
             + "and get-only properties, and only when the file that declares the addition belongs "
             + "to the same assembly and is part of this reload: passed, or unchanged since it was "
-            + "last applied. Constructors, initializers, setters, indexers, operators, event "
-            + "accessors and subscriptions to an added event cannot. Pass that file too or move the "
+            + "last applied. Constructors, initializers, setters, indexers, operators and event "
+            + "accessors cannot. Pass that file too or move the "
             + "call into a method, or run 'uloop compile' to make the added members compiled, then "
             + "rerun.";
 
