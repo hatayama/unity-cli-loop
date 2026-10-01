@@ -258,6 +258,13 @@ method's row says which answer it got in `LifecycleNote` (see Output).
   its `Skipped` row names `uloop compile` as the only step: no rewrite of the body would make
   the engine call it.
 
+To re-run an edited compiled `OnEnable` on live objects — for example after adding a
+subscription to it — toggle the component around the reload instead of compiling: set
+`enabled = false` with `execute-dynamic-code`, run `hot-reload`, then set `enabled = true`.
+Unity calls the old `OnDisable` (so the old subscription is removed) and then the patched
+`OnEnable`; coroutines keep running because only the component is toggled. This works only
+for an `OnEnable` / `OnDisable` the compiled class already has; an added one is not called.
+
 The proxies exist only for the running session: nothing is attached outside Play Mode, and a
 compile or a domain reload drops them along with every other patch. Execution order relative
 to other components is not guaranteed — a proxy is its own component, so an added `Update`
