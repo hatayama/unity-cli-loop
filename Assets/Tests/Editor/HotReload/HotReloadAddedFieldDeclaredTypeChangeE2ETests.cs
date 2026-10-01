@@ -49,7 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task Run_AddedFieldDeclaredTypeChanged_WarnsNamingTheField()
         {
             await RunAsync(WithAddedMember("private int _addedCount = 3;", "return _addedCount;"));
-            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(3));
+            HotReloadAddedFieldApplyFixture fixture = new HotReloadAddedFieldApplyFixture();
+            Assert.That(fixture.ReadAdded(), Is.EqualTo(3));
 
             HotReloadOrchestratorResult second = await RunAsync(
                 WithAddedMember("private string _addedCount = \"ab\";", "return _addedCount.Length;"));
@@ -62,7 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Has.Some.Matches<string>(
                     warning => warning.Contains(DeclaredTypeChangedToken) && warning.Contains(changedName)),
                 FormatOutcomes(second));
-            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(2), FormatOutcomes(second));
+            // Why the instance read before the change: its stored int is what the new type
+            // cannot hold, so reading 2 there shows the value was initialized again.
+            Assert.That(fixture.ReadAdded(), Is.EqualTo(2), FormatOutcomes(second));
         }
 
         /// <summary>

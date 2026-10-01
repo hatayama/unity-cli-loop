@@ -219,6 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(introducedType.stubbedMethodKeys, Is.EqualTo(new[] { "Example.Stubs.Caller::Subscribes()" }));
             Assert.That(introducedType.source, Does.Not.Contain("host.AddedEvent += () => { };"));
+            Assert.That(introducedType.source, Does.Contain("{ " + StubThrow + "\"'Example.Stubs.Caller.Subscribes' calls members"));
         }
 
         /// <summary>

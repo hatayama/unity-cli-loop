@@ -31,6 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string IntroducedTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload." + IntroducedTypeSimpleName;
         private const int IntroducedSeed = 5;
+
+        // Added to the seed when the added event is raised, so the handler's value is told apart
+        // from a body that returns the seed without the raise arriving.
+        private const int AddedEventRaiseOffset = 2;
         private const int EditedComputedValue = IntroducedSeed * 2;
         private const string SeedExpression = "_seed";
         private const string EditedExpression = "_seed * 2";
@@ -169,8 +173,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     DescribeOutcomes(second));
                 AssertComputedValue(
                     readArtifact(),
-                    IntroducedSeed,
-                    "The patched body subscribes and still returns the seed.");
+                    IntroducedSeed + AddedEventRaiseOffset,
+                    "The patched body's handler must receive the value the added event is raised with.");
             });
         }
 
@@ -823,14 +827,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host, Does.Contain(HostStoredFieldAnchor), "Precondition: host field anchor must exist.");
             string hostWithEvent = host.Replace(
                 HostStoredFieldAnchor,
-                HostStoredFieldAnchor + "\n\n        public event System.Action<int> " + AddedHostEventName + ";",
+                HostStoredFieldAnchor + "\n\n        public event System.Action<int> " + AddedHostEventName + ";\n\n"
+                + "        public void RaiseAddedEvent(int value)\n        {\n"
+                + "            " + AddedHostEventName + "?.Invoke(value);\n        }",
                 StringComparison.Ordinal);
             string subscribingExpression =
                 "new System.Func<int>(() =>\n"
                 + "            {\n"
                 + "                HotReloadCrossFileAddedMemberHost host = new HotReloadCrossFileAddedMemberHost();\n"
-                + "                host." + AddedHostEventName + " += value => { };\n"
-                + "                return _seed;\n"
+                + "                int received = 0;\n"
+                + "                host." + AddedHostEventName + " += value => received = value;\n"
+                + "                host.RaiseAddedEvent(_seed + " + AddedEventRaiseOffset + ");\n"
+                + "                return received;\n"
                 + "            })()";
             return new Dictionary<string, string>
             {
