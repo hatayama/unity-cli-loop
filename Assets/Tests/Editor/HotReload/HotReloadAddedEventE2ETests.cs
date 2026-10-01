@@ -116,6 +116,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: another type subscribing to a compiled event through parentheses,
+        /// '(publisher.Existing) += h', is patched and the compiled raise reaches the handler,
+        /// so looking past the parentheses does not break the compiled-event subscription path.
+        /// </summary>
+        [Test]
+        public async Task Run_OtherTypeSubscribesToCompiledEventThroughParentheses_IsPatched()
+        {
+            HotReloadOrchestratorResult result = await RunAsync(
+                ReadFixture(PublisherFileName),
+                EditSubscriber(WireAnchor, "(publisher.Existing) += Accept;"));
+
+            AssertPatched(result, ".Wire(");
+            Assert.That(WireAndRaise(4), Is.EqualTo(4), FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: the declaring type subscribing to its compiled event through parentheses,
+        /// '(Existing) += h', is patched and the raise reaches both that handler and a handler
+        /// compiled code subscribed.
+        /// </summary>
+        [Test]
+        public async Task Run_DeclaringTypeSubscribesToCompiledEventThroughParentheses_IsPatched()
+        {
+            string publisher = ReplaceInSource(
+                ReadFixture(PublisherFileName),
+                RaiseBodyAnchor,
+                "            (Existing) += forwarded => RaiseStatic(forwarded);\n" + RaiseBodyAnchor);
+
+            HotReloadOrchestratorResult result = await RunAsync(publisher, ReadFixture(SubscriberFileName));
+
+            AssertPatched(result, ".Raise(");
+            HotReloadAddedEventApplyPublisher target = new HotReloadAddedEventApplyPublisher();
+            HotReloadAddedEventApplySubscriber subscriber = new HotReloadAddedEventApplySubscriber();
+            target.Existing += subscriber.Accept;
+            target.Raise(3);
+            Assert.That(subscriber.Received, Is.EqualTo(3), FormatOutcomes(result));
+        }
+
+        /// <summary>
         /// What: an added static event with a generic delegate type is raised from a patched static
         /// method and reaches a lambda another type subscribed.
         /// </summary>
