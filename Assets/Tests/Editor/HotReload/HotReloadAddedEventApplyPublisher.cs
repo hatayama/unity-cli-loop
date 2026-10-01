@@ -21,5 +21,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public static void RaiseStatic(int value)
         {
         }
+
+        // A compiled getter an edit can make raise an added event.
+        public int Probe
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            get { return 0; }
+        }
+
+        // Private, so a body calling it is rewritten through accessor delegates, the path that
+        // must not plan a backing field for an added event.
+        private int Secret()
+        {
+            return 2;
+        }
     }
 }

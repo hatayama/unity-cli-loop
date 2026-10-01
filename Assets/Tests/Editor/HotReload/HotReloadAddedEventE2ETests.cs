@@ -116,6 +116,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added property's getter that calls a private member, and so goes through
+        /// accessor delegates, raises the added event through the store and the raise arrives,
+        /// instead of the run planning a backing field the compiled class does not have.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedPropertyGetterWithPrivateAccessRaisesAddedEvent_ReachesSubscriber()
+        {
+            string publisher = EditPublisher(
+                AddedEvent + "\n\n        public int Fire\n        {\n"
+                + "            get\n            {\n                Changed?.Invoke(Secret());\n"
+                + "                return 1;\n            }\n        }",
+                "            if (Changed == null)\n            {\n"
+                + "                Changed += forwarded => Existing?.Invoke(forwarded);\n            }\n\n"
+                + "            _ = Fire;");
+
+            HotReloadOrchestratorResult result = await RunAsync(publisher, ReadFixture(SubscriberFileName));
+
+            AssertPatched(result, ".Raise(");
+            Assert.That(RaiseThroughExisting(), Is.EqualTo(2), FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: a compiled property's getter edited to call a private member and raise the added
+        /// event is patched, and the raise reaches a subscriber.
+        /// </summary>
+        [Test]
+        public async Task Run_CompiledGetterWithPrivateAccessRaisesAddedEvent_ReachesSubscriber()
+        {
+            string publisher = EditPublisher(
+                AddedEvent,
+                "            if (Changed == null)\n            {\n"
+                + "                Changed += forwarded => Existing?.Invoke(forwarded);\n            }\n\n"
+                + "            _ = Probe;");
+            publisher = ReplaceInSource(
+                publisher,
+                "            get { return 0; }",
+                "            get\n            {\n                Changed?.Invoke(Secret());\n"
+                + "                return 1;\n            }");
+
+            HotReloadOrchestratorResult result = await RunAsync(publisher, ReadFixture(SubscriberFileName));
+
+            AssertPatched(result, ".Raise(");
+            Assert.That(RaiseThroughExisting(), Is.EqualTo(2), FormatOutcomes(result));
+        }
+
+        /// <summary>
         /// What: another type subscribing to a compiled event through parentheses,
         /// '(publisher.Existing) += h', is patched and the compiled raise reaches the handler,
         /// so looking past the parentheses does not break the compiled-event subscription path.
@@ -287,6 +333,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertPatched(third, ".Raise(");
             target.Raise(4);
             Assert.That(listener.Received, Is.EqualTo(4), FormatOutcomes(third));
+        }
+
+        private static int RaiseThroughExisting()
+        {
+            HotReloadAddedEventApplyPublisher target = new HotReloadAddedEventApplyPublisher();
+            HotReloadAddedEventApplySubscriber listener = new HotReloadAddedEventApplySubscriber();
+            target.Existing += listener.Accept;
+            target.Raise(0);
+            return listener.Received;
         }
 
         private static int WireAndRaise(int value)
