@@ -137,10 +137,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// The row describing one added field of <paramref name="typeName"/>, which may be spelled
-        /// either way a nested type is spelled.
-        /// </summary>
-        /// <summary>
         /// Adds to <paramref name="changedFullNames"/> each added field whose committed
         /// declaration names another type than <paramref name="addedFieldDeclarations"/> does.
         /// </summary>
@@ -176,6 +172,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// The row describing one added field of <paramref name="typeName"/>, which may be spelled
+        /// either way a nested type is spelled.
+        /// </summary>
         internal bool TryGetDeclaration(
             string typeName,
             string fieldName,
