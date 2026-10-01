@@ -154,7 +154,9 @@ reload pulls back in on its own.
 
 Constructors, initializers, setters, indexers, operators and event accessors cannot be patched, so a call from them still fails the artifact compile (CS1061 or
 CS0117) with a hint saying where such a call works. So does a call to an addition in another
-assembly, or in a file that changed since it was last applied and is not passed.
+assembly, or in a file that changed since it was last applied and is not passed, and so does a
+subscription to an added event the added-field store cannot hold (custom `add`/`remove`
+accessors, or a delegate type not visible outside the assembly).
 
 - When this reload does not patch a stubbed body (a generic method, or a method of a struct, is
   `Skipped`), no type of that artifact is introduced: the stubbed type's row reads `Not
