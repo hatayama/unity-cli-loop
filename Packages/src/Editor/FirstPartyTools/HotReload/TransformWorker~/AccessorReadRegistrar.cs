@@ -16,18 +16,7 @@ internal static class AccessorReadRegistrar
         rejectReason = null;
         if (symbol is IFieldSymbol fieldSymbol)
         {
-            if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
-            {
-                return false;
-            }
-
-            if (fieldSymbol.IsConst)
-            {
-                return true;
-            }
-
-            plan.GetOrAddField(fieldSymbol);
-            return true;
+            return TryRegisterFieldRead(fieldSymbol, plan);
         }
 
         if (symbol is IPropertySymbol propertySymbol)
@@ -37,15 +26,7 @@ internal static class AccessorReadRegistrar
 
         if (symbol is IEventSymbol eventSymbol)
         {
-            // An added event the store keeps has no backing field to reach; its reads become
-            // store calls any assembly can compile.
-            if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
-            {
-                return false;
-            }
-
-            plan.GetOrAddEventBackingField(eventSymbol);
-            return true;
+            return TryRegisterEventRead(eventSymbol, plan, addedMemberAccess);
         }
 
         if (symbol is IMethodSymbol methodSymbol
@@ -74,6 +55,38 @@ internal static class AccessorReadRegistrar
         }
 
         return false;
+    }
+
+    private static bool TryRegisterFieldRead(IFieldSymbol fieldSymbol, AccessorPlan plan)
+    {
+        if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
+        {
+            return false;
+        }
+
+        if (fieldSymbol.IsConst)
+        {
+            return true;
+        }
+
+        plan.GetOrAddField(fieldSymbol);
+        return true;
+    }
+
+    private static bool TryRegisterEventRead(
+        IEventSymbol eventSymbol,
+        AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess)
+    {
+        // An added event the store keeps has no backing field to reach; its reads become
+        // store calls any assembly can compile.
+        if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
+        {
+            return false;
+        }
+
+        plan.GetOrAddEventBackingField(eventSymbol);
+        return true;
     }
 
     private static bool TryRegisterInaccessiblePropertyRead(
