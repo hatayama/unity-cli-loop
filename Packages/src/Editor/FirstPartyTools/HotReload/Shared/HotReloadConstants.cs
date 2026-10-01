@@ -330,6 +330,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "read yet; assign the value inside a patched method (for a reference type, "
             + "'if (field == null) field = ...;'), rename the field, or run 'uloop compile'.";
 
+        // Why a warning: the store keeps a value under the field's key whatever its type, and a
+        // read with a type that cannot hold it starts over from the initializer, so a value (for
+        // an added event, its subscribers) is silently gone. The run is the only place that sees
+        // both declarations.
+        public const string AddedFieldDeclaredTypeChangedWarningFormat =
+            "A previous reload already added these fields with a different type, so a value stored "
+            + "under the old type is replaced by the initializer (or the default) wherever the new "
+            + "type cannot hold it; an added event loses its subscribers: {0}. Assign or subscribe "
+            + "again inside a patched method, or run 'uloop compile'.";
+
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
 

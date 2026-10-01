@@ -42,11 +42,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(resolution != null && resolution.AllResolved, "resolution must be resolved.");
 
             // Why before the generation starts: BeginGeneration drops the added-field ledger,
-            // and with it the initializers the previous reload committed.
-            List<string> initializerChangedFields = CollectInitializerChangedAddedFields(
+            // and with it the initializers and declarations the previous reload committed.
+            List<string> staleAddedFieldWarnings = CollectStaleAddedFieldWarnings(
                 file.ProjectRelativePath,
                 file.AddedFieldNames,
-                file.AddedFieldInitializers);
+                file.AddedFieldInitializers,
+                file.AddedFieldDeclarations);
             _domain.BeginGeneration(
                 file.ProjectRelativePath,
                 compileResult.AssemblyBytes,
@@ -59,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.AddedFieldNames,
                 file.AddedFieldInitializers,
                 file.AddedFieldDeclarations);
-            AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
+            file.Sinks.Warnings.AddRange(staleAddedFieldWarnings);
             List<string> inlineRiskMethodLabels = new List<string>();
             List<string> unforwardedUnityMessageLabels = new List<string>();
             int patchedCount = ApplyResolvedEntries(
@@ -119,17 +120,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 file.AddedFieldInitializers ?? file.FileOutput.addedFieldInitializers;
             TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations =
                 file.AddedFieldDeclarations ?? file.FileOutput.addedFieldDeclarations;
-            List<string> initializerChangedFields = CollectInitializerChangedAddedFields(
+            List<string> staleAddedFieldWarnings = CollectStaleAddedFieldWarnings(
                 file.ProjectRelativePath,
                 addedFieldNames,
-                addedFieldInitializers);
+                addedFieldInitializers,
+                addedFieldDeclarations);
             _domain.BeginAddedMemberOnlyGeneration(file.ProjectRelativePath);
             CommitAddedFieldsForFile(
                 file.ProjectRelativePath,
                 addedFieldNames,
                 addedFieldInitializers,
                 addedFieldDeclarations);
-            AppendAddedFieldInitializerChangedWarning(file.Sinks.Warnings, initializerChangedFields);
+            file.Sinks.Warnings.AddRange(staleAddedFieldWarnings);
             // Why recorded: a file that only declares an added member has no entry of its own,
             // yet a sibling file's applied body uses that field, so the run must report it.
             file.ClearedAddedFieldNames = addedFieldNames;
@@ -167,37 +169,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadAddedFieldDeclarationConversion.ListSerializedFields(addedFieldDeclarations));
         }
 
-        // The fields a previous reload already added and this run declares with a different
-        // initializer. Read from the generation the run is about to replace, so the caller has to
-        // collect before it starts the new one.
-        private List<string> CollectInitializerChangedAddedFields(
+        // The warnings about fields a previous reload already added and this run declares with a
+        // different initializer or a different type. Read from the generation the run is about to
+        // replace, so the caller has to collect before it starts the new one.
+        private List<string> CollectStaleAddedFieldWarnings(
             string projectRelativePath,
             string[] addedFieldNames,
-            string[] addedFieldInitializers)
+            string[] addedFieldInitializers,
+            TransformWorkerAddedFieldDeclarationDto[] addedFieldDeclarations)
         {
-            List<string> changedFieldNames = new List<string>();
-            _domain.FindGeneration(projectRelativePath)?.CollectAddedFieldsWithChangedInitializer(
+            List<string> warnings = new List<string>();
+            HotReloadFileGeneration generation = _domain.FindGeneration(projectRelativePath);
+            if (generation == null)
+            {
+                return warnings;
+            }
+
+            List<string> initializerChangedFields = new List<string>();
+            generation.CollectAddedFieldsWithChangedInitializer(
                 addedFieldNames,
                 addedFieldInitializers,
-                changedFieldNames);
-            return changedFieldNames;
+                initializerChangedFields);
+            AppendNamedFieldsWarning(
+                warnings,
+                HotReloadConstants.AddedFieldInitializerChangedWarningFormat,
+                initializerChangedFields);
+            List<string> typeChangedFields = new List<string>();
+            generation.CollectAddedFieldsWithChangedDeclaredType(
+                HotReloadAddedFieldDeclarationConversion.FromWorkerRows(addedFieldDeclarations),
+                typeChangedFields);
+            AppendNamedFieldsWarning(
+                warnings,
+                HotReloadConstants.AddedFieldDeclaredTypeChangedWarningFormat,
+                typeChangedFields);
+            return warnings;
         }
 
         // Why one line for the whole file: the reader's next step is the same for every field
         // named, and a line per field would bury the rest of the run's warnings.
-        private static void AppendAddedFieldInitializerChangedWarning(
+        private static void AppendNamedFieldsWarning(
             List<string> warnings,
-            List<string> changedFieldNames)
+            string format,
+            List<string> fieldNames)
         {
-            if (changedFieldNames.Count == 0)
+            if (fieldNames.Count == 0)
             {
                 return;
             }
 
-            warnings.Add(
-                string.Format(
-                    HotReloadConstants.AddedFieldInitializerChangedWarningFormat,
-                    string.Join(", ", changedFieldNames)));
+            warnings.Add(string.Format(format, string.Join(", ", fieldNames)));
         }
 
         internal HotReloadFileProcessResult BuildUnappliedResult(HotReloadGroupFile file)

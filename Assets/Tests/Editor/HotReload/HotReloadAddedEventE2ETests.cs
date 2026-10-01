@@ -34,6 +34,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedEvent = "        public event Action<int> Changed;";
         private const string RaiseChanged = "            Changed?.Invoke(value);";
 
+        // The sentence only the declared-type warning carries, so another warning naming the
+        // event cannot satisfy the pin.
+        private const string DeclaredTypeChangedToken = "with a different type";
+
         private HotReloadDomainTestScope _scope;
 
         [SetUp]
@@ -186,14 +190,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertPatched(second, ".Raise(");
             target.Raise(8);
             Assert.That(listener.Received, Is.EqualTo(9), FormatOutcomes(second));
+            Assert.That(second.Warnings ?? new List<string>(), Has.None.Contains(DeclaredTypeChangedToken), FormatOutcomes(second));
         }
 
         /// <summary>
         /// What: changing the added event's delegate type between runs drops the stored
-        /// subscribers, because the store resets a value of another type.
+        /// subscribers, because the store resets a value of another type, and the run warns that
+        /// it did, naming the event. A change of a generic argument alone counts as a change.
         /// </summary>
         [Test]
-        public async Task Run_ChangedDelegateType_DropsSubscribers()
+        public async Task Run_ChangedDelegateType_DropsSubscribersWithAWarning()
         {
             await RunAsync(
                 EditPublisher(AddedEvent, RaiseChanged),
@@ -209,6 +215,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertPatched(second, ".Raise(");
             target.Raise(9);
             Assert.That(listener.Received, Is.EqualTo(0), FormatOutcomes(second));
+            Assert.That(
+                second.Warnings ?? new List<string>(),
+                Has.Some.Contains(DeclaredTypeChangedToken)
+                    .And.Some.Contains(typeof(HotReloadAddedEventApplyPublisher).FullName + ".Changed"),
+                FormatOutcomes(second));
         }
 
         /// <summary>
