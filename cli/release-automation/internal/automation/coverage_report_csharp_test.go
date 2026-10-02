@@ -217,6 +217,24 @@ func TestRunCoverageReportCSharpFailsClosedOnBadInputs(t *testing.T) {
 			},
 			message: `assembly "UnityCLILoop.Bad" covers 4 of 3 coverable lines`,
 		},
+		"assembly without a name": {
+			arrange: func(fixture *coverageFixture) {
+				fixture.writeCSharpSummary(withCSharpTestAssemblyJSON(map[string]any{"coveredlines": 1, "coverablelines": 2}))
+			},
+			message: "assembly 6 in the coverage summary has no name",
+		},
+		"assembly without coveredlines": {
+			arrange: func(fixture *coverageFixture) {
+				fixture.writeCSharpSummary(withCSharpTestAssemblyJSON(map[string]any{"name": "UnityCLILoop.Bad", "coverablelines": 2}))
+			},
+			message: `assembly "UnityCLILoop.Bad" has no coveredlines`,
+		},
+		"assembly without coverablelines": {
+			arrange: func(fixture *coverageFixture) {
+				fixture.writeCSharpSummary(withCSharpTestAssemblyJSON(map[string]any{"name": "UnityCLILoop.Bad", "coveredlines": 0}))
+			},
+			message: `assembly "UnityCLILoop.Bad" has no coverablelines`,
+		},
 		"baseline without csharp section": {
 			arrange: func(fixture *coverageFixture) { fixture.writeBaselineWithCSharp(nil) },
 			message: "baseline has no csharp section",
@@ -276,6 +294,16 @@ func TestRunCoverageReportCSharpFailsClosedOnBadInputs(t *testing.T) {
 
 func withCSharpTestAssembly(extra csharpTestAssembly) []csharpTestAssembly {
 	return append(csharpTestAssemblies(), extra)
+}
+
+// withCSharpTestAssemblyJSON appends a raw assembly entry so a test can leave out a key that the
+// typed fixture would always write.
+func withCSharpTestAssemblyJSON(extra map[string]any) []any {
+	assemblies := []any{}
+	for _, assembly := range csharpTestAssemblies() {
+		assemblies = append(assemblies, assembly)
+	}
+	return append(assemblies, extra)
 }
 
 func TestRunCoverageReportIgnoresABrokenCSharpBaselineWithoutASummary(t *testing.T) {

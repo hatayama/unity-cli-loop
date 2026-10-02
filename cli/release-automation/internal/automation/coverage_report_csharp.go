@@ -23,14 +23,23 @@ type csharpCoverageBaseline struct {
 // recomputed from line counts after exclusions.
 type csharpCoverageSummary struct {
 	Coverage struct {
-		Assemblies []csharpCoverageAssembly `json:"assemblies"`
+		Assemblies []csharpCoverageSummaryAssembly `json:"assemblies"`
 	} `json:"coverage"`
 }
 
-type csharpCoverageAssembly struct {
+// csharpCoverageSummaryAssembly uses pointers so a missing line count is rejected instead of read
+// as 0, which would silently lower the scope figure. ReportGenerator always writes these keys, so
+// a missing one means its format changed.
+type csharpCoverageSummaryAssembly struct {
 	Name      string `json:"name"`
-	Covered   int    `json:"coveredlines"`
-	Coverable int    `json:"coverablelines"`
+	Covered   *int   `json:"coveredlines"`
+	Coverable *int   `json:"coverablelines"`
+}
+
+type csharpCoverageAssembly struct {
+	Name      string
+	Covered   int
+	Coverable int
 }
 
 // csharpCoverageResult is the measured C# scope against its baseline, with the assemblies split
@@ -104,16 +113,35 @@ func readCSharpCoverageSummary(path string) ([]csharpCoverageAssembly, error) {
 	if err := json.Unmarshal(content, &summary); err != nil {
 		return nil, fmt.Errorf("parse C# coverage summary: %w", err)
 	}
-	assemblies := summary.Coverage.Assemblies
-	if len(assemblies) == 0 {
+	if len(summary.Coverage.Assemblies) == 0 {
 		return nil, errors.New("coverage summary lists no C# assemblies")
 	}
-	for _, assembly := range assemblies {
+
+	assemblies := make([]csharpCoverageAssembly, 0, len(summary.Coverage.Assemblies))
+	for index, entry := range summary.Coverage.Assemblies {
+		assembly, err := toCSharpCoverageAssembly(index, entry)
+		if err != nil {
+			return nil, err
+		}
 		if err := validateCSharpAssembly(assembly); err != nil {
 			return nil, err
 		}
+		assemblies = append(assemblies, assembly)
 	}
 	return assemblies, nil
+}
+
+func toCSharpCoverageAssembly(index int, entry csharpCoverageSummaryAssembly) (csharpCoverageAssembly, error) {
+	if entry.Name == "" {
+		return csharpCoverageAssembly{}, fmt.Errorf("assembly %d in the coverage summary has no name", index)
+	}
+	if entry.Covered == nil {
+		return csharpCoverageAssembly{}, fmt.Errorf("assembly %q has no coveredlines", entry.Name)
+	}
+	if entry.Coverable == nil {
+		return csharpCoverageAssembly{}, fmt.Errorf("assembly %q has no coverablelines", entry.Name)
+	}
+	return csharpCoverageAssembly{Name: entry.Name, Covered: *entry.Covered, Coverable: *entry.Coverable}, nil
 }
 
 func validateCSharpAssembly(assembly csharpCoverageAssembly) error {
