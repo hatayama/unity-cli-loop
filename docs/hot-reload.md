@@ -377,9 +377,16 @@ Wire details:
   orchestrator reflects over each shim type and invokes `__BindAccessors()` once when present
   (parameterless `public static`). Types with no accessor delegates simply have no binder.
 - Bind failure (for example the source names a member the compiled assembly does not have yet)
-  fails **only that shim type's delegation entries** with a remediation hint to run
-  `uloop compile`. Transplant entries that share the same shim type are not taken down —
-  they never read accessor delegates.
+  fails **every entry of that shim type** with a remediation hint to run `uloop compile`.
+  Transplant entries are included because a transplanted body's closures may call the same
+  accessors (see the closure scope below).
+- Closure scope: when only closures (lambdas, anonymous methods, local functions, query
+  expressions) touch inaccessible members and the body is not async or an iterator and needs
+  no event accessors, the method stays a **transplant**. Only the accesses inside those
+  closures are rewritten, since only the closures JIT-compile normally; the transplanted outer
+  body reaches private members directly, so a private method group outside the closure
+  (`E += OnValue;`) stays the delegate compiled `-=` removes. Type visibility and the
+  property `++`/`--` check still look at the whole body.
 - Scope constraint: the rewrite applies only when the containing type and every type
   appearing in an accessor signature (instance type, field type, parameter and return types)
   is accessible to a foreign assembly. Inaccessible member *names* are fine; inaccessible
