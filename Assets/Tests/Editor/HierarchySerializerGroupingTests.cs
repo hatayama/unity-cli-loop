@@ -24,10 +24,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies null inputs are treated as no nodes and default options.
+        /// Verifies null nodes are treated as no nodes.
         /// </summary>
         [Test]
-        public void BuildGroups_WithNullNodesAndOptions_ReturnsAnEmptyResultWithTheContextNames()
+        public void BuildGroups_WithNullNodes_ReturnsAnEmptyResultWithTheContextNames()
         {
             HierarchySerializationResult result = _serializer.BuildGroups(null, Context, null);
 
@@ -35,6 +35,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Context.sceneType, Is.EqualTo("editor"));
             Assert.That(result.Context.sceneName, Is.EqualTo("SampleScene"));
             Assert.That(result.Context.nodeCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies null options fall back to the defaults: no paths and component names kept.
+        /// </summary>
+        [Test]
+        public void BuildGroups_WithNodesAndNullOptions_UsesTheDefaultOptions()
+        {
+            List<HierarchyNode> nodes = new List<HierarchyNode>
+            {
+                new HierarchyNode("1", "Root", null, 0, true, new[] { "Transform" }, "SceneA")
+            };
+
+            HierarchySerializationResult result = _serializer.BuildGroups(nodes, Context, null);
+
+            HierarchyNodeNested root = result.Groups[0].roots[0];
+            Assert.That(root.path, Is.Null);
+            Assert.That(root.components, Is.EqualTo(new[] { "Transform" }));
+            Assert.That(result.Groups[0].componentsLut, Is.Null);
         }
 
         /// <summary>
@@ -151,15 +170,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies the automatic rule stays off when half or more of the names are unique.
+        /// Verifies the automatic rule stays off when exactly half of the names are unique.
         /// </summary>
         [Test]
-        public void BuildGroups_AutoWithMostlyUniqueNames_KeepsComponentNames()
+        public void BuildGroups_AutoWithHalfTheNamesUnique_KeepsComponentNames()
         {
             List<HierarchyNode> nodes = new List<HierarchyNode>();
             for (int i = 0; i < 25; i++)
             {
-                nodes.Add(new HierarchyNode(i.ToString(), "Node" + i, null, 0, true, new[] { "Transform", "Unique" + i }, "SceneA"));
+                nodes.Add(new HierarchyNode(i.ToString(), "Node" + i, null, 0, true, new[] { "Unique" + i, "Unique" + i }, "SceneA"));
             }
 
             HierarchySerializationResult result = _serializer.BuildGroups(nodes, Context, new HierarchySerializationOptions());
