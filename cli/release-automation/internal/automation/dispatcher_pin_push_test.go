@@ -424,3 +424,14 @@ func TestParseDispatcherPinPushFlagsAcceptsStableTag(t *testing.T) {
 		t.Fatalf("config = %+v", config)
 	}
 }
+
+func TestDispatcherPinPushRepositoryRootReportsGitFailure(t *testing.T) {
+	// Verifies a git binary that cannot run is reported as a repository root failure.
+	t.Setenv("PATH", t.TempDir())
+
+	_, err := dispatcherPinPushRepositoryRoot(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "resolve repository root") {
+		t.Fatalf("expected a repository root error, got %v", err)
+	}
+}
