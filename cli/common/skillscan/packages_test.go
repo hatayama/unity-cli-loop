@@ -326,14 +326,18 @@ func TestFindEditorFoldersHonorsDepthAndExclusions(t *testing.T) {
 	mkdirAll(t, filepath.Join(basePath, "B", "Editor"))
 	mkdirAll(t, filepath.Join(basePath, "A", "One", "Two", "Editor"))
 	mkdirAll(t, filepath.Join(basePath, "A", "One", "Two", "Three", "Editor"))
+	// A-B sorts before A/ ('-' < '/'), so a depth-first walk and the sorted result disagree.
+	mkdirAll(t, filepath.Join(basePath, "A-B", "Editor"))
 	mkdirAll(t, filepath.Join(basePath, "node_modules", "Editor"))
-	if err := os.WriteFile(filepath.Join(basePath, "Editor.txt"), []byte("not a folder"), 0o644); err != nil {
+	mkdirAll(t, filepath.Join(basePath, "C"))
+	if err := os.WriteFile(filepath.Join(basePath, "C", "Editor"), []byte("not a folder"), 0o644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
 
 	actual := FindEditorFolders(basePath, SkillSearchMaxDepth)
 
 	expected := []string{
+		filepath.Join(basePath, "A-B", "Editor"),
 		filepath.Join(basePath, "A", "One", "Two", "Editor"),
 		filepath.Join(basePath, "B", "Editor"),
 		filepath.Join(basePath, "Editor"),
@@ -360,8 +364,14 @@ func TestFindUnityCliLoopPackageFallsBackToPackageCacheDirectoryName(t *testing.
 	cachedRoot := filepath.Join(cacheDir, packageNameAlias+"@1.0.0", "Packages", "src")
 	mkdirAll(t, filepath.Join(cachedRoot, "Editor", "FirstPartyTools"))
 	mkdirAll(t, filepath.Join(cacheDir, "com.example.unrelated@1.0.0"))
-	if err := os.WriteFile(filepath.Join(cacheDir, packageName+"@file"), []byte("not a folder"), 0o644); err != nil {
+	cachedFile := filepath.Join(cacheDir, packageName+"@file")
+	if err := os.WriteFile(cachedFile, []byte("not a folder"), 0o644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
+	}
+	for _, searchResult := range EnumeratePackageSearchResults(projectRoot) {
+		if filepath.Clean(searchResult.Root) == filepath.Clean(cachedFile) {
+			t.Fatalf("a file in PackageCache must not be listed as a package: %#v", searchResult)
+		}
 	}
 
 	result, ok := FindUnityCliLoopPackage(projectRoot)
@@ -374,19 +384,22 @@ func TestFindUnityCliLoopPackageFallsBackToPackageCacheDirectoryName(t *testing.
 	}
 }
 
-// Tests that two package candidates with the same priority resolve to the lexicographically smaller root.
+// Tests that two package candidates with the same priority resolve to the lexicographically smaller
+// root, even when the larger root is enumerated first.
 func TestFindUnityCliLoopPackageBreaksPriorityTiesByRoot(t *testing.T) {
-	projectRoot := t.TempDir()
-	cacheDir := filepath.Join(projectRoot, "Library", "PackageCache")
-	firstRoot := filepath.Join(cacheDir, packageName+"@1.0.0")
-	secondRoot := filepath.Join(cacheDir, packageName+"@2.0.0")
-	mkdirAll(t, filepath.Join(secondRoot, "Editor", "FirstPartyTools"))
-	mkdirAll(t, filepath.Join(firstRoot, "Editor", "FirstPartyTools"))
+	baseRoot := t.TempDir()
+	projectRoot := filepath.Join(baseRoot, "z-project")
+	directRoot := filepath.Join(projectRoot, "Packages", "custom")
+	writeTestPackageJSON(t, directRoot, packageName)
+	mkdirAll(t, filepath.Join(directRoot, "Editor", "FirstPartyTools"))
+	externalRoot := filepath.Join(baseRoot, "a-external")
+	mkdirAll(t, filepath.Join(externalRoot, "Editor", "FirstPartyTools"))
+	writeManifest(t, projectRoot, `{"dependencies":{"`+packageName+`":"file:`+filepath.ToSlash(externalRoot)+`"}}`)
 
 	result, ok := FindUnityCliLoopPackage(projectRoot)
 
-	if !ok || filepath.Clean(result.Root) != filepath.Clean(firstRoot) {
-		t.Fatalf("expected %s, got %#v (ok=%v)", firstRoot, result, ok)
+	if !ok || filepath.Clean(result.Root) != filepath.Clean(externalRoot) {
+		t.Fatalf("expected %s, got %#v (ok=%v)", externalRoot, result, ok)
 	}
 }
 
@@ -425,11 +438,13 @@ func TestEnumeratePackageSearchResultsOrdersSharedRootsByIdentity(t *testing.T) 
 	}
 }
 
-// Tests that an unparsable manifest or one without dependencies yields no dependencies.
+// Tests that an unparsable or mistyped manifest, or one without dependencies, yields no dependencies
+// instead of a partially decoded set.
 func TestReadManifestDependenciesReturnsEmptyForUnusableManifests(t *testing.T) {
 	for name, content := range map[string]string{
 		"invalid json":      `{"dependencies":`,
 		"null dependencies": `{"dependencies":null}`,
+		"mistyped entry":    `{"dependencies":{"com.example.local":"file:local","bad":1}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			projectRoot := t.TempDir()

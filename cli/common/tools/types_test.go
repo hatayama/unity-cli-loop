@@ -22,16 +22,29 @@ func TestToolPropertyEffectiveDefault(t *testing.T) {
 	}
 }
 
-// Tests that the parameter schema is used only when the input schema carries no values.
+// Tests that the input schema wins whenever it carries a type, properties, or required names, and
+// that the parameter schema is used only when the input schema is empty.
 func TestToolDefinitionEffectiveInputSchema(t *testing.T) {
-	parameterSchema := ToolInputSchema{Required: []string{"Name"}}
-	withInput := ToolDefinition{InputSchema: ToolInputSchema{Type: "object"}, ParameterSchema: parameterSchema}
-	withoutInput := ToolDefinition{ParameterSchema: parameterSchema}
-
-	if schema := withInput.EffectiveInputSchema(); schema.Type != "object" {
-		t.Fatalf("input schema should win, got %#v", schema)
+	parameterSchema := ToolInputSchema{Type: "parameter"}
+	cases := []struct {
+		name         string
+		inputSchema  ToolInputSchema
+		expectsInput bool
+	}{
+		{name: "type only", inputSchema: ToolInputSchema{Type: "object"}, expectsInput: true},
+		{name: "properties only", inputSchema: ToolInputSchema{Properties: map[string]ToolProperty{"Name": {}}}, expectsInput: true},
+		{name: "required only", inputSchema: ToolInputSchema{Required: []string{"Name"}}, expectsInput: true},
+		{name: "empty", inputSchema: ToolInputSchema{}, expectsInput: false},
 	}
-	if schema := withoutInput.EffectiveInputSchema(); len(schema.Required) != 1 || schema.Required[0] != "Name" {
-		t.Fatalf("parameter schema should be used, got %#v", schema)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			tool := ToolDefinition{InputSchema: testCase.inputSchema, ParameterSchema: parameterSchema}
+
+			usedParameterSchema := tool.EffectiveInputSchema().Type == "parameter"
+
+			if usedParameterSchema == testCase.expectsInput {
+				t.Fatalf("expected input schema=%v, got %#v", testCase.expectsInput, tool.EffectiveInputSchema())
+			}
+		})
 	}
 }

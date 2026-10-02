@@ -34,8 +34,12 @@ func readCLIVibeLogs(t *testing.T, projectRoot string) string {
 	return builder.String()
 }
 
-// Verifies that an empty project root loads nothing without touching the file system.
+// Verifies that an empty project root loads nothing even when the working directory holds an
+// installed package that a relative lookup would otherwise find.
 func TestLoadWithoutAProjectRootReturnsNil(t *testing.T) {
+	projectRoot := writeFixtureProject(t, map[string]string{"FirstPartyTools/SimulateKeyboard": singleToolSkill})
+	t.Chdir(projectRoot)
+
 	if docs := Load(""); docs != nil {
 		t.Fatalf("expected nil docs, got %v", docs)
 	}
@@ -86,10 +90,15 @@ func TestLoadSkipsUnusableSkillsAndKeepsTheRest(t *testing.T) {
 		t.Fatalf("simulate-keyboard is missing: %v", docs)
 	}
 	logs := readCLIVibeLogs(t, projectRoot)
-	for _, message := range []string{"skill file could not be read", "skill file documented no tool"} {
-		if !strings.Contains(logs, message) {
-			t.Errorf("log is missing %q: %q", message, logs)
-		}
+	// Exactly one unreadable skill: a tool folder without a SKILL.md must be skipped before reading.
+	if count := strings.Count(logs, "skill file could not be read"); count != 1 {
+		t.Errorf("expected one unreadable-skill log entry, got %d: %q", count, logs)
+	}
+	if strings.Contains(logs, "NoSkill") {
+		t.Errorf("a tool folder without a skill must not be logged: %q", logs)
+	}
+	if !strings.Contains(logs, "skill file documented no tool") {
+		t.Errorf("log is missing the tool-less skill entry: %q", logs)
 	}
 }
 
