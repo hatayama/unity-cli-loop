@@ -278,7 +278,7 @@ internal static class AccessorAccessRegistrar
             symbol,
             plan,
             addedMemberAccess,
-            EventAccessorRules.IsUnsubscribeOperand(site),
+            EventAccessorRules.FindHandlerAssignmentKind(site),
             out rejectReason);
     }
 

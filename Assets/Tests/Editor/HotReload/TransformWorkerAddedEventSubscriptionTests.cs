@@ -62,6 +62,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a method group of an added method is skipped with the reason that fits where it is
+        /// used: a '+=' handler is told to subscribe a lambda, a '-=' handler is told to remove a
+        /// kept delegate instead of a lambda, and any other use is told to wrap it in a lambda.
+        /// </summary>
+        [TestCase(
+            "publisher.Existing += AddedHandler;",
+            nameof(HotReloadWorkerReasonCode.AddedMethodMethodGroupSubscription),
+            "a => AddedHandler(a)")]
+        [TestCase(
+            "publisher.Existing -= AddedHandler;",
+            nameof(HotReloadWorkerReasonCode.AddedMethodMethodGroupUnsubscription),
+            "added field")]
+        [TestCase(
+            "System.Action<int> handler = AddedHandler;\n            handler(1);",
+            nameof(HotReloadWorkerReasonCode.AddedMethodMethodGroupReference),
+            "a => AddedHandler(a)")]
+        public async Task Skip_AddedMethodGroup_ReasonFitsWhereItIsUsed(
+            string body,
+            string expectedCode,
+            string expectedAdvice)
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                ReadOnDisk(PublisherFileName),
+                WithSubscriberMethod(
+                    "public void AddedHandler(int value)\n        {\n            Accept(value);\n        }\n\n"
+                    + "        public void WireAdded(HotReloadAddedEventPublisher publisher)\n        {\n"
+                    + "            " + body + "\n        }"));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "WireAdded");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.code.ToString(), Is.EqualTo(expectedCode), reason);
+            Assert.That(reason, Does.Contain(expectedAdvice), reason);
+        }
+
+        /// <summary>
+        /// What: an edited compiled method that keeps a compiled private method group on the right
+        /// of '+=' and adds a lambda calling a private member is skipped with advice to move the
+        /// added code into an added method, not to wrap the existing handler in a lambda that a
+        /// compiled '-=' could no longer remove.
+        /// </summary>
+        [Test]
+        public async Task Skip_PrivateHandlerKeptBesideAddedLambda_AdvisesAnAddedMethod()
+        {
+            string subscriber = ReadOnDisk(SubscriberFileName);
+            Assert.That(subscriber, Does.Contain(WireBody), "Precondition: Wire body must exist.");
+            subscriber = subscriber.Replace(
+                WireBody,
+                "            publisher.Existing += OnValue;\n"
+                + "            publisher.Existing += value => OnValue(value + 1);",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunAsync(ReadOnDisk(PublisherFileName), subscriber);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape),
+                reason);
+            Assert.That(reason, Does.Contain("method this reload adds"), reason);
+        }
+
+        /// <summary>
         /// What: an added method that subscribes a lambda to an event this edit adds is applied.
         /// </summary>
         [Test]

@@ -138,9 +138,11 @@ internal static class AddedCallSiteGuard
             }
         }
 
-        if (BodyReferencesAddedMethodGroup(bodyNode, semanticModel, addedMethodCatalog))
+        (ExpressionSyntax methodGroup, IMethodSymbol groupMethod) =
+            FindAddedMethodGroup(bodyNode, semanticModel, addedMethodCatalog);
+        if (methodGroup != null)
         {
-            return (WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodMethodGroupReference), null);
+            return (DescribeAddedMethodGroup(methodGroup, groupMethod), null);
         }
 
         WorkerReason propertyReason = AddedPropertyBodyScan.EvaluateAddedPropertySkipReason(
@@ -156,7 +158,28 @@ internal static class AddedCallSiteGuard
         return (AddedFieldSkipEvaluator.EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog), null);
     }
 
-    internal static bool BodyReferencesAddedMethodGroup(
+    // Why the reason follows where the group is used: a '+=' handler is fixed by subscribing a
+    // lambda, while a lambda on the right of '-=' removes a different delegate, so each use is
+    // told the step that applies to it.
+    private static WorkerReason DescribeAddedMethodGroup(ExpressionSyntax methodGroup, IMethodSymbol groupMethod)
+    {
+        SyntaxKind handlerAssignmentKind = EventAccessorRules.FindHandlerAssignmentKind(methodGroup);
+        if (handlerAssignmentKind == SyntaxKind.SubtractAssignmentExpression)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodMethodGroupUnsubscription, groupMethod.Name);
+        }
+
+        HotReloadWorkerReasonCode code = handlerAssignmentKind == SyntaxKind.AddAssignmentExpression
+            ? HotReloadWorkerReasonCode.AddedMethodMethodGroupSubscription
+            : HotReloadWorkerReasonCode.AddedMethodMethodGroupReference;
+        return WorkerReason.Of(code, groupMethod.Name, MethodGroupLambdaExample.BuildSuffix(groupMethod));
+    }
+
+    /// <summary>
+    /// The first use of an added method as a method group in the body (not a call and not inside
+    /// nameof), with the method it names, or (null, null) when there is none.
+    /// </summary>
+    internal static (ExpressionSyntax MethodGroup, IMethodSymbol Method) FindAddedMethodGroup(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog)
@@ -168,11 +191,15 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
-            if (symbol is IMethodSymbol methodSymbol
-                && addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol)))
+            IMethodSymbol methodSymbol = FindAddedMethod(name, semanticModel, addedMethodCatalog);
+            if (methodSymbol != null)
             {
-                return true;
+                // Why the member access is returned for 'this.M': the '+=' or '-=' it is the
+                // handler of sees the whole access, not its name.
+                ExpressionSyntax site = name.Parent is MemberAccessExpressionSyntax access && access.Name == name
+                    ? access
+                    : name;
+                return (site, methodSymbol);
             }
         }
 
@@ -185,15 +212,28 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            ISymbol symbol = semanticModel.GetSymbolInfo(access).Symbol;
-            if (symbol is IMethodSymbol methodSymbol
-                && addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol)))
+            IMethodSymbol methodSymbol = FindAddedMethod(access, semanticModel, addedMethodCatalog);
+            if (methodSymbol != null)
             {
-                return true;
+                return (access, methodSymbol);
             }
         }
 
-        return false;
+        return (null, null);
+    }
+
+    private static IMethodSymbol FindAddedMethod(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog)
+    {
+        if (semanticModel.GetSymbolInfo(expression).Symbol is IMethodSymbol methodSymbol
+            && addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol)))
+        {
+            return methodSymbol;
+        }
+
+        return null;
     }
 
     internal static bool IsInvocationCalleeName(IdentifierNameSyntax name)

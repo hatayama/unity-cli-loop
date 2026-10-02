@@ -985,7 +985,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult first = await RunWithOverridesAsync(new[] { hostPath, callerPath }, overrides);
             Assert.That(
                 FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".Call(").WorkerReason?.Code,
-                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodMethodGroupReference),
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodMethodGroupSubscription),
                 FormatOutcomes(first));
             FindOutcome(first, HotReloadMethodOutcomeKind.Skipped, ".RaiseHit(");
             FindOutcome(first, HotReloadMethodOutcomeKind.Patched, ".Other(");

@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 // Registers a read of a property or a field on the accessor plan, or rejects the shape the plan
@@ -10,7 +11,7 @@ internal static class AccessorReadRegistrar
         ISymbol symbol,
         AccessorPlan plan,
         AddedMemberAccessLookup addedMemberAccess,
-        bool unsubscribeOperand,
+        SyntaxKind handlerAssignmentKind,
         out WorkerReason rejectReason)
     {
         rejectReason = null;
@@ -32,14 +33,7 @@ internal static class AccessorReadRegistrar
         if (symbol is IMethodSymbol methodSymbol
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
-            // Why no lambda example on the right of '-=': a lambda there is a new delegate that
-            // was never subscribed, so the rewrite would compile and leave the handler attached.
-            rejectReason = unsubscribeOperand
-                ? WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape, methodSymbol.Name)
-                : WorkerReason.Of(
-                    HotReloadWorkerReasonCode.AccessorMethodGroupNoShape,
-                    methodSymbol.Name,
-                    MethodGroupLambdaExample.BuildSuffix(methodSymbol));
+            rejectReason = DescribeMethodGroupReject(methodSymbol, handlerAssignmentKind);
             return false;
         }
 
@@ -55,6 +49,22 @@ internal static class AccessorReadRegistrar
         }
 
         return false;
+    }
+
+    // Why the reason follows the assignment: a lambda on the right of '-=' is a new delegate that
+    // was never subscribed, so offering one there would compile and leave the handler attached,
+    // and on the right of '+=' a lambda could no longer be removed by a compiled '-='.
+    private static WorkerReason DescribeMethodGroupReject(IMethodSymbol methodSymbol, SyntaxKind handlerAssignmentKind)
+    {
+        if (handlerAssignmentKind == SyntaxKind.SubtractAssignmentExpression)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape, methodSymbol.Name);
+        }
+
+        HotReloadWorkerReasonCode code = handlerAssignmentKind == SyntaxKind.AddAssignmentExpression
+            ? HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape
+            : HotReloadWorkerReasonCode.AccessorMethodGroupNoShape;
+        return WorkerReason.Of(code, methodSymbol.Name, MethodGroupLambdaExample.BuildSuffix(methodSymbol));
     }
 
     private static bool TryRegisterFieldRead(IFieldSymbol fieldSymbol, AccessorPlan plan)

@@ -157,8 +157,11 @@ internal static class EventAccessorRules
             || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
     }
 
-    /// <summary>Whether the expression is the handler removed by a '-=' assignment.</summary>
-    internal static bool IsUnsubscribeOperand(ExpressionSyntax operand)
+    /// <summary>
+    /// The kind of the '+=' or '-=' assignment whose handler the expression is, or
+    /// SyntaxKind.None when the expression is not such a handler.
+    /// </summary>
+    internal static SyntaxKind FindHandlerAssignmentKind(ExpressionSyntax operand)
     {
         // Why parentheses and one cast are looked past: '-= (Handler)' and '-= (Action)Handler'
         // still remove the delegate the method group converts to.
@@ -177,9 +180,14 @@ internal static class EventAccessorRules
             }
         }
 
-        return unwrapped.Parent is AssignmentExpressionSyntax assignment
-            && assignment.Right == unwrapped
-            && assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
+        if (unwrapped.Parent is not AssignmentExpressionSyntax assignment
+            || assignment.Right != unwrapped
+            || !IsSubscriptionAssignment(assignment))
+        {
+            return SyntaxKind.None;
+        }
+
+        return assignment.Kind();
     }
 
     private static bool IsPassedByRef(SyntaxNode eventUseNode)
