@@ -245,7 +245,7 @@ func TestResolveUnityReleaseRejectsUnusableInputs(t *testing.T) {
 }
 
 func TestSelectUnityReleaseRejectsMalformedResults(t *testing.T) {
-	// What: invalid JSON, a result without a version, and a Linux archive without a URL are rejected.
+	// What: invalid JSON, a result without a version or a short revision, and a Linux archive without a URL are rejected.
 	cases := []struct {
 		name    string
 		body    string
@@ -253,6 +253,7 @@ func TestSelectUnityReleaseRejectsMalformedResults(t *testing.T) {
 	}{
 		{"invalid JSON", "{", "parse unity release response"},
 		{"missing version", `{"results":[{"shortRevision":"abc"}]}`, "missing version or shortRevision"},
+		{"missing short revision", `{"results":[{"version":"6000.7.0"}]}`, "missing version or shortRevision"},
 		{"archive without URL", `{"results":[{"version":"6000.7.0","shortRevision":"abc","downloads":[{"platform":"LINUX","architecture":"X86_64","type":"TAR_XZ"}]}]}`, "download is missing url"},
 	}
 	for _, testCase := range cases {
@@ -275,7 +276,7 @@ func TestRunResolveUnityReleaseRejectsUnknownFlags(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("exit code = %d, want 1", exitCode)
 	}
-	if !strings.Contains(stderr.String(), "flag provided but not defined") {
-		t.Fatalf("stderr = %q", stderr.String())
+	if !strings.Contains(stderr.String(), "flag provided but not defined") || strings.Contains(stderr.String(), "--series is required") {
+		t.Fatalf("expected only the flag parse error, got %q", stderr.String())
 	}
 }

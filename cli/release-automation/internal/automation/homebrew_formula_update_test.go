@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -526,13 +527,23 @@ func TestIsHexStringRejectsNonHexCharacters(t *testing.T) {
 	}
 }
 
-// TestRunHomebrewFormulaUpdateCommandOutputCapturesOutputAndFailures verifies stdout is returned on success and the command line is reported on failure.
+// TestRunHomebrewFormulaUpdateCommandOutputCapturesOutputAndFailures verifies the child sees both the parent environment and the extra variables, stdout is returned on success, and the command line is reported on failure.
 func TestRunHomebrewFormulaUpdateCommandOutputCapturesOutputAndFailures(t *testing.T) {
-	output, err := runHomebrewFormulaUpdateCommandOutput(context.Background(), []string{"GIT_CONFIG_NOSYSTEM=1"}, "git", "--version")
-	if err != nil {
-		t.Fatalf("git --version failed: %v", err)
+	// git reads GIT_CONFIG_KEY_0 / GIT_CONFIG_VALUE_0 only when GIT_CONFIG_COUNT is set, so the value is
+	// printed only if the parent's two variables and the extra GIT_CONFIG_COUNT all reach the child.
+	// The parent may already carry GIT_CONFIG_COUNT (some shells and CI runners inject git config this way),
+	// so it is removed first; otherwise the extra variable would not be what makes git read the pair.
+	t.Setenv("GIT_CONFIG_COUNT", "")
+	if err := os.Unsetenv("GIT_CONFIG_COUNT"); err != nil {
+		t.Fatalf("unset GIT_CONFIG_COUNT: %v", err)
 	}
-	if !strings.HasPrefix(output, "git version") {
+	t.Setenv("GIT_CONFIG_KEY_0", "test.key")
+	t.Setenv("GIT_CONFIG_VALUE_0", "from-parent")
+	output, err := runHomebrewFormulaUpdateCommandOutput(context.Background(), []string{"GIT_CONFIG_COUNT=1"}, "git", "config", "--get", "test.key")
+	if err != nil {
+		t.Fatalf("git config --get failed: %v", err)
+	}
+	if strings.TrimSpace(output) != "from-parent" {
 		t.Fatalf("output = %q", output)
 	}
 
