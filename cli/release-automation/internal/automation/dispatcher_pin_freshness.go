@@ -57,8 +57,10 @@ func RunDispatcherPinFreshnessCheck(ctx context.Context, stdout io.Writer, stder
 
 func defaultDispatcherPinFreshnessDeps() dispatcherPinFreshnessDeps {
 	return dispatcherPinFreshnessDeps{
-		fetchReleases: fetchDispatcherReleases,
-		readPin:       os.ReadFile,
+		fetchReleases: func(ctx context.Context, repository string) ([]dispatcherRelease, error) {
+			return fetchDispatcherReleases(ctx, dispatcherPinStampAPIBaseURL, repository)
+		},
+		readPin: os.ReadFile,
 	}
 }
 
@@ -172,11 +174,13 @@ func newestStableDispatcherRelease(releases []dispatcherRelease) (string, string
 	return newestTag, newestVersion
 }
 
-func fetchDispatcherReleases(ctx context.Context, repository string) ([]dispatcherRelease, error) {
+// fetchDispatcherReleases takes the API base URL from the caller so tests can
+// point it at a local server instead of GitHub.
+func fetchDispatcherReleases(ctx context.Context, apiBaseURL string, repository string) ([]dispatcherRelease, error) {
 	client := &http.Client{Timeout: dispatcherPinFreshnessRequestTimeout}
 	releases := []dispatcherRelease{}
 	for page := 1; page <= dispatcherPinFreshnessMaxPages; page++ {
-		pageReleases, err := fetchDispatcherReleasePage(ctx, client, repository, page)
+		pageReleases, err := fetchDispatcherReleasePage(ctx, client, apiBaseURL, repository, page)
 		if err != nil {
 			return nil, err
 		}
@@ -191,12 +195,13 @@ func fetchDispatcherReleases(ctx context.Context, repository string) ([]dispatch
 func fetchDispatcherReleasePage(
 	ctx context.Context,
 	client *http.Client,
+	apiBaseURL string,
 	repository string,
 	page int,
 ) ([]dispatcherRelease, error) {
 	requestURL := fmt.Sprintf(
 		"%s/repos/%s/releases?per_page=%d&page=%d",
-		dispatcherPinStampAPIBaseURL,
+		apiBaseURL,
 		repository,
 		dispatcherPinFreshnessPageSize,
 		page)

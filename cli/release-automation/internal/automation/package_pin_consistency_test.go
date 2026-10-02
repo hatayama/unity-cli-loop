@@ -167,3 +167,75 @@ func TestPackagePinConsistencyRejectsPaddedManifestVersion(t *testing.T) {
 		t.Fatalf("expected the non-canonical version to be named in the failure message, got %q", stderr)
 	}
 }
+
+// Verifies unusable flags and an unresolvable repository root fail the check before any file is read.
+func TestPackagePinConsistencyRejectsUnusableFlags(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		noGit   bool
+		wantErr string
+	}{
+		{"unknown flag", []string{"--unknown"}, false, "flag provided but not defined"},
+		{"empty ref", []string{"--repo-root", t.TempDir(), "--ref", ""}, false, "--ref must not be empty"},
+		{"git unavailable for the default root", []string{"--ref", "HEAD"}, true, "failed to resolve the repository root"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if testCase.noGit {
+				t.Setenv("PATH", t.TempDir())
+			}
+			stdout := bytes.Buffer{}
+			stderr := bytes.Buffer{}
+
+			exitCode := RunPackagePinConsistencyCheck(context.Background(), &stdout, &stderr, testCase.args)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d", exitCode)
+			}
+			if !strings.Contains(stderr.String(), testCase.wantErr) {
+				t.Fatalf("expected stderr to contain %q, got %q", testCase.wantErr, stderr.String())
+			}
+		})
+	}
+}
+
+// Verifies a missing, malformed, or dispatcher-less release manifest fails the check, because the expected tag cannot be derived.
+func TestPackagePinConsistencyFailsWhenManifestIsUnusable(t *testing.T) {
+	pin := `{"dispatcherReleaseTag":"dispatcher-v3.4.0"}`
+	cases := []struct {
+		name     string
+		manifest string
+		wantErr  string
+	}{
+		{"missing", "", releasePleaseManifestRelativePath + " is missing at HEAD"},
+		{"invalid JSON", "{", "failed to parse " + releasePleaseManifestRelativePath},
+		{"no dispatcher entry", `{"Packages/src":"3.6.0"}`, `has no "cli/dispatcher" version`},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			repoRoot := writePackagePinConsistencyRepo(t, testCase.manifest, pin)
+
+			exitCode, _, stderr := runPackagePinConsistencyCheck(t, repoRoot)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d", exitCode)
+			}
+			if !strings.Contains(stderr, testCase.wantErr) {
+				t.Fatalf("expected stderr to contain %q, got %q", testCase.wantErr, stderr)
+			}
+		})
+	}
+}
+
+// Verifies a git binary that cannot be started is reported as an error instead of an absent file.
+func TestPackagePinConsistencyFileReportsGitStartFailure(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	config := packagePinConsistencyConfig{repoRoot: t.TempDir(), ref: "HEAD"}
+
+	_, err := packagePinConsistencyFile(context.Background(), config, releasePleaseManifestRelativePath)
+
+	if err == nil || !strings.Contains(err.Error(), "git show HEAD:"+releasePleaseManifestRelativePath+" failed") {
+		t.Fatalf("expected a git start failure, got %v", err)
+	}
+}
