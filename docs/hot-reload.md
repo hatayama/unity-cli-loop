@@ -377,9 +377,10 @@ Wire details:
   orchestrator reflects over each shim type and invokes `__BindAccessors()` once when present
   (parameterless `public static`). Types with no accessor delegates simply have no binder.
 - Bind failure (for example the source names a member the compiled assembly does not have yet)
-  fails **every entry of that shim type** with a remediation hint to run `uloop compile`.
-  Transplant entries are included because a transplanted body's closures may call the same
-  accessors (see the closure scope below).
+  fails the file of any entry in that shim type, whatever its patch kind: the entry reports
+  `Failed` with a remediation hint to run `uloop compile`, and the file's other entries are
+  `Skipped`. Transplant entries are included because a transplanted body's closures may call
+  the same accessors (see the closure scope below).
 - Closure scope: when only closures (lambdas, anonymous methods, local functions, query
   expressions) touch inaccessible members and the body is not async or an iterator and needs
   no event accessors, the method stays a **transplant**. Only the accesses inside those

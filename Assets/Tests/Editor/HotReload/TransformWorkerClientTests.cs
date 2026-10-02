@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -2515,6 +2516,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skipped.reason.detail.code,
                 Is.EqualTo(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape),
                 reason);
+        }
+
+        /// <summary>
+        /// What: a query expression reading a private field beside a private method-group
+        /// subscription is transplanted; only the query's read goes through the accessor and the
+        /// method group stays as written.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_PrivateHandlerKeptBesideQuery_RewritesOnlyInsideTheQuery()
+        {
+            const string compiledBody = "        public void Subscribe()\n        {\n            Pinged += OnPing;\n        }";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                "ClosureScopedQuery.cs",
+                onDisk =>
+                {
+                    Assert.That(onDisk, Does.Contain(compiledBody), "Precondition: Subscribe body must exist.");
+                    return onDisk.Replace(
+                        compiledBody,
+                        "        public void Subscribe()\n        {\n"
+                        + "            Pinged += OnPing;\n"
+                        + "            int[] values = { 1, 2 };\n"
+                        + "            RaisePing((from value in values where value < _secret select value).Count());\n"
+                        + "        }",
+                        StringComparison.Ordinal);
+                });
+
+            TransformWorkerEntryDto entry = FindEntryNamed(result, nameof(HotReloadE2EFixture.Subscribe));
+            Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+            string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+            Assert.That(slice, Does.Contain("__F__secret("), "The query's read must use the accessor.\n" + slice);
+            Assert.That(
+                Regex.IsMatch(slice, "\\+= (__uloopInstance\\.)?OnPing;"),
+                Is.True,
+                "The method group outside the query must stay as written.\n" + slice);
         }
 
         private static async Task<TransformWorkerClientResult> RunWorkerOnEditedLambdaPrivateAsync(
