@@ -19,6 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             publisher.Existing += Accept;
         }
 
+        // An iterator, so an edit that touches a private member rewrites the whole body.
+        public System.Collections.IEnumerator WireLater(HotReloadAddedEventPublisher publisher)
+        {
+            yield return null;
+        }
+
         public void Accept(int value)
         {
             _received += value;
