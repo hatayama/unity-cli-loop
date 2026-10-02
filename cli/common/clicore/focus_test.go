@@ -3,6 +3,7 @@ package clicore
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -77,4 +78,67 @@ func TestRunFocusWindowWritesFocusFailureVibeLog(t *testing.T) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
 		}
 	}
+}
+
+// Verifies that focus-window fails with a JSON error on stderr when the process lookup fails or finds
+// no Unity process, and never attempts to focus.
+func TestRunFocusWindowReportsLookupFailures(t *testing.T) {
+	cases := []struct {
+		name            string
+		process         *UnityProcess
+		lookupError     error
+		expectedMessage string
+	}{
+		{name: "lookup error", lookupError: fmt.Errorf("ps failed"), expectedMessage: "ps failed"},
+		{name: "no process", expectedMessage: "No running Unity process found for this project"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			deps := focusWindowDeps{
+				findRunningUnityProcess: func(context.Context, string) (*UnityProcess, error) {
+					return testCase.process, testCase.lookupError
+				},
+				focusUnityProcess: func(context.Context, int) error {
+					t.Fatal("focus must not be attempted")
+					return nil
+				},
+			}
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			code := runFocusWindow(context.Background(), t.TempDir(), &stdout, &stderr, deps)
+
+			assertFocusFailure(t, code, stdout.String(), stderr.Bytes(), testCase.expectedMessage)
+		})
+	}
+}
+
+func assertFocusFailure(t *testing.T, code int, stdout string, stderr []byte, expectedMessage string) {
+	t.Helper()
+	if code != 1 || stdout != "" {
+		t.Fatalf("expected exit 1 with no stdout, got %d and %q", code, stdout)
+	}
+	var response focusResponse
+	if err := json.Unmarshal(stderr, &response); err != nil {
+		t.Fatalf("stderr is not a JSON response: %v (%q)", err, string(stderr))
+	}
+	if response.Success || response.Message != expectedMessage {
+		t.Fatalf("unexpected focus response: %#v", response)
+	}
+}
+
+// Verifies that the public focus-window entry point reports no running Unity process for a project
+// that no Editor has open, using the real process lookup.
+func TestRunFocusWindowReportsNoProcessForUnopenedProject(t *testing.T) {
+	projectRoot := t.TempDir()
+	runningProcess, err := FindRunningUnityProcess(context.Background(), projectRoot)
+	if err != nil || runningProcess != nil {
+		t.Fatalf("expected no Unity process, got %#v (err=%v)", runningProcess, err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
+
+	assertFocusFailure(t, code, stdout.String(), stderr.Bytes(), "No running Unity process found for this project")
 }
