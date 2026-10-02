@@ -35,8 +35,9 @@ func TestParseFlagValue(t *testing.T) {
 		expectedValue    string
 		expectedConsumed bool
 		expectedErrorOpt string
+		expectedErrorMsg string
 	}{
-		{name: "bare double dash", args: []string{"--"}, expectedErrorOpt: "--"},
+		{name: "bare double dash", args: []string{"--"}, expectedErrorOpt: "--", expectedErrorMsg: "Invalid option: --"},
 		{name: "inline value", args: []string{"--count=3"}, expectedName: "count", expectedValue: "3"},
 		{name: "inline empty value", args: []string{"--count="}, expectedErrorOpt: "--count"},
 		{name: "next token value", args: []string{"--count", "3"}, expectedName: "count", expectedValue: "3", expectedConsumed: true},
@@ -47,7 +48,7 @@ func TestParseFlagValue(t *testing.T) {
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			name, value, consumed, err := ParseFlagValue(testCase.args[0], testCase.args, 0)
-			assertParseFlagValueError(t, err, testCase.expectedErrorOpt)
+			assertParseFlagValueError(t, err, testCase.expectedErrorOpt, testCase.expectedErrorMsg)
 			if name != testCase.expectedName || value != testCase.expectedValue || consumed != testCase.expectedConsumed {
 				t.Fatalf("ParseFlagValue = (%q, %q, %v), want (%q, %q, %v)",
 					name, value, consumed, testCase.expectedName, testCase.expectedValue, testCase.expectedConsumed)
@@ -56,7 +57,7 @@ func TestParseFlagValue(t *testing.T) {
 	}
 }
 
-func assertParseFlagValueError(t *testing.T, err error, expectedOption string) {
+func assertParseFlagValueError(t *testing.T, err error, expectedOption string, expectedMessage string) {
 	t.Helper()
 	if expectedOption == "" {
 		if err != nil {
@@ -67,6 +68,12 @@ func assertParseFlagValueError(t *testing.T, err error, expectedOption string) {
 	var argumentError *clierrors.ArgumentError
 	if !errors.As(err, &argumentError) || argumentError.Option != expectedOption {
 		t.Fatalf("expected an argument error for %q, got %v", expectedOption, err)
+	}
+	if expectedMessage == "" {
+		expectedMessage = expectedOption + " requires a value"
+	}
+	if argumentError.Message != expectedMessage {
+		t.Fatalf("argument error message = %q, want %q", argumentError.Message, expectedMessage)
 	}
 }
 

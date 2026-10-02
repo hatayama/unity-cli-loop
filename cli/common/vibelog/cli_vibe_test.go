@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -151,9 +152,9 @@ func TestWriteCLIVibeLogReportsDirectoryCreationFailure(t *testing.T) {
 		t.Fatalf("failed to create blocking file: %v", err)
 	}
 
-	if err := WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{Operation: "test_operation"}); err == nil {
-		t.Fatalf("expected an error when the log directory cannot be created")
-	}
+	err := WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{Operation: "test_operation"})
+
+	assertPathErrorOp(t, err, "mkdir")
 }
 
 // Verifies a log path occupied by a directory is reported as an open error.
@@ -165,9 +166,9 @@ func TestWriteCLIVibeLogReportsOpenFailure(t *testing.T) {
 		t.Fatalf("failed to create blocking directory: %v", err)
 	}
 
-	if err := WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{Operation: "test_operation"}); err == nil {
-		t.Fatalf("expected an error when the log file path is a directory")
-	}
+	err := WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{Operation: "test_operation"})
+
+	assertPathErrorOp(t, err, "open")
 }
 
 // Verifies an entry whose context cannot be encoded as JSON is reported as an error.
@@ -176,8 +177,10 @@ func TestWriteCLIVibeLogReportsMarshalFailure(t *testing.T) {
 	projectRoot := t.TempDir()
 
 	err := WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{Context: map[string]any{"bad": make(chan int)}})
-	if err == nil {
-		t.Fatalf("expected a JSON encoding error for an unsupported context value")
+
+	var unsupportedTypeErr *json.UnsupportedTypeError
+	if !errors.As(err, &unsupportedTypeErr) {
+		t.Fatalf("expected a JSON unsupported type error, got %v", err)
 	}
 }
 
@@ -241,4 +244,12 @@ func TestProjectIdentity(t *testing.T) {
 func expectedProjectIdentity(path string) string {
 	sum := sha256.Sum256([]byte(path))
 	return "project_" + hex.EncodeToString(sum[:])[:16]
+}
+
+func assertPathErrorOp(t *testing.T, err error, expectedOp string) {
+	t.Helper()
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || pathErr.Op != expectedOp {
+		t.Fatalf("expected a %s path error, got %v", expectedOp, err)
+	}
 }

@@ -175,7 +175,7 @@ func TestWaitForToolReadinessTimesOutWithLastProbeError(t *testing.T) {
 
 	err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), ToolReadinessPoll/100, deps)
 
-	if !errors.Is(err, probeErr) || probeCount == 0 {
+	if !errors.Is(err, probeErr) || !strings.HasPrefix(err.Error(), "timed out waiting for Unity tool readiness: ") || probeCount == 0 {
 		t.Fatalf("expected the timeout to wrap the probe error after probing, got %v (probes=%d)", err, probeCount)
 	}
 }
@@ -212,8 +212,12 @@ func TestProbeToolReadinessSequenceFailsWithoutAServer(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), ToolReadinessProbeTimeout)
 			defer cancel()
-			if err := ProbeToolReadinessSequence(ctx, projectRoot); err == nil {
-				t.Fatal("probing a project with no server should fail")
+			err := ProbeToolReadinessSequence(ctx, projectRoot)
+
+			// The project resolves, so the failure must come from reaching the server, not from resolution.
+			var notUnityProjectErr clierrors.NotUnityProjectError
+			if err == nil || errors.As(err, &notUnityProjectErr) {
+				t.Fatalf("expected a server connection failure, got %v", err)
 			}
 		})
 	}

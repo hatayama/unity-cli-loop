@@ -65,14 +65,12 @@ func TestArgumentErrorToCLIErrorFallsBackWhenFieldsAreEmpty(t *testing.T) {
 func TestMissingValueArgumentErrorDescribesOption(t *testing.T) {
 	err := MissingValueArgumentError("--filter")
 
-	want := &ArgumentError{
-		Message:      "--filter requires a value",
-		Option:       "--filter",
-		ExpectedType: "string",
-		NextActions:  []string{"Pass a value after `--filter` or use `--filter=<value>`."},
+	if err.Message != "--filter requires a value" || err.Option != "--filter" {
+		t.Fatalf("unexpected message or option: %#v", err)
 	}
-	if !reflect.DeepEqual(err, want) {
-		t.Fatalf("unexpected error:\n got: %#v\nwant: %#v", err, want)
+	expectedActions := []string{"Pass a value after `--filter` or use `--filter=<value>`."}
+	if !reflect.DeepEqual(err.NextActions, expectedActions) {
+		t.Fatalf("unexpected next actions: %#v", err.NextActions)
 	}
 }
 

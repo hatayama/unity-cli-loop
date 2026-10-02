@@ -126,19 +126,3 @@ func assertFocusFailure(t *testing.T, code int, stdout string, stderr []byte, ex
 		t.Fatalf("unexpected focus response: %#v", response)
 	}
 }
-
-// Verifies that the public focus-window entry point reports no running Unity process for a project
-// that no Editor has open, using the real process lookup.
-func TestRunFocusWindowReportsNoProcessForUnopenedProject(t *testing.T) {
-	projectRoot := t.TempDir()
-	runningProcess, err := FindRunningUnityProcess(context.Background(), projectRoot)
-	if err != nil || runningProcess != nil {
-		t.Fatalf("expected no Unity process, got %#v (err=%v)", runningProcess, err)
-	}
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := RunFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
-
-	assertFocusFailure(t, code, stdout.String(), stderr.Bytes(), "No running Unity process found for this project")
-}

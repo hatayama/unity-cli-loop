@@ -538,6 +538,9 @@ func TestFindUnityProjectRootWithin_WhenNoChildProject_ShouldFallBackToParents(t
 
 func TestFindUnityProjectRootWithin_WhenChildDirectoryIsUnreadable_ShouldSkipIt(t *testing.T) {
 	// Verifies an unreadable child directory is skipped and the remaining readable child project is still found.
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a directory with mode 000, so the unreadable branch is not reached")
+	}
 	workspaceRoot := createGitBoundedDir(t)
 	projectRoot := filepath.Join(workspaceRoot, "readable", "Game")
 	createUnityProject(t, projectRoot)

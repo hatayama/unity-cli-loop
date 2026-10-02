@@ -9,7 +9,7 @@ import (
 )
 
 // Verifies that disabled tools are read from .uloop/settings.tools.json and that a missing, blank,
-// unparsable, or field-less settings file yields an empty list.
+// unparsable, mistyped, or field-less settings file yields an empty list rather than a partial one.
 func TestLoadDisabledTools(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -19,6 +19,7 @@ func TestLoadDisabledTools(t *testing.T) {
 		{name: "missing file", expected: []string{}},
 		{name: "blank file", content: stringPointer("  \n"), expected: []string{}},
 		{name: "invalid json", content: stringPointer("{"), expected: []string{}},
+		{name: "mistyped entry", content: stringPointer(`{"disabledTools":["compile",1]}`), expected: []string{}},
 		{name: "no disabled tools", content: stringPointer(`{"other":true}`), expected: []string{}},
 		{name: "disabled tools", content: stringPointer(`{"disabledTools":["compile","get-logs"]}`), expected: []string{"compile", "get-logs"}},
 	}
