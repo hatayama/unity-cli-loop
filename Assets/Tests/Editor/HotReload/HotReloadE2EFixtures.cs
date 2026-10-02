@@ -285,6 +285,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HiddenScore;
         }
 
+        private int _pingCount;
+
+        private int _lambdaCount;
+
+        public event Action<int> Pinged;
+
+        public int PingCountForAssert => _pingCount;
+
+        public int LambdaCountForAssert => _lambdaCount;
+
+        private void OnPing(int value)
+        {
+            _pingCount += value;
+        }
+
+        private void RecordLambda(int value)
+        {
+            _lambdaCount += value;
+        }
+
+        public void RaisePing(int value)
+        {
+            Pinged?.Invoke(value);
+        }
+
+        // Private method-group subscription: a transplanted edit must keep it paired with the
+        // compiled removal in Unsubscribe.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Subscribe()
+        {
+            Pinged += OnPing;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Unsubscribe()
+        {
+            Pinged -= OnPing;
+        }
+
         // v2 e2e (5): async body that names an internal type — must stay Skipped (condition c).
         public async Task<int> AsyncUsesInternalType()
         {

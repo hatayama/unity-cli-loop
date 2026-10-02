@@ -1099,6 +1099,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a transplanted body that subscribes a compiled private method group creates
+        /// delegates the compiled '-=' still removes, so the subscription and removal stay paired.
+        /// </summary>
+        [Test]
+        public async Task Run_TransplantedPrivateMethodGroupSubscription_SubscribesAndUnsubscribes()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "TransplantedPrivateMethodGroupSubscription.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    subscribeMethod:
+                    "public void Subscribe()\n        {\n"
+                    + "            Pinged += OnPing;\n"
+                    + "            Pinged += OnPing;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.Subscribe));
+            AssertSubscribeIsTransplanted();
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            fixture.Subscribe();
+            fixture.RaisePing(1);
+            Assert.That(
+                fixture.PingCountForAssert,
+                Is.EqualTo(2),
+                "The edited body subscribes twice, so a count of 2 proves the patched body ran.");
+
+            fixture.Unsubscribe();
+            fixture.Unsubscribe();
+            fixture.RaisePing(1);
+            Assert.That(
+                fixture.PingCountForAssert,
+                Is.EqualTo(2),
+                "The compiled '-= OnPing' must remove the delegates the transplanted body added.");
+        }
+
+        /// <summary>
         /// What: hot-reloading an async body that writes a private field and calls a private
         /// method applies a delegation patch and changes the await result.
         /// </summary>
@@ -7686,6 +7731,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.Fail("Expected Patched outcome for " + methodName + ".\n" + FormatOutcomes(result));
         }
 
+        private static void AssertSubscribeIsTransplanted()
+        {
+            HotReloadShimFileLookup lookup = HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(
+                "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs");
+            Assert.That(lookup, Is.Not.Null);
+            HotReloadShimMethodLookup subscribeEntry = null;
+            foreach (HotReloadShimMethodLookup method in lookup.Methods)
+            {
+                if (method.OriginalMethod != null
+                    && method.OriginalMethod.Name == nameof(HotReloadE2EFixture.Subscribe))
+                {
+                    subscribeEntry = method;
+                }
+            }
+
+            Assert.That(subscribeEntry, Is.Not.Null);
+            Assert.That(subscribeEntry.IsDelegation, Is.False, "Subscribe must be applied as a transplant.");
+        }
+
         private static void AssertHasAlreadyActive(
             HotReloadOrchestratorResult result,
             string methodName,
@@ -8936,8 +9000,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callsBaseMethod = null,
             string explicitAccessorsBlock = null,
             string inlineRiskAlphaMethod = null,
-            string inlineRiskBetaMethod = null)
+            string inlineRiskBetaMethod = null,
+            string subscribeMethod = null)
         {
+            string subscribe = subscribeMethod ??
+                "public void Subscribe()\n        {\n            Pinged += OnPing;\n        }";
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
             string callsMissingHelper = callsMissingHelperMethod ??
@@ -9112,6 +9179,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         " + propertyPrivate + @"
+
+        private int _pingCount;
+
+        private int _lambdaCount;
+
+        public event Action<int> Pinged;
+
+        public int PingCountForAssert => _pingCount;
+
+        public int LambdaCountForAssert => _lambdaCount;
+
+        private void OnPing(int value)
+        {
+            _pingCount += value;
+        }
+
+        private void RecordLambda(int value)
+        {
+            _lambdaCount += value;
+        }
+
+        public void RaisePing(int value)
+        {
+            Pinged?.Invoke(value);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        " + subscribe + @"
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Unsubscribe()
+        {
+            Pinged -= OnPing;
+        }
 
         " + asyncInternal + @"
     }
