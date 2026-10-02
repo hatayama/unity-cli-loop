@@ -1766,3 +1766,234 @@ func TestLinuxUnityExecutableCandidatesAreEmptyWithoutHome(t *testing.T) {
 		t.Fatalf("expected no candidates, got %#v", candidates)
 	}
 }
+
+// isolatedLaunchTestDeps replaces every dependency that could touch a real Unity
+// process, IPC endpoint, or Editor install with a harmless fake, so a regression
+// in the branch under test cannot kill, focus, or start a real Editor.
+func isolatedLaunchTestDeps(t *testing.T) launchDeps {
+	t.Helper()
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
+	deps.focusUnityProcess = func(context.Context, int) error { return nil }
+	deps.killUnityProcess = func(pid int) error {
+		t.Fatalf("unexpected kill of pid %d", pid)
+		return nil
+	}
+	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
+	deps.waitForUnityProcessExit = func(context.Context, string, int, time.Duration, time.Duration) error { return nil }
+	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error { return nil }
+	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error { return nil }
+	deps.waitForV2ServerReady = func(context.Context, string, string, time.Duration, time.Duration) error { return nil }
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error { return nil }
+	deps.probeProjectIpcFallback = func(context.Context, string) error { return errors.New("no IPC in tests") }
+	deps.sleep = func(time.Duration) {}
+	return deps
+}
+
+func createVersionedLaunchTestProject(t *testing.T) string {
+	t.Helper()
+	projectRoot := createLaunchTestProject(t)
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, projectVersionFilePath), "m_EditorVersion: 2022.3.0f1\n")
+	return projectRoot
+}
+
+func TestTryHandleLaunchRequestReportsInvalidOptions(t *testing.T) {
+	// Verifies an invalid launch option exits with code 1 before any project lookup or process scan.
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	deps := isolatedLaunchTestDeps(t)
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		t.Fatal("no process scan may run for invalid options")
+		return nil, nil
+	}
+
+	handled, code := tryHandleLaunchRequestWithDeps(context.Background(), []string{clicore.LaunchCommandName, "--bogus"}, t.TempDir(), "", &stdout, &stderr, deps)
+
+	if !handled || code != 1 || !strings.Contains(stderr.String(), "Unknown launch option: --bogus") {
+		t.Fatalf("unexpected result: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+}
+
+func TestRunLaunchReportsSearchAndProjectFailures(t *testing.T) {
+	// Verifies an unlimited search is announced as such and a missing project stops the launch with code 1.
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	startPath := t.TempDir()
+
+	code := runLaunchWithDeps(context.Background(), launchOptions{maxDepth: -1}, startPath, &stdout, &stderr, isolatedLaunchTestDeps(t))
+
+	if code != 1 || !strings.Contains(stderr.String(), "unity project not found") {
+		t.Fatalf("expected the project error: code=%d stderr=%s", code, stderr.String())
+	}
+	if want := "Searching for Unity project under " + startPath + " (max-depth: unlimited)..."; !strings.Contains(stdout.String(), want) {
+		t.Fatalf("missing search line %q: %s", want, stdout.String())
+	}
+}
+
+func TestDeleteLaunchRecoveryIfRequested(t *testing.T) {
+	// Verifies --delete-recovery removes Assets/_Recovery, and a removal failure stops the launch.
+	projectRoot := createLaunchTestProject(t)
+	recoveryFile := filepath.Join(projectRoot, filepath.FromSlash(recoveryDirectoryPath), "scene.unity")
+	writeDispatcherTestFile(t, recoveryFile, "x")
+
+	if !deleteLaunchRecoveryIfRequested(launchOptions{deleteRecovery: true}, projectRoot, io.Discard) {
+		t.Fatal("expected the recovery directory to be removed")
+	}
+	if fileExists(filepath.Dir(recoveryFile)) {
+		t.Fatal("Assets/_Recovery must be gone")
+	}
+
+	writeDispatcherTestFile(t, recoveryFile, "x")
+	lockSkillsTestDirectory(t, filepath.Dir(recoveryFile), 0o555)
+	var stderr bytes.Buffer
+	if deleteLaunchRecoveryIfRequested(launchOptions{deleteRecovery: true}, projectRoot, &stderr) {
+		t.Fatal("a failed removal must stop the launch")
+	}
+	if !strings.Contains(stderr.String(), "scene.unity: permission denied") {
+		t.Fatalf("expected the removal error: %s", stderr.String())
+	}
+}
+
+func TestRunLaunchReportsRunningProcessFailures(t *testing.T) {
+	// Verifies a failed kill on restart and a failed readiness wait on an already running Editor each stop with code 1.
+	t.Run("kill fails", func(t *testing.T) {
+		deps := isolatedLaunchTestDeps(t)
+		deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+			return &clicore.UnityProcess{Pid: 4242}, nil
+		}
+		deps.killUnityProcess = func(int) error { return errors.New("kill denied") }
+		projectRoot := createVersionedLaunchTestProject(t)
+		var stderr bytes.Buffer
+
+		code := runLaunchWithDeps(context.Background(), launchOptions{restart: true, projectPath: projectRoot}, projectRoot, io.Discard, &stderr, deps)
+
+		if code != 1 || !strings.Contains(stderr.String(), "kill denied") {
+			t.Fatalf("expected the kill error: code=%d stderr=%s", code, stderr.String())
+		}
+	})
+	t.Run("existing editor never ready", func(t *testing.T) {
+		deps := isolatedLaunchTestDeps(t)
+		deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+			return &clicore.UnityProcess{Pid: 4242}, nil
+		}
+		deps.waitForToolReadiness = func(context.Context, string, time.Duration) error { return errors.New("tools not ready") }
+		projectRoot := createVersionedLaunchTestProject(t)
+		var stderr bytes.Buffer
+
+		code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, io.Discard, &stderr, deps)
+
+		if code != 1 || !strings.Contains(stderr.String(), "tools not ready") {
+			t.Fatalf("expected the readiness error: code=%d stderr=%s", code, stderr.String())
+		}
+	})
+}
+
+func TestRunLaunchReportsStartFailures(t *testing.T) {
+	// Verifies each failure between resolving the Editor and readiness stops a fresh launch with its own error.
+	cases := []struct {
+		name        string
+		noVersion   bool
+		modify      func(t *testing.T, deps *launchDeps)
+		wantMessage string
+	}{
+		{name: "project version missing", noVersion: true, modify: func(*testing.T, *launchDeps) {}, wantMessage: "ProjectVersion.txt"},
+		{name: "editor not installed", modify: func(_ *testing.T, deps *launchDeps) {
+			deps.resolveUnityExecutablePath = func(string) (string, error) { return "", errors.New("editor 2022.3.0f1 missing") }
+		}, wantMessage: "editor 2022.3.0f1 missing"},
+		{name: "editor cannot start", modify: func(t *testing.T, deps *launchDeps) {
+			missing := filepath.Join(t.TempDir(), "missing-unity")
+			deps.resolveUnityExecutablePath = func(string) (string, error) { return missing, nil }
+		}, wantMessage: "missing-unity"},
+		{name: "startup marker never appears", modify: func(_ *testing.T, deps *launchDeps) {
+			deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error { return errors.New("no lockfile") }
+		}, wantMessage: "no lockfile"},
+		{name: "tools never ready", modify: func(_ *testing.T, deps *launchDeps) {
+			deps.waitForToolReadiness = func(context.Context, string, time.Duration) error { return errors.New("tools not ready") }
+		}, wantMessage: "tools not ready"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			deps := isolatedLaunchTestDeps(t)
+			testCase.modify(t, &deps)
+			projectRoot := createLaunchTestProject(t)
+			if !testCase.noVersion {
+				projectRoot = createVersionedLaunchTestProject(t)
+			}
+			var stderr bytes.Buffer
+
+			code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, io.Discard, &stderr, deps)
+
+			if code != 1 || !strings.Contains(stderr.String(), testCase.wantMessage) {
+				t.Fatalf("expected %q: code=%d stderr=%s", testCase.wantMessage, code, stderr.String())
+			}
+		})
+	}
+}
+
+func TestWaitForUnityProcessExitWithDeps(t *testing.T) {
+	// Verifies the exit wait returns once the process is gone, surfaces lookup errors, and times out on a process that stays.
+	projectRoot := t.TempDir()
+	deps := isolatedLaunchTestDeps(t)
+
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 7}, nil
+	}
+	if err := waitForUnityProcessExitWithDeps(context.Background(), projectRoot, 8, time.Millisecond, time.Second, deps); err != nil {
+		t.Fatalf("a different pid means the old process exited: %v", err)
+	}
+
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, errors.New("ps failed") }
+	if err := waitForUnityProcessExitWithDeps(context.Background(), projectRoot, 8, time.Millisecond, time.Second, deps); err == nil || err.Error() != "ps failed" {
+		t.Fatalf("expected the lookup error, got %v", err)
+	}
+
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 8}, nil
+	}
+	err := waitForUnityProcessExitWithDeps(context.Background(), projectRoot, 8, time.Millisecond, time.Millisecond, deps)
+	var timeoutErr launchProcessExitTimeoutError
+	if !errors.As(err, &timeoutErr) || timeoutErr.pid != 8 {
+		t.Fatalf("expected the exit timeout error, got %v", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitForUnityProcessExitWithDeps(canceled, projectRoot, 8, time.Millisecond, time.Second, deps); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected the caller's cancellation, got %v", err)
+	}
+}
+
+func TestWaitForUnityStartupMarkerOrTimeout(t *testing.T) {
+	// Verifies the marker wait reports an uninspectable path and the caller's cancellation.
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows reports a path below a file as not found rather than ENOTDIR.")
+	}
+	parentFile := filepath.Join(t.TempDir(), "file")
+	writeDispatcherTestFile(t, parentFile, "x")
+	err := waitForUnityStartupMarkerOrTimeout(context.Background(), filepath.Join(parentFile, "UnityLockfile"), time.Millisecond, time.Second)
+	if err == nil || !strings.HasSuffix(err.Error(), "not a directory") {
+		t.Fatalf("expected the stat error, got %v", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = waitForUnityStartupMarkerOrTimeout(canceled, filepath.Join(t.TempDir(), "UnityLockfile"), time.Millisecond, time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected the caller's cancellation, got %v", err)
+	}
+}
+
+func TestResolveExistingUnityExecutablePathFindsCandidateOrRejectsPlatform(t *testing.T) {
+	// Verifies the first existing candidate is returned and an empty candidate list reports an unsupported platform.
+	missing := filepath.Join(t.TempDir(), "missing")
+	existing := filepath.Join(t.TempDir(), "Unity")
+	writeDispatcherTestFile(t, existing, "")
+
+	path, err := resolveExistingUnityExecutablePath("2022.3.0f1", []string{missing, existing})
+	if err != nil || path != existing {
+		t.Fatalf("unexpected result: path=%q err=%v", path, err)
+	}
+	if _, err := resolveExistingUnityExecutablePath("2022.3.0f1", nil); err == nil || err.Error() != "unity launch is not supported on "+runtime.GOOS {
+		t.Fatalf("expected the unsupported platform error, got %v", err)
+	}
+}
