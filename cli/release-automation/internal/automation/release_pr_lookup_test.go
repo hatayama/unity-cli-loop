@@ -18,6 +18,7 @@ func TestReleasePRCheckTitleMatches(t *testing.T) {
 		"chore(main): releases":           false,
 		"chore(main release 3.6.0":        false,
 		"feat: release 3.6.0":             false,
+		"feat(main): release 3.6.0":       false,
 	}
 	for title, want := range cases {
 		if got := releasePRCheckTitleMatches(title); got != want {

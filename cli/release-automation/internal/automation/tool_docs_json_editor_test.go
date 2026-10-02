@@ -7,7 +7,7 @@ import (
 
 // Verifies only tool and inputSchema/parameterSchema property descriptions are rewritten: a description outside "tools", one under another schema key, and escaped quotes around the old value leave every other byte untouched.
 func TestReplaceCatalogDescriptionsRewritesOnlyCatalogDescriptions(t *testing.T) {
-	content := `{"description":"root","tools":[{"description":"say \"hi\" \\","parameterSchema":{"properties":{"P":{"description":"old p"}}},"otherSchema":{"properties":{"P":{"description":"keep"}}},"name":"t"}]}`
+	content := `{"description":"root","other":[{"description":"keep"}],"tools":[{"description":"say \"hi\" \\","parameterSchema":{"properties":{"P":{"description":"old p"}}},"otherSchema":{"properties":{"P":{"description":"keep"}}},"name":"t"}]}`
 	replacements := map[descriptionKey]string{
 		{Tool: "t"}:                "new <tool>",
 		{Tool: "t", Property: "P"}: "new p",
@@ -17,7 +17,7 @@ func TestReplaceCatalogDescriptionsRewritesOnlyCatalogDescriptions(t *testing.T)
 	if err != nil {
 		t.Fatalf("replaceCatalogDescriptions failed: %v", err)
 	}
-	want := `{"description":"root","tools":[{"description":"new <tool>","parameterSchema":{"properties":{"P":{"description":"new p"}}},"otherSchema":{"properties":{"P":{"description":"keep"}}},"name":"t"}]}`
+	want := `{"description":"root","other":[{"description":"keep"}],"tools":[{"description":"new <tool>","parameterSchema":{"properties":{"P":{"description":"new p"}}},"otherSchema":{"properties":{"P":{"description":"keep"}}},"name":"t"}]}`
 	if string(edited) != want {
 		t.Fatalf("edited =\n%s\nwant\n%s", edited, want)
 	}

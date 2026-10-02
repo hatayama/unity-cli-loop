@@ -464,7 +464,7 @@ func TestRunAsmdefPolicyCheckReportsUnusableInputs(t *testing.T) {
 		{"assembly without category", func(t *testing.T, root string) string {
 			writeAsmdefFixture(t, root, asmdefFixture{dir: "Editor/Mystery", name: "UnityCLILoop.Mystery", guid: fixtureGUIDDomain})
 			return ""
-		}, "check-asmdef-policy: "},
+		}, "matches no assembly category"},
 		{"missing allowlist", func(t *testing.T, root string) string {
 			writePolicyFixtureRepository(t, root, []string{guidReference(fixtureGUIDToolContracts)})
 			return filepath.Join(root, "missing-allowlist.json")

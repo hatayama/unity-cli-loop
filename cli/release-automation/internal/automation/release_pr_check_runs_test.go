@@ -49,8 +49,9 @@ func findReleasePRCheckRunForTest(lookup *releasePRCheckRunLookup, attempts int)
 func TestFindDispatchedReleasePRCheckRunPicksTheNewestRunSinceDispatch(t *testing.T) {
 	lookup := &releasePRCheckRunLookup{answers: []string{`[
 		{"databaseId":1,"headSha":"head123","createdAt":"2026-09-08T00:59:59Z"},
+		{"databaseId":2,"headSha":"head123","createdAt":"2026-09-08T01:00:05Z"},
 		{"databaseId":3,"headSha":"head123","createdAt":"2026-09-08T01:00:09Z"},
-		{"databaseId":2,"headSha":"head123","createdAt":"2026-09-08T01:00:05Z"}
+		{"databaseId":5,"headSha":"head123","createdAt":"2026-09-08T01:00:07Z"}
 	]`}}
 
 	run, err := findReleasePRCheckRunForTest(lookup, 1)

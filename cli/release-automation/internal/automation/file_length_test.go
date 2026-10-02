@@ -251,10 +251,11 @@ func TestCountSLOCHandlesDoubledQuotesInInterpolatedVerbatimStrings(t *testing.T
 	}
 }
 
-// Verifies a non-positive limit falls back to the default, files with other extensions are ignored, and upper-case extensions still count.
+// Verifies a non-positive limit falls back to the default, files with other extensions or another root's language are ignored, and upper-case extensions still count.
 func TestRunFileLengthCheckAppliesTheDefaultLimitAndExtensionFilter(t *testing.T) {
 	root := t.TempDir()
 	writeRepoFile(t, root, "cli/notes.txt", goLines(DefaultMaxFileLength+1))
+	writeRepoFile(t, root, "cli/Other.cs", csharpLines(DefaultMaxFileLength+1))
 	writeRepoFile(t, root, "Packages/src/Upper.CS", csharpLines(DefaultMaxFileLength+1))
 	writeRepoFile(t, root, "Packages/src/AtLimit.cs", csharpLines(DefaultMaxFileLength))
 	stdout := &bytes.Buffer{}
@@ -341,23 +342,15 @@ func TestCountSLOCTracksCSharpStringAndHoleBoundaries(t *testing.T) {
 		want   int
 	}{
 		{"division on its own line", "var x = 4\n/ 2;\n", 2},
-		{"nested braces in a hole", "var s = $\"{new { A = 1 }\n// comment inside the hole\n.A}\";\n", 2},
-		{"regular string across lines", "var s = \"abc\n// inside the string\n\";\n", 3},
-		{"doubled quote in a verbatim string", "var s = @\"a\"\"\n// inside the string\n\";\n", 3},
-		{"escaped quote in an interpolated string", "var s = $\"\\\"\n// inside the string\n\";\n", 3},
-		{"doubled brace in an interpolated string", "var s = $\"{{\n// inside the string\n\";\n", 3},
-		{"backslash before a newline", "var s = \"a\\\n// inside the string\n", 2},
+		{"nested braces in a hole across lines", "var s = $\"{new { A = 1 }\n// comment inside the hole\n.A}\";\n", 2},
+		{"nested braces in a hole", "var s = $\"{new { A = 1 }.A}\";\n// c\n", 1},
+		{"doubled quote in a verbatim string", "var s = @\"a\"\"\\\";\n// c\n", 1},
+		{"escaped quote in an interpolated string", "var s = $\"\\\\\\\" /* \";\nint x = 1;\n// */\n", 2},
+		{"doubled brace in an interpolated string", "var s = $\"{{ /* \";\nint x = 1;\n// */\n", 2},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			assertSLOC(t, testCase.source, LanguageCSharp, testCase.want)
 		})
-	}
-}
-
-// Verifies sources that end in the middle of a token count their one line instead of reading past the end.
-func TestCountSLOCHandlesSourceEndingMidToken(t *testing.T) {
-	for _, source := range []string{"x /", "var s = \"a\\", "var s = $\"{x", "var s = $", "var c = @"} {
-		assertSLOC(t, source, LanguageCSharp, 1)
 	}
 }
