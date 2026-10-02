@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
@@ -239,6 +240,121 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void InvalidateCache()
             {
             }
+        }
+
+        /// <summary>
+        /// Verifies an added tools-changed handler is notified when a tool setting changes.
+        /// </summary>
+        [Test]
+        public void AddToolsChangedHandler_WhenToolSettingChanges_InvokesHandler()
+        {
+            ToolSettingsUseCase useCase = CreateUseCase(new RecordingToolSettingsPort());
+            int invocationCount = 0;
+
+            useCase.AddToolsChangedHandler(() => invocationCount++);
+            useCase.SetToolEnabled(UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT, false);
+
+            Assert.That(invocationCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a removed tools-changed handler is no longer notified when a tool setting changes.
+        /// </summary>
+        [Test]
+        public void RemoveToolsChangedHandler_WhenToolSettingChanges_DoesNotInvokeHandler()
+        {
+            ToolSettingsUseCase useCase = CreateUseCase(new RecordingToolSettingsPort());
+            int invocationCount = 0;
+            Action handler = () => invocationCount++;
+            useCase.AddToolsChangedHandler(handler);
+
+            useCase.RemoveToolsChangedHandler(handler);
+            useCase.SetToolEnabled(UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT, false);
+
+            Assert.That(invocationCount, Is.Zero);
+        }
+
+        /// <summary>
+        /// Verifies the catalog is reported unavailable and empty until the registry has been created.
+        /// </summary>
+        [Test]
+        public void TryGetToolCatalog_WhenRegistryNotWarmedUp_ReturnsFalseAndEmptyCatalog()
+        {
+            ToolSettingsUseCase useCase = CreateUseCase(new RecordingToolSettingsPort());
+
+            bool isAvailable = useCase.TryGetToolCatalog(out ToolSettingsUseCase.ToolCatalogItem[] allTools);
+
+            Assert.That(isAvailable, Is.False);
+            Assert.That(allTools, Is.Not.Null);
+            Assert.That(allTools, Is.Empty);
+        }
+
+        private static ToolSettingsUseCase CreateUseCase(RecordingToolSettingsPort toolSettingsPort)
+        {
+            UnityCliLoopToolRegistrarService toolRegistrarService = new UnityCliLoopToolRegistrarService(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsPort,
+                new UnityCliLoopToolExecutionService(new IdleEditorRuntimeStatePort()),
+                () => Array.Empty<IUnityCliLoopTool>());
+            return new ToolSettingsUseCase(
+                toolSettingsPort,
+                toolRegistrarService,
+                new EmptyToolSkillDescriptionProvider());
+        }
+
+        /// <summary>
+        /// Test support type that stores tool enabled flags in memory.
+        /// </summary>
+        private sealed class RecordingToolSettingsPort : IToolSettingsPort
+        {
+            private readonly HashSet<string> _disabledTools = new HashSet<string>();
+
+            public bool IsToolEnabled(string toolName)
+            {
+                return !_disabledTools.Contains(toolName);
+            }
+
+            public void SetToolEnabled(string toolName, bool enabled)
+            {
+                if (enabled)
+                {
+                    _disabledTools.Remove(toolName);
+                    return;
+                }
+
+                _disabledTools.Add(toolName);
+            }
+
+            public string[] GetDisabledTools()
+            {
+                return new List<string>(_disabledTools).ToArray();
+            }
+
+            public void InvalidateCache()
+            {
+            }
+        }
+
+        /// <summary>
+        /// Test support type that reports no skill descriptions.
+        /// </summary>
+        private sealed class EmptyToolSkillDescriptionProvider : IToolSkillDescriptionProvider
+        {
+            public IReadOnlyDictionary<string, string> GetSkillDescriptionsByToolName()
+            {
+                return new Dictionary<string, string>();
+            }
+        }
+
+        /// <summary>
+        /// Test support type that reports an idle editor.
+        /// </summary>
+        private sealed class IdleEditorRuntimeStatePort : IEditorRuntimeStatePort
+        {
+            public bool IsCompiling => false;
+            public bool IsUpdating => false;
+            public bool IsPlaying => false;
+            public bool IsPaused => false;
         }
     }
 }

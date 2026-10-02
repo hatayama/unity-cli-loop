@@ -1,4 +1,6 @@
 using NUnit.Framework;
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -451,6 +453,202 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 DisposeCallCount++;
                 IsRunning = false;
             }
+        }
+
+        /// <summary>
+        /// Verifies a server stop failure rolls back the recorded reload start and surfaces a critical error wrapping the cause.
+        /// </summary>
+        [Test]
+        public void ExecuteBeforeDomainReload_WhenServerStopThrows_RollsBackStartAndThrowsWrappedError()
+        {
+            RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
+            PresetSessionFlagsRepository sessionFlagsRepository = new PresetSessionFlagsRepository();
+            DomainReloadRecoveryUseCase useCase = CreateRecordingUseCase(detectionService, sessionFlagsRepository);
+            InvalidOperationException stopFailure = new InvalidOperationException("stop failed");
+            ThrowingStopServerInstance server = new ThrowingStopServerInstance(stopFailure);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => useCase.ExecuteBeforeDomainReload(server));
+
+            Assert.That(
+                exception.Message,
+                Is.EqualTo("Failed to properly shutdown Unity CLI bridge before assembly reload."));
+            Assert.That(exception.InnerException, Is.SameAs(stopFailure));
+            Assert.That(detectionService.Calls.Count, Is.EqualTo(2));
+            Assert.That(detectionService.Calls[0], Does.StartWith("Start|True|"));
+            string startCorrelationId = detectionService.Calls[0].Substring("Start|True|".Length);
+            Assert.That(detectionService.Calls[1], Is.EqualTo("Rollback|" + startCorrelationId));
+        }
+
+        /// <summary>
+        /// Verifies post-reload recovery reports a failure carrying the restoration error when no server comes back.
+        /// </summary>
+        [Test]
+        public void ExecuteAfterDomainReloadAsync_WhenRestorationFails_ReturnsFailureWithRestorationError()
+        {
+            RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
+            DomainReloadRecoveryUseCase useCase = CreateRecordingUseCase(detectionService, new PresetSessionFlagsRepository());
+            ScriptedRecoveryCoordinator recoveryCoordinator = new ScriptedRecoveryCoordinator(false);
+
+            ServiceResult<string> result =
+                GetCompletedResult(useCase.ExecuteAfterDomainReloadAsync(recoveryCoordinator, CancellationToken.None));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Server restoration failed: Unity CLI Loop server recovery finished, but no running server instance is available."));
+            Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies successful post-reload recovery returns the correlation id that was used to complete the reload.
+        /// </summary>
+        [Test]
+        public void ExecuteAfterDomainReloadAsync_WhenServerIsRestored_ReturnsCompletionCorrelationId()
+        {
+            RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
+            DomainReloadRecoveryUseCase useCase = CreateRecordingUseCase(detectionService, new PresetSessionFlagsRepository());
+            ScriptedRecoveryCoordinator recoveryCoordinator = new ScriptedRecoveryCoordinator(true);
+
+            ServiceResult<string> result =
+                GetCompletedResult(useCase.ExecuteAfterDomainReloadAsync(recoveryCoordinator, CancellationToken.None));
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Data, Does.StartWith("unity_"));
+            Assert.That(detectionService.Calls, Is.EqualTo(new[] { "Complete|" + result.Data }));
+        }
+
+        private static DomainReloadRecoveryUseCase CreateRecordingUseCase(
+            RecordingDomainReloadDetectionService detectionService,
+            PresetSessionFlagsRepository sessionFlagsRepository)
+        {
+            SessionRecoveryService sessionRecoveryService = new SessionRecoveryService(detectionService, sessionFlagsRepository);
+            return new DomainReloadRecoveryUseCase(sessionRecoveryService, detectionService, sessionFlagsRepository);
+        }
+
+        private static T GetCompletedResult<T>(Task<T> task)
+        {
+            Assert.That(task.IsCompleted, Is.True, "Recovery must complete synchronously with completed fakes.");
+            return task.GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Test support type that records domain reload detection calls with their correlation ids.
+        /// </summary>
+        private sealed class RecordingDomainReloadDetectionService : IDomainReloadDetectionService
+        {
+            public List<string> Calls { get; } = new List<string>();
+
+            public void RegisterForEditorStartup()
+            {
+                Calls.Add("Register");
+            }
+
+            public void StartDomainReload(string correlationId, bool serverIsRunning)
+            {
+                Calls.Add("Start|" + serverIsRunning + "|" + correlationId);
+            }
+
+            public void CompleteDomainReload(string correlationId)
+            {
+                Calls.Add("Complete|" + correlationId);
+            }
+
+            public void RollbackDomainReloadStart(string correlationId)
+            {
+                Calls.Add("Rollback|" + correlationId);
+            }
+
+            public bool ShouldShowReconnectingUI()
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Test support type whose StopServer throws the configured exception.
+        /// </summary>
+        private sealed class ThrowingStopServerInstance : IUnityCliLoopServerInstance
+        {
+            private readonly Exception _stopFailure;
+
+            public ThrowingStopServerInstance(Exception stopFailure)
+            {
+                _stopFailure = stopFailure;
+            }
+
+            public bool IsRunning => true;
+
+            public string Endpoint => "test";
+
+            public void StartServer()
+            {
+            }
+
+            public void StopServer()
+            {
+                throw _stopFailure;
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        /// <summary>
+        /// Test support type whose recovery either produces a running server or leaves none.
+        /// </summary>
+        private sealed class ScriptedRecoveryCoordinator : IUnityCliLoopServerRecoveryCoordinator
+        {
+            private readonly bool _recoverServer;
+            private IUnityCliLoopServerInstance _currentServer;
+
+            public ScriptedRecoveryCoordinator(bool recoverServer)
+            {
+                _recoverServer = recoverServer;
+            }
+
+            public int StartRecoveryCallCount { get; private set; }
+
+            public IUnityCliLoopServerInstance CurrentServer => _currentServer;
+
+            public Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
+            {
+                StartRecoveryCallCount++;
+                if (_recoverServer)
+                {
+                    _currentServer = new ThrowingStopServerInstance(new InvalidOperationException("not stopped in this test"));
+                }
+
+                return Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Test support type with every session flag cleared and mutations ignored.
+        /// </summary>
+        private sealed class PresetSessionFlagsRepository : ISessionFlagsRepository
+        {
+            public bool GetIsServerRunning() => false;
+            public bool GetIsServerManuallyStopped() => false;
+            public bool GetIsAfterCompile() => false;
+            public bool GetIsDomainReloadInProgress() => false;
+            public bool GetShowReconnectingUI() => false;
+            public void SetIsAfterCompile(bool isAfterCompile) { }
+            public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress) { }
+            public void SetIsReconnecting(bool isReconnecting) { }
+            public void SetShowReconnectingUI(bool showReconnectingUI) { }
+            public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI) { }
+            public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration) { }
+            public bool ConsumeShouldAutoScanThirdPartyToolMigration() => false;
+            public void MarkServerStarted() { }
+            public void MarkServerManuallyStopped() { }
+            public void ClearServerSession() { }
+            public void ClearAfterCompileFlag() { }
+            public void ClearReconnectingFlags() { }
+            public void ClearPostCompileReconnectingUI() { }
+            public void ClearDomainReloadFlag() { }
+            public void ClearDomainReloadRecoveryFlags() { }
         }
     }
 }
