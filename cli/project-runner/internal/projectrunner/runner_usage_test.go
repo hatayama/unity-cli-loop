@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 )
 
 // Verifies the project runner refuses dispatcher-owned bootstrap
@@ -79,5 +81,19 @@ func TestRunProjectLocalCommandHelpPrintsRunnerUsage(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "--force-recompile") {
 		t.Fatalf("command help must not duplicate the full tool help: %s", stdout.String())
+	}
+}
+
+// Verifies a bare --version request prints only the project runner version and is handled.
+func TestTryHandleRunnerInfoRequestPrintsVersion(t *testing.T) {
+	var stdout bytes.Buffer
+
+	handled, code := tryHandleRunnerInfoRequest([]string{"--version"}, &stdout)
+
+	if !handled || code != 0 {
+		t.Fatalf("handled=%v code=%d", handled, code)
+	}
+	if got := strings.TrimSpace(stdout.String()); got != clicontract.ProjectRunnerVersion() {
+		t.Fatalf("stdout = %q, want %q", got, clicontract.ProjectRunnerVersion())
 	}
 }

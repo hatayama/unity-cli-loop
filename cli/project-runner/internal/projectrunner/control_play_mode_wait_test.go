@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -820,5 +821,195 @@ func TestDecodeControlPlayModeResponsePreservesActiveScenario(t *testing.T) {
 	}
 	if _, exists := withoutScenarioFields["ActiveScenario"]; exists {
 		t.Fatalf("ActiveScenario should be omitted: %s", withoutScenarioJSON)
+	}
+}
+
+// Verifies the initial control-play-mode response short-circuits the wait: an undecodable result
+// fails, an already-reached state returns at once, and a Unity error is reported without polling.
+func TestRunControlPlayModeWithStateWaitHandlesInitialResponse(t *testing.T) {
+	cases := []struct {
+		name       string
+		response   string
+		wantCode   int
+		wantStdout string
+		wantStderr string
+	}{
+		{name: "undecodable result", response: `{"jsonrpc":"2.0","result":"text","id":1}`, wantCode: 1, wantStderr: "cannot unmarshal"},
+		{name: "state already reached", response: `{"jsonrpc":"2.0","result":{"IsPlaying":true,"IsPaused":false,"Message":"already playing"},"id":1}`, wantStdout: "already playing"},
+		{name: "Unity error", response: testUnityRPCFailureResponse, wantCode: 1, wantStderr: "tool exploded in Unity"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := startFakeUnityServer(t, t.TempDir(), controlPlayModeCommandName, testCase.response)
+			var stdout, stderr bytes.Buffer
+
+			code := runControlPlayModeWithStateWait(
+				context.Background(),
+				server.connection,
+				map[string]any{controlPlayModeActionParam: "Play", controlPlayModeTimeoutParam: 1},
+				&stdout,
+				&stderr,
+			)
+
+			if code != testCase.wantCode {
+				t.Fatalf("exit code = %d, want %d; stderr=%s", code, testCase.wantCode, stderr.String())
+			}
+			server.receivedRequest(t)
+			if !strings.Contains(stdout.String(), testCase.wantStdout) {
+				t.Fatalf("stdout must contain %q:\n%s", testCase.wantStdout, stdout.String())
+			}
+			if !strings.Contains(stderr.String(), testCase.wantStderr) {
+				t.Fatalf("stderr must contain %q:\n%s", testCase.wantStderr, stderr.String())
+			}
+		})
+	}
+}
+
+// serveDroppedConnections reads each request and closes the connection without answering, so
+// the client sees a transport disconnect after dispatch. It calls onSecondAccept once the second
+// connection arrives, which is the first state probe after the dropped action request.
+func serveDroppedConnections(listener net.Listener, onSecondAccept func()) {
+	accepted := 0
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		accepted++
+		if accepted == 2 {
+			onSecondAccept()
+		}
+		_, _ = unityipc.Read(bufio.NewReader(conn))
+		_ = conn.Close()
+	}
+}
+
+// Verifies a disconnect during the action request moves on to the state wait, and the caller's
+// context ending during that wait is reported as a failure.
+func TestRunControlPlayModeWithStateWaitReportsContextEndDuringWait(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() { controlPlayModeStatePoll = originalPoll })
+	// Why the cancel comes from the server rather than a timer: only a state probe proves the action
+	// request already ended in a disconnect, so the wait is cancelled at that point on any machine.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	listener := newLoopbackIpcListener(t)
+	go serveDroppedConnections(listener, cancel)
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
+		ProjectRoot: t.TempDir(),
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runControlPlayModeWithStateWait(
+		ctx,
+		connection,
+		map[string]any{controlPlayModeActionParam: "Stop", controlPlayModeTimeoutParam: 30},
+		&stdout,
+		&stderr,
+	)
+
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), context.Canceled.Error()) {
+		t.Fatalf("stderr must report the cancelled wait:\n%s", stderr.String())
+	}
+}
+
+// Verifies a wait that never got a status response times out with the last transport error attached.
+func TestWaitForControlPlayModeStateTimesOutWithLastError(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() { controlPlayModeStatePoll = originalPoll })
+
+	_, completed, err := waitForControlPlayModeState(
+		context.Background(),
+		unreachableConnection(t.TempDir()),
+		"Play",
+		20*time.Millisecond,
+	)
+
+	if completed || err == nil {
+		t.Fatalf("expected an error, got completed=%v err=%v", completed, err)
+	}
+	if !strings.Contains(err.Error(), "timed out waiting for play mode state:") {
+		t.Fatalf("error must wrap the last transport error: %v", err)
+	}
+}
+
+// Verifies only a dispatched request that lost its transport is treated as a reload disconnect.
+func TestShouldWaitForControlPlayModeDisconnect(t *testing.T) {
+	if shouldWaitForControlPlayModeDisconnect(io.EOF, unityipc.UnitySendOutcome{}) {
+		t.Fatal("an undispatched request must not wait")
+	}
+	if !shouldWaitForControlPlayModeDisconnect(io.EOF, unityipc.UnitySendOutcome{RequestDispatched: true}) {
+		t.Fatal("a dispatched request that lost its transport must wait")
+	}
+}
+
+// Verifies the action defaults to Play and the timeout accepts int, int64, and float64 values,
+// falling back to the default for missing, non-positive, non-numeric, or too-large float values.
+func TestControlPlayModeParamDefaults(t *testing.T) {
+	if action := controlPlayModeAction(map[string]any{}); action != "Play" {
+		t.Fatalf("default action = %q, want Play", action)
+	}
+	cases := []struct {
+		name  string
+		value any
+		want  int
+	}{
+		{name: "int", value: 5, want: 5},
+		{name: "int64", value: int64(6), want: 6},
+		{name: "float64", value: float64(7), want: 7},
+		{name: "negative", value: -1, want: controlPlayModeDefaultTimeout},
+		// On amd64 int(1e300) is negative even without the guard; on arm64 it saturates, so only the
+		// guard keeps it from becoming a huge timeout there.
+		{name: "too-large float64", value: float64(1e300), want: controlPlayModeDefaultTimeout},
+		{name: "string", value: "8", want: controlPlayModeDefaultTimeout},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := controlPlayModeTimeoutSeconds(map[string]any{controlPlayModeTimeoutParam: testCase.value}); got != testCase.want {
+				t.Fatalf("timeout = %d, want %d", got, testCase.want)
+			}
+		})
+	}
+	if got := controlPlayModeTimeoutSeconds(map[string]any{}); got != controlPlayModeDefaultTimeout {
+		t.Fatalf("missing timeout = %d, want default", got)
+	}
+}
+
+// Verifies state matching and the user-facing messages for every action, including unknown ones.
+func TestControlPlayModeStateAndMessages(t *testing.T) {
+	if !controlPlayModeStateMatches("Pause", controlPlayModeResponse{IsPlaying: true, IsPaused: true}) {
+		t.Fatal("Pause must match a paused editor")
+	}
+	if controlPlayModeStateMatches("Status", controlPlayModeResponse{IsPlaying: true}) {
+		t.Fatal("an action without a target state must never match")
+	}
+	for action, want := range map[string][2]string{
+		"Stop":  {"Play mode stopped", "Play mode stop"},
+		"Pause": {"Play mode paused", "Play mode pause"},
+		"Play":  {"Play mode started", "Play mode start"},
+	} {
+		if got := completedControlPlayModeMessage(action, controlPlayModeResponse{}, false); got != want[0] {
+			t.Fatalf("completed message for %s = %q, want %q", action, got, want[0])
+		}
+		if got := requestedControlPlayModeMessage(action); got != want[1] {
+			t.Fatalf("requested message for %s = %q, want %q", action, got, want[1])
+		}
+	}
+}
+
+// Verifies the compile-errors envelope counts the listed errors when Unity omitted the count.
+func TestControlPlayModeCompileErrorsErrorCountsListedErrors(t *testing.T) {
+	cliError := controlPlayModeCompileErrorsError("<PROJECT_ROOT>", "Play", controlPlayModeResponse{
+		CompileErrors: []controlPlayModeCompileError{{Message: "a"}, {Message: "b"}},
+	})
+
+	if cliError.Details["CompileErrorCount"] != 2 {
+		t.Fatalf("CompileErrorCount = %#v, want 2", cliError.Details["CompileErrorCount"])
 	}
 }

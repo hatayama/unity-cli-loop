@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -328,5 +329,80 @@ func TestRunTestsWaitTimeoutErrorIsNotSafeToRetry(t *testing.T) {
 	}
 	if !cliErr.Retryable || cliErr.SafeToRetry {
 		t.Fatalf("retry flags mismatch: retryable=%v safeToRetry=%v", cliErr.Retryable, cliErr.SafeToRetry)
+	}
+}
+
+// Verifies the run-tests status query sends the request id to Unity and decodes the stored result,
+// and surfaces Unity errors and undecodable payloads.
+func TestQueryRunTestsStatusFromUnity(t *testing.T) {
+	t.Run("decodes status", func(t *testing.T) {
+		server := startFakeUnityResultServer(t, t.TempDir(), runTestsStatusCommandName, `{"Success":true,"HasResult":true,"Result":{"TestCount":3}}`)
+
+		status, err := queryRunTestsStatusFromUnity(context.Background(), server.connection, "run_tests_1_abcd")
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if request := server.receivedRequest(t); request[runTestsRequestIDParam] != "run_tests_1_abcd" {
+			t.Fatalf("unexpected request: %#v", request)
+		}
+		if !status.HasResult || string(status.Result) != `{"TestCount":3}` {
+			t.Fatalf("unexpected status: %#v", status)
+		}
+	})
+	t.Run("Unity error", func(t *testing.T) {
+		server := startFakeUnityServer(t, t.TempDir(), runTestsStatusCommandName, testUnityRPCFailureResponse)
+		if _, err := queryRunTestsStatusFromUnity(context.Background(), server.connection, "run_tests_1_abcd"); err == nil || !strings.Contains(err.Error(), "tool exploded in Unity") {
+			t.Fatalf("expected the Unity error, got %v", err)
+		}
+	})
+	t.Run("undecodable result", func(t *testing.T) {
+		server := startFakeUnityResultServer(t, t.TempDir(), runTestsStatusCommandName, `[1]`)
+		if _, err := queryRunTestsStatusFromUnity(context.Background(), server.connection, "run_tests_1_abcd"); err == nil || !strings.Contains(err.Error(), "cannot unmarshal array") {
+			t.Fatalf("expected a decode error, got %v", err)
+		}
+	})
+}
+
+// Verifies the recovered-result wait reports a cancelled context and a timeout as failures with
+// no result, the timeout using the run-tests wait timeout envelope.
+func TestFinishRunTestsRecoveredResultReportsFailures(t *testing.T) {
+	noResult := func(context.Context, unityipc.Connection, string) (runTestsStatusResponse, error) {
+		return runTestsStatusResponse{Success: true}, nil
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	cases := []struct {
+		name       string
+		ctx        context.Context
+		timeout    time.Duration
+		wantStderr string
+	}{
+		{name: "cancelled", ctx: cancelled, timeout: time.Minute, wantStderr: "canceled"},
+		{name: "timed out", ctx: context.Background(), timeout: 0, wantStderr: runTestsWaitTimeoutErrorCode},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			spinner := clicore.NewToolSpinner(&stderr, clicore.RunTestsCommandName)
+
+			execution := finishRunTestsRecoveredResult(
+				testCase.ctx,
+				compileWaitTestConnection(t),
+				"run_tests_1_abcd",
+				testCase.timeout,
+				&stderr,
+				spinner,
+				time.Now(),
+				unityipc.UnitySendOutcome{},
+				noResult,
+			)
+
+			if execution.exitCode != 1 || len(execution.result) != 0 {
+				t.Fatalf("unexpected execution: %#v", execution)
+			}
+			if !strings.Contains(stderr.String(), testCase.wantStderr) {
+				t.Fatalf("stderr must contain %q:\n%s", testCase.wantStderr, stderr.String())
+			}
+		})
 	}
 }

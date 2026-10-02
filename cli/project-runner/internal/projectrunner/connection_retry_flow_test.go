@@ -3,10 +3,12 @@ package projectrunner
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
@@ -171,5 +173,79 @@ func TestFinishUndispatchedRetryProbeRecordsTheProbeFailureInTheVibeLog(t *testi
 	}
 	if !strings.Contains(string(contents), "operation not permitted") {
 		t.Fatalf("the probe failure was not recorded: %s", contents)
+	}
+}
+
+func cancelledContext() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return ctx
+}
+
+// Verifies the busy retry stops with the caller's context error when the caller cancelled, and
+// with the last busy error when only the retry window ran out.
+func TestFinishBusyRetryStopsWithTheRightError(t *testing.T) {
+	busy := errors.New("busy")
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	deps := connectionRetryDeps{retryTimeout: time.Hour}
+
+	cases := []struct {
+		name         string
+		ctx          context.Context
+		retryContext context.Context
+		startedAt    time.Time
+		want         error
+	}{
+		{name: "window elapsed after caller cancelled", ctx: cancelledContext(), retryContext: context.Background(), startedAt: time.Now().Add(-2 * time.Hour), want: context.Canceled},
+		{name: "retry context ended after caller cancelled", ctx: cancelledContext(), retryContext: cancelledContext(), startedAt: time.Now(), want: context.Canceled},
+		{name: "retry context ended on its own", ctx: context.Background(), retryContext: cancelledContext(), startedAt: time.Now(), want: busy},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			finished, _, err := finishBusyRetry(testCase.ctx, testCase.retryContext, testCase.startedAt, ticker, unityipc.UnitySendOutcome{}, busy, deps)
+			if !finished || !errors.Is(err, testCase.want) {
+				t.Fatalf("finished=%v err=%v, want finished with %v", finished, err, testCase.want)
+			}
+		})
+	}
+}
+
+// Verifies a transport error right after a busy answer reports the busy answer, unless the caller
+// cancelled, in which case the cancellation wins.
+func TestFinishNonRetryableConnectionAttemptPrefersBusyOverTransportError(t *testing.T) {
+	busy := serverBusyRPCError(t)
+	current := sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true}, err: io.ErrUnexpectedEOF}
+	last := sendAttempt{err: busy}
+
+	_, err := finishNonRetryableConnectionAttempt(context.Background(), current, last, 0, nil)
+	if !errors.Is(err, busy) {
+		t.Fatalf("err = %v, want the earlier busy answer", err)
+	}
+
+	_, err = finishNonRetryableConnectionAttempt(cancelledContext(), current, last, 0, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// Verifies the unity-alive retry reports the caller's cancellation when its retry context ends
+// because the caller cancelled, and Unity-not-responding otherwise.
+func TestFinishUnityAliveRetryWaitWhenRetryContextEnds(t *testing.T) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	deps := connectionRetryDeps{retryTimeout: time.Hour}
+	connection := unityipc.Connection{ProjectRoot: t.TempDir()}
+	dialErr := errors.New("dial refused")
+
+	finished, _, err := finishUnityAliveRetryWait(cancelledContext(), cancelledContext(), time.Now(), ticker, connection, unityipc.UnitySendOutcome{}, dialErr, deps)
+	if !finished || !errors.Is(err, context.Canceled) {
+		t.Fatalf("finished=%v err=%v, want context.Canceled", finished, err)
+	}
+
+	finished, _, err = finishUnityAliveRetryWait(context.Background(), cancelledContext(), time.Now(), ticker, connection, unityipc.UnitySendOutcome{}, dialErr, deps)
+	var notResponding clierrors.UnityServerNotRespondingError
+	if !finished || !errors.As(err, &notResponding) {
+		t.Fatalf("finished=%v err=%v, want UnityServerNotRespondingError", finished, err)
 	}
 }
