@@ -185,6 +185,11 @@ func assertCurrentCompileResult(t *testing.T, result compileExecutionResult) {
 	if string(result.result) != currentCompileResult {
 		t.Fatalf("expected the current compile's result, got: %s", result.result)
 	}
+	// Why 1: the current compile's result is a failed compile, and a caller must not go on as if
+	// it had succeeded.
+	if result.exitCode != 1 {
+		t.Fatalf("expected the failed current compile to exit 1, got: %d", result.exitCode)
+	}
 }
 
 func assertPendingRecordCleared(t *testing.T, projectRoot string) {
