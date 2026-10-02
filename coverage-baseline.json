@@ -2,10 +2,10 @@
   "go": {
     "exclude": ["/cmd/", "/common/clitest"],
     "modules": {
-      "common": 75.0,
-      "dispatcher": 79.6,
-      "project-runner": 84.3,
-      "release-automation": 77.0
+      "common": 94.8,
+      "dispatcher": 94.2,
+      "project-runner": 95.2,
+      "release-automation": 96.4
     }
   },
   "csharp": {
