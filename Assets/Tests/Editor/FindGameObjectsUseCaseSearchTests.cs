@@ -61,23 +61,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a tag filter drops objects whose tag differs, and keeps those whose tag matches.
+        /// Verifies a tag filter drops an object whose tag differs, and keeps it when the tag matches.
         /// </summary>
         [Test]
-        public void ExecuteAsync_WithATagThatDoesNotMatch_ExcludesTheObject()
+        public void ExecuteAsync_WithATagFilter_KeepsOnlyTheMatchingTag()
         {
+            // Built-in tags keep the TagManager untouched; a tagged child gets past the Untagged shortcut.
+            _root.transform.Find(ChildName).gameObject.tag = "EditorOnly";
+
             FindGameObjectsResponse mismatch = Execute(new FindGameObjectsSchema
             {
                 NamePattern = ChildName,
-                Tag = "EditorOnly"
+                Tag = "MainCamera"
             });
             FindGameObjectsResponse match = Execute(new FindGameObjectsSchema
             {
                 NamePattern = ChildName,
-                Tag = "Untagged"
+                Tag = "EditorOnly"
             });
 
-            Assert.That(mismatch.Results, Is.Empty);
+            Assert.That(mismatch.Results.Where(result => result.Name == ChildName), Is.Empty);
             Assert.That(match.Results.Select(result => result.Name).ToArray(), Is.EqualTo(new[] { ChildName }));
         }
 
