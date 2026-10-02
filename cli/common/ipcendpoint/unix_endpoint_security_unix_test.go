@@ -69,7 +69,16 @@ func TestValidateChecksTheLiveEndpointDirectory(t *testing.T) {
 	if err != nil || parent.OwnerUserID != 0 || parent.Permissions&unixStickyBit == 0 {
 		t.Skipf("%s is not a root-owned sticky directory on this host: %#v (err=%v)", unixSocketParent, parent, err)
 	}
-	endpointDirectory := t.TempDir()
+	// The endpoint directory sits directly under the inspected parent, the way real endpoints do.
+	endpointDirectory, err := os.MkdirTemp(unixSocketParent, "uloop-test-")
+	if err != nil {
+		t.Skipf("cannot create a directory under %s on this host: %v", unixSocketParent, err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(endpointDirectory); err != nil {
+			t.Errorf("remove directory: %v", err)
+		}
+	})
 	if err := os.Chmod(endpointDirectory, 0o700); err != nil {
 		t.Fatalf("set private mode: %v", err)
 	}

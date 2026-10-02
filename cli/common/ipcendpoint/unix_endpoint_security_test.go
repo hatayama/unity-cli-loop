@@ -131,6 +131,9 @@ func TestValidateUnixEndpointPathsReportsEachFailingStep(t *testing.T) {
 		{"parent stat error", func(r *erroringUnixMetadataReader) {
 			r.statErrors[testUnixParentPath] = inspectErr
 		}, "inspect resolved Unix endpoint parent: inspect failed"},
+		{"resolved parent not a directory", func(r *erroringUnixMetadataReader) {
+			r.follow[testUnixParentPath] = unixFileMetadata{Kind: unixFileKindOther, OwnerUserID: 0, Permissions: 0o1777}
+		}, "resolved Unix endpoint parent /tmp must be a root-owned sticky directory"},
 		{"parent not root owned", func(r *erroringUnixMetadataReader) {
 			r.follow[testUnixParentPath] = unixFileMetadata{Kind: unixFileKindDirectory, OwnerUserID: testEffectiveUserID, Permissions: 0o1777}
 		}, "resolved Unix endpoint parent /tmp must be a root-owned sticky directory"},
