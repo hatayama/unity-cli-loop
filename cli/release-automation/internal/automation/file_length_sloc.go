@@ -70,8 +70,13 @@ func (s *slocScanner) scanCode(stopOnUnmatchedBrace bool) {
 		if s.tryComment() {
 			continue
 		}
-		if stopOnUnmatchedBrace && s.handleInterpolationBrace(current, &braceDepth) {
-			return
+		// A brace inside a hole is consumed whole and the scan continues, so the character after it is read
+		// like any other instead of being taken as plain code.
+		if stopOnUnmatchedBrace && isBrace(current) {
+			if s.consumeInterpolationBrace(current, &braceDepth) {
+				return
+			}
+			continue
 		}
 		if s.tryString() {
 			continue
@@ -81,10 +86,9 @@ func (s *slocScanner) scanCode(stopOnUnmatchedBrace bool) {
 	}
 }
 
-func (s *slocScanner) handleInterpolationBrace(current rune, braceDepth *int) bool {
-	if current != '{' && current != '}' {
-		return false
-	}
+// consumeInterpolationBrace consumes a brace inside an interpolation hole and reports whether it is the
+// unmatched closing brace that ends the hole.
+func (s *slocScanner) consumeInterpolationBrace(current rune, braceDepth *int) bool {
 	s.markCode()
 	s.nextRune()
 	if current == '{' {
@@ -397,6 +401,10 @@ func (s *slocScanner) hasPrefix(prefix string) bool {
 		offset += width
 	}
 	return true
+}
+
+func isBrace(value rune) bool {
+	return value == '{' || value == '}'
 }
 
 func isNewline(value rune) bool {
