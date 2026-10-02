@@ -86,6 +86,29 @@ internal static class MethodTransformDecider
                 addedMemberAccess);
         }
 
+        return DecideWholeBodyTransform(
+            semanticModel,
+            methodSymbol,
+            typeSymbol,
+            bodyNode,
+            addedMemberAccess,
+            closureInaccessible,
+            asyncIteratorInaccessible,
+            eventAccessorsRequired);
+    }
+
+    // Async and iterator state machines, event accessors, getters, and added methods JIT the whole
+    // shim body normally, so every inaccessible access in it goes through an accessor.
+    private static MethodTransformDecision DecideWholeBodyTransform(
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol,
+        SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess,
+        bool closureInaccessible,
+        bool asyncIteratorInaccessible,
+        bool eventAccessorsRequired)
+    {
         // Condition (a): only the private-access skip reasons are eligible for accessor rewrite.
         HotReloadWorkerReasonCode? rescuableSkipCode =
             BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
