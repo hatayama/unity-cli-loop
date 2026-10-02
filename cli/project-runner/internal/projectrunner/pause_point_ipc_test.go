@@ -1,0 +1,48 @@
+package projectrunner
+
+import (
+	"context"
+	"strings"
+	"testing"
+)
+
+// Verifies the Debug switch posts set-code-optimization-debug to Unity and reports Unity's refusal.
+func TestSendSetCodeOptimizationDebugFromUnity(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		server := startFakeUnityResultServer(t, t.TempDir(), setCodeOptimizationDebugCommandName, `{"Success":true}`)
+		if err := sendSetCodeOptimizationDebugFromUnity(context.Background(), server.connection); err != nil {
+			t.Fatalf("switch failed: %v", err)
+		}
+		if request := server.receivedRequest(t); len(request) != 0 {
+			t.Fatalf("switch must send no params: %#v", request)
+		}
+	})
+	t.Run("Unity error", func(t *testing.T) {
+		server := startFakeUnityServer(t, t.TempDir(), setCodeOptimizationDebugCommandName, testUnityRPCFailureResponse)
+		if err := sendSetCodeOptimizationDebugFromUnity(context.Background(), server.connection); err == nil || !strings.Contains(err.Error(), "tool exploded in Unity") {
+			t.Fatalf("expected the Unity error, got %v", err)
+		}
+	})
+}
+
+// Verifies status queries surface Unity errors and undecodable results instead of an empty status.
+func TestPausePointStatusQueriesReportFailures(t *testing.T) {
+	t.Run("status undecodable", func(t *testing.T) {
+		server := startFakeUnityResultServer(t, t.TempDir(), pausePointStatusCommandName, `[1]`)
+		if _, err := queryPausePointStatusFromUnity(context.Background(), server.connection, "jump"); err == nil || !strings.Contains(err.Error(), "cannot unmarshal") {
+			t.Fatalf("expected a decode error, got %v", err)
+		}
+	})
+	t.Run("list Unity error", func(t *testing.T) {
+		server := startFakeUnityServer(t, t.TempDir(), pausePointStatusCommandName, testUnityRPCFailureResponse)
+		if _, err := queryPausePointStatusListFromUnity(context.Background(), server.connection); err == nil || !strings.Contains(err.Error(), "tool exploded in Unity") {
+			t.Fatalf("expected the Unity error, got %v", err)
+		}
+	})
+	t.Run("list undecodable", func(t *testing.T) {
+		server := startFakeUnityResultServer(t, t.TempDir(), pausePointStatusCommandName, `"text"`)
+		if _, err := queryPausePointStatusListFromUnity(context.Background(), server.connection); err == nil || !strings.Contains(err.Error(), "cannot unmarshal") {
+			t.Fatalf("expected a decode error, got %v", err)
+		}
+	})
+}

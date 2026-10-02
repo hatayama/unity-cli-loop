@@ -986,3 +986,100 @@ func TestRunWaitForPausePointCommandReportsResumeSkipForAlreadyHitMarker(t *test
 		t.Fatalf("Skipped mismatch: %#v", resumeResult)
 	}
 }
+
+// Verifies the remaining resume outcomes: default messages for Success=false without text, a
+// refused Play, and a completed resume.
+func TestResumePlayModeForPausePointFromUnityRemainingBranches(t *testing.T) {
+	originalSend := sendControlPlayModeForPausePoint
+	t.Cleanup(func() { sendControlPlayModeForPausePoint = originalSend })
+
+	t.Run("Status Success=false without message", func(t *testing.T) {
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModeFixed(controlPlayModeToolResponse{}, nil),
+			pausePointResumePlayResult{Error: "control-play-mode Status returned Success=false"}, []string{"Status"})
+	})
+	t.Run("Play Success=false with message", func(t *testing.T) {
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModePlayResponse(controlPlayModeToolResponse{Message: "play denied"}),
+			pausePointResumePlayResult{WasPaused: true, Error: "play denied"}, []string{"Status", "Play"})
+	})
+	t.Run("Play Success=false without message", func(t *testing.T) {
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModePlayResponse(controlPlayModeToolResponse{}),
+			pausePointResumePlayResult{WasPaused: true, Error: "control-play-mode Play returned Success=false"}, []string{"Status", "Play"})
+	})
+	t.Run("Play succeeds", func(t *testing.T) {
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModePlayResponse(controlPlayModeToolResponse{Success: true}),
+			pausePointResumePlayResult{WasPaused: true, Resumed: true}, []string{"Status", "Play"})
+	})
+}
+
+func stubControlPlayModePlayResponse(
+	playResponse controlPlayModeToolResponse,
+) func(context.Context, unityipc.Connection, string) (controlPlayModeToolResponse, error) {
+	return func(_ context.Context, _ unityipc.Connection, action string) (controlPlayModeToolResponse, error) {
+		if action == "Status" {
+			return controlPlayModeToolResponse{Success: true, IsPaused: true}, nil
+		}
+		return playResponse, nil
+	}
+}
+
+// Verifies a failed re-pause is recorded on the resume result instead of claiming PlayMode was paused again.
+func TestRepausePlayModeAfterAbandonedWaitRecordsFailures(t *testing.T) {
+	originalSend := sendControlPlayModeForPausePoint
+	t.Cleanup(func() { sendControlPlayModeForPausePoint = originalSend })
+	resumed := pausePointResumePlayResult{WasPaused: true, Resumed: true}
+
+	cases := []struct {
+		name string
+		stub func(context.Context, unityipc.Connection, string) (controlPlayModeToolResponse, error)
+		want string
+	}{
+		{name: "transport failure", stub: stubControlPlayModeStatusError("pause boom"), want: "control-play-mode Pause failed: pause boom"},
+		{name: "Success=false with message", stub: stubControlPlayModeFixed(controlPlayModeToolResponse{Message: "pause denied"}, nil), want: "pause denied"},
+		{name: "Success=false without message", stub: stubControlPlayModeFixed(controlPlayModeToolResponse{}, nil), want: "control-play-mode Pause returned Success=false"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			sendControlPlayModeForPausePoint = testCase.stub
+
+			result := repausePlayModeAfterAbandonedWait(context.Background(), unityipc.Connection{}, resumed)
+
+			if result.Repaused || result.RepauseError != testCase.want {
+				t.Fatalf("unexpected result: %#v", result)
+			}
+			if !result.WasPaused || !result.Resumed {
+				t.Fatalf("resume fields must be preserved: %#v", result)
+			}
+		})
+	}
+}
+
+// Verifies the control-play-mode sender posts the action to Unity and decodes the response,
+// and surfaces transport and decode failures.
+func TestSendControlPlayModeForPausePointFromUnity(t *testing.T) {
+	t.Run("decodes response", func(t *testing.T) {
+		server := startFakeUnityResultServer(t, t.TempDir(), pausePointResumePlayCommandName, `{"Success":true,"IsPaused":true,"Message":"status"}`)
+
+		response, err := sendControlPlayModeForPausePointFromUnity(context.Background(), server.connection, "Status")
+		if err != nil {
+			t.Fatalf("send failed: %v", err)
+		}
+		if request := server.receivedRequest(t); request["Action"] != "Status" {
+			t.Fatalf("unexpected request: %#v", request)
+		}
+		if !response.Success || !response.IsPaused || response.Message != "status" {
+			t.Fatalf("unexpected response: %#v", response)
+		}
+	})
+	t.Run("Unity error", func(t *testing.T) {
+		server := startFakeUnityServer(t, t.TempDir(), pausePointResumePlayCommandName, testUnityRPCFailureResponse)
+		if _, err := sendControlPlayModeForPausePointFromUnity(context.Background(), server.connection, "Play"); err == nil || !strings.Contains(err.Error(), "tool exploded in Unity") {
+			t.Fatalf("expected the Unity error, got %v", err)
+		}
+	})
+	t.Run("undecodable result", func(t *testing.T) {
+		server := startFakeUnityResultServer(t, t.TempDir(), pausePointResumePlayCommandName, `"text"`)
+		if _, err := sendControlPlayModeForPausePointFromUnity(context.Background(), server.connection, "Play"); err == nil || !strings.Contains(err.Error(), "cannot unmarshal") {
+			t.Fatalf("expected a decode error, got %v", err)
+		}
+	})
+}
