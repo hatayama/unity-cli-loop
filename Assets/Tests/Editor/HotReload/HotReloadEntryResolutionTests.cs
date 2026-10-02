@@ -291,6 +291,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.FailureOutcomes[1].Reason, Does.Contain(missingKey));
         }
 
+        /// <summary>
+        /// What: a transplant entry whose shim type failed to bind its accessors fails instead of
+        /// resolving, because a transplanted body's closures call those accessors and would hit an
+        /// unbound delegate once the patch is live.
+        /// </summary>
+        [Test]
+        public void ResolveEntries_WhenATransplantShimTypeFailedToBind_FailsTheEntry()
+        {
+            const string bindFailureReason = "Accessor bind failed for the shim type.";
+            TransformWorkerEntryDto transplant = BuildExistingMethodEntry(
+                nameof(HotReloadCoreFixture.StaticPing),
+                new string[0],
+                "StaticPing__shim0");
+            transplant.patchKind = "transplant";
+            TransformWorkerEntryDto[] entries = { transplant };
+
+            HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
+                TestAssemblyHome,
+                FileHomeResolver,
+                FilePath,
+                ShimAssembly,
+                entries,
+                new Dictionary<string, string> { { ShimTypeName, bindFailureReason } },
+                new HotReloadAddedCalleeIndex(entries));
+
+            Assert.That(result.AllResolved, Is.False);
+            Assert.That(result.ResolvedEntries, Is.Empty);
+            Assert.That(result.FailureOutcomes, Has.Count.EqualTo(1));
+            Assert.That(result.FailureOutcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            Assert.That(result.FailureOutcomes[0].Reason, Is.EqualTo(bindFailureReason));
+        }
+
         private static string ResolveProjectRoot()
         {
             return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));

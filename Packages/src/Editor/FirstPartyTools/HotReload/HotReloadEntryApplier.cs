@@ -199,10 +199,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
         /// <summary>
         /// Invokes each shim type's binder (emitted when the type carries at least one accessor
-        /// delegate) once, before any patch is applied, so no delegation shim or added-method
-        /// accessor rewrite can run with unbound accessor delegates. Returns bind failures keyed
-        /// by shim type name; every delegation entry and added-method entry in a failed type
-        /// becomes Failed instead of being patched or registered.
+        /// delegate) once, before any patch is applied, so no shim body or closure that calls an
+        /// accessor can run with unbound accessor delegates. Returns bind failures keyed
+        /// by shim type name; every entry in a failed type becomes Failed instead of being
+        /// patched or registered.
         /// Internal so tests can pin the failure contract directly — an end-to-end bind failure
         /// cannot be fabricated once shim compilation has succeeded against the same assembly.
         /// </summary>
