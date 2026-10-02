@@ -60,13 +60,19 @@ func TestRunReportsAPlanThatCannotBeBuilt(t *testing.T) {
 	}
 }
 
-// Verifies a run on a project Unity never built reports the missing build before anything else.
+// Verifies a run on a project Unity never built reports the missing build before taking the project
+// lock, so it leaves no Library directory behind in the unbuilt project.
 func TestRunReportsAProjectWithoutABuild(t *testing.T) {
-	_, err := Run(context.Background(), Options{ProjectRoot: t.TempDir()})
+	projectRoot := t.TempDir()
+
+	_, err := Run(context.Background(), Options{ProjectRoot: projectRoot})
 
 	var required UnityBuildRequiredError
 	if !errors.As(err, &required) {
 		t.Fatalf("err = %v, want UnityBuildRequiredError", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(projectRoot, libraryDirectoryName)); !os.IsNotExist(statErr) {
+		t.Fatalf("the unbuilt project must not get a %s directory (stat error %v)", libraryDirectoryName, statErr)
 	}
 }
 

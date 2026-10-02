@@ -30,7 +30,8 @@ func TestResolveEditorCompilerPathsRejectsEditorWithoutCompiler(t *testing.T) {
 func TestResolveEditorCompilerPathsScansForNestedLayouts(t *testing.T) {
 	t.Run("within the depth limit", func(t *testing.T) {
 		contentsPath, executablePath := newMacEditorContents(t)
-		scriptingRootPath := filepath.Join(contentsPath, "Frameworks", "Scripting")
+		// Why exactly the depth limit: a layout any shallower would still be found with a lower limit.
+		scriptingRootPath := filepath.Join(contentsPath, "a", "b", "c", "d")
 		writeCompilerFiles(t, filepath.Join(scriptingRootPath, dotNetSdkRoslynDirectoryName), "{}")
 		writeSharedRuntime(t, filepath.Join(scriptingRootPath, netCoreRuntimeDirectoryName), "6.0.21")
 

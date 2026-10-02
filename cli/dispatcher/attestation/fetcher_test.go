@@ -18,19 +18,33 @@ func useGithubAPIBase(t *testing.T, baseURL string) {
 	t.Cleanup(func() { setGithubAPIBase(original) })
 }
 
-// serveTagRefs answers each tag-ref request with the next body in order.
-func serveTagRefs(t *testing.T, bodies ...string) *httptest.Server {
+// tagRefResponse is one expected tag-ref request path and the body it is answered with.
+type tagRefResponse struct {
+	path string
+	body string
+}
+
+// serveTagRefs answers each tag-ref request with the next response in order, after checking the
+// request asks for the expected API path with the GitHub JSON headers.
+func serveTagRefs(t *testing.T, responses ...tagRefResponse) *httptest.Server {
 	t.Helper()
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if calls >= len(bodies) {
-			t.Errorf("unexpected extra call to %s", r.URL.Path)
+		if calls >= len(responses) {
+			t.Errorf("unexpected extra call to %s", r.URL.EscapedPath())
 			http.Error(w, "unexpected", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintln(w, bodies[calls])
+		expected := responses[calls]
 		calls++
+		if r.URL.EscapedPath() != expected.path {
+			t.Errorf("request %d path = %q, want %q", calls, r.URL.EscapedPath(), expected.path)
+		}
+		if r.Header.Get("Accept") != acceptHeaderGitHubJSON || r.Header.Get("X-GitHub-Api-Version") != apiVersionHeaderValue {
+			t.Errorf("request %d headers: Accept=%q X-GitHub-Api-Version=%q", calls, r.Header.Get("Accept"), r.Header.Get("X-GitHub-Api-Version"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintln(w, expected.body)
 	}))
 	t.Cleanup(server.Close)
 	useGithubAPIBase(t, server.URL)
@@ -92,29 +106,35 @@ func TestFetchBundleFailsClosedOnTransportErrors(t *testing.T) {
 	})
 }
 
+// tagRefPath is the git-ref API path for the tag the tests resolve; the tag holds a "/" so a
+// missing path escape shows up as a different path.
+const tagRefPath = "/repos/owner/repo/git/ref/tags/release%2Fv3.1.0"
+
 // Verifies tag resolution rejects a ref that does not end at a commit, and a commit SHA that is
 // not 40 hex characters.
 func TestFetchTagCommitSHARejectsUnexpectedRefs(t *testing.T) {
 	t.Run("tree object", func(t *testing.T) {
-		serveTagRefs(t, `{"object":{"sha":"1eb1ebb9841b1bcb8fc7dec3fa282568a1c31a4f","type":"tree"}}`)
+		serveTagRefs(t, tagRefResponse{path: tagRefPath, body: `{"object":{"sha":"1eb1ebb9841b1bcb8fc7dec3fa282568a1c31a4f","type":"tree"}}`})
 
-		_, err := FetchTagCommitSHA(context.Background(), "owner/repo", "dispatcher-v3.1.0")
+		_, err := FetchTagCommitSHA(context.Background(), "owner/repo", "release/v3.1.0")
 		if !errors.Is(err, ErrTagRefFetch) || !strings.Contains(err.Error(), `unexpected object type "tree"`) {
 			t.Fatalf("err = %v", err)
 		}
 	})
 	t.Run("short SHA", func(t *testing.T) {
-		serveTagRefs(t, `{"object":{"sha":"1eb1ebb","type":"commit"}}`)
+		serveTagRefs(t, tagRefResponse{path: tagRefPath, body: `{"object":{"sha":"1eb1ebb","type":"commit"}}`})
 
-		_, err := FetchTagCommitSHA(context.Background(), "owner/repo", "dispatcher-v3.1.0")
+		_, err := FetchTagCommitSHA(context.Background(), "owner/repo", "release/v3.1.0")
 		if !errors.Is(err, ErrTagRefFetch) || !strings.Contains(err.Error(), `bad commit SHA "1eb1ebb"`) {
 			t.Fatalf("err = %v", err)
 		}
 	})
 	t.Run("annotated tag lookup fails", func(t *testing.T) {
-		serveTagRefs(t, `{"object":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","type":"tag"}}`, `not json`)
+		serveTagRefs(t,
+			tagRefResponse{path: tagRefPath, body: `{"object":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","type":"tag"}}`},
+			tagRefResponse{path: "/repos/owner/repo/git/tags/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", body: `not json`})
 
-		_, err := FetchTagCommitSHA(context.Background(), "owner/repo", "dispatcher-v3.1.0")
+		_, err := FetchTagCommitSHA(context.Background(), "owner/repo", "release/v3.1.0")
 		if !errors.Is(err, ErrTagRefFetch) || !strings.Contains(err.Error(), "decode payload") {
 			t.Fatalf("err = %v", err)
 		}

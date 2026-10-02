@@ -26,6 +26,8 @@ func TestVerifyRejectsIncompleteOptionsAndBadDigests(t *testing.T) {
 		{name: "missing digest", mutate: func(o *VerifyOptions) { o.AssetDigest = "" }, wantErr: "AssetDigest required"},
 		{name: "missing bundle", mutate: func(o *VerifyOptions) { o.BundleData = nil }, wantErr: "BundleData required"},
 		{name: "bad commit", mutate: func(o *VerifyOptions) { o.ExpectedCommitSHA = "abc" }, wantErr: "ExpectedCommitSHA must be 40-char hex"},
+		{name: "missing repository", mutate: func(o *VerifyOptions) { o.Identity.Repository = "" }, wantErr: "at least one Ref required"},
+		{name: "missing workflow path", mutate: func(o *VerifyOptions) { o.Identity.WorkflowPath = "" }, wantErr: "at least one Ref required"},
 		{name: "missing refs", mutate: func(o *VerifyOptions) { o.Identity.Refs = nil }, wantErr: "at least one Ref required"},
 		{name: "non-hex digest", mutate: func(o *VerifyOptions) { o.AssetDigest = "zz" }, wantErr: "asset digest must be hex sha256"},
 		{name: "short digest", mutate: func(o *VerifyOptions) { o.AssetDigest = "abcd" }, wantErr: "asset digest must be 32 bytes (sha256), got 2"},
