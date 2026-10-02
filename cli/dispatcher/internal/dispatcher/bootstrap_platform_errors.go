@@ -13,7 +13,7 @@ func unsupportedPlatformError(message string, context clierrors.ErrorContext) (c
 			message,
 			context,
 			[]string{
-				"Run `uloop update` on macOS or Windows.",
+				"Run `uloop update` on macOS, Linux, or Windows.",
 				"Install the latest uloop dispatcher manually on this platform.",
 			}), true
 	case installUnsupportedOSMessage:
@@ -21,7 +21,7 @@ func unsupportedPlatformError(message string, context clierrors.ErrorContext) (c
 			message,
 			context,
 			[]string{
-				"Run `uloop install` on macOS or Windows.",
+				"Run `uloop install` on macOS, Linux, or Windows.",
 				"Use the platform-specific installer for this system.",
 			}), true
 	case uninstallUnsupportedOSMessage:
@@ -29,7 +29,7 @@ func unsupportedPlatformError(message string, context clierrors.ErrorContext) (c
 			message,
 			context,
 			[]string{
-				"Run `uloop uninstall` on macOS or Windows.",
+				"Run `uloop uninstall` on macOS, Linux, or Windows.",
 				"Remove the uloop dispatcher binary manually on this platform.",
 			}), true
 	default:
