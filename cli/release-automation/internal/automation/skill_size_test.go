@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -128,4 +129,32 @@ func TestRunSkillSizeCheckPassesWhenAllSkillsFit(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d (stderr: %s)", exitCode, stderr.String())
 	}
+}
+
+// Verifies a skill root that is a file, and a skill root whose parent is a file, fail the scan instead of being skipped as absent.
+func TestScanSkillFileSizesRejectsUnusableSkillRoots(t *testing.T) {
+	t.Run("root is a file", func(t *testing.T) {
+		root := t.TempDir()
+		writeSkillFile(t, root, ".claude/skills", 1)
+
+		_, err := ScanSkillFileSizes(root, MaxSkillFileBytes)
+
+		if err == nil || !strings.Contains(err.Error(), "skill root .claude/skills is not a directory") {
+			t.Fatalf("expected a not-a-directory error, got %v", err)
+		}
+	})
+	t.Run("parent is a file", func(t *testing.T) {
+		// Windows reports a path through a file as not found, which the scan rightly treats as an absent root.
+		if runtime.GOOS == "windows" {
+			t.Skip("a path through a file is reported as not found on Windows")
+		}
+		root := t.TempDir()
+		writeSkillFile(t, root, ".claude", 1)
+
+		_, err := ScanSkillFileSizes(root, MaxSkillFileBytes)
+
+		if err == nil || !strings.Contains(err.Error(), "stat ") {
+			t.Fatalf("expected the stat error, got %v", err)
+		}
+	})
 }
