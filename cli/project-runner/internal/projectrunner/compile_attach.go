@@ -83,6 +83,9 @@ func tryAttachToPendingCompile(
 	// stored only after that request finishes — so a result is definitive even when
 	// the editor is busy with unrelated work.
 	if status.HasResult && len(status.Result) > 0 {
+		if reattach == compileReattachRequiresCurrentSources && !status.Ready {
+			return attachWaitForPendingCompile(ctx, connection, record, params, reattach, waitTimeout, stderr, deps)
+		}
 		if compileForceRecompileEnabled(params) || reattach == compileReattachRequiresCurrentSources {
 			clearCompilePendingRecord(connection.ProjectRoot)
 			return false, compileExecutionResult{}
@@ -172,10 +175,11 @@ func attachWaitForPendingCompile(
 	waitStartedAt := time.Now()
 	bindCompileWaitInterimReporter(stderr, spinner, &deps)
 	result, outcome, lastStatus, waitErr := waitForAttachedCompileCompletion(ctx, compileCompletionOptions{
-		connection:   connection,
-		requestID:    record.RequestID,
-		timeout:      waitTimeout,
-		pollInterval: pollInterval,
+		connection:       connection,
+		requestID:        record.RequestID,
+		untilEditorReady: reattach == compileReattachRequiresCurrentSources,
+		timeout:          waitTimeout,
+		pollInterval:     pollInterval,
 	}, deps)
 	if waitErr != nil {
 		spinner.Stop()
@@ -254,7 +258,7 @@ func waitForAttachedCompileCompletion(
 		if err == nil {
 			lastStatus = status
 			observedStatus = true
-			if status.HasResult && len(status.Result) > 0 {
+			if status.HasResult && len(status.Result) > 0 && (status.Ready || !options.untilEditorReady) {
 				logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 				logCompileStatusPollComplete(options, startedAt, attempts, status)
 				return status.Result, attachWaitCompleted, nil, nil

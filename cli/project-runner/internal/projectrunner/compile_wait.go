@@ -48,8 +48,12 @@ type compileCompletionOptions struct {
 	connection     unityipc.Connection
 	requestID      string
 	forceRecompile bool
-	timeout        time.Duration
-	pollInterval   time.Duration
+	// untilEditorReady keeps an attach wait polling past the stored result until the Editor is
+	// Ready, because Unity stores the result before it stops compiling and would reject a new
+	// compile sent in between.
+	untilEditorReady bool
+	timeout          time.Duration
+	pollInterval     time.Duration
 }
 
 type compileStatusResponse struct {
