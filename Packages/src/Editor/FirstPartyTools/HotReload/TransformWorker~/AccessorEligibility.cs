@@ -24,12 +24,16 @@ internal static class AccessorEligibility
 {
     // addedMemberAccess is null when the body's added members are not rewritten directly (a
     // property accessor body); then every inaccessible member goes through the plan.
+    // accessRoots limits which accesses are registered (null registers the whole body). The type
+    // visibility and property increment checks still look at the whole body: a closure that
+    // captures an outer local carries its type into the display class.
     public static bool TryBuildPlan(
         SemanticModel semanticModel,
         IMethodSymbol methodSymbol,
         INamedTypeSymbol typeSymbol,
         SyntaxNode bodyNode,
         AddedMemberAccessLookup addedMemberAccess,
+        IReadOnlyList<SyntaxNode> accessRoots,
         out AccessorPlan plan,
         out WorkerReason rejectReason)
     {
@@ -53,7 +57,43 @@ internal static class AccessorEligibility
         }
 
         AccessorPlan built = new AccessorPlan();
-        foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
+        IReadOnlyList<SyntaxNode> roots = accessRoots ?? new[] { bodyNode };
+        foreach (SyntaxNode root in roots)
+        {
+            if (!TryRegisterAccesses(semanticModel, root, built, addedMemberAccess, out rejectReason))
+            {
+                return false;
+            }
+        }
+
+        foreach (AccessorEntry entry in built.Entries)
+        {
+            if (entry.TryGetVisibilityFailure(out rejectReason))
+            {
+                return false;
+            }
+        }
+
+        if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode, addedMemberAccess))
+        {
+            rejectReason =
+                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
+            return false;
+        }
+
+        plan = built;
+        rejectReason = null;
+        return true;
+    }
+
+    private static bool TryRegisterAccesses(
+        SemanticModel semanticModel,
+        SyntaxNode root,
+        AccessorPlan built,
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
+    {
+        foreach (SyntaxNode node in root.DescendantNodesAndSelf())
         {
             if (NameofRules.IsInsideNameofArgument(node))
             {
@@ -74,22 +114,6 @@ internal static class AccessorEligibility
             }
         }
 
-        foreach (AccessorEntry entry in built.Entries)
-        {
-            if (entry.TryGetVisibilityFailure(out rejectReason))
-            {
-                return false;
-            }
-        }
-
-        if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode, addedMemberAccess))
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
-            return false;
-        }
-
-        plan = built;
         rejectReason = null;
         return true;
     }

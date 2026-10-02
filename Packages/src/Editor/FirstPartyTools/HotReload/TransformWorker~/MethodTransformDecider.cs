@@ -74,6 +74,41 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Transplant();
         }
 
+        // Why only ordinary methods: the getter paths pass no declaration and keep the whole-body
+        // rewrite, and an added method is decided again over its whole body afterwards.
+        if (closureInaccessible && !asyncIteratorInaccessible && !eventAccessorsRequired && methodDeclaration != null)
+        {
+            return DecideClosureScopedTransform(
+                semanticModel,
+                methodSymbol,
+                typeSymbol,
+                bodyNode,
+                addedMemberAccess);
+        }
+
+        return DecideWholeBodyTransform(
+            semanticModel,
+            methodSymbol,
+            typeSymbol,
+            bodyNode,
+            addedMemberAccess,
+            closureInaccessible,
+            asyncIteratorInaccessible,
+            eventAccessorsRequired);
+    }
+
+    // Async and iterator state machines, event accessors, getters, and added methods JIT the whole
+    // shim body normally, so every inaccessible access in it goes through an accessor.
+    private static MethodTransformDecision DecideWholeBodyTransform(
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol,
+        SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess,
+        bool closureInaccessible,
+        bool asyncIteratorInaccessible,
+        bool eventAccessorsRequired)
+    {
         // Condition (a): only the private-access skip reasons are eligible for accessor rewrite.
         HotReloadWorkerReasonCode? rescuableSkipCode =
             BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
@@ -84,13 +119,14 @@ internal static class MethodTransformDecider
                 typeSymbol,
                 bodyNode,
                 addedMemberAccess,
+                null,
                 out AccessorPlan feasibilityPlan,
                 out WorkerReason accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
                 WorkerReason.Composite(
                     rescuableSkipCode ?? HotReloadWorkerReasonCode.EventAccessorRewriteUnavailable,
-                    asyncIteratorInaccessible ? AdviseForWholeBody(accessorRejectReason) : accessorRejectReason));
+                    accessorRejectReason));
         }
 
         // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
@@ -103,17 +139,38 @@ internal static class MethodTransformDecider
         return MethodTransformDecision.Delegation();
     }
 
-    // Why an async or iterator body drops the '+=' advice: its whole state machine is rewritten,
-    // so leaving the '+= Handler' line and moving other code out still leaves a private access the
-    // rewrite has no shape for; only wrapping the handler in a lambda lets it apply.
-    private static WorkerReason AdviseForWholeBody(WorkerReason accessorRejectReason)
+    // Only the closures JIT normally, so a transplanted body keeps its own private accesses and
+    // rewrites just the ones inside them; a method group outside stays the delegate compiled
+    // code subscribes and removes.
+    private static MethodTransformDecision DecideClosureScopedTransform(
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol,
+        SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess)
     {
-        if (accessorRejectReason?.Code != HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape)
+        if (!AccessorEligibility.TryBuildPlan(
+                semanticModel,
+                methodSymbol,
+                typeSymbol,
+                bodyNode,
+                addedMemberAccess,
+                FindClosureBodies(bodyNode),
+                out AccessorPlan closurePlan,
+                out WorkerReason accessorRejectReason))
         {
-            return accessorRejectReason;
+            return MethodTransformDecision.Skip(
+                WorkerReason.Composite(
+                    HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
+                    accessorRejectReason));
         }
 
-        return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape, accessorRejectReason.Args);
+        if (closurePlan.Entries.Count == 0)
+        {
+            return MethodTransformDecision.Transplant();
+        }
+
+        return MethodTransformDecision.TransplantWithClosureAccessors();
     }
 
     // Null when the body needs accessors only for its event uses: there is no skip to rescue.
@@ -363,6 +420,7 @@ internal static class MethodTransformDecider
                 typeSymbol,
                 methodBodyNode,
                 addedMemberAccess,
+                null,
                 out AccessorPlan feasibilityPlan,
                 out WorkerReason accessorRejectReason))
         {

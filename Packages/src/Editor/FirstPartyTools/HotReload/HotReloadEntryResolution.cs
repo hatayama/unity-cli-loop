@@ -232,8 +232,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPatchShape patchShape = entry.patchKind == HotReloadConstants.PatchKindDelegation
                 ? HotReloadPatchShape.Delegation
                 : HotReloadPatchShape.Transplant;
-            if (patchShape == HotReloadPatchShape.Delegation
-                && bindFailures.TryGetValue(entry.shimTypeName ?? string.Empty, out string bindFailureReason))
+            // Why every patch shape: a transplanted body whose closures reach private members
+            // calls the same accessors, and patching it would leave them unbound.
+            if (bindFailures.TryGetValue(entry.shimTypeName ?? string.Empty, out string bindFailureReason))
             {
                 return ResolvedEntryOutcome.Failed(
                     HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath));

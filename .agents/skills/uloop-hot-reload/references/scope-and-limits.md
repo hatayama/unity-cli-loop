@@ -372,9 +372,10 @@ compiled class already uses for another member, `E ??= h`, `nameof(E)`, `a?.E +=
 field could not have, and `Get().E += h` (the receiver would be evaluated twice).
 A handler that is a method group of an added method or of a compiled private method is
 `Skipped` too; subscribe a lambda that calls it instead (`E += x => OnValue(x);`). When a
-compiled method already holds `E += OnValue;` and compiled code removes it with `-= OnValue`,
-do not wrap that line in a lambda (the `-=` would stop removing it): leave it as it is and
-put the new lambda subscription in a method this reload adds, called from the edited method.
+compiled method already holds `E += OnValue;`, keep that line and add the lambda
+subscription beside it: the method applies, only the private accesses inside the lambda are
+rewritten, and a compiled `-= OnValue` still removes the kept handler. Do not wrap the kept
+line itself in a lambda, since the `-=` would stop removing it.
 Subscriptions live on the store's delegate, not on Unity objects: `+=` is not atomic, so
 subscribe and raise on the main thread only. A handler subscribed by an earlier reload
 keeps running the body it was subscribed with until it is removed and subscribed again
@@ -424,7 +425,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Method signature not found in the loaded assembly | Usually a stale assembly; run `uloop compile`. In-file renames and signature changes are classified as added members before reaching this point |
 | Shim compile error (e.g. the body calls a member that does not exist yet) | The error is attributed to the file it came from: that file reports `Failed` with its own compiler errors (plus the `uloop compile` hint when they indicate a missing member) and the rest of the file is `Skipped`, while the other files of the assembly are recompiled without it and applied. Bodies elsewhere that call an added method this reload left out — its shim failed to compile, or another method of its file did — are `Skipped` with a reason naming that method; its own row says which. When errors cannot be attributed to a file, every file of that assembly reports one `(shim-compile)` entry; if only one method was edited, the failure is attributed to that method's name instead |
 | Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the rejection reason or the underlying engine error |
-| Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
+| Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; the first method of that shim type reports the binder error and the rest of its file is `Skipped` — run `uloop compile` and retry |
 | The signature-change gate could not finish the run safely — the retry that skips a gated change failed, or shim-compile isolation dropped an edited caller that had covered a change | Every file of that assembly reports `Method` = `(signature-change-gate)` carrying the specific cause; nothing from those files is applied, because the reload has no retry budget left to split them — fix the failing edit or run `uloop compile`. Files of other assemblies in the same command are unaffected |
 
 A reload applies each file all-or-nothing: when any method in a file fails to compile or validate, nothing from that file is applied and patches from earlier reloads stay active. The other files of the same assembly are still applied, except a body that calls an added method the reload left out, whether its own shim failed to compile or another method of its file did — that body is `Skipped` until the method applies. The one exception to all-or-nothing is a Harmony patch-engine failure in the middle of applying a validated file; that run reports itself as partially applied and recommends 'uloop hot-reload --revert-all'. A `Failed` row in `IntroducedTypes` widens the unit from the file to the assembly: type preparation runs once per assembly before any of its method bodies is transformed, so every file sharing that assembly is left unapplied, while files in other assemblies still apply.

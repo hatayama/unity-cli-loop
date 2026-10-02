@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -99,20 +100,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an edited compiled method that keeps a compiled private method group on the right
-        /// of '+=' and adds a lambda calling a private member is skipped with advice to move the
-        /// added code into an added method, not to wrap the existing handler in a lambda that a
-        /// compiled '-=' could no longer remove.
+        /// What: an edited compiled method that keeps a compiled private method group beside a
+        /// closure calling a private member stays a transplant: only the private call inside the
+        /// closure goes through an accessor, and the method group outside it is left as written so
+        /// a compiled '-=' still removes it. Each closure form is covered because the in-closure
+        /// check must see every one of them.
+        /// </summary>
+        [TestCase(
+            "            publisher.Existing += OnValue;\n"
+            + "            publisher.Existing += value => OnValue(value + 1);",
+            "+=",
+            TestName = "Lambda beside a '+=' method group")]
+        [TestCase(
+            "            publisher.Existing -= OnValue;\n"
+            + "            publisher.Existing += value => OnValue(value + 1);",
+            "-=",
+            TestName = "Lambda beside a '-=' method group")]
+        [TestCase(
+            "            publisher.Existing += OnValue;\n"
+            + "            publisher.Existing += delegate (int value) { OnValue(value + 1); };",
+            "+=",
+            TestName = "Anonymous method beside a method group")]
+        [TestCase(
+            "            publisher.Existing += OnValue;\n"
+            + "            void Local(int value)\n            {\n                OnValue(value + 1);\n            }\n"
+            + "            publisher.Existing += Local;",
+            "+=",
+            TestName = "Block-bodied local function beside a method group")]
+        [TestCase(
+            "            publisher.Existing += OnValue;\n"
+            + "            void Local(int value) => OnValue(value + 1);\n"
+            + "            publisher.Existing += Local;",
+            "+=",
+            TestName = "Expression-bodied local function beside a method group")]
+        [TestCase(
+            "            publisher.Existing += OnValue;\n"
+            + "            void Wire()\n            {\n                publisher.Existing += value => OnValue(value + 1);\n            }\n"
+            + "            Wire();",
+            "+=",
+            TestName = "Lambda inside a local function beside a method group")]
+        [TestCase(
+            "            publisher.Existing += OnValue;\n"
+            + "            System.Action wire = () => publisher.Existing += value => OnValue(value + 1);\n"
+            + "            wire();",
+            "+=",
+            TestName = "Lambda inside a lambda beside a method group")]
+        public async Task Run_PrivateHandlerKeptBesideClosure_RewritesOnlyInsideTheClosure(
+            string body,
+            string outerOperator)
+        {
+            string subscriber = ReadOnDisk(SubscriberFileName);
+            Assert.That(subscriber, Does.Contain(WireBody), "Precondition: Wire body must exist.");
+            subscriber = subscriber.Replace(WireBody, body, StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunAsync(ReadOnDisk(PublisherFileName), subscriber);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipped(result, "Wire"), Is.Null, "Unexpected skip.\n" + FormatSkipped(result));
+            TransformWorkerEntryDto entry = FindEntry(result, "Wire");
+            Assert.That(entry, Is.Not.Null, "Missing entry.\n" + FormatSkipped(result));
+            Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+            string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+            Assert.That(slice, Does.Contain("__M_OnValue"), "The closure's private call must use an accessor.\n" + slice);
+            Assert.That(
+                Regex.IsMatch(slice, "(?<!__M_)OnValue\\("),
+                Is.False,
+                "No direct private call may remain inside the closure.\n" + slice);
+            Assert.That(
+                Regex.IsMatch(slice, Regex.Escape(outerOperator) + " (__uloopInstance\\.)?OnValue;"),
+                Is.True,
+                "The method group outside the closure must stay as written.\n" + slice);
+        }
+
+        /// <summary>
+        /// What: a closure that uses a compiled private method as a method group has no accessor
+        /// shape, so the method is still skipped for that closure.
         /// </summary>
         [Test]
-        public async Task Skip_PrivateHandlerKeptBesideAddedLambda_AdvisesAnAddedMethod()
+        public async Task Skip_PrivateMethodGroupInsideLambda_KeepsTheMethodGroupReason()
         {
             string subscriber = ReadOnDisk(SubscriberFileName);
             Assert.That(subscriber, Does.Contain(WireBody), "Precondition: Wire body must exist.");
             subscriber = subscriber.Replace(
                 WireBody,
-                "            publisher.Existing += OnValue;\n"
-                + "            publisher.Existing += value => OnValue(value + 1);",
+                "            publisher.Existing += value => { System.Action<int> handler = OnValue; handler(value); };",
                 StringComparison.Ordinal);
 
             TransformWorkerClientResult result = await RunAsync(ReadOnDisk(PublisherFileName), subscriber);
@@ -121,41 +192,106 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
             Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
             string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess),
+                reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape),
+                reason);
+        }
+
+        /// <summary>
+        /// What: an added method runs JIT-compiled as a whole, so a compiled private method group
+        /// beside a closure still refuses it, now with the added-method reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedMethodWithPrivateHandlerBesideLambda_UsesTheAddedMethodReason()
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                ReadOnDisk(PublisherFileName),
+                WithSubscriberMethod(
+                    "public void WireBoth(HotReloadAddedEventPublisher publisher)\n        {\n"
+                    + "            publisher.Existing += OnValue;\n"
+                    + "            publisher.Existing += value => OnValue(value + 1);\n        }"));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "WireBoth");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite),
+                reason);
             Assert.That(skipped.reason.detail, Is.Not.Null, reason);
             Assert.That(
                 skipped.reason.detail.code,
                 Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape),
                 reason);
-            Assert.That(reason, Does.Contain("method this reload adds"), reason);
         }
 
         /// <summary>
         /// What: in an iterator, whose whole body is rewritten when it touches a private member, a
-        /// compiled private method group on the right of '+=' keeps the lambda advice: leaving the
-        /// line and moving other code out would not make the body apply.
+        /// compiled private method group on the right of '+=' is skipped with the '+=' reason,
+        /// which offers the lambda unless compiled code removes the handler.
         /// </summary>
         [Test]
-        public async Task Skip_PrivateHandlerInIterator_KeepsTheLambdaAdvice()
+        public async Task Skip_PrivateHandlerInIterator_UsesTheSubscribeReason()
+        {
+            TransformWorkerSkippedDto skipped = await RunWireLaterAsync(
+                "            publisher.Existing += OnValue;\n");
+
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformAsyncIteratorInaccessibleAccess),
+                reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape),
+                reason);
+        }
+
+        /// <summary>
+        /// What: an iterator with both a compiled private method group on the right of '+=' and a
+        /// lambda calling a private member is still rewritten whole, so it is skipped for the
+        /// closure with the '+=' reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_PrivateHandlerBesideLambdaInIterator_UsesTheSubscribeReason()
+        {
+            TransformWorkerSkippedDto skipped = await RunWireLaterAsync(
+                "            publisher.Existing += OnValue;\n"
+                + "            publisher.Existing += value => OnValue(value + 1);\n");
+
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess),
+                reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape),
+                reason);
+        }
+
+        private static async Task<TransformWorkerSkippedDto> RunWireLaterAsync(string addedLines)
         {
             string subscriber = ReadOnDisk(SubscriberFileName);
             const string iteratorBody = "            yield return null;\n        }\n\n        public void Accept";
             Assert.That(subscriber, Does.Contain(iteratorBody), "Precondition: WireLater body must exist.");
-            subscriber = subscriber.Replace(
-                iteratorBody,
-                "            publisher.Existing += OnValue;\n" + iteratorBody,
-                StringComparison.Ordinal);
+            subscriber = subscriber.Replace(iteratorBody, addedLines + iteratorBody, StringComparison.Ordinal);
 
             TransformWorkerClientResult result = await RunAsync(ReadOnDisk(PublisherFileName), subscriber);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             TransformWorkerSkippedDto skipped = FindSkipped(result, "WireLater");
             Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
-            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
-            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
-            Assert.That(
-                skipped.reason.detail.code,
-                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape),
-                reason);
+            return skipped;
         }
 
         /// <summary>
@@ -330,6 +466,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        private static string SliceShimMethod(string shimSource, string shimMethodName)
+        {
+            // Why the '(': an added member's shim type also declares its invocation counter, whose
+            // name starts with the shim method name.
+            int nameIndex = shimSource.IndexOf(shimMethodName + "(", StringComparison.Ordinal);
+            Assert.That(nameIndex, Is.GreaterThanOrEqualTo(0), "Shim method missing: " + shimMethodName);
+            int declarationStart = shimSource.LastIndexOf("public static", nameIndex, StringComparison.Ordinal);
+            int openBrace = shimSource.IndexOf('{', nameIndex);
+            Assert.That(openBrace, Is.GreaterThan(0));
+            int depth = 0;
+            for (int index = openBrace; index < shimSource.Length; index++)
+            {
+                if (shimSource[index] == '{')
+                {
+                    depth++;
+                }
+                else if (shimSource[index] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return shimSource.Substring(declarationStart, index - declarationStart + 1);
+                    }
+                }
+            }
+
+            Assert.Fail("Unbalanced shim method: " + shimMethodName);
+            return string.Empty;
         }
 
         private static string FormatSkipped(TransformWorkerClientResult result)

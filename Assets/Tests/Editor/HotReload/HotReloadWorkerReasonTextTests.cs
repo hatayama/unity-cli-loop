@@ -708,10 +708,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape,
                 new[] { "Helper", " (such as 'a => Helper(a)')" },
                 "inaccessible method group 'Helper' on the right of '+=' has no accessor rewrite "
-                + "shape. If compiled code removes it with '-= Helper', leave this line as it is and "
-                + "move the code here that needs private access (such as a lambda you added) into a "
-                + "method this reload adds, called from here; otherwise, wrapping the method group in "
-                + "a lambda that calls it (such as 'a => Helper(a)') keeps hot reloading.");
+                + "shape. If compiled code removes it with '-= Helper', a lambda here would stay "
+                + "subscribed after that removal, so run 'uloop compile' instead; otherwise wrapping "
+                + "the method group in a lambda that calls it (such as 'a => Helper(a)') keeps hot "
+                + "reloading.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape,
                 new[] { "Helper" },
