@@ -66,11 +66,13 @@ func encodeFrame(t *testing.T, payload string) []byte {
 // Verifies that a dial failure is wrapped in ConnectionAttemptError carrying the project
 // root and endpoint, and that the request is never reported as dispatched.
 func TestSendWrapsDialFailureInConnectionAttemptError(t *testing.T) {
-	connection := Connection{
-		Endpoint:    Endpoint{Network: "bogus-network", Address: "<ENDPOINT_ADDRESS>"},
-		ProjectRoot: "<PROJECT_ROOT>",
-	}
+	endpoint := unreachableTestEndpoint()
+	connection := Connection{Endpoint: endpoint, ProjectRoot: "<PROJECT_ROOT>"}
 	client := NewClient(connection, "9.9.9")
+	_, expectedDialErr := dialEndpoint(context.Background(), endpoint)
+	if expectedDialErr == nil {
+		t.Fatalf("the test endpoint %q should not be dialable", endpoint.Address)
+	}
 
 	outcome, err := client.SendWithProgressOutcome(context.Background(), "get-version", map[string]any{}, nil)
 
@@ -78,15 +80,15 @@ func TestSendWrapsDialFailureInConnectionAttemptError(t *testing.T) {
 	if !errors.As(err, &attemptErr) {
 		t.Fatalf("expected ConnectionAttemptError, got %T: %v", err, err)
 	}
-	if attemptErr.ProjectRoot != "<PROJECT_ROOT>" || attemptErr.Endpoint != "<ENDPOINT_ADDRESS>" {
+	if attemptErr.ProjectRoot != "<PROJECT_ROOT>" || attemptErr.Endpoint != endpoint.Address {
 		t.Fatalf("connection attempt fields mismatch: %#v", attemptErr)
 	}
 	expectedMessage := "the Unity CLI Loop server is not reachable for this project: " + attemptErr.Cause.Error()
 	if err.Error() != expectedMessage {
 		t.Fatalf("message mismatch: got %q want %q", err.Error(), expectedMessage)
 	}
-	if !strings.Contains(attemptErr.Cause.Error(), "unknown network bogus-network") {
-		t.Fatalf("cause should be the dial failure: %v", attemptErr.Cause)
+	if attemptErr.Cause == nil || attemptErr.Cause.Error() != expectedDialErr.Error() {
+		t.Fatalf("cause should be the dial failure %q, got %v", expectedDialErr, attemptErr.Cause)
 	}
 	if outcome.RequestDispatched {
 		t.Fatalf("dial failure must not report a dispatched request: %#v", outcome)
@@ -330,4 +332,13 @@ func TestIsDeadlineExpiryClassifiesTimeoutErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// unreachableTestEndpoint returns an endpoint whose dial fails without opening a socket: an unknown
+// network on Unix, and a pipe name nothing listens on for Windows, whose dialer always opens a pipe.
+func unreachableTestEndpoint() Endpoint {
+	if runtime.GOOS == "windows" {
+		return Endpoint{Network: "pipe", Address: `\\.\pipe\uloop-test-unreachable-endpoint`}
+	}
+	return Endpoint{Network: "bogus-network", Address: "<ENDPOINT_ADDRESS>"}
 }
