@@ -1,6 +1,7 @@
 package tooldocs
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/tools"
@@ -86,5 +87,86 @@ func TestOptionSummaryKeepsPlainOptionDescriptions(t *testing.T) {
 
 	if summary != "How much to apply" {
 		t.Errorf("a plain option's description must be printed as written: %q", summary)
+	}
+}
+
+// Verifies the usage placeholder for each schema type and the default/values text in each description,
+// and that hidden properties are left out of the listing.
+func TestVisibleOptionHelpEntriesForToolRendersUsageAndDefaults(t *testing.T) {
+	tool := toolWithProperties("my-custom-command", map[string]tools.ToolProperty{
+		"Count":   {Type: "integer", Description: "How many", Default: 3},
+		"Ratio":   {Type: "number", Description: "Scale"},
+		"Items":   {Type: "array", Description: "Entries"},
+		"Payload": {Type: "object", Description: "Extra data"},
+		"Label":   {Type: "string", Description: "Text label", Default: ""},
+		"Mode":    {Type: "string", Description: "Mode to use", DefaultValue: float64(1), Enum: []string{"Fast", "Slow"}},
+		"Verbose": {Type: "boolean", Description: "Print more", Default: false},
+		"Secret":  {Type: "string", Hidden: true},
+	})
+
+	actual := VisibleOptionHelpEntriesForTool(tool)
+
+	expected := []OptionHelpEntry{
+		{Name: "--count", Usage: "--count <integer>", Description: "How many; default: 3"},
+		{Name: "--items", Usage: "--items <value[,value]>", Description: "Entries"},
+		{Name: "--label", Usage: "--label <value>", Description: "Text label"},
+		{Name: "--mode", Usage: "--mode <value>", Description: "Mode to use; default: Slow; values: Fast|Slow"},
+		{Name: "--payload", Usage: "--payload <json>", Description: "Extra data"},
+		{Name: "--ratio", Usage: "--ratio <number>", Description: "Scale"},
+		{Name: "--verbose", Usage: "--verbose", Description: "Print more; default: disabled"},
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("help entries mismatch:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+}
+
+// Verifies that the CLI-only --code-file and --skip-compile help rows are added when the schema lacks
+// them and that a schema-declared row is kept instead of being duplicated.
+func TestVisibleOptionHelpEntriesForToolAddsCLIOnlyRowsOnce(t *testing.T) {
+	cases := []struct {
+		name     string
+		tool     tools.ToolDefinition
+		expected []OptionHelpEntry
+	}{
+		{
+			name: "code-file added",
+			tool: toolWithProperties(executeDynamicCodeCommandName, map[string]tools.ToolProperty{}),
+			expected: []OptionHelpEntry{
+				{Name: DynamicCodeFileOptionName, Usage: DynamicCodeFileOptionUsage, Description: DynamicCodeFileOptionDescription},
+			},
+		},
+		{
+			name: "code-file already declared",
+			tool: toolWithProperties(executeDynamicCodeCommandName, map[string]tools.ToolProperty{
+				"CodeFile": {Type: "string", Description: "Schema code file"},
+			}),
+			expected: []OptionHelpEntry{
+				{Name: DynamicCodeFileOptionName, Usage: DynamicCodeFileOptionName + " <value>", Description: "Schema code file"},
+			},
+		},
+		{
+			name: "skip-compile added",
+			tool: toolWithProperties(runTestsCommandName, map[string]tools.ToolProperty{}),
+			expected: []OptionHelpEntry{
+				{Name: RunTestsSkipCompileOptionName, Usage: RunTestsSkipCompileOptionUsage, Description: RunTestsSkipCompileOptionDescription},
+			},
+		},
+		{
+			name: "skip-compile already declared",
+			tool: toolWithProperties(runTestsCommandName, map[string]tools.ToolProperty{
+				"SkipCompile": {Type: "boolean", Description: "Schema skip compile"},
+			}),
+			expected: []OptionHelpEntry{
+				{Name: RunTestsSkipCompileOptionName, Usage: RunTestsSkipCompileOptionName, Description: "Schema skip compile"},
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			actual := VisibleOptionHelpEntriesForTool(testCase.tool)
+			if !reflect.DeepEqual(actual, testCase.expected) {
+				t.Fatalf("help entries mismatch:\nactual:   %#v\nexpected: %#v", actual, testCase.expected)
+			}
+		})
 	}
 }

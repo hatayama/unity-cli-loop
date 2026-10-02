@@ -311,3 +311,189 @@ func TestEnumeratePackageSearchResultsResolvesRelativeManifestDependency(t *test
 		t.Fatalf("package results mismatch:\nactual:   %#v\nexpected: %#v", actual, expected)
 	}
 }
+
+func mkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("failed to create %s: %v", path, err)
+	}
+}
+
+// Tests that Editor folders are found down to the depth limit, sorted, and never inside excluded or Editor folders.
+func TestFindEditorFoldersHonorsDepthAndExclusions(t *testing.T) {
+	basePath := t.TempDir()
+	mkdirAll(t, filepath.Join(basePath, "Editor", "Editor"))
+	mkdirAll(t, filepath.Join(basePath, "B", "Editor"))
+	mkdirAll(t, filepath.Join(basePath, "A", "One", "Two", "Editor"))
+	mkdirAll(t, filepath.Join(basePath, "A", "One", "Two", "Three", "Editor"))
+	// A-B sorts before A/ ('-' < '/'), so a depth-first walk and the sorted result disagree.
+	mkdirAll(t, filepath.Join(basePath, "A-B", "Editor"))
+	mkdirAll(t, filepath.Join(basePath, "node_modules", "Editor"))
+	mkdirAll(t, filepath.Join(basePath, "C"))
+	if err := os.WriteFile(filepath.Join(basePath, "C", "Editor"), []byte("not a folder"), 0o644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	actual := FindEditorFolders(basePath, SkillSearchMaxDepth)
+
+	expected := []string{
+		filepath.Join(basePath, "A-B", "Editor"),
+		filepath.Join(basePath, "A", "One", "Two", "Editor"),
+		filepath.Join(basePath, "B", "Editor"),
+		filepath.Join(basePath, "Editor"),
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("editor folders mismatch:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+}
+
+// Tests that a missing base path yields an empty, non-nil folder list.
+func TestFindEditorFoldersReturnsEmptyForMissingBase(t *testing.T) {
+	actual := FindEditorFolders(filepath.Join(t.TempDir(), "missing"), SkillSearchMaxDepth)
+
+	if actual == nil || len(actual) != 0 {
+		t.Fatalf("expected an empty folder list, got %#v", actual)
+	}
+}
+
+// Tests that the package is found in PackageCache by directory name alone when no manifest lists it,
+// and that a nested Packages/src inside the cached directory is used as its root.
+func TestFindUnityCliLoopPackageFallsBackToPackageCacheDirectoryName(t *testing.T) {
+	projectRoot := t.TempDir()
+	cacheDir := filepath.Join(projectRoot, "Library", "PackageCache")
+	cachedRoot := filepath.Join(cacheDir, packageNameAlias+"@1.0.0", "Packages", "src")
+	mkdirAll(t, filepath.Join(cachedRoot, "Editor", "FirstPartyTools"))
+	mkdirAll(t, filepath.Join(cacheDir, "com.example.unrelated@1.0.0"))
+	cachedFile := filepath.Join(cacheDir, packageName+"@file")
+	if err := os.WriteFile(cachedFile, []byte("not a folder"), 0o644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	for _, searchResult := range EnumeratePackageSearchResults(projectRoot) {
+		if filepath.Clean(searchResult.Root) == filepath.Clean(cachedFile) {
+			t.Fatalf("a file in PackageCache must not be listed as a package: %#v", searchResult)
+		}
+	}
+
+	result, ok := FindUnityCliLoopPackage(projectRoot)
+
+	if !ok {
+		t.Fatal("cached package should be found")
+	}
+	if result.Identity.Name != packageNameAlias || filepath.Clean(result.Root) != filepath.Clean(cachedRoot) {
+		t.Fatalf("unexpected package result: %#v", result)
+	}
+}
+
+// Tests that two package candidates with the same priority resolve to the lexicographically smaller
+// root, even when the larger root is enumerated first.
+func TestFindUnityCliLoopPackageBreaksPriorityTiesByRoot(t *testing.T) {
+	baseRoot := t.TempDir()
+	projectRoot := filepath.Join(baseRoot, "z-project")
+	directRoot := filepath.Join(projectRoot, "Packages", "custom")
+	writeTestPackageJSON(t, directRoot, packageName)
+	mkdirAll(t, filepath.Join(directRoot, "Editor", "FirstPartyTools"))
+	externalRoot := filepath.Join(baseRoot, "a-external")
+	mkdirAll(t, filepath.Join(externalRoot, "Editor", "FirstPartyTools"))
+	writeManifest(t, projectRoot, `{"dependencies":{"`+packageName+`":"file:`+filepath.ToSlash(externalRoot)+`"}}`)
+
+	result, ok := FindUnityCliLoopPackage(projectRoot)
+
+	if !ok || filepath.Clean(result.Root) != filepath.Clean(externalRoot) {
+		t.Fatalf("expected %s, got %#v (ok=%v)", externalRoot, result, ok)
+	}
+}
+
+// Tests that a manifest entry with no name is dropped and that a package reached both directly and
+// through the manifest under the same identity is listed once.
+func TestEnumeratePackageSearchResultsDropsNamelessAndDuplicateEntries(t *testing.T) {
+	projectRoot := t.TempDir()
+	localRoot := filepath.Join(projectRoot, "Packages", "local")
+	writeTestPackageJSON(t, localRoot, "com.example.local")
+	writeManifest(t, projectRoot, `{"dependencies":{"":"file:local","com.example.local":"file:local"}}`)
+
+	actual := packageResultSummaries(EnumeratePackageSearchResults(projectRoot))
+
+	expected := []string{"com.example.local|" + filepath.Clean(localRoot)}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("package results mismatch:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+}
+
+// Tests that manifest entries sharing one local root are ordered by identity name.
+func TestEnumeratePackageSearchResultsOrdersSharedRootsByIdentity(t *testing.T) {
+	projectRoot := t.TempDir()
+	sharedRoot := filepath.Join(t.TempDir(), "shared")
+	mkdirAll(t, sharedRoot)
+	sharedValue := "file:" + filepath.ToSlash(sharedRoot)
+	writeManifest(t, projectRoot, `{"dependencies":{"com.example.zeta":"`+sharedValue+`","com.example.alpha":"`+sharedValue+`"}}`)
+
+	actual := packageResultSummaries(EnumeratePackageSearchResults(projectRoot))
+
+	expected := []string{
+		"com.example.alpha|" + filepath.Clean(sharedRoot),
+		"com.example.zeta|" + filepath.Clean(sharedRoot),
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("package results mismatch:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+}
+
+// Tests that an unparsable or mistyped manifest, or one without dependencies, yields no dependencies
+// instead of a partially decoded set.
+func TestReadManifestDependenciesReturnsEmptyForUnusableManifests(t *testing.T) {
+	for name, content := range map[string]string{
+		"invalid json":      `{"dependencies":`,
+		"null dependencies": `{"dependencies":null}`,
+		"mistyped entry":    `{"dependencies":{"com.example.local":"file:local","bad":1}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			writeManifest(t, projectRoot, content)
+
+			dependencies := readManifestDependencies(projectRoot)
+
+			if dependencies == nil || len(dependencies) != 0 {
+				t.Fatalf("expected empty dependencies, got %#v", dependencies)
+			}
+		})
+	}
+}
+
+// Tests that local dependency values that are not file:/path: references or are blank resolve to nothing.
+func TestResolveLocalDependencyPathRejectsNonLocalValues(t *testing.T) {
+	for _, value := range []string{"1.0.0", "file:", "path:   "} {
+		if resolved := resolveLocalDependencyPath(value, t.TempDir()); resolved != "" {
+			t.Errorf("resolveLocalDependencyPath(%q) = %q, want empty", value, resolved)
+		}
+	}
+}
+
+// Tests that the cache directory version suffix is stripped and a name without one is kept.
+func TestPackageIdentityNameFromCacheDir(t *testing.T) {
+	cases := map[string]string{
+		packageName + "@1.2.3": packageName,
+		packageName:            packageName,
+	}
+	for dirName, expected := range cases {
+		if actual := packageIdentityNameFromCacheDir(dirName); actual != expected {
+			t.Errorf("packageIdentityNameFromCacheDir(%q) = %q, want %q", dirName, actual, expected)
+		}
+	}
+}
+
+// Tests the package root priority order: Packages/src, the package name, its alias, other locations, then PackageCache.
+func TestUnityCliLoopPackagePriority(t *testing.T) {
+	projectRoot := t.TempDir()
+	cases := map[string]int{
+		filepath.Join(projectRoot, "Packages", "src"):                               0,
+		filepath.Join(projectRoot, "Packages", packageName):                         1,
+		filepath.Join(projectRoot, "Packages", packageNameAlias):                    2,
+		filepath.Join(t.TempDir(), "elsewhere"):                                     10,
+		filepath.Join(projectRoot, "Library", "PackageCache", packageName+"@1.0.0"): 20,
+	}
+	for packageRoot, expected := range cases {
+		if actual := unityCliLoopPackagePriority(projectRoot, packageRoot); actual != expected {
+			t.Errorf("priority(%q) = %d, want %d", packageRoot, actual, expected)
+		}
+	}
+}
