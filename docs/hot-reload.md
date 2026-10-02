@@ -415,7 +415,7 @@ Wire details:
   edited in any file of the same assembly passed to the same reload — including on a type an
   earlier reload introduced, where they are applied on the artifact that already carries it. An
   added auto-property is backed by the added-field store, so its value shares that lifetime,
-  and so is a field-like event added to a compiled class (ADR 0011). Other added events, indexers, and the property shapes listed in the skill's scope reference
+  and so is a field-like event added to a compiled, non-generic class whose declaring and delegate types are visible outside the assembly (ADR 0011; not on a struct, not with custom accessors). Other added events, indexers, and the property shapes listed in the skill's scope reference
   (set-only, virtual, explicit interface, `init`, struct host) still require `uloop compile`. Unchanged files of that assembly that
   already hold active patches are re-applied so they bind to the newest shim. Shim compile errors caused by references to
   members that are still missing are reported with that hint, and changed `const` values

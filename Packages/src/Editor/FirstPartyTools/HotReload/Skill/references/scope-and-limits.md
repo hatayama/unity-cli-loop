@@ -360,12 +360,12 @@ that the added-field store cannot hold (see below).
 Raising through a conditional receiver (`other?.E?.Invoke(x)`) and `nameof(E)` also
 stay `Skipped`.
 
-A field-like event added in this edit to a compiled class keeps its delegate in the
-added-field store, like an added field, so edited bodies in any file of the same reload
+A field-like event added in this edit to a compiled, non-generic class that is visible
+outside the assembly keeps its delegate in the added-field store, like an added field, so edited bodies in any file of the same reload
 can subscribe, unsubscribe, raise, read, and assign it (instance or static). It is listed in
 `AddedFields`, shares the added-field lifetime, and compiled code that is not patched
-cannot see it. These stay `Skipped`: a struct host (the struct-field reason), a delegate
-type not visible outside the assembly, custom `add`/`remove` accessors, a name the
+cannot see it. These stay `Skipped`: a struct host (the struct-field reason), a generic
+host or one nested in a generic type, a delegate type not visible outside the assembly, custom `add`/`remove` accessors, a name the
 compiled class already uses for another member, `E ??= h`, `nameof(E)`, `a?.E += h`, passing it by `ref`, an initializer an added
 field could not have, and `Get().E += h` (the receiver would be evaluated twice).
 A handler that is a method group of an added method or of a compiled private method is
@@ -374,10 +374,13 @@ Subscriptions live on the store's delegate, not on Unity objects: `+=` is not at
 subscribe and raise on the main thread only. A handler subscribed by an earlier reload
 keeps running the body it was subscribed with until it is removed and subscribed again
 (for a subscription made in `OnEnable`, toggle `enabled` as described under "Added Unity
-messages"). Changing the event's delegate type in a later reload drops its subscribers,
-and that reload names it in `Warnings`. Deleting the event from the source removes it
-from `AddedFields`, but its subscribers stay in the store until `--revert-all`, so adding
-it back delivers to them again.
+messages"). Changing the event's delegate type in a later reload drops its subscribers unless the
+new type can still read the old list (a variance-compatible change), and that reload names
+it in `Warnings`. The store keeps subscriptions until `--revert-all`, a compile, or a domain
+reload: an instance event's subscriptions go with the object, while a static event's outlive
+Play Mode when Domain Reload is off, as a compiled static event's do. Deleting the event from
+the source removes it from `AddedFields`, but its subscribers stay in the store until
+`--revert-all`, so adding it back delivers to them again.
 
 A `Skipped` row never undoes what an earlier reload applied to the same method: that
 patch keeps running, so the method matches neither the compiled assembly nor the

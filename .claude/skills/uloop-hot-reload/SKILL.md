@@ -63,8 +63,8 @@ changed are patched (`UnchangedTotal` counts the rest).
 ## Scope in Brief
 
 - Patched: ordinary method bodies and property getters with a body.
-- Added members: new methods, fields, field-like events of a class, and supported properties
-  apply as `Added` rows,
+- Added members: new methods, fields, and supported properties apply as `Added` rows
+  (supported field-like events of a class are listed in `AddedFields`),
   visible to edited code of the same reload within the same assembly (pass the declaring
   file and its callers together), and gone on any compile or domain reload.
 - New types: a top-level class, struct, enum, or interface declared in an edited

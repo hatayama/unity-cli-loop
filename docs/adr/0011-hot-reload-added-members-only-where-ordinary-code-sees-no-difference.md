@@ -24,10 +24,12 @@ Applying this question to the requests from the 2026-10-01 usability round:
   added-field store under the same key form as an added field. Subscribing, unsubscribing,
   raising, comparing with null, and assigning work as they do after a compile, from the
   declaring type and from other types in the same run. What differs: reflection does not see
-  the event, `+=` is not atomic (the store is main-thread only, as for added fields), and
-  subscriptions are dropped when Play Mode ends or `--revert-all` runs. Event declarations
-  with accessors, events on structs, events whose delegate type is not visible, and names that
-  clash with a compiled member stay refused.
+  the event, `+=` is not atomic (the store is main-thread only, as for added fields), and the
+  store keeps subscriptions until `--revert-all`, a compile, or a domain reload. An instance
+  event's subscriptions go with the object; a static event's outlive Play Mode when Domain
+  Reload is off, as a compiled static event's do. Event declarations with accessors, events on
+  structs or generic classes, events whose declaring or delegate type is not visible outside the
+  assembly, and names that clash with a compiled member stay refused.
 - **Not taken — forwarding an added `Awake`, `OnEnable`, `OnDisable`, or `OnDestroy`.** Unity
   calls these only on methods that exist when the object is created. Forwarding them through
   a hidden component runs them after the compiled lifecycle methods, ignores Script Execution
@@ -88,8 +90,9 @@ added event reuses it, so the event change adds no new runtime mechanism.
 ## Consequences
 
 - An added field-like event on a compiled class can be raised and subscribed to without leaving
-  Play Mode. Subscribing with a lambda or a compiled method works; subscribing with a method
-  group that names an added method stays refused.
+  Play Mode. Subscribing with a lambda or an accessible compiled method works; a private
+  handler, or one that is an added method, is subscribed through a lambda, since a method group
+  naming either stays refused.
 - An added `Awake`, `OnEnable`, `OnDisable`, or `OnDestroy` still needs a compile, as before.
   Code added to an existing compiled lifecycle method is patched as any other body edit; Unity
   does not call it again for objects that already ran it.
