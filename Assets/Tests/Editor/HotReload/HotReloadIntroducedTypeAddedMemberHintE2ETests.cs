@@ -43,10 +43,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string UnpatchableBodiesHintCore =
             "Constructors, initializers, setters, indexers, operators and event accessors cannot";
 
-        // The part of the hint that says an added event outside the added-field store cannot be
-        // subscribed to, which is the only step a reader of that failure can take.
+        // The part of the hint that sends a subscription to an added event outside the
+        // added-field store to a compile, the only step that makes that subscription bind.
         private const string StorelessEventHintCore =
-            "nor can a subscription to an added event the added-field store cannot hold";
+            "A subscription to an added event the added-field store cannot hold (custom add/remove "
+            + "accessors, or a delegate type not visible outside the assembly) needs 'uloop compile' "
+            + "wherever it is written.";
 
         private const string StorelessEventName = "AddedWithAccessors";
 

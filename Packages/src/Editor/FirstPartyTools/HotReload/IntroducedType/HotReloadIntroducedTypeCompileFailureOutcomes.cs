@@ -32,11 +32,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "and get-only properties, and only when the file that declares the addition belongs "
             + "to the same assembly and is part of this reload: passed, or unchanged since it was "
             + "last applied. Constructors, initializers, setters, indexers, operators and event "
-            + "accessors cannot, nor can a subscription to an added event the added-field store "
-            + "cannot hold (custom add/remove accessors, or a delegate type not visible outside the "
-            + "assembly). Pass that file too or move the "
-            + "call into a method, or run 'uloop compile' to make the added members compiled, then "
-            + "rerun.";
+            + "accessors cannot. Pass that file too or move the call into a method, or run "
+            + "'uloop compile' to make the added members compiled, then rerun. A subscription to an "
+            + "added event the added-field store cannot hold (custom add/remove accessors, or a "
+            + "delegate type not visible outside the assembly) needs 'uloop compile' wherever it is "
+            + "written.";
 
         // Why it points at the warning: the enum-member warning of the same run already carries
         // the cast that avoids the member, and repeating the value here would need the enum too.
