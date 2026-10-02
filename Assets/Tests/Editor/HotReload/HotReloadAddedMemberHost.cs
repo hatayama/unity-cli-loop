@@ -391,6 +391,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Compiled OnEnable / OnDisable host for the direct note that offers toggling enabled.
+    /// </summary>
+    public class HotReloadLifecycleOnEnableFixture : MonoBehaviour
+    {
+        private int _count;
+
+        private void OnEnable()
+        {
+            _count++;
+        }
+
+        private void OnDisable()
+        {
+            _count--;
+        }
+    }
+
+    /// <summary>
     /// Compiled alias-shadow host so the local-vs-global using-alias test is not a new type.
     /// </summary>
     internal class HotReloadAliasShadowFixture

@@ -178,7 +178,7 @@ internal static class ShimMethodEmitter
             return null;
         }
 
-        return string.Format(LifecycleNotes.DirectFormat, methodName);
+        return string.Format(LifecycleNotes.SelectDirectFormat(methodName), methodName);
     }
 
     internal static bool IsOneShotLifecycleMethodName(string methodName)

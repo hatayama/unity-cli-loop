@@ -552,7 +552,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The row must also say how to trigger the next call, because for
         // initialization-only methods that is the non-obvious step.
         public const string ActivePatchNeverInvokedReason =
-            "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, or run 'uloop compile' and enter Play Mode again.";
+            "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, toggle the component's `enabled` to false and back to true when it runs from OnEnable or OnDisable (for example with `uloop execute-dynamic-code`), or run 'uloop compile' and enter Play Mode again.";
 
         // Format: replacement display name for an Active row whose compiled signature was
         // replaced in a later edit. Supersedes ActivePatchNeverInvokedReason when both apply.
