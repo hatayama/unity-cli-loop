@@ -2,6 +2,7 @@ package nativepath
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -233,5 +234,103 @@ func TestCommandPathPreservesPosixRootDirectory(t *testing.T) {
 
 	if targetPath != "/uloop" {
 		t.Fatalf("target path mismatch: %s", targetPath)
+	}
+}
+
+func homeEnvironment(home string, homeErr error, values map[string]string) Environment {
+	return Environment{
+		Getenv:      func(name string) string { return values[name] },
+		UserHomeDir: func() (string, error) { return home, homeErr },
+	}
+}
+
+func TestResolveInstallDirFallsBackToOSDefault(t *testing.T) {
+	// Verifies a missing explicit and environment directory falls back to the OS default under home.
+	installDir, err := ResolveInstallDir("linux", "", homeEnvironment("/home/<USER_NAME>", nil, nil))
+	if err != nil {
+		t.Fatalf("ResolveInstallDir failed: %v", err)
+	}
+	if installDir != "/home/<USER_NAME>/.local/bin" {
+		t.Fatalf("install dir mismatch: %s", installDir)
+	}
+}
+
+func TestHomeBasedDirectoriesReportHomeLookupFailure(t *testing.T) {
+	// Verifies every home-based directory returns the home lookup error instead of a guessed path.
+	homeErr := errors.New("home lookup failed")
+	environment := homeEnvironment("", homeErr, nil)
+	if _, err := DefaultInstallDir("darwin", environment); !errors.Is(err, homeErr) {
+		t.Fatalf("DefaultInstallDir error = %v, want the home lookup error", err)
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		if _, err := CacheRoot(goos, environment); !errors.Is(err, homeErr) {
+			t.Fatalf("CacheRoot(%s) error = %v, want the home lookup error", goos, err)
+		}
+	}
+}
+
+func TestCacheRootUsesOSDefaults(t *testing.T) {
+	// Verifies the cache root defaults to the macOS caches folder, LOCALAPPDATA on Windows, and
+	// ~/.cache on Linux when XDG_CACHE_HOME is unset.
+	cases := []struct {
+		goos   string
+		values map[string]string
+		want   string
+	}{
+		{goos: "darwin", want: "/Users/<USER_NAME>/Library/Caches/uloop"},
+		{goos: "windows", values: map[string]string{LocalAppDataEnvName: `C:\Users\<USER_NAME>\AppData\Local`}, want: `C:\Users\<USER_NAME>\AppData\Local\uloop`},
+		{goos: "linux", want: "/Users/<USER_NAME>/.cache/uloop"},
+	}
+	for _, testCase := range cases {
+		cacheRoot, err := CacheRoot(testCase.goos, homeEnvironment("/Users/<USER_NAME>", nil, testCase.values))
+		if err != nil {
+			t.Fatalf("CacheRoot(%s) failed: %v", testCase.goos, err)
+		}
+		if cacheRoot != testCase.want {
+			t.Fatalf("CacheRoot(%s) = %q, want %q", testCase.goos, cacheRoot, testCase.want)
+		}
+	}
+}
+
+func TestCacheRootRejectsMissingWindowsLocalAppData(t *testing.T) {
+	// Verifies Windows cache resolution fails with its own message when LOCALAPPDATA is missing.
+	_, err := CacheRoot("windows", homeEnvironment("/unused", nil, nil))
+	if err == nil || err.Error() != "LOCALAPPDATA is required to resolve the uloop cache directory" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCommandPathUsesWindowsSeparatorAndCommandName(t *testing.T) {
+	// Verifies Windows command paths use a backslash and the Windows command name.
+	commandPath := CommandPath("windows", `C:\Tools\uloop\`, "uloop", "uloop.exe")
+	if commandPath != `C:\Tools\uloop\uloop.exe` {
+		t.Fatalf("command path mismatch: %s", commandPath)
+	}
+}
+
+func TestEnvironmentWithoutFunctionsUsesProcessDefaults(t *testing.T) {
+	// Verifies a zero Environment reads no variables and falls back to the process home directory.
+	t.Setenv(InstallDirEnvName, "/ignored/by/zero/environment")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("process home directory unavailable: %v", err)
+	}
+
+	installDir, err := ResolveInstallDir("linux", "", Environment{})
+	if err != nil {
+		t.Fatalf("ResolveInstallDir failed: %v", err)
+	}
+	if installDir != Join("linux", home, ".local", "bin") {
+		t.Fatalf("install dir = %q, want it under the process home %q", installDir, home)
+	}
+}
+
+func TestDefaultEnvironmentReadsTheProcessEnvironment(t *testing.T) {
+	// Verifies DefaultEnvironment reads variables from the current process.
+	t.Setenv(CacheDirEnvName, "/from/process/env")
+
+	cacheRoot, err := CacheRoot("linux", DefaultEnvironment())
+	if err != nil || cacheRoot != "/from/process/env" {
+		t.Fatalf("cacheRoot=%q err=%v", cacheRoot, err)
 	}
 }
