@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -131,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (FieldInfo field in EnumerateInstanceFields(source.GetType()))
             {
-                if (followOuterThis && field.Name == StateMachineOuterThisFieldName)
+                if (followOuterThis && IsOuterThisField(field, isCompilerGeneratedStateMachine))
                 {
                     outerThis = field.GetValue(source);
                     continue;
@@ -160,6 +161,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return outerThis;
+        }
+
+        // A hot-reload shim is a static method taking the instance as its receiver parameter, so
+        // its state machine or closure display class holds the instance in a field named after
+        // that parameter instead of "<>4__this"; listing it as a parameter would hide "this".
+        private static bool IsOuterThisField(FieldInfo field, bool isCompilerGeneratedHolder)
+        {
+            if (field.Name == StateMachineOuterThisFieldName)
+            {
+                return true;
+            }
+
+            return isCompilerGeneratedHolder
+                && field.Name == HotReloadShimMethodLookup.ShimReceiverParameterName;
         }
 
         private static IEnumerable<FieldInfo> EnumerateInstanceFields(Type type)

@@ -730,7 +730,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = await fixture.AsyncPrivateFieldAndMethod(5);
             Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5 + 100));
-            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
+            // The shim's state machine hoists the receiver parameter; it must surface as "this".
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == HotReloadShimMethodLookup.ShimReceiverParameterName),
+                Is.False,
+                FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "this"),
+                Is.True,
+                FormatCaptured(status));
         }
 
         /// <summary>

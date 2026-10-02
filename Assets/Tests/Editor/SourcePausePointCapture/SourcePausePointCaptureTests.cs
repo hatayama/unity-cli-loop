@@ -207,6 +207,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Collect_WithShimStateMachineHoistingTheReceiver_ResolvesThisToTheReceiver()
+        {
+            // Verifies a hot-reload shim's async state machine, which hoists the shim's receiver
+            // parameter instead of "<>4__this", emits that receiver as "this" with its fields
+            // and never lists the receiver parameter under its internal name.
+            AsyncStateMachineFixture receiver = new() { OuterField = 7 };
+            Type stateMachineType = typeof(ShimShapedFixture)
+                .GetNestedTypes(BindingFlags.NonPublic)
+                .Single(type => type.Name.StartsWith("<RunShimAsync>d__", StringComparison.Ordinal));
+            object stateMachine = Activator.CreateInstance(stateMachineType);
+            FieldInfo receiverField = stateMachineType.GetField(
+                HotReloadShimMethodLookup.ShimReceiverParameterName,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(receiverField, Is.Not.Null, "compiler must hoist the receiver parameter for this fixture");
+            receiverField.SetValue(stateMachine, receiver);
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+
+            AssertReceiverSurfacesAsThis(frame, receiver);
+        }
+
+        [Test]
+        public void Collect_WithShimClosureCapturingTheReceiver_ResolvesThisToTheReceiver()
+        {
+            // Verifies a closure inside a hot-reload shim, whose display class captures the shim's
+            // receiver parameter, emits that receiver as "this" rather than as a parameter.
+            AsyncStateMachineFixture receiver = new() { OuterField = 7 };
+            Func<int> closure = ShimShapedFixture.CaptureReceiver(receiver, 3);
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                closure.Target, Array.Empty<object>(), Array.Empty<object>());
+
+            AssertReceiverSurfacesAsThis(frame, receiver);
+            Assert.That(frame.Entries.Any(entry => entry.Name == "bonus"), Is.True);
+        }
+
+        private static void AssertReceiverSurfacesAsThis(
+            UloopPausePointCapturedVariableFrame frame,
+            AsyncStateMachineFixture receiver)
+        {
+            UloopPausePointCapturedVariableEntry thisEntry = frame.Entries.Single(entry => entry.Name == "this");
+            Assert.That(thisEntry.Scope, Is.EqualTo(UloopCapturedVariableScope.This));
+            Assert.That(thisEntry.Value, Is.SameAs(receiver));
+            Assert.That(
+                frame.Entries.Any(entry => entry.Name == HotReloadShimMethodLookup.ShimReceiverParameterName),
+                Is.False);
+            UloopPausePointCapturedVariableEntry field = frame.Entries.Single(entry => entry.Name == "OuterField");
+            Assert.That(field.Scope, Is.EqualTo(UloopCapturedVariableScope.InstanceField));
+            Assert.That(field.Value, Is.EqualTo(7));
+        }
+
+        [Test]
         public void Collect_WithNullInstance_AddsNoThisEntry()
         {
             // Verifies a static method (null instance) produces no "this" entry.
@@ -328,6 +381,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await Task.Yield();
                 OuterField += localValue;
                 return localValue;
+            }
+        }
+
+        // Mirrors a hot-reload shim: a static method whose first parameter stands for "this".
+        private static class ShimShapedFixture
+        {
+            public static async Task<int> RunShimAsync(AsyncStateMachineFixture __uloopInstance, int delta)
+            {
+                await Task.Yield();
+                return __uloopInstance.OuterField + delta;
+            }
+
+            public static Func<int> CaptureReceiver(AsyncStateMachineFixture __uloopInstance, int bonus)
+            {
+                return () => __uloopInstance.OuterField + bonus;
             }
         }
 
