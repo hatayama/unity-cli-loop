@@ -220,6 +220,30 @@ func runCompileWithDomainReloadWaitResultWithDeps(
 	stderr io.Writer,
 	compileWait compileWaitDeps,
 ) compileExecutionResult {
+	return runCompileWithReattachPolicy(
+		ctx, connection, params, stderr, compileWait, compileReattachAcceptsEarlierResult)
+}
+
+// runCompileOfCurrentSourcesResultWithDeps compiles for a command that goes on to rely on the
+// sources as they are now (the hot-reload compile fallback, the run-tests implicit compile).
+func runCompileOfCurrentSourcesResultWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+) compileExecutionResult {
+	return runCompileWithReattachPolicy(
+		ctx, connection, map[string]any{}, stderr, compileWait, compileReattachRequiresCurrentSources)
+}
+
+func runCompileWithReattachPolicy(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+	reattach compileReattachPolicy,
+) compileExecutionResult {
 	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
 	if timeoutErr != nil {
 		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
@@ -235,7 +259,7 @@ func runCompileWithDomainReloadWaitResultWithDeps(
 		)
 	}
 
-	if handled, result := tryAttachToPendingCompile(ctx, connection, params, waitTimeout, stderr, compileWait); handled {
+	if handled, result := tryAttachToPendingCompile(ctx, connection, params, reattach, waitTimeout, stderr, compileWait); handled {
 		return result
 	}
 

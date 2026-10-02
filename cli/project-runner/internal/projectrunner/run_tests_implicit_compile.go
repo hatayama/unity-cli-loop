@@ -54,12 +54,9 @@ func runTestsImplicitCompileDefault(
 	connection unityipc.Connection,
 	stderr io.Writer,
 ) compileExecutionResult {
-	return runCompileWithDomainReloadWaitResultWithDeps(
-		ctx,
-		connection,
-		map[string]any{},
-		stderr,
-		defaultCompileWaitDeps())
+	// Why not the plain compile entry: it would hand back an earlier timed-out compile's stored
+	// result, which predates the edits this command goes on to rely on.
+	return runCompileOfCurrentSourcesResultWithDeps(ctx, connection, stderr, defaultCompileWaitDeps())
 }
 
 func extractRunTestsSkipCompileFlag(args []string) ([]string, bool) {
