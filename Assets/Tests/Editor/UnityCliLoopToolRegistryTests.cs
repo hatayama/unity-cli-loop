@@ -668,5 +668,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return Task.FromResult(response);
             }
         }
+
+        /// <summary>
+        /// Verifies that registering a null tool is rejected.
+        /// </summary>
+        [Test]
+        public void RegisterTool_WhenToolIsNull_ThrowsArgumentNullException()
+        {
+            UnityCliLoopToolRegistry registry = CreateManualRegistry();
+
+            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => registry.RegisterTool(null));
+
+            Assert.That(exception.ParamName, Is.EqualTo("tool"));
+        }
+
+        /// <summary>
+        /// Verifies that a tool with a blank name is rejected and not registered.
+        /// </summary>
+        [Test]
+        public void RegisterTool_WhenToolNameIsBlank_ThrowsArgumentExceptionWithoutRegistering()
+        {
+            UnityCliLoopToolRegistry registry = CreateManualRegistry();
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => registry.RegisterTool(new NamedRegistrationTool(" ")));
+
+            Assert.That(exception.ParamName, Is.EqualTo("tool"));
+            Assert.That(exception.Message, Does.StartWith("Tool name cannot be null or empty"));
+            Assert.That(registry.IsToolRegistered(" "), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that looking up an unregistered tool type returns null.
+        /// </summary>
+        [Test]
+        public void GetToolType_WhenToolIsNotRegistered_ReturnsNull()
+        {
+            UnityCliLoopToolRegistry registry = CreateManualRegistry();
+            registry.RegisterTool(new NamedRegistrationTool("registered-tool"));
+
+            Assert.That(registry.GetToolType("registered-tool"), Is.EqualTo(typeof(NamedRegistrationTool)));
+            Assert.That(registry.GetToolType("missing-tool"), Is.Null);
+        }
+
+        private static UnityCliLoopToolRegistry CreateManualRegistry()
+        {
+            return new UnityCliLoopToolRegistry(
+                new AlwaysEnabledToolSettingsPort(),
+                internalToolNameProvider: null,
+                toolDiscovery: null);
+        }
+
+        private sealed class NamedRegistrationTool : IUnityCliLoopTool
+        {
+            public NamedRegistrationTool(string toolName)
+            {
+                ToolName = toolName;
+            }
+
+            public string ToolName { get; }
+            public ToolParameterSchema ParameterSchema { get; } = new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                UnityCliLoopToolResponse response = new ManualRegistrationResponse();
+                return Task.FromResult(response);
+            }
+        }
     }
 }

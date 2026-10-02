@@ -39,5 +39,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result, Is.False);
         }
+
+        /// <summary>
+        /// Verifies that a missing executable path is not classified as winget-managed.
+        /// </summary>
+        [Test]
+        public void IsWingetManagedPath_WhenPathIsNull_ReturnsFalse()
+        {
+            bool result = WingetManagedCliPolicy.IsWingetManagedPath(null);
+
+            Assert.That(result, Is.False);
+        }
     }
 }
