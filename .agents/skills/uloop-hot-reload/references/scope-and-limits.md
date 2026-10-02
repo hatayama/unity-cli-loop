@@ -264,8 +264,10 @@ To re-run an edited compiled `OnEnable` on live objects — for example after ad
 subscription to it — toggle the component around the reload instead of compiling: set
 `enabled = false` with `execute-dynamic-code`, run `hot-reload`, then set `enabled = true`.
 Unity calls the old `OnDisable` (so the old subscription is removed) and then the patched
-`OnEnable`; coroutines keep running because only the component is toggled. This works only
-for an `OnEnable` / `OnDisable` the compiled class already has; an added one is not called.
+`OnEnable`; coroutines keep running because only the component is toggled. An edited
+`OnDisable` runs the next time the component is disabled; to run it now, toggle `enabled`
+after the reload. This works only for an `OnEnable` / `OnDisable` the compiled class already
+has; an added one is not called.
 
 The proxies exist only for the running session: nothing is attached outside Play Mode, and a
 compile or a domain reload drops them along with every other patch. Execution order relative

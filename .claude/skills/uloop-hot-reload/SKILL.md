@@ -89,8 +89,10 @@ While hot-reload changes are active, `AutoRefreshHeld` is true so returning focu
 recompile; `uloop compile` releases the hold, and `--revert-all` only when no introduced type
 remains.
 One-shot methods (`Awake`, `Start`, init helpers) patch but show no effect on the call that
-already ran; the response marks them with `LifecycleNote`. For an edited compiled `OnEnable` /
-`OnDisable`, set `enabled = false` with `execute-dynamic-code`, reload, then set it back to `true`.
+already ran; the response marks them with `LifecycleNote`. To re-run an edited compiled
+`OnEnable`, set `enabled = false` with `execute-dynamic-code`, reload, then set it back to `true`
+(Unity calls the old `OnDisable`, then the patched `OnEnable`). An edited `OnDisable` runs the
+next time the component is disabled; to run it now, toggle `enabled` after the reload.
 To tune a value while playing, expose a static property getter instead of a `const`; its
 body is patched on compiled and introduced types alike.
 
