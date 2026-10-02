@@ -77,6 +77,11 @@ issue when none is open, and fails when several are open; close all but one. Whe
 produced no coverage (no Unity license, or the leg failed before its tests ran), the comment
 carries Go alone and says so.
 
+Only scheduled runs post by default. A manual `workflow_dispatch` run, for example on a branch
+that adds C# tests, shows the same Go table and C# section in its run summary but leaves the
+issue alone, so branch figures do not mix into the trend. Pass `-f post-trend=true` to
+`gh workflow run unity-editmode-tests.yml` to post a dispatched run as well.
+
 C# coverage never gates. When the scope falls more than 0.1 point below `csharp.lineCoverage`,
 the nightly run prints a warning and the comment marks it `below baseline`; pull requests do not
 measure C# at all, and a broken `csharp` section does not affect the pull request Go gate.

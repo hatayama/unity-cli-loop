@@ -2,6 +2,11 @@ name: Unity EditMode Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      post-trend:
+        description: Post this run's coverage to the coverage-trend issue (scheduled runs always post)
+        type: boolean
+        default: false
   schedule:
     - cron: '0 18 * * *'
 
@@ -267,9 +272,13 @@ jobs:
               --go-coverage-dir "$GO_COVERAGE_DIR" \
               --markdown-out "$COVERAGE_MARKDOWN"
             printf '%s\n' "C# coverage was not produced in this run." >> "$COVERAGE_MARKDOWN"
+            printf '%s\n' "C# coverage was not produced in this run." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Only the nightly figures belong in the trend; a dispatched branch run still shows its
+      # tables in the run summary, which coverage-report writes in the step above.
       - name: Post coverage to the trend issue
+        if: ${{ github.event_name == 'schedule' || inputs.post-trend == true }}
         working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ github.token }}
