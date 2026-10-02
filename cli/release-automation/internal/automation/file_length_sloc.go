@@ -276,26 +276,20 @@ func (s *slocScanner) scanCSharpInterpolatedString(verbatim bool) {
 			s.consumeEscapedRune()
 			continue
 		}
-		if s.consumeInterpolatedQuote(current, verbatim) {
+		// A doubled quote in a verbatim string is an escaped quote; it is consumed whole and the scan
+		// continues, so the character after it is read as string content rather than skipped.
+		if verbatim && current == '"' && s.peekRuneAt(1) == '"' {
+			s.markCode()
+			s.skipRunes(2)
+			continue
+		}
+		if current == '"' {
+			s.markCode()
+			s.nextRune()
 			return
 		}
 		s.consumeStringRune(current)
 	}
-}
-
-func (s *slocScanner) consumeInterpolatedQuote(current rune, verbatim bool) bool {
-	if current != '"' {
-		return false
-	}
-	if verbatim && s.peekRuneAt(1) == '"' {
-		s.markCode()
-		s.nextRune()
-		s.nextRune()
-		return false
-	}
-	s.markCode()
-	s.nextRune()
-	return true
 }
 
 func (s *slocScanner) consumeInterpolationHole() {

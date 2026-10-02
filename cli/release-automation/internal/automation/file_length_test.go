@@ -228,3 +228,23 @@ func findingPaths(findings []FileLengthFinding) []string {
 	}
 	return paths
 }
+
+// Verifies a doubled quote inside an interpolated verbatim string ($@" or @$") is counted like one inside a plain verbatim
+// string: the closing quote and the newline right after the doubled quote are not swallowed.
+func TestCountSLOCHandlesDoubledQuotesInInterpolatedVerbatimStrings(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+		want   int
+	}{
+		{"closing quote after the doubled quote", "var s = PREFIX\"a\"\"\";\n// comment\nvar y = 1;\n", 2},
+		{"newline after the doubled quote", "var s = PREFIX\"a\"\"\n// inside the string\n\";\n", 3},
+	}
+	for _, testCase := range cases {
+		for _, prefix := range []string{"@", "$@", "@$"} {
+			t.Run(testCase.name+" "+prefix, func(t *testing.T) {
+				assertSLOC(t, strings.Replace(testCase.source, "PREFIX", prefix, 1), LanguageCSharp, testCase.want)
+			})
+		}
+	}
+}
