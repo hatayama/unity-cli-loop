@@ -538,13 +538,11 @@ func TestFindUnityProjectRootWithin_WhenNoChildProject_ShouldFallBackToParents(t
 
 func TestFindUnityProjectRootWithin_WhenChildDirectoryIsUnreadable_ShouldSkipIt(t *testing.T) {
 	// Verifies an unreadable child directory is skipped and the remaining readable child project is still found.
-	if os.Geteuid() == 0 {
-		t.Skip("root can read a directory with mode 000, so the unreadable branch is not reached")
-	}
 	workspaceRoot := createGitBoundedDir(t)
 	projectRoot := filepath.Join(workspaceRoot, "readable", "Game")
 	createUnityProject(t, projectRoot)
-	unreadableDir := filepath.Join(workspaceRoot, "unreadable")
+	// Named to be scanned before "readable", so stopping the scan at an unreadable child would fail.
+	unreadableDir := filepath.Join(workspaceRoot, "a-unreadable")
 	mkdirAll(t, unreadableDir)
 	if err := os.Chmod(unreadableDir, 0o000); err != nil {
 		t.Fatalf("failed to make directory unreadable: %v", err)
@@ -552,6 +550,10 @@ func TestFindUnityProjectRootWithin_WhenChildDirectoryIsUnreadable_ShouldSkipIt(
 	t.Cleanup(func() {
 		_ = os.Chmod(unreadableDir, 0o755)
 	})
+	// Root, and Windows where Chmod only toggles the read-only attribute, can still read the directory.
+	if _, err := os.ReadDir(unreadableDir); err == nil {
+		t.Skip("the directory is still readable, so the unreadable branch is not reached")
+	}
 
 	resolved, err := FindUnityProjectRootWithin(workspaceRoot, 3)
 	if err != nil {

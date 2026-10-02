@@ -88,9 +88,15 @@ func TestNewCLIVibeCorrelationIDIncludesProcessID(t *testing.T) {
 // Verifies an enabled log with no project root is a silent no-op.
 func TestWriteCLIVibeLogSkipsWithoutProjectRoot(t *testing.T) {
 	t.Setenv(CLIVibeLogEnvName, "1")
+	// An empty root would otherwise resolve against the working directory, so isolate it.
+	workingDirectory := t.TempDir()
+	t.Chdir(workingDirectory)
 
 	if err := WriteCLIVibeLog("", CLIVibeLogEntry{Operation: "test_operation"}); err != nil {
 		t.Fatalf("WriteCLIVibeLog without project root should skip without error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workingDirectory, CLIVibeLogDirectory)); !os.IsNotExist(err) {
+		t.Fatalf("no log directory should be created without a project root, stat error: %v", err)
 	}
 }
 

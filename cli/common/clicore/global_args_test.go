@@ -111,13 +111,13 @@ func TestRequestShapePredicates(t *testing.T) {
 			name:      "version json",
 			predicate: IsVersionJSONRequest,
 			accepted:  [][]string{{"--version", "--json"}, {"-v", "--json"}},
-			rejected:  [][]string{{"--version"}, {"--json", "--version"}},
+			rejected:  [][]string{{"--version"}, {"--json", "--version"}, {"--version", "--other"}},
 		},
 		{
 			name:      "help",
 			predicate: IsHelpRequest,
 			accepted:  [][]string{{"--help"}, {"-h"}},
-			rejected:  [][]string{{"compile", "--help"}, {"help"}},
+			rejected:  [][]string{{"compile", "--help"}, {"help"}, {"--help", "compile"}},
 		},
 		{
 			name:      "contains help",

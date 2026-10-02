@@ -13,6 +13,7 @@ import (
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
@@ -214,11 +215,7 @@ func TestProbeToolReadinessSequenceFailsWithoutAServer(t *testing.T) {
 			defer cancel()
 			err := ProbeToolReadinessSequence(ctx, projectRoot)
 
-			// The project resolves, so the failure must come from reaching the server, not from resolution.
-			var notUnityProjectErr clierrors.NotUnityProjectError
-			if err == nil || errors.As(err, &notUnityProjectErr) {
-				t.Fatalf("expected a server connection failure, got %v", err)
-			}
+			assertConnectionAttemptToProject(t, err, projectRoot)
 		})
 	}
 }
@@ -250,4 +247,20 @@ func createReadinessUnityProject(t *testing.T) string {
 		}
 	}
 	return projectRoot
+}
+
+// assertConnectionAttemptToProject checks that err is a failed connection to projectRoot's own endpoint.
+func assertConnectionAttemptToProject(t *testing.T, err error, projectRoot string) {
+	t.Helper()
+	canonicalRoot, evalErr := filepath.EvalSymlinks(projectRoot)
+	if evalErr != nil {
+		t.Fatalf("failed to resolve project root: %v", evalErr)
+	}
+	var attemptErr *unityipc.ConnectionAttemptError
+	if !errors.As(err, &attemptErr) {
+		t.Fatalf("expected a connection attempt error, got %v", err)
+	}
+	if expected := project.CreateEndpoint(canonicalRoot).Address; attemptErr.Endpoint != expected {
+		t.Fatalf("connection endpoint = %q, want %q", attemptErr.Endpoint, expected)
+	}
 }

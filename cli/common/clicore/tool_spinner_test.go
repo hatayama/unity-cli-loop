@@ -2,17 +2,27 @@ package clicore
 
 import (
 	"bytes"
+	"os"
 	"testing"
 )
 
-// Verifies that tool feedback is suppressed for execute-dynamic-code and that a non-terminal writer
-// never gets an animated spinner.
+// Verifies that a terminal writer gets an animated spinner for regular tools but not for
+// execute-dynamic-code, and that a non-terminal writer never gets one.
 func TestNewToolSpinner(t *testing.T) {
-	if shouldShowToolFeedback(ExecuteDynamicCodeCommandName) {
-		t.Fatal("execute-dynamic-code should not show tool feedback")
+	// The null device reports itself as a character device, which is how a terminal is detected.
+	terminal, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("failed to open null device: %v", err)
 	}
-	if !shouldShowToolFeedback("compile") {
-		t.Fatal("regular tools should show tool feedback")
+	t.Cleanup(func() { _ = terminal.Close() })
+
+	compileSpinner := NewToolSpinner(terminal, "compile")
+	compileSpinner.Stop()
+	if !compileSpinner.Enabled {
+		t.Fatal("a regular tool should show a spinner on a terminal")
+	}
+	if NewToolSpinner(terminal, ExecuteDynamicCodeCommandName).Enabled {
+		t.Fatal("execute-dynamic-code should not show a spinner")
 	}
 
 	var stderr bytes.Buffer
