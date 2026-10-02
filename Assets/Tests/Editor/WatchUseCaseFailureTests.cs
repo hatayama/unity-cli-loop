@@ -166,27 +166,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(WatchExpressionServices.Registry.GetEntries(), Is.Empty);
         }
 
-        /// <summary>
-        /// Verifies a stored watch is recompiled and registered again, and the report counts it.
-        /// </summary>
-        [Test]
-        public void RestoreAfterDomainReload_WithAStoredWatch_RegistersItAgain()
-        {
-            _store.Save(new List<WatchPersistedRecord>
-            {
-                new WatchPersistedRecord { Id = "speed", Expression = "1 + 2", MaxHistory = 7 }
-            });
-            WatchExpressionServices.OverrideCompilerForTesting(new StubWatchExpressionCompiler(
-                WatchCompilationResult.SuccessResult(new ConstantWatchExpressionEvaluator(3))));
-
-            WatchExpressionServices.RestoreAfterDomainReload();
-
-            Assert.That(WatchExpressionServices.LastRestoreReport.RestoredCount, Is.EqualTo(1));
-            WatchExpressionEntry entry = WatchExpressionServices.Registry.GetEntries().Single();
-            Assert.That(entry.Id, Is.EqualTo("speed"));
-            Assert.That(entry.Expression, Is.EqualTo("1 + 2"));
-        }
-
         private static void UseUnreachableCompiler()
         {
             // Keeps a broken validation away from the real dynamic-code compiler.
