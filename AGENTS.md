@@ -173,8 +173,9 @@ figures in `coverage-baseline.json`; the Linux `build-cli` job fails the pull
 request otherwise.
 When your tests lift a module a point or more, the job summary suggests a new
 figure; raise it in the same pull request. Never lower a figure without a reason
-in the pull request description. What is measured and how to run it locally:
-`docs/coverage.md`.
+in the pull request description. C# coverage is measured nightly in the Unity
+2022.3 EditMode leg and posted to the `coverage-trend` issue; it warns but never
+gates. What is measured and how to run it locally: `docs/coverage.md`.
 
 ## Nested Type Name Forms
 
