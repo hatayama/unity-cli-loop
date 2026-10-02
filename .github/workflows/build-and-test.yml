@@ -142,10 +142,7 @@ jobs:
           go run ./cmd/coverage-report \
             --baseline ../../coverage-baseline.json \
             --mode gate \
-            --go-profile common="$GO_COVERAGE_DIR/common.out" \
-            --go-profile dispatcher="$GO_COVERAGE_DIR/dispatcher.out" \
-            --go-profile project-runner="$GO_COVERAGE_DIR/project-runner.out" \
-            --go-profile release-automation="$GO_COVERAGE_DIR/release-automation.out"
+            --go-coverage-dir "$GO_COVERAGE_DIR"
 
       - name: Package native Go CLI installers
         run: scripts/package-go-cli.sh

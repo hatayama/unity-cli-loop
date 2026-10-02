@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -225,6 +226,26 @@ func measureGoModules(baseline coverageBaseline, profiles map[string]string) ([]
 		})
 	}
 	return results, nil
+}
+
+// CollectGoCoverProfiles maps each <module>.out file in dir to its module name. Reading the whole
+// directory, rather than a list kept elsewhere, makes a module newly wired into the test script
+// reach the baseline comparison and fail until the baseline lists it.
+func CollectGoCoverProfiles(dir string) (map[string]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	profiles := map[string]string{}
+	for _, entry := range entries {
+		name, ok := strings.CutSuffix(entry.Name(), ".out")
+		if !ok || entry.IsDir() {
+			continue
+		}
+		profiles[name] = filepath.Join(dir, entry.Name())
+	}
+	return profiles, nil
 }
 
 func readGoCoverProfile(path string, exclude []string) (GoCoverageTotals, error) {

@@ -116,6 +116,45 @@ func TestRunCoverageReportShowsAndSuggestsTheSameTruncatedFigure(t *testing.T) {
 	}
 }
 
+func TestRunCoverageReportGateFailsJustPastTheRoundingTolerance(t *testing.T) {
+	// Verifies a module 0.2 point under its baseline fails, so the tolerance cannot widen past
+	// the one-decimal rounding it exists for without a test noticing.
+	fixture := newCoverageFixture(t, map[string]float64{"common": 40.2})
+	fixture.writeProfile("common", 4, 10)
+
+	code, stdout, _ := fixture.run(coverageModeGate)
+
+	if code != 1 {
+		t.Fatalf("expected 40.0%% to fail a 40.2%% baseline, got %d\n%s", code, stdout)
+	}
+}
+
+func TestCollectGoCoverProfilesNamesEachProfileAfterItsModule(t *testing.T) {
+	// Verifies every <module>.out in the directory is collected under its module name, so a
+	// module whose profile appears without a baseline entry reaches the mismatch check.
+	dir := t.TempDir()
+	for _, name := range []string{"common.out", "new-module.out", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("mode: set\n"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	profiles, err := CollectGoCoverProfiles(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(profiles) != 2 || profiles["common"] != filepath.Join(dir, "common.out") || profiles["new-module"] == "" {
+		t.Fatalf("expected common and new-module profiles, got %v", profiles)
+	}
+}
+
+func TestCollectGoCoverProfilesRejectsAMissingDirectory(t *testing.T) {
+	// Verifies a coverage directory that was never written fails instead of yielding no modules.
+	if _, err := CollectGoCoverProfiles(filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Fatal("expected an error for a missing directory")
+	}
+}
+
 func TestRunCoverageReportHintsWhenTheBaselineCanBeRaised(t *testing.T) {
 	// Verifies a module a full point above its baseline is reported as ready to raise.
 	fixture := newCoverageFixture(t, map[string]float64{"common": 30.0})

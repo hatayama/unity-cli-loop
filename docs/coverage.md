@@ -19,7 +19,9 @@ The `build-cli` job in `build-and-test.yml` runs `scripts/check-go-cli.sh` with
 `cli/release-automation/cmd/coverage-report --mode gate`. The step fails when a module is more
 than 0.1 point below its figure in `coverage-baseline.json`, and also when a module's profile
 is missing, a profile names a module the baseline does not list, or a module has no statements
-left after exclusion. The gate runs only on Linux, because build-tagged files make the figures
+left after exclusion. The report reads every `<module>.out` in the coverage directory, so a
+module newly added to `scripts/check-go-cli-source.sh` fails the gate until the baseline lists
+it. The gate runs only on Linux, because build-tagged files make the figures
 differ per OS.
 
 ## Raising the baseline
@@ -35,10 +37,7 @@ export GO_COVERAGE_DIR="${TMPDIR:-/tmp}/go-coverage"
 scripts/check-go-cli-source.sh
 cd cli/release-automation
 go run ./cmd/coverage-report --baseline ../../coverage-baseline.json --mode report \
-  --go-profile common="$GO_COVERAGE_DIR/common.out" \
-  --go-profile dispatcher="$GO_COVERAGE_DIR/dispatcher.out" \
-  --go-profile project-runner="$GO_COVERAGE_DIR/project-runner.out" \
-  --go-profile release-automation="$GO_COVERAGE_DIR/release-automation.out"
+  --go-coverage-dir "$GO_COVERAGE_DIR"
 ```
 
 `GO_COVERAGE_DIR` must be absolute, because each module's tests run from that module's
