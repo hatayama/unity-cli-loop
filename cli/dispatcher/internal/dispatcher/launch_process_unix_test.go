@@ -38,6 +38,8 @@ func TestKillUnityProcessStopsTheProcess(t *testing.T) {
 		t.Fatalf("killUnityProcess failed: %v", err)
 	}
 
+	// Closing stdin lets a surviving child exit normally, so a kill that did nothing fails fast instead of hanging.
+	_ = stdin.Close()
 	err = command.Wait()
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) || exitErr.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {

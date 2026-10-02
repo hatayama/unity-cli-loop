@@ -97,10 +97,13 @@ func TestRunLaunchReportsV2ReadinessFailures(t *testing.T) {
 	// Verifies a V2 project stops with code 1 when its fresh lockfile or its already running server never becomes ready.
 	t.Run("fresh launch lockfile", func(t *testing.T) {
 		deps := isolatedLaunchTestDeps(t)
-		deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error {
+		projectRoot := createV2LaunchTestProject(t)
+		deps.waitForFreshUnityLockfile = func(_ context.Context, lockfilePath string, _ time.Time, _ time.Duration, _ time.Duration) error {
+			if lockfilePath != unityLockfilePath(projectRoot) {
+				t.Errorf("fresh lockfile wait got %q, want %q", lockfilePath, unityLockfilePath(projectRoot))
+			}
 			return errors.New("lockfile never refreshed")
 		}
-		projectRoot := createV2LaunchTestProject(t)
 		var stderr bytes.Buffer
 
 		code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, io.Discard, &stderr, deps)

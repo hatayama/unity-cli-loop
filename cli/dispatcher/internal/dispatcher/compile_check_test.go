@@ -475,13 +475,17 @@ func isolateCompileCheckEditorLookup(t *testing.T) {
 }
 
 func TestTryHandleCompileCheckRequestRunsWithParsedOptions(t *testing.T) {
-	// Verifies valid options reach the run, which then reports the project search result from the start path.
+	// Verifies parsed options reach the run: the explicit editor version is the one resolution reports missing.
+	isolateCompileCheckEditorLookup(t)
+	// No ProjectVersion.txt, so dropping the parsed version would fail on the missing file instead.
+	projectRoot := createDispatcherUnityProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	handled, code := tryHandleCompileCheckRequest(context.Background(), []string{clicore.CompileCheckCommandName, compileCheckMaxDepthFlag, "0"}, t.TempDir(), "", &stdout, &stderr)
+	args := []string{clicore.CompileCheckCommandName, compileCheckEditorFlag, bogusCompileCheckEditorVersion}
+	handled, code := tryHandleCompileCheckRequest(context.Background(), args, projectRoot, "", &stdout, &stderr)
 
-	if !handled || code != 1 || !strings.Contains(stderr.String(), "unity project not found") {
+	if !handled || code != 1 || !strings.Contains(stderr.String(), "unity "+bogusCompileCheckEditorVersion+" executable not found") {
 		t.Fatalf("unexpected result: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
 }

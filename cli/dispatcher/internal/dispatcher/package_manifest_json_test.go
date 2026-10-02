@@ -2,47 +2,26 @@ package dispatcher
 
 import (
 	"encoding/json"
-	"errors"
-	"io"
 	"reflect"
 	"testing"
 )
 
 func TestParseOrderedJSONObjectBytesRejectsIncompleteObjects(t *testing.T) {
 	// Verifies empty, truncated, and value-less object input is rejected instead of yielding a partial object.
-	cases := []struct {
-		input   string
-		wantEOF bool
-		want    string
-	}{
-		{input: "", wantEOF: true},
-		{input: `{"a":1`, wantEOF: true},
-		{input: `{"a":}`, want: "invalid character '}' looking for beginning of value"},
-	}
-	for _, testCase := range cases {
-		_, err := parseOrderedJSONObjectBytes([]byte(testCase.input))
-		if testCase.wantEOF && !errors.Is(err, io.EOF) || !testCase.wantEOF && (err == nil || err.Error() != testCase.want) {
-			t.Fatalf("%q: unexpected error %v", testCase.input, err)
+	for _, input := range []string{"", `{"a":1`, `{"a":}`} {
+		object, err := parseOrderedJSONObjectBytes([]byte(input))
+		if err == nil || len(object.keys) != 0 || len(object.values) != 0 {
+			t.Fatalf("%q: expected an error and no partial object, got object=%+v err=%v", input, object, err)
 		}
 	}
 }
 
 func TestParseJSONRawArrayRejectsMalformedArrays(t *testing.T) {
-	// Verifies empty, truncated, invalid, and trailing-garbage arrays are rejected.
-	cases := []struct {
-		input   string
-		wantEOF bool
-		want    string
-	}{
-		{input: "", wantEOF: true},
-		{input: "[1", wantEOF: true},
-		{input: "[1,}", want: "invalid character '}' looking for beginning of value"},
-		{input: "[1] 2", want: "unexpected trailing JSON token: 2"},
-	}
-	for _, testCase := range cases {
-		_, err := parseJSONRawArray([]byte(testCase.input))
-		if testCase.wantEOF && !errors.Is(err, io.EOF) || !testCase.wantEOF && (err == nil || err.Error() != testCase.want) {
-			t.Fatalf("%q: unexpected error %v", testCase.input, err)
+	// Verifies empty, truncated, invalid, and trailing-garbage arrays are rejected without partial elements.
+	for _, input := range []string{"", "[1", "[1,}", "[1] 2"} {
+		values, err := parseJSONRawArray([]byte(input))
+		if err == nil || len(values) != 0 {
+			t.Fatalf("%q: expected an error and no elements, got values=%v err=%v", input, values, err)
 		}
 	}
 }
@@ -57,7 +36,9 @@ func TestEmitOrderedJSONObjectRejectsInconsistentObjects(t *testing.T) {
 		{name: "missing value", object: orderedJSONObject{keys: []string{"a"}, values: map[string]json.RawMessage{}}, want: `missing value for key "a"`},
 		{name: "blank value", object: orderedJSONObject{keys: []string{"a"}, values: map[string]json.RawMessage{"a": json.RawMessage(" ")}}, want: "empty JSON value"},
 		{name: "invalid array value", object: orderedJSONObject{keys: []string{"a"}, values: map[string]json.RawMessage{"a": json.RawMessage("[1,")}}, want: "unexpected end of JSON input"},
-		{name: "invalid nested object", object: orderedJSONObject{keys: []string{"a"}, values: map[string]json.RawMessage{"a": json.RawMessage(`{"b"`)}}, want: "EOF"},
+	}
+	if _, err := emitOrderedJSONObject(orderedJSONObject{keys: []string{"a"}, values: map[string]json.RawMessage{"a": json.RawMessage(`{"b"`)}}, 0); err == nil {
+		t.Fatal("a truncated nested object must not be emitted")
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

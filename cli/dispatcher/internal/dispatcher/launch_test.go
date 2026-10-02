@@ -1893,32 +1893,38 @@ func TestRunLaunchReportsStartFailures(t *testing.T) {
 	cases := []struct {
 		name        string
 		noVersion   bool
-		modify      func(t *testing.T, deps *launchDeps)
+		modify      func(t *testing.T, deps *launchDeps, projectRoot string)
 		wantMessage string
 	}{
-		{name: "project version missing", noVersion: true, modify: func(*testing.T, *launchDeps) {}, wantMessage: "ProjectVersion.txt"},
-		{name: "editor not installed", modify: func(_ *testing.T, deps *launchDeps) {
-			deps.resolveUnityExecutablePath = func(string) (string, error) { return "", errors.New("editor 2022.3.0f1 missing") }
+		{name: "project version missing", noVersion: true, modify: func(*testing.T, *launchDeps, string) {}, wantMessage: "ProjectVersion.txt"},
+		{name: "editor not installed", modify: func(_ *testing.T, deps *launchDeps, _ string) {
+			// Echoing the received version proves the one from ProjectVersion.txt is what gets resolved.
+			deps.resolveUnityExecutablePath = func(version string) (string, error) { return "", errors.New("editor " + version + " missing") }
 		}, wantMessage: "editor 2022.3.0f1 missing"},
-		{name: "editor cannot start", modify: func(t *testing.T, deps *launchDeps) {
+		{name: "editor cannot start", modify: func(t *testing.T, deps *launchDeps, _ string) {
 			missing := filepath.Join(t.TempDir(), "missing-unity")
 			deps.resolveUnityExecutablePath = func(string) (string, error) { return missing, nil }
 		}, wantMessage: "missing-unity"},
-		{name: "startup marker never appears", modify: func(_ *testing.T, deps *launchDeps) {
-			deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error { return errors.New("no lockfile") }
+		{name: "startup marker never appears", modify: func(t *testing.T, deps *launchDeps, projectRoot string) {
+			deps.waitForUnityStartupMarker = func(_ context.Context, lockfilePath string, _ time.Duration, _ time.Duration) error {
+				if lockfilePath != unityLockfilePath(projectRoot) {
+					t.Errorf("startup marker wait got %q, want %q", lockfilePath, unityLockfilePath(projectRoot))
+				}
+				return errors.New("no lockfile")
+			}
 		}, wantMessage: "no lockfile"},
-		{name: "tools never ready", modify: func(_ *testing.T, deps *launchDeps) {
+		{name: "tools never ready", modify: func(_ *testing.T, deps *launchDeps, _ string) {
 			deps.waitForToolReadiness = func(context.Context, string, time.Duration) error { return errors.New("tools not ready") }
 		}, wantMessage: "tools not ready"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			deps := isolatedLaunchTestDeps(t)
-			testCase.modify(t, &deps)
 			projectRoot := createLaunchTestProject(t)
 			if !testCase.noVersion {
 				projectRoot = createVersionedLaunchTestProject(t)
 			}
+			testCase.modify(t, &deps, projectRoot)
 			var stderr bytes.Buffer
 
 			code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, io.Discard, &stderr, deps)
