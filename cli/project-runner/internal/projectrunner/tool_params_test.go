@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -545,4 +546,136 @@ func TestBuildToolParamsUnknownOptionTieBreaksToSortedFirstOptionName(t *testing
 		"Did you mean: uloop sample-tool --output-file",
 		"Run `uloop sample-tool --help` to inspect supported options.",
 	})
+}
+
+func toolParamsConversionTool() clicore.ToolDefinition {
+	return clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Count":    {Type: "integer"},
+				"Ratio":    {Type: "number"},
+				"Tags":     {Type: "array"},
+				"Options":  {Type: "object"},
+				"Verbose":  {Type: "boolean"},
+				"AutoSave": {Type: "boolean", Default: true},
+				"Payload":  {Type: "custom"},
+			},
+		},
+	}
+}
+
+// Verifies that each schema type converts its CLI value to the JSON shape Unity expects,
+// including --flag=value, negated booleans, and --project-path extraction.
+func TestBuildToolParamsConvertsValuesBySchemaType(t *testing.T) {
+	params, projectPath, err := buildToolParams([]string{
+		"--count", "3",
+		"--ratio=0.5",
+		"--tags", "a, b ,c",
+		"--options", `{"key":"value"}`,
+		"--verbose",
+		"--no-auto-save",
+		"--payload", "raw",
+		"--project-path", "nested",
+	}, toolParamsConversionTool())
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+	want := map[string]any{
+		"Count":    3,
+		"Ratio":    0.5,
+		"Tags":     []string{"a", "b", "c"},
+		"Options":  map[string]any{"key": "value"},
+		"Verbose":  true,
+		"AutoSave": false,
+		"Payload":  "raw",
+	}
+	if !reflect.DeepEqual(params, want) {
+		t.Fatalf("params mismatch:\nwant: %#v\ngot:  %#v", want, params)
+	}
+	if projectPath != "nested" {
+		t.Fatalf("projectPath = %q, want %q", projectPath, "nested")
+	}
+}
+
+// Verifies that a JSON array value is decoded as JSON instead of being split on commas.
+func TestBuildToolParamsDecodesJSONArrayValue(t *testing.T) {
+	params, _, err := buildToolParams([]string{"--tags", `["x,y", 2]`}, toolParamsConversionTool())
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+	want := []any{"x,y", float64(2)}
+	if !reflect.DeepEqual(params["Tags"], want) {
+		t.Fatalf("Tags mismatch:\nwant: %#v\ngot:  %#v", want, params["Tags"])
+	}
+}
+
+// Verifies that the --project-path=value form is accepted without consuming the next token.
+func TestBuildToolParamsAcceptsInlineProjectPath(t *testing.T) {
+	params, projectPath, err := buildToolParams([]string{"--project-path=nested", "--verbose"}, toolParamsConversionTool())
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+	if projectPath != "nested" || params["Verbose"] != true {
+		t.Fatalf("unexpected result: projectPath=%q params=%#v", projectPath, params)
+	}
+}
+
+// Verifies that malformed flags and values are rejected with an argument error naming the
+// offending option and the expected type.
+func TestBuildToolParamsRejectsMalformedArguments(t *testing.T) {
+	cases := []struct {
+		name         string
+		args         []string
+		wantOption   string
+		wantExpected string
+	}{
+		{name: "bare double dash", args: []string{"--"}, wantOption: "--"},
+		{name: "empty inline value", args: []string{"--count="}, wantOption: "--count", wantExpected: "string"},
+		{name: "missing trailing value", args: []string{"--count"}, wantOption: "--count", wantExpected: "string"},
+		{name: "value is next option", args: []string{"--count", "--verbose"}, wantOption: "--count", wantExpected: "string"},
+		{name: "missing project path value", args: []string{"--project-path"}, wantOption: "--project-path", wantExpected: "string"},
+		{name: "invalid integer", args: []string{"--count", "three"}, wantOption: "--count", wantExpected: "integer"},
+		{name: "invalid number", args: []string{"--ratio", "half"}, wantOption: "--ratio", wantExpected: "number"},
+		{name: "invalid json array", args: []string{"--tags", "[1,"}, wantOption: "--tags", wantExpected: "array"},
+		{name: "invalid json object", args: []string{"--options", "{"}, wantOption: "--options", wantExpected: "object"},
+		{name: "null json object", args: []string{"--options", "null"}, wantOption: "--options", wantExpected: "object"},
+		{name: "boolean with inline value", args: []string{"--verbose=true"}, wantOption: "--verbose", wantExpected: "flag"},
+		{name: "boolean with trailing value", args: []string{"--verbose", "true"}, wantOption: "--verbose", wantExpected: "flag"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			params, _, err := buildToolParams(testCase.args, toolParamsConversionTool())
+			if params != nil {
+				t.Fatalf("expected nil params on error, got %#v", params)
+			}
+			argumentError := requireArgumentError(t, err)
+			if argumentError.Option != testCase.wantOption {
+				t.Fatalf("Option = %q, want %q (message: %s)", argumentError.Option, testCase.wantOption, argumentError.Message)
+			}
+			if argumentError.ExpectedType != testCase.wantExpected {
+				t.Fatalf("ExpectedType = %q, want %q", argumentError.ExpectedType, testCase.wantExpected)
+			}
+		})
+	}
+}
+
+// Verifies that boolean values parse case-insensitively and reject anything but true/false.
+func TestConvertValueBoolean(t *testing.T) {
+	property := clicore.ToolProperty{Type: "Boolean"}
+	for input, want := range map[string]bool{"TRUE": true, "false": false} {
+		converted, err := convertValue(input, property, "--flag")
+		if err != nil {
+			t.Fatalf("convertValue(%q) failed: %v", input, err)
+		}
+		if converted != want {
+			t.Fatalf("convertValue(%q) = %#v, want %v", input, converted, want)
+		}
+	}
+
+	_, err := convertValue("yes", property, "--flag")
+	argumentError := requireArgumentError(t, err)
+	if argumentError.ExpectedType != "boolean" || argumentError.Received != "yes" {
+		t.Fatalf("unexpected argument error: %#v", argumentError)
+	}
 }
