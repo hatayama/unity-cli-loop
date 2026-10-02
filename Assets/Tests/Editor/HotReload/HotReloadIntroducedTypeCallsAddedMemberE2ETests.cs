@@ -614,8 +614,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     });
 
                 AssertMethodRow(result, HotReloadMethodOutcomeKind.Added, "." + CompiledTypeAddedMethodName + "(System.Int32)");
+                // Why Skipped for both: the new type's file was pulled back in, not passed, so a
+                // body of it that no longer binds is skipped with the file to pass rather than
+                // failing the run with an error in code the reader did not touch.
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Skipped, ".Run(");
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Skipped, ".get_Answer(");
+                Assert.That(CountMethodRows(result, HotReloadMethodOutcomeKind.Failed), Is.EqualTo(0), DescribeRun(result));
                 Assert.That(result.Warnings, Does.Contain(ExpectedStaleCallsFromTheNewType()), DescribeRun(result));
                 Assert.That(Invoke(readArtifact(), "Run"), Is.EqualTo(CompiledTypeAddedValue), DescribeRun(result));
+            });
+        }
+
+        /// <summary>
+        /// What: when the reader passes the new type's file itself and its getter no longer binds
+        /// against the added method's new signature, the getter is Failed rather than skipped,
+        /// since the error is in the file they passed.
+        /// </summary>
+        [Test]
+        public async Task Run_PassedNewTypeFileGetterNoLongerBinds_ReportsItFailed()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                HotReloadOrchestratorResult introducing = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = WriteSource(hostPath, "PassedGetterIntroducing", InsertCompiledTypeMember(File.ReadAllText(hostPath))),
+                        [UserOwnerPath] = WriteSource(UserOwnerPath, "PassedGetterIntroducing", BuildUserSource(CompiledTypeAddedCall))
+                    });
+                AssertIntroduced(introducing);
+
+                HotReloadOrchestratorResult result = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = WriteSource(
+                            hostPath,
+                            "PassedGetterReshaped",
+                            InsertReshapedCompiledTypeMember(File.ReadAllText(hostPath))),
+                        [UserOwnerPath] = WriteSource(UserOwnerPath, "PassedGetterStale", BuildUserSource(CompiledTypeAddedCall))
+                    });
+
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Failed, ".get_Answer(");
+                Assert.That(CountMethodRows(result, HotReloadMethodOutcomeKind.Skipped), Is.EqualTo(0), DescribeRun(result));
             });
         }
 

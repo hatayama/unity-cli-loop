@@ -102,7 +102,9 @@ internal static class PropertyGetterEmitter
                     addedMethodCatalog,
                     addedFieldCatalog,
                     addedPropertyCatalog,
-                    typeState.HomeAssemblyName);
+                    typeState.HomeAssemblyName,
+                    typeState.SourceUnit.Input.ReappliedSibling,
+                    typeState.TargetAssembly);
         }
     }
 
@@ -131,7 +133,9 @@ internal static class PropertyGetterEmitter
             AddedMethodCatalog addedMethodCatalog,
             AddedFieldCatalog addedFieldCatalog,
             AddedPropertyCatalog addedPropertyCatalog,
-            string homeAssemblyName)
+            string homeAssemblyName,
+            bool reappliedSibling,
+            IAssemblySymbol targetAssembly)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -213,6 +217,27 @@ internal static class PropertyGetterEmitter
         if (skipGetter)
         {
             return currentShimType;
+        }
+
+        // Why the same guard as an ordinary method: a getter of a file pulled back in whose body no
+        // longer binds would otherwise reach the shim and fail the run over code the reader never
+        // passed. A file the reader passed keeps its errors as Failed.
+        if (reappliedSibling)
+        {
+            WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
+                semanticModel,
+                getterBodyNode,
+                targetAssembly);
+            if (siblingSkip != null)
+            {
+                skipped.Add(new WorkerSkipped
+                {
+                    SourceProjectRelativePath = sourceProjectRelativePath,
+                    Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+                    Reason = siblingSkip
+                });
+                return currentShimType;
+            }
         }
 
         return EmitPropertyGetterShim(
