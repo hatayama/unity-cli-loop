@@ -369,7 +369,10 @@ host or one nested in a generic type, a delegate type not visible outside the as
 compiled class already uses for another member, `E ??= h`, `nameof(E)`, `a?.E += h`, passing it by `ref`, an initializer an added
 field could not have, and `Get().E += h` (the receiver would be evaluated twice).
 A handler that is a method group of an added method or of a compiled private method is
-`Skipped` too; subscribe a lambda that calls it instead (`E += x => OnValue(x);`).
+`Skipped` too; subscribe a lambda that calls it instead (`E += x => OnValue(x);`). When a
+compiled method already holds `E += OnValue;` and compiled code removes it with `-= OnValue`,
+do not wrap that line in a lambda (the `-=` would stop removing it): leave it as it is and
+put the new lambda subscription in a method this reload adds, called from the edited method.
 Subscriptions live on the store's delegate, not on Unity objects: `+=` is not atomic, so
 subscribe and raise on the main thread only. A handler subscribed by an earlier reload
 keeps running the body it was subscribed with until it is removed and subscribed again

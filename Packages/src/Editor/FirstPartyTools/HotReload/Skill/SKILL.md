@@ -89,7 +89,8 @@ While hot-reload changes are active, `AutoRefreshHeld` is true so returning focu
 recompile; `uloop compile` releases the hold, and `--revert-all` only when no introduced type
 remains.
 One-shot methods (`Awake`, `Start`, init helpers) patch but show no effect on the call that
-already ran; the response marks them with `LifecycleNote`.
+already ran; the response marks them with `LifecycleNote`. For an edited compiled `OnEnable` /
+`OnDisable`, set `enabled = false` with `execute-dynamic-code`, reload, then set it back to `true`.
 To tune a value while playing, expose a static property getter instead of a `const`; its
 body is patched on compiled and introduced types alike.
 
