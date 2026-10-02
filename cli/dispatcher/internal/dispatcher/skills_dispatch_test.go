@@ -40,6 +40,10 @@ func stubSkillsUserHomeDir(t *testing.T, homeDir string, err error) {
 	userHomeDir = func() (string, error) {
 		return homeDir, err
 	}
+	// A regression that bypasses userHomeDir must land in a throwaway home, never the real one.
+	isolatedHome := t.TempDir()
+	t.Setenv("HOME", isolatedHome)
+	t.Setenv("USERPROFILE", isolatedHome)
 }
 
 func TestTryHandleSkillsRequestInstallListUninstallRoundTrip(t *testing.T) {
@@ -177,7 +181,6 @@ func TestTryHandleSkillsRequestReportsMissingV3MigrationSource(t *testing.T) {
 
 func TestRunSkillsSubcommandRejectsUnroutedSubcommands(t *testing.T) {
 	// Verifies subcommands that bypassed routing fail with code 1 without running any handler.
-	// Project and migration modes fail silently because routing already reported the subcommand.
 	options := skillCommandOptions{targets: []skillTarget{targetConfigs["claude"]}}
 	projectRoot := t.TempDir()
 	cases := []struct {
@@ -203,7 +206,7 @@ func TestRunSkillsSubcommandRejectsUnroutedSubcommands(t *testing.T) {
 			if code != 1 || stdout.Len() != 0 {
 				t.Fatalf("expected code 1 with no output: code=%d stdout=%s", code, stdout.String())
 			}
-			if testCase.wantStderr == "" && stderr.Len() != 0 || !strings.Contains(stderr.String(), testCase.wantStderr) {
+			if !strings.Contains(stderr.String(), testCase.wantStderr) {
 				t.Fatalf("stderr mismatch: want %q got %s", testCase.wantStderr, stderr.String())
 			}
 		})
@@ -307,7 +310,9 @@ func TestRunSkillsUninstallReportsTargetErrors(t *testing.T) {
 
 	code := runSkillsUninstall(projectRoot, []skillDefinition{skill}, skillCommandOptions{targets: []skillTarget{targetConfigs["claude"]}}, &bytes.Buffer{}, &stderr)
 
-	if code != 1 || !strings.Contains(stderr.String(), "stat "+filepath.Join(projectRoot, ".claude", "skills")+string(filepath.Separator)) {
+	// The deprecated-skill cleanup runs before the per-skill lookup, so its path is the one reported.
+	wantMessage := "stat " + filepath.Join(projectRoot, ".claude", "skills", deprecatedSkillNames[0]) + ": not a directory"
+	if code != 1 || !strings.Contains(stderr.String(), wantMessage) {
 		t.Fatalf("expected an error: code=%d stderr=%s", code, stderr.String())
 	}
 }

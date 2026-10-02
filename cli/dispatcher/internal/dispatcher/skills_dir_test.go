@@ -1717,41 +1717,65 @@ func TestSyncSkillDirectoryPreservingForeignFilesReportsUncreatableDestination(t
 	}
 }
 
-func TestRunSkillsDirCommandsReportUnreadableStore(t *testing.T) {
-	// Verifies dir-mode install, list, and uninstall exit with code 1 when the store or an installed skill cannot be read.
+func TestRunSkillsDirCommandsReportStoreThatIsAFile(t *testing.T) {
+	// Verifies dir-mode install and uninstall exit with code 1 and name the store when it is a regular file.
 	root := t.TempDir()
 	skill := writeDirModeSkillSource(t, root, "uloop-sample")
 	storeFile := filepath.Join(root, "store-file")
 	writeDispatcherTestFile(t, storeFile, "not a directory")
-	lockedStore := filepath.Join(root, "locked-store")
-	lockSkillsTestDirectory(t, filepath.Join(lockedStore, "uloop-sample"), 0o300)
 
 	cases := []struct {
-		name        string
-		run         func(stderr *bytes.Buffer) int
-		wantMessage string
+		name string
+		run  func(stderr *bytes.Buffer) int
 	}{
-		{name: "uninstall from a file", wantMessage: "store-file: not a directory", run: func(stderr *bytes.Buffer) int {
+		{name: "uninstall from a file", run: func(stderr *bytes.Buffer) int {
 			return runSkillsDirUninstall(storeFile, []skillDefinition{skill}, &bytes.Buffer{}, stderr)
 		}},
-		{name: "install disabled skill into a file", wantMessage: "store-file: not a directory", run: func(stderr *bytes.Buffer) int {
+		{name: "install disabled skill into a file", run: func(stderr *bytes.Buffer) int {
 			return runSkillsDirInstall(storeFile, []skillDefinition{skill}, []string{"sample"}, &bytes.Buffer{}, stderr)
 		}},
-		{name: "install over an unreadable skill", wantMessage: filepath.Join("locked-store", "uloop-sample") + ": permission denied", run: func(stderr *bytes.Buffer) int {
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			code := testCase.run(&stderr)
+			envelope := decodeDispatcherTestEnvelope(t, stderr.String())
+			errorObject, _ := envelope["Error"].(map[string]any)
+			message, _ := errorObject["Message"].(string)
+			if code != 1 || !strings.Contains(message, storeFile) {
+				t.Fatalf("expected an error naming the store: code=%d stderr=%s", code, stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunSkillsDirCommandsReportUnreadableSkill(t *testing.T) {
+	// Verifies dir-mode install, list, and uninstall exit with code 1 when an installed skill cannot be read.
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	lockedStore := filepath.Join(root, "locked-store")
+	lockSkillsTestDirectory(t, filepath.Join(lockedStore, "uloop-sample"), 0o300)
+	wantMessage := filepath.Join("locked-store", "uloop-sample") + ": permission denied"
+
+	cases := []struct {
+		name string
+		run  func(stderr *bytes.Buffer) int
+	}{
+		{name: "install", run: func(stderr *bytes.Buffer) int {
 			return runSkillsDirInstall(lockedStore, []skillDefinition{skill}, nil, &bytes.Buffer{}, stderr)
 		}},
-		{name: "list an unreadable skill", wantMessage: filepath.Join("locked-store", "uloop-sample") + ": permission denied", run: func(stderr *bytes.Buffer) int {
+		{name: "list", run: func(stderr *bytes.Buffer) int {
 			return runSkillsDirList(lockedStore, []skillDefinition{skill}, nil, &bytes.Buffer{}, stderr)
 		}},
-		{name: "uninstall an unreadable skill", wantMessage: filepath.Join("locked-store", "uloop-sample") + ": permission denied", run: func(stderr *bytes.Buffer) int {
+		{name: "uninstall", run: func(stderr *bytes.Buffer) int {
 			return runSkillsDirUninstall(lockedStore, []skillDefinition{skill}, &bytes.Buffer{}, stderr)
 		}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			var stderr bytes.Buffer
-			if code := testCase.run(&stderr); code != 1 || !strings.Contains(stderr.String(), testCase.wantMessage) {
-				t.Fatalf("expected %q: code=%d stderr=%s", testCase.wantMessage, code, stderr.String())
+			if code := testCase.run(&stderr); code != 1 || !strings.Contains(stderr.String(), wantMessage) {
+				t.Fatalf("expected %q: code=%d stderr=%s", wantMessage, code, stderr.String())
 			}
 		})
 	}
