@@ -1635,3 +1635,171 @@ func TestPathContainsDistinguishesDescendantFromSiblingPrefix(t *testing.T) {
 		t.Fatal("an ancestor path must not be treated as contained")
 	}
 }
+
+func TestSyncSkillDirectoryPreservingForeignFilesCopiesSourceWithoutSkillFile(t *testing.T) {
+	// Verifies a source without SKILL.md still syncs its other owned entries and skips .meta files.
+	sourceDir := filepath.Join(t.TempDir(), "Skill")
+	writeDispatcherTestFile(t, filepath.Join(sourceDir, "references", "note.md"), "note")
+	writeDispatcherTestFile(t, filepath.Join(sourceDir, "references.meta"), "meta")
+	destinationDir := filepath.Join(t.TempDir(), "uloop-sample")
+
+	if err := syncSkillDirectoryPreservingForeignFiles(sourceDir, destinationDir); err != nil {
+		t.Fatalf("sync failed: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(destinationDir, "references", "note.md"), "note")
+	for _, unexpected := range []string{"references.meta", "SKILL.md"} {
+		if fileExists(filepath.Join(destinationDir, unexpected)) {
+			t.Fatalf("%s must not be written", unexpected)
+		}
+	}
+}
+
+func TestSyncSkillDirectoryPreservingForeignFilesReportsFailures(t *testing.T) {
+	// Verifies dir-mode sync failures are returned and never replace the installed SKILL.md.
+	cases := []struct {
+		name        string
+		setup       func(t *testing.T, sourceDir string, destinationDir string) string
+		wantMessage string
+	}{
+		{
+			name:        "source missing",
+			wantMessage: "open ",
+			setup: func(t *testing.T, sourceDir string, destinationDir string) string {
+				return filepath.Join(t.TempDir(), "missing")
+			},
+		},
+		{
+			name:        "source reference unreadable",
+			wantMessage: filepath.Join("Skill", "notes.md") + ": permission denied",
+			setup: func(t *testing.T, sourceDir string, destinationDir string) string {
+				writeDispatcherTestFile(t, filepath.Join(sourceDir, "notes.md"), "notes")
+				lockSkillsTestFile(t, filepath.Join(sourceDir, "notes.md"))
+				return sourceDir
+			},
+		},
+		{
+			name:        "destination not writable",
+			wantMessage: filepath.Join("uloop-sample", "SKILL.md.uloop-tmp-"),
+			setup: func(t *testing.T, sourceDir string, destinationDir string) string {
+				lockSkillsTestDirectory(t, destinationDir, 0o555)
+				return sourceDir
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			sourceDir := filepath.Join(t.TempDir(), "Skill")
+			writeSkillFile(t, sourceDir, sampleSkillContent)
+			destinationDir := filepath.Join(t.TempDir(), "uloop-sample")
+			effectiveSource := testCase.setup(t, sourceDir, destinationDir)
+
+			err := syncSkillDirectoryPreservingForeignFiles(effectiveSource, destinationDir)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
+				t.Fatalf("expected an error containing %q, got %v", testCase.wantMessage, err)
+			}
+			if fileExists(filepath.Join(destinationDir, "SKILL.md")) {
+				t.Fatal("SKILL.md must not be written when the sync fails")
+			}
+		})
+	}
+}
+
+func TestSyncSkillDirectoryPreservingForeignFilesReportsUncreatableDestination(t *testing.T) {
+	// Verifies a destination below a regular file fails before any entry is copied.
+	parentFile := filepath.Join(t.TempDir(), "file")
+	writeDispatcherTestFile(t, parentFile, "x")
+	sourceDir := filepath.Join(t.TempDir(), "Skill")
+	writeSkillFile(t, sourceDir, sampleSkillContent)
+
+	if err := syncSkillDirectoryPreservingForeignFiles(sourceDir, filepath.Join(parentFile, "uloop-sample")); err == nil || !strings.HasPrefix(err.Error(), "mkdir "+parentFile) {
+		t.Fatalf("expected a destination failure, got %v", err)
+	}
+}
+
+func TestRunSkillsDirCommandsReportUnreadableStore(t *testing.T) {
+	// Verifies dir-mode install, list, and uninstall exit with code 1 when the store or an installed skill cannot be read.
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	storeFile := filepath.Join(root, "store-file")
+	writeDispatcherTestFile(t, storeFile, "not a directory")
+	lockedStore := filepath.Join(root, "locked-store")
+	lockSkillsTestDirectory(t, filepath.Join(lockedStore, "uloop-sample"), 0o300)
+
+	cases := []struct {
+		name        string
+		run         func(stderr *bytes.Buffer) int
+		wantMessage string
+	}{
+		{name: "uninstall from a file", wantMessage: "store-file: not a directory", run: func(stderr *bytes.Buffer) int {
+			return runSkillsDirUninstall(storeFile, []skillDefinition{skill}, &bytes.Buffer{}, stderr)
+		}},
+		{name: "install disabled skill into a file", wantMessage: "store-file: not a directory", run: func(stderr *bytes.Buffer) int {
+			return runSkillsDirInstall(storeFile, []skillDefinition{skill}, []string{"sample"}, &bytes.Buffer{}, stderr)
+		}},
+		{name: "install over an unreadable skill", wantMessage: filepath.Join("locked-store", "uloop-sample") + ": permission denied", run: func(stderr *bytes.Buffer) int {
+			return runSkillsDirInstall(lockedStore, []skillDefinition{skill}, nil, &bytes.Buffer{}, stderr)
+		}},
+		{name: "list an unreadable skill", wantMessage: filepath.Join("locked-store", "uloop-sample") + ": permission denied", run: func(stderr *bytes.Buffer) int {
+			return runSkillsDirList(lockedStore, []skillDefinition{skill}, nil, &bytes.Buffer{}, stderr)
+		}},
+		{name: "uninstall an unreadable skill", wantMessage: filepath.Join("locked-store", "uloop-sample") + ": permission denied", run: func(stderr *bytes.Buffer) int {
+			return runSkillsDirUninstall(lockedStore, []skillDefinition{skill}, &bytes.Buffer{}, stderr)
+		}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			if code := testCase.run(&stderr); code != 1 || !strings.Contains(stderr.String(), testCase.wantMessage) {
+				t.Fatalf("expected %q: code=%d stderr=%s", testCase.wantMessage, code, stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunSkillsDirCommandsReportMissingSource(t *testing.T) {
+	// Verifies dir-mode install and uninstall stop when the skill source cannot be listed, leaving the store untouched.
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	store := filepath.Join(root, "store")
+	if code := runSkillsDirInstall(store, []skillDefinition{skill}, nil, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("setup install failed: %d", code)
+	}
+	skill.content = []byte("---\nname: uloop-sample\n---\n\n# changed\n")
+	if err := os.RemoveAll(skill.sourceDirectory); err != nil {
+		t.Fatalf("failed to remove source: %v", err)
+	}
+
+	for _, run := range []func(*bytes.Buffer) int{
+		func(stderr *bytes.Buffer) int {
+			return runSkillsDirInstall(store, []skillDefinition{skill}, nil, &bytes.Buffer{}, stderr)
+		},
+		func(stderr *bytes.Buffer) int {
+			return runSkillsDirUninstall(store, []skillDefinition{skill}, &bytes.Buffer{}, stderr)
+		},
+	} {
+		var stderr bytes.Buffer
+		if code := run(&stderr); code != 1 || !strings.Contains(stderr.String(), filepath.Join("uloop-sample", "Skill")+": no such file or directory") {
+			t.Fatalf("expected an error: code=%d stderr=%s", code, stderr.String())
+		}
+	}
+	assertFileContent(t, filepath.Join(store, "uloop-sample", "references", "note.md"), "note\n")
+}
+
+func TestRunSkillsDirUninstallReportsBlockedRemoval(t *testing.T) {
+	// Verifies uninstall exits with code 1 when an owned directory cannot be removed.
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	store := filepath.Join(root, "store")
+	if code := runSkillsDirInstall(store, []skillDefinition{skill}, nil, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("setup install failed: %d", code)
+	}
+	lockSkillsTestDirectory(t, filepath.Join(store, "uloop-sample", "references"), 0o555)
+	var stderr bytes.Buffer
+
+	code := runSkillsDirUninstall(store, []skillDefinition{skill}, &bytes.Buffer{}, &stderr)
+
+	if code != 1 || !strings.Contains(stderr.String(), "unlinkat "+filepath.Join(store, "uloop-sample", "references", "note.md")) {
+		t.Fatalf("expected an error: code=%d stderr=%s", code, stderr.String())
+	}
+}

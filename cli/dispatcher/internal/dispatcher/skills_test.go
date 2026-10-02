@@ -2,9 +2,11 @@ package dispatcher
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -1508,4 +1510,307 @@ func assertSkillContentContains(t *testing.T, skills []skillDefinition, skillNam
 		return
 	}
 	t.Fatalf("skill not found: %s", skillName)
+}
+
+// lockSkillsTestDirectory sets POSIX permissions on a directory and restores them so t.TempDir can clean up.
+func lockSkillsTestDirectory(t *testing.T, directory string, mode os.FileMode) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX directory permissions are required for this failure.")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file and directory permissions.")
+	}
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatalf("failed to create %s: %v", directory, err)
+	}
+	if err := os.Chmod(directory, mode); err != nil {
+		t.Fatalf("failed to chmod %s: %v", directory, err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(directory, 0o755)
+	})
+}
+
+func sampleSkillWithSource(t *testing.T) skillDefinition {
+	t.Helper()
+	sourceDir := filepath.Join(t.TempDir(), "Skill")
+	writeSkillFile(t, sourceDir, sampleSkillContent)
+	return skillDefinition{name: "uloop-sample", content: []byte(sampleSkillContent), sourceDirectory: sourceDir}
+}
+
+func TestInstallSkillsForTargetGlobalIgnoresProjectToolSettings(t *testing.T) {
+	// Verifies a global install installs skills of tools disabled in the project, since global installs have no project settings.
+	projectRoot := t.TempDir()
+	writeToolSettings(t, projectRoot, `{"disabledTools":["sample"]}`)
+	homeDir := t.TempDir()
+	stubSkillsUserHomeDir(t, homeDir, nil)
+
+	result, err := installSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{sampleSkillWithSource(t)}, true, false)
+
+	if err != nil || result.installed != 1 {
+		t.Fatalf("unexpected result: %+v err=%v", result, err)
+	}
+	if !fileExists(filepath.Join(homeDir, ".claude", "skills", "uloop-sample", "SKILL.md")) {
+		t.Fatal("global install must write under the home directory")
+	}
+}
+
+func TestInstallSkillsForTargetReportsFailures(t *testing.T) {
+	// Verifies each install stage failure is returned instead of reporting a partial install as success.
+	cases := []struct {
+		name        string
+		grouped     bool
+		setup       func(t *testing.T, baseDir string, skill *skillDefinition)
+		wantMessage string
+	}{
+		{
+			name:        "source missing",
+			wantMessage: "lstat ",
+			setup: func(t *testing.T, baseDir string, skill *skillDefinition) {
+				skill.sourceDirectory = filepath.Join(t.TempDir(), "missing")
+			},
+		},
+		{
+			name:        "legacy migration blocked",
+			grouped:     true,
+			wantMessage: "rename ",
+			setup: func(t *testing.T, baseDir string, skill *skillDefinition) {
+				writeSkillFile(t, filepath.Join(baseDir, "uloop-sample"), sampleSkillContent)
+				lockSkillsTestDirectory(t, filepath.Join(baseDir, managedSkillsDir), 0o555)
+			},
+		},
+		{
+			name:        "empty managed directory unreadable",
+			wantMessage: "open ",
+			setup: func(t *testing.T, baseDir string, skill *skillDefinition) {
+				lockSkillsTestDirectory(t, filepath.Join(baseDir, managedSkillsDir), 0o300)
+			},
+		},
+		{
+			name:        "alternate layout cannot be removed",
+			wantMessage: "unlinkat ",
+			setup: func(t *testing.T, baseDir string, skill *skillDefinition) {
+				alternateDir := filepath.Join(baseDir, managedSkillsDir, "uloop-sample")
+				writeSkillFile(t, filepath.Join(alternateDir, "locked"), "x")
+				lockSkillsTestDirectory(t, filepath.Join(alternateDir, "locked"), 0o555)
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			baseDir := filepath.Join(projectRoot, ".claude", "skills")
+			skill := sampleSkillWithSource(t)
+			testCase.setup(t, baseDir, &skill)
+
+			_, err := installSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{skill}, false, testCase.grouped)
+			if err == nil || !strings.HasPrefix(err.Error(), testCase.wantMessage) {
+				t.Fatalf("expected an error starting with %q, got %v", testCase.wantMessage, err)
+			}
+		})
+	}
+}
+
+func TestInstallSkillsForTargetReportsHomeLookupFailure(t *testing.T) {
+	// Verifies a global install fails when the home directory cannot be resolved.
+	stubSkillsUserHomeDir(t, "", errors.New("home unavailable"))
+
+	_, err := installSkillsForTarget(t.TempDir(), targetConfigs["claude"], nil, true, false)
+
+	if err == nil || !strings.Contains(err.Error(), "home unavailable") {
+		t.Fatalf("expected the home error, got %v", err)
+	}
+}
+
+func TestInstallSkillForTargetReportsStatusFailure(t *testing.T) {
+	// Verifies a skill whose installed location cannot be inspected is reported rather than overwritten.
+	baseDir := t.TempDir()
+	blockSkillsDirWithFile(t, baseDir, "uloop-sample")
+	result := skillInstallResult{}
+
+	err := installSkillForTarget(baseDir, sampleSkillWithSource(t), nil, false, &result)
+
+	if err == nil || !strings.Contains(err.Error(), "SKILL.md: not a directory") {
+		t.Fatalf("expected a status failure, got %v", err)
+	}
+	assertFileContent(t, filepath.Join(baseDir, "uloop-sample"), "not a directory")
+}
+
+func TestUninstallSkillsForTargetReportsFailures(t *testing.T) {
+	// Verifies uninstall stops on a home lookup failure and on a skill directory that cannot be removed.
+	t.Run("home lookup", func(t *testing.T) {
+		stubSkillsUserHomeDir(t, "", errors.New("home unavailable"))
+		if _, _, err := uninstallSkillsForTarget(t.TempDir(), targetConfigs["claude"], nil, true, false); err == nil || err.Error() != "home unavailable" {
+			t.Fatalf("expected the home error, got %v", err)
+		}
+	})
+	t.Run("removal blocked", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		lockedDir := filepath.Join(projectRoot, ".claude", "skills", "uloop-sample", "locked")
+		writeSkillFile(t, lockedDir, "x")
+		lockSkillsTestDirectory(t, lockedDir, 0o555)
+
+		removed, _, err := uninstallSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{{name: "uloop-sample"}}, false, false)
+
+		if err == nil || removed != 0 || !strings.HasPrefix(err.Error(), "unlinkat "+filepath.Join(lockedDir, "SKILL.md")) {
+			t.Fatalf("expected a removal failure, got removed=%d err=%v", removed, err)
+		}
+	})
+}
+
+func TestCollectSkillDefinitionsHandlesEditorFolderLayouts(t *testing.T) {
+	// Verifies discovery reads loose SKILL.md files, skips excluded folders, empty Skill folders, and unsafe names.
+	projectRoot := t.TempDir()
+	writeTestSkill(t, projectRoot, "Assets/Editor/Loose", "---\nname: uloop-loose\n---\n")
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Assets", "Editor", "Loose", "README.md"), "docs")
+	writeTestSkill(t, projectRoot, "Assets/Editor/node_modules/pkg/Skill", "---\nname: uloop-excluded\n---\n")
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Assets", "Editor", "Empty", "Skill", "notes.md"), "no skill file")
+	writeTestSkill(t, projectRoot, "Assets/Editor/Unsafe/Skill", "---\nname: bad/name\n---\n")
+
+	skills, err := collectSkillDefinitions(projectRoot)
+	if err != nil {
+		t.Fatalf("collectSkillDefinitions failed: %v", err)
+	}
+	if names := skillNames(skills); !reflect.DeepEqual(names, []string{"uloop-loose"}) {
+		t.Fatalf("skill names mismatch: %v", names)
+	}
+}
+
+func TestCollectSkillDefinitionsReportsUnreadableSources(t *testing.T) {
+	// Verifies an unreadable folder or SKILL.md under an Editor folder fails discovery instead of silently dropping skills.
+	cases := []struct {
+		name        string
+		setup       func(t *testing.T, projectRoot string)
+		wantMessage string
+	}{
+		{
+			name: "unreadable folder",
+			setup: func(t *testing.T, projectRoot string) {
+				lockSkillsTestDirectory(t, filepath.Join(projectRoot, "Assets", "Editor", "Locked"), 0o000)
+			},
+			wantMessage: filepath.Join("Editor", "Locked") + ": permission denied",
+		},
+		{
+			name:        "unreadable SKILL.md in Skill folder",
+			wantMessage: filepath.Join("Tool", "Skill", "SKILL.md") + ": permission denied",
+			setup: func(t *testing.T, projectRoot string) {
+				writeTestSkill(t, projectRoot, "Assets/Editor/Tool/Skill", sampleSkillContent)
+				lockSkillsTestFile(t, filepath.Join(projectRoot, "Assets", "Editor", "Tool", "Skill", "SKILL.md"))
+			},
+		},
+		{
+			name:        "unreadable loose SKILL.md",
+			wantMessage: filepath.Join("Loose", "SKILL.md") + ": permission denied",
+			setup: func(t *testing.T, projectRoot string) {
+				writeTestSkill(t, projectRoot, "Assets/Editor/Loose", sampleSkillContent)
+				lockSkillsTestFile(t, filepath.Join(projectRoot, "Assets", "Editor", "Loose", "SKILL.md"))
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			testCase.setup(t, projectRoot)
+
+			_, err := collectSkillDefinitions(projectRoot)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantMessage, err)
+			}
+		})
+	}
+}
+
+func TestCollectV3MigrationSkillDefinitionReportsMissingOrUnreadableSource(t *testing.T) {
+	// Verifies a package root without a readable migration SKILL.md is reported.
+	t.Run("missing", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		writePackageRootMarker(t, projectRoot)
+		_, err := collectV3MigrationSkillDefinition(projectRoot)
+		if err == nil || !strings.Contains(err.Error(), "skill source was not found") {
+			t.Fatalf("expected a not-found error, got %v", err)
+		}
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		writeV3MigrationSkillFixture(t, projectRoot, "---\nname: v3-cli-invocation-migration\n---\n")
+		lockSkillsTestFile(t, filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", v3MigrationSkillName, "Skill", "SKILL.md"))
+		_, err := collectV3MigrationSkillDefinition(projectRoot)
+		if err == nil || !strings.Contains(err.Error(), "SKILL.md: permission denied") {
+			t.Fatalf("expected a read error, got %v", err)
+		}
+	})
+}
+
+func v3MigrationSkillWithSource(t *testing.T) skillDefinition {
+	t.Helper()
+	sourceDir := filepath.Join(t.TempDir(), "Skill")
+	content := "---\nname: " + v3MigrationSkillName + "\n---\n"
+	writeSkillFile(t, sourceDir, content)
+	return skillDefinition{name: v3MigrationSkillName, content: []byte(content), sourceDirectory: sourceDir}
+}
+
+func TestRunV3MigrationSkillCommandsReportTargetErrors(t *testing.T) {
+	// Verifies migration install and uninstall exit with code 1 when the target directory cannot be used.
+	cases := []struct {
+		name        string
+		run         func(t *testing.T, projectRoot string, stderr *bytes.Buffer) int
+		wantMessage string
+	}{
+		{name: "install with unreadable target", wantMessage: "SKILL.md: not a directory", run: func(t *testing.T, projectRoot string, stderr *bytes.Buffer) int {
+			blockSkillsDirWithFile(t, projectRoot, ".claude")
+			return runV3MigrationSkillInstall(projectRoot, []skillDefinition{v3MigrationSkillWithSource(t)}, skillCommandOptions{targets: []skillTarget{targetConfigs["claude"]}}, &bytes.Buffer{}, stderr)
+		}},
+		{name: "uninstall with unreadable target", wantMessage: v3MigrationSkillName + ": not a directory", run: func(t *testing.T, projectRoot string, stderr *bytes.Buffer) int {
+			blockSkillsDirWithFile(t, projectRoot, ".claude")
+			return runV3MigrationSkillUninstall(projectRoot, skillCommandOptions{targets: []skillTarget{targetConfigs["claude"]}}, &bytes.Buffer{}, stderr)
+		}},
+		{name: "install without home", wantMessage: "home unavailable", run: func(t *testing.T, projectRoot string, stderr *bytes.Buffer) int {
+			stubSkillsUserHomeDir(t, "", errors.New("home unavailable"))
+			return runV3MigrationSkillInstall(projectRoot, []skillDefinition{v3MigrationSkillWithSource(t)}, skillCommandOptions{global: true, targets: []skillTarget{targetConfigs["claude"]}}, &bytes.Buffer{}, stderr)
+		}},
+		{name: "uninstall without home", wantMessage: "home unavailable", run: func(t *testing.T, projectRoot string, stderr *bytes.Buffer) int {
+			stubSkillsUserHomeDir(t, "", errors.New("home unavailable"))
+			return runV3MigrationSkillUninstall(projectRoot, skillCommandOptions{global: true, targets: []skillTarget{targetConfigs["claude"]}}, &bytes.Buffer{}, stderr)
+		}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			if code := testCase.run(t, t.TempDir(), &stderr); code != 1 || !strings.Contains(stderr.String(), testCase.wantMessage) {
+				t.Fatalf("expected %q: code=%d stderr=%s", testCase.wantMessage, code, stderr.String())
+			}
+		})
+	}
+}
+
+func TestInstallV3MigrationSkillForTargetReportsSyncFailures(t *testing.T) {
+	// Verifies a missing migration source or an unremovable alternate layout aborts the migration install.
+	t.Run("source missing", func(t *testing.T) {
+		skill := v3MigrationSkillWithSource(t)
+		skill.sourceDirectory = filepath.Join(t.TempDir(), "missing")
+		_, err := installV3MigrationSkillForTarget(t.TempDir(), targetConfigs["claude"], []skillDefinition{skill}, false, false)
+		if err == nil || !strings.HasPrefix(err.Error(), "lstat "+skill.sourceDirectory) {
+			t.Fatalf("expected a sync failure, got %v", err)
+		}
+	})
+	t.Run("alternate layout locked", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		lockedDir := filepath.Join(projectRoot, ".claude", "skills", managedSkillsDir, v3MigrationSkillName, "locked")
+		writeSkillFile(t, lockedDir, "x")
+		lockSkillsTestDirectory(t, lockedDir, 0o555)
+		_, err := installV3MigrationSkillForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{v3MigrationSkillWithSource(t)}, false, false)
+		if err == nil || !strings.HasPrefix(err.Error(), "unlinkat "+filepath.Join(lockedDir, "SKILL.md")) {
+			t.Fatalf("expected an alternate layout removal failure, got %v", err)
+		}
+	})
+}
+
+func TestUninstallV3MigrationSkillForTargetCountsMissingSkill(t *testing.T) {
+	// Verifies uninstalling a migration skill that is not installed reports it as not found.
+	removed, notFound, err := uninstallV3MigrationSkillForTarget(t.TempDir(), targetConfigs["claude"], false, false)
+
+	if err != nil || removed != 0 || notFound != 1 {
+		t.Fatalf("unexpected result: removed=%d notFound=%d err=%v", removed, notFound, err)
+	}
 }
