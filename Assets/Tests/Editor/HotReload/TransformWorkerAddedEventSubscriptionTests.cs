@@ -234,31 +234,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: in an iterator, whose whole body is rewritten when it touches a private member, a
-        /// compiled private method group on the right of '+=' keeps the lambda advice: leaving the
-        /// line and moving other code out would not make the body apply.
+        /// compiled private method group on the right of '+=' is skipped with the '+=' reason,
+        /// which offers the lambda unless compiled code removes the handler.
         /// </summary>
         [Test]
-        public async Task Skip_PrivateHandlerInIterator_KeepsTheLambdaAdvice()
+        public async Task Skip_PrivateHandlerInIterator_UsesTheSubscribeReason()
+        {
+            TransformWorkerSkippedDto skipped = await RunWireLaterAsync(
+                "            publisher.Existing += OnValue;\n");
+
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformAsyncIteratorInaccessibleAccess),
+                reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape),
+                reason);
+        }
+
+        /// <summary>
+        /// What: an iterator with both a compiled private method group on the right of '+=' and a
+        /// lambda calling a private member is still rewritten whole, so it is skipped for the
+        /// closure with the '+=' reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_PrivateHandlerBesideLambdaInIterator_UsesTheSubscribeReason()
+        {
+            TransformWorkerSkippedDto skipped = await RunWireLaterAsync(
+                "            publisher.Existing += OnValue;\n"
+                + "            publisher.Existing += value => OnValue(value + 1);\n");
+
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess),
+                reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape),
+                reason);
+        }
+
+        private static async Task<TransformWorkerSkippedDto> RunWireLaterAsync(string addedLines)
         {
             string subscriber = ReadOnDisk(SubscriberFileName);
             const string iteratorBody = "            yield return null;\n        }\n\n        public void Accept";
             Assert.That(subscriber, Does.Contain(iteratorBody), "Precondition: WireLater body must exist.");
-            subscriber = subscriber.Replace(
-                iteratorBody,
-                "            publisher.Existing += OnValue;\n" + iteratorBody,
-                StringComparison.Ordinal);
+            subscriber = subscriber.Replace(iteratorBody, addedLines + iteratorBody, StringComparison.Ordinal);
 
             TransformWorkerClientResult result = await RunAsync(ReadOnDisk(PublisherFileName), subscriber);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             TransformWorkerSkippedDto skipped = FindSkipped(result, "WireLater");
             Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
-            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
-            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
-            Assert.That(
-                skipped.reason.detail.code,
-                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape),
-                reason);
+            return skipped;
         }
 
         /// <summary>
