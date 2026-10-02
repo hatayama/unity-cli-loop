@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -327,5 +329,76 @@ func assertDispatcherPinFileContent(t *testing.T, pinPath string, want string) {
 	}
 	if string(content) != want {
 		t.Fatalf("pin content = %s, want %s", content, want)
+	}
+}
+
+func TestFetchDispatcherReleaseAssetsReadsTheReleaseByTag(t *testing.T) {
+	// Verifies the release is requested by tag with the API headers and bearer token, and its assets are decoded.
+	t.Setenv("GITHUB_TOKEN", "test-token")
+	var requestPath, authorization, apiVersion string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestPath = request.URL.Path
+		authorization = request.Header.Get("Authorization")
+		apiVersion = request.Header.Get("X-GitHub-Api-Version")
+		_, _ = writer.Write([]byte(`{"assets":[{"name":"install.sh","browser_download_url":"https://example.test/install.sh"}]}`))
+	}))
+	defer server.Close()
+
+	assets, err := fetchDispatcherReleaseAssets(context.Background(), server.URL, "dispatcher-v3.0.1")
+	if err != nil {
+		t.Fatalf("fetchDispatcherReleaseAssets failed: %v", err)
+	}
+	if len(assets) != 1 || assets[0].Name != "install.sh" || assets[0].URL != "https://example.test/install.sh" {
+		t.Fatalf("assets = %+v", assets)
+	}
+	if !strings.HasSuffix(requestPath, "/releases/tags/dispatcher-v3.0.1") {
+		t.Fatalf("request path = %q", requestPath)
+	}
+	if authorization != "Bearer test-token" || apiVersion != "2022-11-28" {
+		t.Fatalf("authorization = %q, api version = %q", authorization, apiVersion)
+	}
+}
+
+func TestFetchDispatcherReleaseAssetsReportsUnusableResponses(t *testing.T) {
+	// Verifies an error status and an undecodable body are reported instead of returning an empty asset list.
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{"not found", http.StatusNotFound, `{}`, "GitHub release API returned 404"},
+		{"invalid body", http.StatusOK, "{", "decode GitHub release assets"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("GITHUB_TOKEN", "")
+			t.Setenv("GH_TOKEN", "")
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.WriteHeader(testCase.status)
+				_, _ = writer.Write([]byte(testCase.body))
+			}))
+			defer server.Close()
+
+			assets, err := fetchDispatcherReleaseAssets(context.Background(), server.URL, "dispatcher-v3.0.1")
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got assets %+v and error %v", testCase.wantErr, assets, err)
+			}
+		})
+	}
+}
+
+func TestFetchDispatcherReleaseAssetsReportsRequestFailures(t *testing.T) {
+	// Verifies an unbuildable request URL and an unreachable server both fail instead of returning assets.
+	if _, err := fetchDispatcherReleaseAssets(context.Background(), "http://bad host", "tag"); err == nil || !strings.Contains(err.Error(), "build GitHub release request") {
+		t.Fatalf("expected a request build error, got %v", err)
+	}
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	closedURL := server.URL
+	server.Close()
+	if _, err := fetchDispatcherReleaseAssets(context.Background(), closedURL, "tag"); err == nil {
+		t.Fatal("expected an unreachable server to fail")
 	}
 }

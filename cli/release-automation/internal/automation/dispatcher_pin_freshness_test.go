@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -290,5 +292,106 @@ func TestNewestStableDispatcherReleaseKeepsHighestVersionRegardlessOfOrder(t *te
 
 	if tag != "dispatcher-v3.2.0" || version != "3.2.0" {
 		t.Fatalf("expected dispatcher-v3.2.0 / 3.2.0, got %q / %q", tag, version)
+	}
+}
+
+// fullDispatcherReleasePage renders a release listing page holding exactly the page size.
+func fullDispatcherReleasePage() string {
+	entries := make([]string, dispatcherPinFreshnessPageSize)
+	for index := range entries {
+		entries[index] = fmt.Sprintf(`{"tag_name":"v1.0.%d"}`, index)
+	}
+	return "[" + strings.Join(entries, ",") + "]"
+}
+
+func TestFetchDispatcherReleasesFollowsPagesUntilAShortPage(t *testing.T) {
+	// Verifies full pages are followed to the next page and the listing ends at the first short page.
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "test-token")
+	requestedPages := []string{}
+	authorization := ""
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestedPages = append(requestedPages, request.URL.Query().Get("page"))
+		authorization = request.Header.Get("Authorization")
+		if request.URL.Query().Get("page") == "1" {
+			_, _ = writer.Write([]byte(fullDispatcherReleasePage()))
+			return
+		}
+		_, _ = writer.Write([]byte(`[{"tag_name":"dispatcher-v3.0.0","prerelease":true}]`))
+	}))
+	defer server.Close()
+
+	releases, err := fetchDispatcherReleases(context.Background(), server.URL, "owner/repository")
+	if err != nil {
+		t.Fatalf("fetchDispatcherReleases failed: %v", err)
+	}
+	if len(releases) != dispatcherPinFreshnessPageSize+1 {
+		t.Fatalf("expected %d releases, got %d", dispatcherPinFreshnessPageSize+1, len(releases))
+	}
+	last := releases[len(releases)-1]
+	if last.TagName != "dispatcher-v3.0.0" || !last.Prerelease {
+		t.Fatalf("last release = %+v", last)
+	}
+	if strings.Join(requestedPages, ",") != "1,2" {
+		t.Fatalf("requested pages = %v", requestedPages)
+	}
+	if authorization != "Bearer test-token" {
+		t.Fatalf("authorization = %q", authorization)
+	}
+}
+
+func TestFetchDispatcherReleasesFailsWhenListingNeverEnds(t *testing.T) {
+	// Verifies a listing that keeps returning full pages fails instead of reporting a release from a truncated listing.
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(fullDispatcherReleasePage()))
+	}))
+	defer server.Close()
+
+	releases, err := fetchDispatcherReleases(context.Background(), server.URL, "owner/repository")
+
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("exceeded %d pages", dispatcherPinFreshnessMaxPages)) {
+		t.Fatalf("expected a page limit error, got %d releases and error %v", len(releases), err)
+	}
+}
+
+func TestFetchDispatcherReleasesReportsUnusablePages(t *testing.T) {
+	// Verifies an error status and an undecodable page fail the listing.
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{"server error", http.StatusInternalServerError, `[]`, "GitHub release list API returned 500"},
+		{"invalid body", http.StatusOK, "{", "decode GitHub release list"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.WriteHeader(testCase.status)
+				_, _ = writer.Write([]byte(testCase.body))
+			}))
+			defer server.Close()
+
+			_, err := fetchDispatcherReleases(context.Background(), server.URL, "owner/repository")
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestFetchDispatcherReleasesReportsRequestFailures(t *testing.T) {
+	// Verifies an unbuildable request URL and an unreachable server both fail the listing.
+	if _, err := fetchDispatcherReleases(context.Background(), "http://bad host", "owner/repository"); err == nil || !strings.Contains(err.Error(), "build GitHub release list request") {
+		t.Fatalf("expected a request build error, got %v", err)
+	}
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	closedURL := server.URL
+	server.Close()
+	if _, err := fetchDispatcherReleases(context.Background(), closedURL, "owner/repository"); err == nil {
+		t.Fatal("expected an unreachable server to fail")
 	}
 }

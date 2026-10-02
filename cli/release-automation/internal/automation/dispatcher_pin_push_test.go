@@ -413,3 +413,14 @@ func TestDispatcherPinPushRepositoryRootResolvesTheCheckout(t *testing.T) {
 		t.Fatalf("expected %s to contain cli/release-automation/go.mod, stat error %v", root, statErr)
 	}
 }
+
+func TestParseDispatcherPinPushFlagsAcceptsStableTag(t *testing.T) {
+	// Verifies a stable dispatcher tag and base branch are returned unchanged in the config.
+	config, err := parseDispatcherPinPushFlags([]string{"--tag", dispatcherPinPushStableTag, "--base-branch", "main"})
+	if err != nil {
+		t.Fatalf("parseDispatcherPinPushFlags failed: %v", err)
+	}
+	if config.tag != dispatcherPinPushStableTag || config.baseBranch != "main" {
+		t.Fatalf("config = %+v", config)
+	}
+}
