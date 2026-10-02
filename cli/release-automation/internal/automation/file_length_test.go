@@ -356,8 +356,8 @@ func TestCountSLOCTracksCSharpStringAndHoleBoundaries(t *testing.T) {
 }
 
 // Verifies the character right after a brace inside an interpolation hole is scanned like any other: a closing
-// brace there still ends the hole, so a later comment line is not counted as string content, and a newline there
-// still ends the line.
+// brace there still ends the hole, so a later comment line is not counted as string content, and a newline after
+// an opening or a closing brace still ends the line.
 func TestCountSLOCScansTheCharacterAfterAHoleBrace(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -366,6 +366,7 @@ func TestCountSLOCScansTheCharacterAfterAHoleBrace(t *testing.T) {
 	}{
 		{"hole closed right after a nested brace", "var s = $\"{new { A = 1 }}\";\n// c\n", 1},
 		{"newline right after a nested brace", "var s = $\"{new { A = 1 }\n.A}\";\n", 2},
+		{"newline right after an opening brace", "var s = $\"{new {\nA = 1 }.A}\";\n", 2},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
