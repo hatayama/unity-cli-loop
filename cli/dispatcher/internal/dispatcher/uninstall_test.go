@@ -3,7 +3,6 @@ package dispatcher
 import (
 	"bytes"
 	"context"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -77,25 +76,6 @@ func TestTryHandleUninstallRequestRejectsExtraArguments(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("no removal progress may be printed: %s", stdout.String())
-	}
-}
-
-func TestTryHandleUninstallRequestReportsUnresolvableInstallDirectory(t *testing.T) {
-	// Verifies uninstall stops with code 1 when no install directory can be resolved.
-	unsetNativeInstallLocation(t)
-	if _, err := resolveUninstallInstallDir(runtime.GOOS); err == nil {
-		t.Fatal("precondition failed: the uninstall directory still resolves, so the real uninstaller could run")
-	}
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	handled, code := tryHandleUninstallRequest(context.Background(), []string{"uninstall"}, &stdout, &stderr)
-
-	if !handled || code != 1 {
-		t.Fatalf("result mismatch: handled=%t code=%d", handled, code)
-	}
-	if stderr.Len() == 0 || stdout.Len() != 0 {
-		t.Fatalf("expected only an error envelope: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

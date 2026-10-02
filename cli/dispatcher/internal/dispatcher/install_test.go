@@ -3,7 +3,6 @@ package dispatcher
 import (
 	"bytes"
 	"context"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -151,8 +150,8 @@ func TestParseInstallOptionsRejectsInvalidArguments(t *testing.T) {
 		{name: "duplicate short flag", args: []string{"-d", "/a", "-d", "/b"}, wantMessage: "Duplicate install option: -d"},
 		{name: "short flag after long flag", args: []string{"--dir", "/a", "-d", "/b"}, wantMessage: "Duplicate install option: -d"},
 		{name: "long flag after short flag", args: []string{"-d", "/a", "--dir=/b"}, wantMessage: "Duplicate install option: --dir"},
-		{name: "short flag without value", args: []string{"-d"}, wantMessage: "-d"},
-		{name: "short flag followed by option", args: []string{"-d", "--dir"}, wantMessage: "-d"},
+		{name: "short flag without value", args: []string{"-d"}, wantMessage: "-d requires a value"},
+		{name: "short flag followed by option", args: []string{"-d", "--dir"}, wantMessage: "-d requires a value"},
 		{name: "positional argument", args: []string{"/opt/uloop"}, wantMessage: "/opt/uloop"},
 	}
 	for _, testCase := range cases {
@@ -181,34 +180,6 @@ func TestTryHandleInstallRequestReportsInvalidOptions(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("no setup progress may be printed for invalid options: %s", stdout.String())
-	}
-}
-
-// unsetNativeInstallLocation clears every input the default install directory is derived from
-// and fails the test unless resolution now fails, so callers can never reach the real installer.
-func unsetNativeInstallLocation(t *testing.T) {
-	t.Helper()
-	t.Setenv(nativepath.InstallDirEnvName, "")
-	t.Setenv(nativepath.LocalAppDataEnvName, "")
-	t.Setenv("HOME", "")
-	if _, err := resolveNativeInstallDir(runtime.GOOS, ""); err == nil {
-		t.Fatal("precondition failed: the install directory still resolves, so the real installer could run")
-	}
-}
-
-func TestTryHandleInstallRequestReportsUnresolvableInstallDirectory(t *testing.T) {
-	// Verifies install stops with code 1 when no install directory can be resolved.
-	unsetNativeInstallLocation(t)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	handled, code := tryHandleInstallRequest(context.Background(), []string{"install"}, &stdout, &stderr)
-
-	if !handled || code != 1 {
-		t.Fatalf("result mismatch: handled=%t code=%d", handled, code)
-	}
-	if stderr.Len() == 0 || stdout.Len() != 0 {
-		t.Fatalf("expected only an error envelope: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

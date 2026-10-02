@@ -96,8 +96,8 @@ func TestShouldKeepDispatcherProcessCommandForEmptyArgs(t *testing.T) {
 func TestResolveDispatcherProjectRootRejectsInvalidCompileCheckOptions(t *testing.T) {
 	// Verifies compile-check option errors surface from project-root resolution before any project lookup.
 	_, err := resolveDispatcherProjectRoot(t.TempDir(), "", []string{clicore.CompileCheckCommandName, "--no-such-option"})
-	if err == nil {
-		t.Fatal("expected an option error for an unknown compile-check option")
+	if err == nil || !strings.Contains(err.Error(), "Unknown compile-check option: --no-such-option") {
+		t.Fatalf("expected the compile-check option error, got %v", err)
 	}
 }
 
@@ -117,8 +117,8 @@ func TestResolveDispatcherProjectRootResolvesCompileCheckProject(t *testing.T) {
 func TestResolveDispatcherProjectRootRejectsInvalidLaunchOptions(t *testing.T) {
 	// Verifies launch option errors surface from project-root resolution.
 	_, err := resolveDispatcherProjectRoot(t.TempDir(), "", []string{clicore.LaunchCommandName, "--no-such-option"})
-	if err == nil {
-		t.Fatal("expected an option error for an unknown launch option")
+	if err == nil || !strings.Contains(err.Error(), "Unknown launch option: --no-such-option") {
+		t.Fatalf("expected the launch option error, got %v", err)
 	}
 }
 
@@ -127,12 +127,12 @@ func TestRunDispatcherRejectsMalformedGlobalProjectPath(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	var stderr bytes.Buffer
-	code := runDispatcherWithDeps(context.Background(), []string{"compile", "--project-path"}, io.Discard, &stderr, defaultDispatcherRunDeps())
+	code := runDispatcherWithDeps(context.Background(), []string{"compile", "--project-path"}, io.Discard, &stderr, fakeDispatcherRunDeps(t))
 
 	if code != 1 {
 		t.Fatalf("exit code mismatch: %d", code)
 	}
-	if !strings.Contains(stderr.String(), "--project-path") {
+	if !strings.Contains(stderr.String(), "--project-path requires a value") {
 		t.Fatalf("error must name the malformed option: %s", stderr.String())
 	}
 }
@@ -140,20 +140,15 @@ func TestRunDispatcherRejectsMalformedGlobalProjectPath(t *testing.T) {
 func TestRunDispatcherReportsUnresolvableProjectForRunnerCommand(t *testing.T) {
 	// Verifies a runner-owned command outside any Unity project fails with exit code 1 before resolving a runner.
 	t.Chdir(t.TempDir())
-	deps := defaultDispatcherRunDeps()
-	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
-		t.Fatal("runner must not be executed when the project cannot be resolved")
-		return 0
-	}
 
 	var stderr bytes.Buffer
-	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, deps)
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, fakeDispatcherRunDeps(t))
 
 	if code != 1 {
 		t.Fatalf("exit code mismatch: %d", code)
 	}
-	if stderr.String() == "" {
-		t.Fatal("expected an error envelope on stderr")
+	if !strings.Contains(stderr.String(), "unity project not found") {
+		t.Fatalf("expected the project resolution error: %s", stderr.String())
 	}
 }
 
@@ -164,14 +159,9 @@ func TestRunDispatcherReportsRealCLIResolutionFailure(t *testing.T) {
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Setenv(nativepath.ProjectRunnerPathEnvName, filepath.Join(t.TempDir(), "missing-runner"))
 	t.Chdir(projectRoot)
-	deps := defaultDispatcherRunDeps()
-	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
-		t.Fatal("runner must not be executed when it cannot be resolved")
-		return 0
-	}
 
 	var stderr bytes.Buffer
-	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, deps)
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, fakeDispatcherRunDeps(t))
 
 	if code != 1 {
 		t.Fatalf("exit code mismatch: %d", code)
@@ -186,4 +176,24 @@ func writeDispatcherExecutable(t *testing.T, filePath string, content string) {
 	if err := os.WriteFile(filePath, []byte(content), 0o755); err != nil {
 		t.Fatalf("failed to write %s: %v", filePath, err)
 	}
+}
+
+// fakeDispatcherRunDeps replaces every dependency that could run a real runner, V2 CLI, or
+// self-update with one that fails the test, so a routing regression cannot reach real side effects.
+func fakeDispatcherRunDeps(t *testing.T) dispatcherRunDeps {
+	t.Helper()
+	deps := defaultDispatcherRunDeps()
+	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
+		t.Fatal("the project runner must not be executed")
+		return 0
+	}
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("the V2 CLI must not be executed")
+		return 0, nil
+	}
+	deps.runUpdate = func(context.Context) (bool, error) {
+		t.Fatal("the dispatcher self-update must not run")
+		return false, nil
+	}
+	return deps
 }

@@ -139,8 +139,9 @@ func TestInstallDispatcherV2CLIReportsUnusableCacheRoot(t *testing.T) {
 		},
 	}
 
-	if _, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", io.Discard, deps); err == nil {
-		t.Fatal("expected a cache directory error")
+	_, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", io.Discard, deps)
+	if err == nil || !strings.Contains(err.Error(), "mkdir "+cacheRoot+": not a directory") {
+		t.Fatalf("expected a cache directory error, got %v", err)
 	}
 }
 
@@ -192,6 +193,9 @@ func TestInstallDispatcherV2CLIReportsUnremovableBrokenInstall(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX directory permissions are required to make removal fail.")
 	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions.")
+	}
 	cacheRoot := t.TempDir()
 	installPath := dispatcherV2InstallPath(cacheRoot, "2.2.0")
 	lockedDirectory := filepath.Join(installPath, "locked")
@@ -209,8 +213,9 @@ func TestInstallDispatcherV2CLIReportsUnremovableBrokenInstall(t *testing.T) {
 		},
 	}
 
-	if _, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", io.Discard, deps); err == nil {
-		t.Fatal("expected the stale install removal failure")
+	_, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", io.Discard, deps)
+	if err == nil || !strings.Contains(err.Error(), "unlinkat "+filepath.Join(lockedDirectory, "file")) {
+		t.Fatalf("expected the stale install removal failure, got %v", err)
 	}
 	assertFileContent(t, filepath.Join(lockedDirectory, "file"), "x")
 }

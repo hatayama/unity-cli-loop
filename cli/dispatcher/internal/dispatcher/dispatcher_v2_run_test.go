@@ -99,8 +99,8 @@ func TestRunDispatcherV2CLIReportsNodeStartFailure(t *testing.T) {
 
 	_, err := runDispatcherV2CLI(context.Background(), "2.2.0", nil, io.Discard, io.Discard)
 
-	if err == nil {
-		t.Fatal("expected a node start failure")
+	if err == nil || !strings.Contains(err.Error(), "fork/exec "+nodePath) {
+		t.Fatalf("expected a node start failure, got %v", err)
 	}
 }
 
@@ -159,8 +159,9 @@ func TestRunDispatcherV2CLIReportsMissingCacheRoot(t *testing.T) {
 	// Verifies an unresolvable cache root fails before installing the V2 CLI.
 	unsetDispatcherCacheRoot(t)
 
-	if _, err := runDispatcherV2CLI(context.Background(), "2.2.0", nil, io.Discard, io.Discard); err == nil {
-		t.Fatal("expected a cache root resolution error")
+	_, err := runDispatcherV2CLI(context.Background(), "2.2.0", nil, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "$HOME is not defined") {
+		t.Fatalf("expected a cache root resolution error, got %v", err)
 	}
 }
 

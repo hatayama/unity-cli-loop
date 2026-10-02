@@ -140,8 +140,8 @@ func TestDownloadDispatcherFileReturnsTransportError(t *testing.T) {
 func TestDownloadDispatcherFileRejectsInvalidURL(t *testing.T) {
 	// Verifies a URL that cannot form a request fails before any network call.
 	err := downloadDispatcherFile(context.Background(), "://missing-scheme", filepath.Join(t.TempDir(), "asset"))
-	if err == nil {
-		t.Fatal("expected an invalid URL error")
+	if err == nil || !strings.Contains(err.Error(), "missing protocol scheme") {
+		t.Fatalf("expected an invalid URL error, got %v", err)
 	}
 }
 
@@ -152,8 +152,8 @@ func TestDownloadDispatcherFileReportsUnwritableDestination(t *testing.T) {
 
 	err := downloadDispatcherFile(context.Background(), "https://example.invalid/asset", destinationPath)
 
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected a missing-directory error, got %v", err)
+	if !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), "open "+destinationPath) {
+		t.Fatalf("expected a destination open error, got %v", err)
 	}
 }
 
@@ -178,9 +178,9 @@ func TestVerifyDispatcherChecksumFailures(t *testing.T) {
 		wantMessage  string
 		wantNotExist bool
 	}{
-		{name: "missing checksum file", assetPath: assetPath, checksumPath: filepath.Join(tempDir, "missing.sha256"), wantNotExist: true},
+		{name: "missing checksum file", assetPath: assetPath, checksumPath: filepath.Join(tempDir, "missing.sha256"), wantMessage: "missing.sha256", wantNotExist: true},
 		{name: "empty checksum file", assetPath: assetPath, checksumPath: emptyChecksumPath, wantMessage: "checksum file is empty"},
-		{name: "missing asset", assetPath: filepath.Join(tempDir, "missing.tar.gz"), checksumPath: validChecksumPath, wantNotExist: true},
+		{name: "missing asset", assetPath: filepath.Join(tempDir, "missing.tar.gz"), checksumPath: validChecksumPath, wantMessage: "missing.tar.gz", wantNotExist: true},
 		{name: "unreadable asset", assetPath: tempDir, checksumPath: validChecksumPath, wantMessage: "is a directory"},
 		{name: "mismatch", assetPath: assetPath, checksumPath: wrongChecksumPath, wantMessage: "checksum mismatch for asset.tar.gz"},
 	}
@@ -194,11 +194,8 @@ func TestVerifyDispatcherChecksumFailures(t *testing.T) {
 
 func assertDispatcherTestError(t *testing.T, err error, wantMessage string, wantNotExist bool) {
 	t.Helper()
-	if wantNotExist {
-		if !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected a not-exist error, got %v", err)
-		}
-		return
+	if wantNotExist && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected a not-exist error, got %v", err)
 	}
 	if err == nil || !strings.Contains(err.Error(), wantMessage) {
 		t.Fatalf("expected error containing %q, got %v", wantMessage, err)
@@ -236,9 +233,9 @@ func TestExtractDispatcherRealCLIFromTarGzFailures(t *testing.T) {
 		wantMessage  string
 		wantNotExist bool
 	}{
-		{name: "missing archive", archivePath: filepath.Join(tempDir, "missing.tar.gz"), wantNotExist: true},
-		{name: "not gzip", archivePath: notGzipPath, wantMessage: "gzip"},
-		{name: "corrupt tar", archivePath: corruptTarPath, wantMessage: "tar"},
+		{name: "missing archive", archivePath: filepath.Join(tempDir, "missing.tar.gz"), wantMessage: "missing.tar.gz", wantNotExist: true},
+		{name: "not gzip", archivePath: notGzipPath, wantMessage: "gzip: invalid header"},
+		{name: "corrupt tar", archivePath: corruptTarPath, wantMessage: "archive/tar"},
 		{name: "runner missing", archivePath: runnerlessArchivePath, wantMessage: "archive does not contain uloop-project-runner"},
 	}
 	for _, testCase := range cases {
@@ -300,7 +297,7 @@ func TestExtractDispatcherRealCLIFromZipFailures(t *testing.T) {
 		archivePath string
 		wantMessage string
 	}{
-		{name: "corrupt zip", archivePath: corruptArchivePath, wantMessage: "zip"},
+		{name: "corrupt zip", archivePath: corruptArchivePath, wantMessage: "zip: not a valid zip file"},
 		{name: "runner missing", archivePath: runnerlessArchivePath, wantMessage: "archive does not contain uloop-project-runner.exe"},
 	}
 	for _, testCase := range cases {
@@ -321,11 +318,13 @@ func TestExtractDispatcherRealCLIReportsUnwritableDestination(t *testing.T) {
 	writeDispatcherZipArchive(t, zipPath, []dispatcherArchiveTestEntry{{Name: "uloop-project-runner.exe", Content: "runner"}})
 	destinationPath := filepath.Join(tempDir, "missing", "runner")
 
-	if err := extractDispatcherRealCLI(tarPath, "asset.tar.gz", destinationPath, "linux"); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected tar extraction to report the missing directory, got %v", err)
-	}
-	if err := extractDispatcherRealCLI(zipPath, "asset.zip", destinationPath, "windows"); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected zip extraction to report the missing directory, got %v", err)
+	for _, err := range []error{
+		extractDispatcherRealCLI(tarPath, "asset.tar.gz", destinationPath, "linux"),
+		extractDispatcherRealCLI(zipPath, "asset.zip", destinationPath, "windows"),
+	} {
+		if !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), "open "+destinationPath) {
+			t.Fatalf("expected the destination open error, got %v", err)
+		}
 	}
 }
 
@@ -392,20 +391,23 @@ func TestInstallDownloadedDispatcherRealCLIReportsSecondRenameFailure(t *testing
 func TestInstallDownloadedDispatcherRealCLIReportsCleanupFailures(t *testing.T) {
 	// Verifies failures to clear a stale READY marker or a stale cache entry abort the install.
 	cases := []struct {
-		name  string
-		setup func(t *testing.T, realCLIPath string)
+		name        string
+		setup       func(t *testing.T, realCLIPath string)
+		blockedPath func(realCLIPath string) string
 	}{
 		{
 			name: "stale READY cannot be removed",
 			setup: func(t *testing.T, realCLIPath string) {
 				writeDispatcherTestFile(t, filepath.Join(dispatcherRealCLIReadyPath(realCLIPath), "child"), "x")
 			},
+			blockedPath: dispatcherRealCLIReadyPath,
 		},
 		{
 			name: "stale entry cannot be removed",
 			setup: func(t *testing.T, realCLIPath string) {
 				writeDispatcherTestFile(t, filepath.Join(realCLIPath, "child"), "x")
 			},
+			blockedPath: func(realCLIPath string) string { return realCLIPath },
 		},
 	}
 	for _, testCase := range cases {
@@ -417,8 +419,9 @@ func TestInstallDownloadedDispatcherRealCLIReportsCleanupFailures(t *testing.T) 
 			testCase.setup(t, realCLIPath)
 			stubDispatcherRenameFailsOnce(t)
 
-			if _, err := installDownloadedDispatcherRealCLI(tempRealCLIPath, realCLIPath); err == nil {
-				t.Fatal("expected the cleanup failure to abort the install")
+			_, err := installDownloadedDispatcherRealCLI(tempRealCLIPath, realCLIPath)
+			if err == nil || !strings.Contains(err.Error(), "remove "+testCase.blockedPath(realCLIPath)+":") {
+				t.Fatalf("expected the cleanup failure to abort the install, got %v", err)
 			}
 			assertFileContent(t, tempRealCLIPath, "downloaded")
 		})
@@ -450,7 +453,7 @@ func TestMarkDispatcherRealCLIReadyReportsWriteFailure(t *testing.T) {
 	}
 
 	path, err := markDispatcherRealCLIReady(realCLIPath)
-	if err == nil || path != "" {
+	if err == nil || path != "" || !strings.Contains(err.Error(), "is a directory") {
 		t.Fatalf("expected a write failure, got path=%q err=%v", path, err)
 	}
 }
@@ -474,8 +477,8 @@ func TestDownloadDispatcherRealCLIForPinFailures(t *testing.T) {
 		wantMessage string
 	}{
 		{name: "unsupported platform", goarch: "arm64", wantMessage: "unsupported platform"},
-		{name: "archive download", goarch: "amd64", wantMessage: "download failed"},
-		{name: "checksum download", goarch: "amd64", bodies: map[string][]byte{assetSuffix: archiveContent}, wantMessage: ".sha256"},
+		{name: "archive download", goarch: "amd64", wantMessage: "linux-amd64.tar.gz: Not Found"},
+		{name: "checksum download", goarch: "amd64", bodies: map[string][]byte{assetSuffix: archiveContent}, wantMessage: "linux-amd64.tar.gz.sha256: Not Found"},
 		{name: "checksum mismatch", goarch: "amd64", bodies: map[string][]byte{assetSuffix: archiveContent, assetSuffix + ".sha256": []byte(strings.Repeat("0", 64))}, wantMessage: "checksum mismatch"},
 		{name: "runner missing from archive", goarch: "amd64", bodies: map[string][]byte{assetSuffix: archiveContent, assetSuffix + ".sha256": validChecksum}, wantMessage: "archive does not contain"},
 	}
@@ -506,8 +509,8 @@ func TestDownloadDispatcherRealCLIForPinReportsUnusableCacheRoot(t *testing.T) {
 
 	_, err := downloadDispatcherRealCLIForPin(context.Background(), cacheRoot, dispatcherPin{ProjectRunnerVersion: "3.0.0"}, "linux", "amd64", io.Discard)
 
-	if err == nil {
-		t.Fatal("expected a cache directory creation error")
+	if err == nil || !strings.Contains(err.Error(), "mkdir "+cacheRoot+": not a directory") {
+		t.Fatalf("expected a cache directory creation error, got %v", err)
 	}
 }
 
@@ -561,8 +564,8 @@ func TestResolveDispatcherRealCLIReportsMissingCacheRoot(t *testing.T) {
 
 	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{ProjectRunnerVersion: "3.0.0"}, io.Discard)
 
-	if err == nil {
-		t.Fatal("expected a cache root resolution error")
+	if err == nil || !strings.Contains(err.Error(), "$HOME is not defined") {
+		t.Fatalf("expected a cache root resolution error, got %v", err)
 	}
 }
 

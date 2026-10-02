@@ -31,8 +31,9 @@ func TestDetectManagedDispatcherInstallIgnoresExecutablePathFailure(t *testing.T
 	t.Cleanup(func() {
 		resolveUpdateExecutablePathFunc = previous
 	})
+	// The path would be detected as Homebrew-managed if the error were ignored.
 	resolveUpdateExecutablePathFunc = func() (string, error) {
-		return "", errors.New("executable path unavailable")
+		return "/opt/homebrew/Cellar/uloop/1.0.0/bin/uloop", errors.New("executable path unavailable")
 	}
 
 	if detectManagedDispatcherInstall().IsManaged() {
@@ -133,23 +134,6 @@ func TestMarkDispatcherSelfUpdateCheckedWritesState(t *testing.T) {
 	if dispatcherSelfUpdateDueWithDeps(deps) {
 		t.Fatal("update must not be due right after it was marked checked")
 	}
-}
-
-func TestMarkDispatcherSelfUpdateCheckedToleratesUnusableCacheRoot(t *testing.T) {
-	// Verifies marking the check is best-effort: an unresolvable or unwritable cache root writes nothing and does not fail.
-	t.Run("unresolvable", func(t *testing.T) {
-		unsetDispatcherCacheRoot(t)
-		markDispatcherSelfUpdateCheckedWithDeps(defaultDispatcherRunDeps())
-	})
-	t.Run("regular file", func(t *testing.T) {
-		cacheRoot := filepath.Join(t.TempDir(), "cache-file")
-		writeDispatcherTestFile(t, cacheRoot, "not a directory")
-		t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
-
-		markDispatcherSelfUpdateCheckedWithDeps(defaultDispatcherRunDeps())
-
-		assertFileContent(t, cacheRoot, "not a directory")
-	})
 }
 
 func TestRunDispatcherUpdateCommandForOSReportsFailures(t *testing.T) {

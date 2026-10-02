@@ -847,7 +847,7 @@ func TestParseUpdateOptionsRejectsInvalidOptions(t *testing.T) {
 	}{
 		{name: "unknown option", args: []string{"--channel", "beta"}, wantMessage: "Unknown update option: --channel"},
 		{name: "duplicate option", args: []string{"--to-version", "3.0.0", "--to-version=3.0.1"}, wantMessage: "Duplicate update option: --to-version"},
-		{name: "missing value", args: []string{"--to-version"}, wantMessage: "--to-version"},
+		{name: "missing value", args: []string{"--to-version"}, wantMessage: "--to-version requires a value"},
 		{name: "positional argument", args: []string{"3.0.0"}, wantMessage: "3.0.0"},
 	}
 	for _, testCase := range cases {

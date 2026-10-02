@@ -852,13 +852,14 @@ func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 			setup: func(t *testing.T, projectRoot string) {
 				mkdirDispatcherTestDirectory(t, filepath.Join(projectRoot, "Packages", "manifest.json"))
 			},
+			want: "manifest.json: is a directory",
 		},
 		{
 			name: "manifest is not JSON",
 			setup: func(t *testing.T, projectRoot string) {
 				writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages", "manifest.json"), "{")
 			},
-			want: "parse ",
+			want: "manifest.json: unexpected end of JSON input",
 		},
 		{
 			name: "lock is a directory",
@@ -866,6 +867,7 @@ func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 				writeV2PackageManifest(t, projectRoot)
 				mkdirDispatcherTestDirectory(t, filepath.Join(projectRoot, "Packages", "packages-lock.json"))
 			},
+			want: "packages-lock.json: is a directory",
 		},
 		{
 			name: "lock is not JSON",
@@ -873,7 +875,7 @@ func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 				writeV2PackageManifest(t, projectRoot)
 				writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages", "packages-lock.json"), "{")
 			},
-			want: "parse ",
+			want: "packages-lock.json: unexpected end of JSON input",
 		},
 		{
 			name: "package cache is a file",
@@ -881,6 +883,7 @@ func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 				writeV2PackageManifest(t, projectRoot)
 				writeDispatcherTestFile(t, filepath.Join(projectRoot, "Library", "PackageCache"), "not a directory")
 			},
+			want: "PackageCache: not a directory",
 		},
 	}
 	for _, testCase := range cases {
@@ -1022,8 +1025,8 @@ func TestDetectV2DispatcherEmbeddedProjectReportsUnreadablePackagesDirectory(t *
 	projectRoot := t.TempDir()
 	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages"), "not a directory")
 
-	if _, err := detectV2DispatcherEmbeddedProject(projectRoot); err == nil {
-		t.Fatal("expected an error for an unreadable Packages directory")
+	if _, err := detectV2DispatcherEmbeddedProject(projectRoot); err == nil || !strings.Contains(err.Error(), "Packages: not a directory") {
+		t.Fatalf("expected an error for an unreadable Packages directory, got %v", err)
 	}
 }
 
