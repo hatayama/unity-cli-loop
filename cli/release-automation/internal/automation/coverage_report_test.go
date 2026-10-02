@@ -262,6 +262,9 @@ type coverageFixture struct {
 	baselinePath string
 	profiles     map[string]string
 	summaryPath  string
+
+	csharpSummaryPath string
+	markdownOutPath   string
 }
 
 func newCoverageFixture(t *testing.T, modules map[string]float64) *coverageFixture {
@@ -308,6 +311,38 @@ func (fixture *coverageFixture) run(mode string) (int, string, string) {
 		GoProfiles:   fixture.profiles,
 		Mode:         mode,
 		SummaryPath:  fixture.summaryPath,
+
+		CSharpSummaryPath: fixture.csharpSummaryPath,
+		MarkdownOutPath:   fixture.markdownOutPath,
 	})
 	return code, stdout.String(), stderr.String()
+}
+
+func TestRunCoverageReportGoOnlyOutputIsUnchangedByteForByte(t *testing.T) {
+	// Verifies stdout and the step summary keep their exact Go-only content when no C# summary is
+	// given, so the pull-request gate output is not disturbed by the C# report.
+	fixture := newCoverageFixture(t, map[string]float64{"common": 50.0, "dispatcher": 10.0})
+	fixture.writeProfile("common", 4, 10)
+	fixture.writeProfile("dispatcher", 2, 3)
+	fixture.summaryPath = filepath.Join(fixture.dir, "summary.md")
+
+	code, stdout, stderr := fixture.run(coverageModeReport)
+
+	table := "| Module | Coverage | Baseline | Note |\n|---|---|---|---|\n" +
+		"| common | 40.0% | 50.0% | below baseline |\n" +
+		"| dispatcher | 66.6% | 10.0% | raise baseline to 66.6 |\n"
+	if code != 0 || stderr != "" {
+		t.Fatalf("expected exit 0 with no stderr, got %d: %s", code, stderr)
+	}
+	wantStdout := table + "::warning::Coverage fell below the baseline in: common\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout changed:\nwant %q\ngot  %q", wantStdout, stdout)
+	}
+	summary, err := os.ReadFile(fixture.summaryPath)
+	if err != nil {
+		t.Fatalf("read summary: %v", err)
+	}
+	if wantSummary := "## Go test coverage\n\n" + table + "\n"; string(summary) != wantSummary {
+		t.Fatalf("step summary changed:\nwant %q\ngot  %q", wantSummary, summary)
+	}
 }

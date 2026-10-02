@@ -7,5 +7,20 @@
       "project-runner": 84.3,
       "release-automation": 77.0
     }
+  },
+  "csharp": {
+    "exclude": [
+      "UnityCLILoop.Runtime",
+      "UnityCLILoop.FirstPartyTools.Common.InputRecording.Editor",
+      "UnityCLILoop.FirstPartyTools.Common.InputSystem.Editor",
+      "UnityCLILoop.FirstPartyTools.SimulateKeyboard.Editor",
+      "UnityCLILoop.FirstPartyTools.SimulateMouseInput.Editor",
+      "UnityCLILoop.FirstPartyTools.SimulateMouseUi.Editor",
+      "UnityCLILoop.FirstPartyTools.Common.MouseUi.Editor",
+      "UnityCLILoop.FirstPartyTools.RecordInput.Editor",
+      "UnityCLILoop.FirstPartyTools.ReplayInput.Editor",
+      "UnityCLILoop.FirstPartyTools.Common.Overlay.Editor"
+    ],
+    "lineCoverage": 78.4
   }
 }

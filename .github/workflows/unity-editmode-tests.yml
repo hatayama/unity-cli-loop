@@ -2,6 +2,11 @@ name: Unity EditMode Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      post-trend:
+        description: Post this run's coverage to the coverage-trend issue (scheduled runs always post)
+        type: boolean
+        default: false
   schedule:
     - cron: '0 18 * * *'
 
@@ -40,6 +45,10 @@ jobs:
           - unity-version: 2022.3.62f3
             test-filter: ''
             strict-compile-check: true
+            # Only the full-suite leg measures C# coverage: the other legs run the hot-reload
+            # suites alone, so their figures would not describe the package. The filters keep
+            # the shipped package assemblies and drop tests, dev tooling, and samples.
+            coverage-options: generateAdditionalMetrics;generateHtmlReport;assemblyFilters:+UnityCLILoop.*,-UnityCLILoop.Tests.*,-UnityCLILoop.Dev,-UnityCLILoop.CustomCommandSamples.*
           # Newer editors open the committed 2022.3 project through an ephemeral
           # in-place upgrade, so obsolete-API warnings are expected there; skip the
           # zero-warning gate and run only the hot-reload suites, which are the
@@ -174,6 +183,18 @@ jobs:
           customParameters: ${{ matrix.test-filter != '' && format('-testFilter {0}', matrix.test-filter) || '' }}
           checkName: Unity Test Results (${{ matrix.unity-version }})
           githubToken: ${{ secrets.GITHUB_TOKEN }}
+          coverageOptions: ${{ matrix.coverage-options }}
+
+      - name: Upload C# coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && env.HAS_UNITY_LICENSE == 'true' && matrix.coverage-options != ''
+        with:
+          name: csharp-coverage
+          # Only the ReportGenerator output: the raw OpenCover XML next to it is tens of MB and the
+          # trend needs just Summary.json. upload-artifact stores the directory's contents, so
+          # Summary.json and index.htm sit at the artifact root.
+          path: CodeCoverage/Report
+          retention-days: 14
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -181,6 +202,90 @@ jobs:
         with:
           name: Unity test results (${{ matrix.unity-version }})
           path: artifacts
+
+  # Records Go and C# coverage on the coverage-trend issue every night. It runs even when a Unity
+  # leg failed, so the Go trend is kept; a run without the C# artifact posts Go alone.
+  coverage-trend:
+    name: Coverage trend
+    needs: [editmode-tests]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    # Serialized so a scheduled and a manual run cannot both find no issue and create two, which
+    # would make every later run fail on the several-issues check.
+    concurrency:
+      group: coverage-trend
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          # Same history as the build-cli job, so the Go tests run under the conditions the gate measures.
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      - name: Measure Go test coverage
+        env:
+          GO_COVERAGE_DIR: ${{ runner.temp }}/go-coverage
+        run: |
+          set -eu
+          mkdir -p "$GO_COVERAGE_DIR"
+          for module in common dispatcher project-runner release-automation; do
+            (cd "cli/$module" && go test -coverprofile="$GO_COVERAGE_DIR/$module.out" ./...)
+          done
+
+      # The artifact is missing when the Unity license is absent or the 2022.3 leg failed before
+      # its tests ran; the Go trend is still posted then.
+      - name: Download C# coverage report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          name: csharp-coverage
+          path: ${{ runner.temp }}/csharp-coverage
+
+      - name: Build coverage Markdown
+        working-directory: cli/release-automation
+        env:
+          GO_COVERAGE_DIR: ${{ runner.temp }}/go-coverage
+          CSHARP_SUMMARY: ${{ runner.temp }}/csharp-coverage/Summary.json
+          COVERAGE_MARKDOWN: ${{ runner.temp }}/coverage.md
+        run: |
+          set -eu
+          if [ -f "$CSHARP_SUMMARY" ]; then
+            go run ./cmd/coverage-report --mode report \
+              --baseline ../../coverage-baseline.json \
+              --go-coverage-dir "$GO_COVERAGE_DIR" \
+              --csharp-summary "$CSHARP_SUMMARY" \
+              --markdown-out "$COVERAGE_MARKDOWN"
+          else
+            go run ./cmd/coverage-report --mode report \
+              --baseline ../../coverage-baseline.json \
+              --go-coverage-dir "$GO_COVERAGE_DIR" \
+              --markdown-out "$COVERAGE_MARKDOWN"
+            printf '%s\n' "C# coverage was not produced in this run." >> "$COVERAGE_MARKDOWN"
+            printf '%s\n' "C# coverage was not produced in this run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Only the nightly figures belong in the trend; a dispatched branch run still shows its
+      # tables in the run summary, which coverage-report writes in the step above.
+      - name: Post coverage to the trend issue
+        if: ${{ github.event_name == 'schedule' || inputs.post-trend == true }}
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          COVERAGE_MARKDOWN: ${{ runner.temp }}/coverage.md
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: go run ./cmd/publish-coverage-trend --body-file "$COVERAGE_MARKDOWN" --run-url "$RUN_URL"
 
   resolve-latest-6000-7:
     name: Resolve latest 6000.7 editor
