@@ -614,6 +614,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     });
 
                 AssertMethodRow(result, HotReloadMethodOutcomeKind.Added, "." + CompiledTypeAddedMethodName + "(System.Int32)");
+                // Why Skipped for both: the new type's file was pulled back in, not passed, so a
+                // body of it that no longer binds is skipped with the file to pass rather than
+                // failing the run with an error in code the reader did not touch.
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Skipped, ".Run(");
+                AssertMethodRow(result, HotReloadMethodOutcomeKind.Skipped, ".get_Answer(");
+                Assert.That(CountMethodRows(result, HotReloadMethodOutcomeKind.Failed), Is.EqualTo(0), DescribeRun(result));
                 Assert.That(result.Warnings, Does.Contain(ExpectedStaleCallsFromTheNewType()), DescribeRun(result));
                 Assert.That(Invoke(readArtifact(), "Run"), Is.EqualTo(CompiledTypeAddedValue), DescribeRun(result));
             });

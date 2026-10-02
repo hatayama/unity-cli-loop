@@ -102,7 +102,8 @@ internal static class PropertyGetterEmitter
                     addedMethodCatalog,
                     addedFieldCatalog,
                     addedPropertyCatalog,
-                    typeState.HomeAssemblyName);
+                    typeState.HomeAssemblyName,
+                    typeState.SourceUnit.Input.ReappliedSibling ? typeState.TargetAssembly : null);
         }
     }
 
@@ -131,7 +132,8 @@ internal static class PropertyGetterEmitter
             AddedMethodCatalog addedMethodCatalog,
             AddedFieldCatalog addedFieldCatalog,
             AddedPropertyCatalog addedPropertyCatalog,
-            string homeAssemblyName)
+            string homeAssemblyName,
+            IAssemblySymbol reappliedSiblingTargetAssembly)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -213,6 +215,27 @@ internal static class PropertyGetterEmitter
         if (skipGetter)
         {
             return currentShimType;
+        }
+
+        // Why the same guard as an ordinary method: a getter of a file pulled back in whose body no
+        // longer binds would otherwise reach the shim and fail the run over code the reader never
+        // passed. Null means the reader passed this file, so its errors stay Failed.
+        if (reappliedSiblingTargetAssembly != null)
+        {
+            WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
+                semanticModel,
+                getterBodyNode,
+                reappliedSiblingTargetAssembly);
+            if (siblingSkip != null)
+            {
+                skipped.Add(new WorkerSkipped
+                {
+                    SourceProjectRelativePath = sourceProjectRelativePath,
+                    Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+                    Reason = siblingSkip
+                });
+                return currentShimType;
+            }
         }
 
         return EmitPropertyGetterShim(
