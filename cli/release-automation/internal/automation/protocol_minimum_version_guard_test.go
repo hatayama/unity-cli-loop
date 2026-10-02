@@ -493,6 +493,11 @@ type protocolMinimumVersionCommentCase struct {
 	headProjectRunner string
 	releaseContent    string
 	commentIDs        string
+	// repositoryFromGh leaves GITHUB_REPOSITORY empty so the repository is resolved
+	// through gh repo view, which prints repoView or fails when repoView is empty.
+	repositoryFromGh  bool
+	repoView          string
+	failCommentLookup bool
 }
 
 type protocolMinimumVersionCommentResult struct {
@@ -528,6 +533,13 @@ func runProtocolMinimumVersionCommentCase(t *testing.T, testCase protocolMinimum
 	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
 	t.Setenv("PR_NUMBER", "456")
 	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
+	if testCase.repositoryFromGh {
+		t.Setenv("GITHUB_REPOSITORY", "")
+		t.Setenv("GH_REPO_VIEW", testCase.repoView)
+	}
+	if testCase.failCommentLookup {
+		t.Setenv("GH_FAIL_PAGINATE", "1")
+	}
 	t.Setenv("GITHUB_BASE_REF", "v3-beta")
 	t.Setenv("PROTOCOL_MINIMUM_VERSION_HEAD_REF", "protocol-pr-head")
 	t.Setenv("GIT_LOG", gitLogPath)
@@ -712,6 +724,10 @@ set -eu
 printf '%s\n' "$*" >> "$GH_LOG"
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
+  if [ -n "${GH_FAIL_RELEASE_VIEW:-}" ]; then
+    echo "release not found" >&2
+    exit 1
+  fi
   if [ -n "${GH_RELEASE_VIEW:-}" ]; then
     printf '%s\n' "$GH_RELEASE_VIEW"
   else
@@ -720,7 +736,20 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   exit 0
 fi
 
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  if [ -n "${GH_REPO_VIEW:-}" ]; then
+    printf '%s\n' "$GH_REPO_VIEW"
+    exit 0
+  fi
+  echo "repo view failed" >&2
+  exit 1
+fi
+
 if [ "$1" = "api" ] && [ "$2" = "--paginate" ]; then
+  if [ -n "${GH_FAIL_PAGINATE:-}" ]; then
+    echo "comment lookup failed" >&2
+    exit 1
+  fi
   if [ -n "$GH_COMMENT_IDS" ]; then
     printf '%s\n' "$GH_COMMENT_IDS"
   fi
@@ -762,5 +791,154 @@ func assertProtocolMinimumVersionLogContains(t *testing.T, actual string, expect
 	t.Helper()
 	if !strings.Contains(actual, expected) {
 		t.Fatalf("expected log to contain %q, got:\n%s", expected, actual)
+	}
+}
+
+// setupProtocolMinimumVersionMocks puts the mock git and gh first on PATH and returns the mock repository root.
+func setupProtocolMinimumVersionMocks(t *testing.T, testCase protocolMinimumVersionRefCase) string {
+	t.Helper()
+	workDir := t.TempDir()
+	mockBin := filepath.Join(workDir, "bin")
+	if err := os.MkdirAll(mockBin, 0o755); err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+	writeProtocolMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
+	writeProtocolMinimumVersionMockGH(t, filepath.Join(mockBin, "gh"))
+	prepareProtocolMinimumVersionGitContents(t, workDir, testCase)
+	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
+	t.Setenv("GIT_LOG", filepath.Join(workDir, "git.log"))
+	t.Setenv("GH_LOG", filepath.Join(workDir, "gh.log"))
+	return workDir
+}
+
+// writeProtocolMinimumVersionWorkingTree writes the constants and pin files that a check without a ref reads from disk.
+func writeProtocolMinimumVersionWorkingTree(t *testing.T, workDir string, constants string, pin string) {
+	t.Helper()
+	if constants != "" {
+		writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, protocolMinimumVersionFile), constants)
+	}
+	if pin != "" {
+		writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, unityPackageCliPinFile), pin)
+	}
+}
+
+func TestRunMinimumCliReleaseProtocolCheck_FailsOnUnusableInputs(t *testing.T) {
+	// Verifies missing or malformed working-tree inputs, a missing or malformed release contract, and an unpublished or malformed release each fail the check.
+	validConstants := buildProtocolMinimumVersionConstants(2)
+	validPin := buildProtocolMinimumVersionPin("3.0.0-beta.33")
+	validRelease := `{"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`
+	cases := []struct {
+		name        string
+		constants   string
+		pin         string
+		release     string
+		environment map[string]string
+		wantErr     string
+	}{
+		{"missing constants", "", validPin, validRelease, nil, "failed to read " + protocolMinimumVersionFile},
+		{"missing pin", validConstants, "", validRelease, nil, "failed to read " + unityPackageCliPinFile},
+		{"invalid pin", validConstants, "{", validRelease, nil, "invalid"},
+		{"no required protocol", "public static class CliConstants {}", validPin, validRelease, nil, "does not define REQUIRED_CLI_PROTOCOL_VERSION"},
+		{"no release contract", validConstants, validPin, "", nil, "uloop-project-runner-v3.0.0-beta.33"},
+		{"invalid release contract", validConstants, validPin, "{", nil, "project runner release contract is invalid JSON"},
+		{"unpublished release", validConstants, validPin, validRelease, map[string]string{"GH_FAIL_RELEASE_VIEW": "1"}, "is not published with complete native assets"},
+		{"invalid release metadata", validConstants, validPin, validRelease, map[string]string{"GH_RELEASE_VIEW": "{"}, "metadata is invalid JSON"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			workDir := setupProtocolMinimumVersionMocks(t, protocolMinimumVersionRefCase{releaseContent: testCase.release})
+			writeProtocolMinimumVersionWorkingTree(t, workDir, testCase.constants, testCase.pin)
+			for key, value := range testCase.environment {
+				t.Setenv(key, value)
+			}
+			stdout := bytes.Buffer{}
+			stderr := bytes.Buffer{}
+
+			exitCode := RunMinimumCliReleaseProtocolCheck(context.Background(), &stdout, &stderr, "")
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout.String())
+			}
+			assertProtocolMinimumVersionLogContains(t, stderr.String(), testCase.wantErr)
+		})
+	}
+}
+
+func TestRunMinimumCliReleaseProtocolCheck_WhenRefCannotBeRead_Fails(t *testing.T) {
+	// Verifies an unreadable ref fails instead of falling back to the working tree.
+	setupProtocolMinimumVersionMocks(t, protocolMinimumVersionRefCase{})
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunMinimumCliReleaseProtocolCheck(context.Background(), &stdout, &stderr, "unknown-ref")
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertProtocolMinimumVersionLogContains(t, stderr.String(), "failed to read "+protocolMinimumVersionFile)
+}
+
+func TestRunMinimumCliReleaseProtocolCheck_WhenGitIsUnavailable_Fails(t *testing.T) {
+	// Verifies a repository root lookup failure fails the check.
+	t.Setenv("PATH", t.TempDir())
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunMinimumCliReleaseProtocolCheck(context.Background(), &stdout, &stderr, "")
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertProtocolMinimumVersionLogContains(t, stderr.String(), "failed to resolve git repository root")
+}
+
+func TestRunProtocolMinimumVersionGuard_FailsWhenRefsCannotBeAnalyzed(t *testing.T) {
+	// Verifies a missing base ref, an unreadable base or head ref, and an unavailable git each fail the guard.
+	cases := []struct {
+		name    string
+		config  ProtocolMinimumVersionGuardConfig
+		noGit   bool
+		wantErr string
+	}{
+		{"missing base", ProtocolMinimumVersionGuardConfig{}, false, "--base is required"},
+		{"unreadable base", ProtocolMinimumVersionGuardConfig{BaseRef: "unknown-ref", HeadRef: "protocol-pr-head"}, false, "unknown-ref"},
+		{"unreadable default head", ProtocolMinimumVersionGuardConfig{BaseRef: "origin/v3-beta"}, false, "HEAD:"},
+		{"git unavailable", ProtocolMinimumVersionGuardConfig{BaseRef: "origin/v3-beta"}, true, "failed to resolve git repository root"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			setupProtocolMinimumVersionMocks(t, protocolMinimumVersionRefCase{
+				baseProtocol: 1, baseProjectRunner: "3.0.0-beta.32", headProtocol: 1, headProjectRunner: "3.0.0-beta.32",
+			})
+			if testCase.noGit {
+				t.Setenv("PATH", t.TempDir())
+			}
+			stdout := bytes.Buffer{}
+			stderr := bytes.Buffer{}
+
+			exitCode := RunProtocolMinimumVersionGuard(context.Background(), &stdout, &stderr, testCase.config)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout.String())
+			}
+			assertProtocolMinimumVersionLogContains(t, stderr.String(), testCase.wantErr)
+		})
+	}
+}
+
+func TestVerifyMinimumProjectRunnerReleaseProtocol_WhenRequiredProtocolIsMissing_Fails(t *testing.T) {
+	// Verifies the release check refuses to compare against a package that declares no required protocol.
+	err := verifyMinimumProjectRunnerReleaseProtocol("uloop-project-runner-v3.0.0", ProtocolMinimumVersionValues{}, []byte(`{"protocolVersion":2}`))
+
+	if err == nil || !strings.Contains(err.Error(), "does not define REQUIRED_CLI_PROTOCOL_VERSION") {
+		t.Fatalf("expected a missing required protocol error, got %v", err)
+	}
+}
+
+func TestProtocolMinimumVersionValueLabel_WhenRequiredProtocolIsMissing_ShowsPlaceholder(t *testing.T) {
+	// Verifies a missing required protocol is rendered as a placeholder rather than as protocol 0.
+	if label := protocolMinimumVersionValueLabel(ProtocolMinimumVersionValues{}); label != "`<missing>`" {
+		t.Fatalf("label = %q", label)
 	}
 }
