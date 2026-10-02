@@ -18,21 +18,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsCancelStopRestoreUnityHooks.OverrideHooksForTests = null;
         }
 
+        /// <summary>
+        /// Verifies a test override replaces the production hooks.
+        /// </summary>
         [Test]
         public void Resolve_WithAnOverride_ReturnsTheOverride()
         {
-            // Verifies a test override replaces the production hooks.
             RunTestsCancelStopRestoreHooks overrideHooks = new RunTestsCancelStopRestoreHooks();
             RunTestsCancelStopRestoreUnityHooks.OverrideHooksForTests = overrideHooks;
 
             Assert.That(RunTestsCancelStopRestoreUnityHooks.Resolve(), Is.SameAs(overrideHooks));
         }
 
+        /// <summary>
+        /// Verifies the production hooks offer cancel and run polling exactly when the bridge resolved them, and
+        /// always offer the Play Mode, delay, and warning hooks.
+        /// </summary>
         [Test]
         public void Resolve_WithoutAnOverride_WiresTheCancelHelpersTheBridgeFound()
         {
-            // Verifies the production hooks offer cancel and run polling exactly when the bridge resolved them,
-            // and always offer the Play Mode, delay, and warning hooks.
             RunTestsCancelStopRestoreHooks hooks = RunTestsCancelStopRestoreUnityHooks.Resolve();
 
             Assert.That(hooks.TryCancelTestRun != null, Is.EqualTo(TestRunnerApiCancelBridge.HasCancelTestRun));
@@ -41,10 +45,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(hooks.DelayAsync, Is.Not.Null);
         }
 
+        /// <summary>
+        /// Verifies the Play Mode hook reads the Editor state and the warning hook writes a Console warning.
+        /// </summary>
         [Test]
         public void CreateDefault_ReportsEditModeAndLogsWarningsToTheConsole()
         {
-            // Verifies the Play Mode hook reads the Editor state and the warning hook writes a Console warning.
             RunTestsCancelStopRestoreHooks hooks = RunTestsCancelStopRestoreUnityHooks.CreateDefault();
             LogAssert.Expect(LogType.Warning, "stop/restore warning from a test");
 

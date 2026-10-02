@@ -27,10 +27,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _hooks = new ScriptedHooks();
         }
 
+        /// <summary>
+        /// Verifies a successful EditMode cancel with no active run reports the attempt and only the restart hint.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_EditModeWithASuccessfulCancel_ReturnsWithoutWarning()
         {
-            // Verifies a successful EditMode cancel with no active run reports the attempt and only the restart hint.
             _hooks.CancelResult = true;
 
             RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: false, RunGuid);
@@ -45,10 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_hooks.Warnings, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies a missing run GUID skips the cancel hook and explains that an EditMode job may keep running.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_WithoutARunGuid_SkipsTheCancelAndWarnsAboutTheEditModeJob()
         {
-            // Verifies a missing run GUID skips the cancel hook and explains that an EditMode job may keep running.
             RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: false, string.Empty);
 
             Assert.That(_hooks.CancelGuids, Is.Empty);
@@ -59,10 +63,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                                "an EditMode job may still be running until it finishes. "));
         }
 
+        /// <summary>
+        /// Verifies a throwing cancel hook is logged and treated as a failed cancel instead of escaping.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_WhenTheCancelHookThrows_WarnsAndFallsBack()
         {
-            // Verifies a throwing cancel hook is logged and treated as a failed cancel instead of escaping.
             _hooks.CancelException = new InvalidOperationException("cancel failed");
 
             RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: false, RunGuid);
@@ -74,10 +80,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.DegradationNote, Does.StartWith("Unity Test Framework 1.3.9"));
         }
 
+        /// <summary>
+        /// Verifies an active EditMode run is polled until it reports inactive, without timing out.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_EditModeRunThatStops_PollsUntilItIsInactive()
         {
-            // Verifies an active EditMode run is polled until it reports inactive, without timing out.
             _hooks.RunActiveAnswers.Enqueue(true);
             _hooks.RunActiveAnswers.Enqueue(true);
             _hooks.RunActiveAnswers.Enqueue(false);
@@ -88,10 +96,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.StopWaitTimedOut, Is.False);
         }
 
+        /// <summary>
+        /// Verifies a run that stays active is polled up to the timeout and then reported as timed out.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_EditModeRunThatNeverStops_TimesOutAtTheUpperBound()
         {
-            // Verifies a run that stays active is polled up to the timeout and then reported as timed out.
             _hooks.RunActiveDefault = true;
 
             RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: false, RunGuid);
@@ -103,10 +113,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.DegradationNote, Does.Contain("Stop-wait polling reached its upper bound. "));
         }
 
+        /// <summary>
+        /// Verifies Play Mode is exited and confirmed, and that a confirmed exit drops the missing-cancel warning.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_PlayModeThatExits_RequestsAndConfirmsTheExit()
         {
-            // Verifies Play Mode is exited and confirmed, and that a confirmed exit drops the missing-cancel warning.
             _hooks.PlayingAnswers.Enqueue(true);
             _hooks.PlayingAnswers.Enqueue(true);
             _hooks.PlayingAnswers.Enqueue(true);
@@ -124,11 +136,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                            "Restart with `uloop launch -r` if Unity remains stuck."));
         }
 
+        /// <summary>
+        /// Verifies Play Mode that stays on is reported as unconfirmed and timed out, keeping the missing-cancel
+        /// warning without the EditMode clause.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_PlayModeThatNeverExits_ReportsTheUnconfirmedExit()
         {
-            // Verifies Play Mode that stays on is reported as unconfirmed and timed out, keeping the
-            // missing-cancel warning without the EditMode clause.
             _hooks.PlayingDefault = true;
 
             RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: true, string.Empty);
@@ -144,10 +158,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                            "Restart with `uloop launch -r` if Unity remains stuck."));
         }
 
+        /// <summary>
+        /// Verifies a throwing exit request is logged and the wait still confirms the exit.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_WhenTheExitRequestThrows_StillWaitsForTheExit()
         {
-            // Verifies a throwing exit request is logged and the wait still confirms the exit.
             _hooks.ExitException = new InvalidOperationException("exit failed");
             _hooks.PlayingAnswers.Enqueue(true);
             _hooks.PlayingAnswers.Enqueue(true);
@@ -160,10 +176,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.PlayModeExitConfirmed, Is.True);
         }
 
+        /// <summary>
+        /// Verifies a PlayMode run whose Editor already left Play Mode needs no exit request.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_PlayModeRunAlreadyStopped_DoesNotRequestAnExit()
         {
-            // Verifies a PlayMode run whose Editor already left Play Mode needs no exit request.
             RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: true, string.Empty);
 
             Assert.That(_hooks.ExitRequestCount, Is.EqualTo(0));
@@ -172,10 +190,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.DegradationNote, Is.EqualTo("Restart with `uloop launch -r` if Unity remains stuck."));
         }
 
+        /// <summary>
+        /// Verifies an unexpected failure is logged and returned as an all-false result instead of thrown.
+        /// </summary>
         [Test]
         public async Task StopAndRestoreAsync_WhenAHookThrowsOutsideItsGuard_SwallowsTheFailure()
         {
-            // Verifies an unexpected failure is logged and returned as an all-false result instead of thrown.
             _hooks.PlayingException = new InvalidOperationException("is-playing failed");
 
             RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: true, string.Empty);
@@ -187,10 +207,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.DegradationNote, Does.StartWith("Stop/restore failed unexpectedly"));
         }
 
+        /// <summary>
+        /// Verifies a result built without a note never exposes null to the timeout message.
+        /// </summary>
         [Test]
         public void Result_WithANullNote_ExposesAnEmptyNote()
         {
-            // Verifies a result built without a note never exposes null to the timeout message.
             RunTestsCancelStopRestoreResult result = new RunTestsCancelStopRestoreResult(
                 true, false, true, false, true, null);
 

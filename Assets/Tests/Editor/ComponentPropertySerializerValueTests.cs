@@ -39,17 +39,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// Verifies a missing component yields an empty property list instead of throwing.
+        /// </summary>
         [Test]
         public void SerializeProperties_WithoutAComponent_ReturnsNoProperties()
         {
-            // Verifies a missing component yields an empty property list instead of throwing.
             Assert.That(_serializer.SerializeProperties(null), Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies the internal script reference is hidden and the fields follow their declaration order.
+        /// </summary>
         [Test]
         public void SerializeProperties_SkipsTheScriptReferenceAndKeepsInspectorOrder()
         {
-            // Verifies the internal script reference is hidden and the fields follow their declaration order.
             ComponentPropertyInfo[] properties = _serializer.SerializeProperties(_fixture);
 
             Assert.That(
@@ -60,10 +64,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }));
         }
 
+        /// <summary>
+        /// Verifies strings and booleans keep their values and enums are rendered by member name.
+        /// </summary>
         [Test]
         public void SerializeProperties_RendersPrimitiveAndEnumValues()
         {
-            // Verifies strings and booleans keep their values and enums are rendered by member name.
             _fixture.label = "hello";
             _fixture.enabledFlag = true;
             _fixture.mode = ComponentPropertySerializerValueFixture.FixtureMode.Second;
@@ -77,10 +83,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(properties["Mode"].Type, Is.EqualTo("Enum"));
         }
 
+        /// <summary>
+        /// Verifies colors, vectors, rects, and bounds are rendered as objects with named components.
+        /// </summary>
         [Test]
         public void SerializeProperties_RendersUnityStructsAsNamedComponents()
         {
-            // Verifies colors, vectors, rects, and bounds are rendered as objects with named components.
             _fixture.tint = new Color(0.25f, 0.5f, 0.75f, 1f);
             _fixture.offset = new Vector2(1f, 2f);
             _fixture.weights = new Vector4(1f, 2f, 3f, 4f);
@@ -96,19 +104,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             AssertJson(properties["Extent"], "{center:{x:1.0,y:2.0,z:3.0},size:{x:4.0,y:6.0,z:8.0}}");
         }
 
+        /// <summary>
+        /// Verifies an unassigned object reference is rendered as None with a zero identifier.
+        /// </summary>
         [Test]
         public void SerializeProperties_WithAnEmptyReference_RendersNone()
         {
-            // Verifies an unassigned object reference is rendered as None with a zero identifier.
             Dictionary<string, ComponentPropertyInfo> properties = SerializeByName();
 
             AssertJson(properties["Target"], "{name:'None',type:'None',entityId:'0'}");
         }
 
+        /// <summary>
+        /// Verifies an assigned object reference is rendered by the referenced object's name and type.
+        /// </summary>
         [Test]
         public void SerializeProperties_WithALiveReference_RendersItsNameAndType()
         {
-            // Verifies an assigned object reference is rendered by the referenced object's name and type.
             _fixture.target = _referenced;
 
             JObject target = ToJson(SerializeByName()["Target"]);
@@ -118,10 +130,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That((string)target["entityId"], Is.Not.EqualTo("0"));
         }
 
+        /// <summary>
+        /// Verifies a reference whose object was destroyed is rendered as Missing with its stored identifier.
+        /// </summary>
         [Test]
         public void SerializeProperties_WithADestroyedReference_RendersMissing()
         {
-            // Verifies a reference whose object was destroyed is rendered as Missing with its stored identifier.
             _fixture.target = _referenced;
             Object.DestroyImmediate(_referenced);
 

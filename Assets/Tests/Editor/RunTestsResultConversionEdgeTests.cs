@@ -28,10 +28,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private const int OverLimitCount = RunTestsConstants.FailedTestDetailsLimit + 2;
 
+        /// <summary>
+        /// Verifies a missing result becomes a failed execution with zero counts instead of throwing.
+        /// </summary>
         [Test]
         public void FromTestResult_WithoutAResult_ReportsAnExecutionFailure()
         {
-            // Verifies a missing result becomes a failed execution with zero counts instead of throwing.
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(null);
 
             Assert.That(result.success, Is.False);
@@ -40,10 +42,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.testCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a suite that carries no child list counts no tests and collects no details.
+        /// </summary>
         [Test]
         public void FromTestResult_WithAPassedSuiteWithoutChildren_ReportsNoTests()
         {
-            // Verifies a suite that carries no child list counts no tests and collects no details.
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
                 Suite("Root", TestResultStatus.Passed, null));
 
@@ -55,10 +59,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.failedSuites, Is.Null);
         }
 
+        /// <summary>
+        /// Verifies a failed suite with no child list is reported as the suite failure that explains the run.
+        /// </summary>
         [Test]
         public void FromTestResult_WithAFailedSuiteWithoutChildren_ReportsTheSuiteAsTheFailure()
         {
-            // Verifies a failed suite with no child list is reported as the suite failure that explains the run.
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
                 Suite("Root", TestResultStatus.Failed, null, message: "cancelled"));
 
@@ -67,10 +73,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.failedSuites[0].Message, Is.EqualTo("cancelled"));
         }
 
+        /// <summary>
+        /// Verifies failed test details stop at the limit while the failed count still covers every test.
+        /// </summary>
         [Test]
         public void FromTestResult_WithMoreFailuresThanTheLimit_KeepsOnlyTheFirstDetails()
         {
-            // Verifies failed test details stop at the limit while the failed count still covers every test.
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
                 SuiteOfLeaves(TestResultStatus.Failed));
 
@@ -80,10 +88,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.failedTests.Last().FullName, Is.EqualTo("Example.Tests.Group1.Leaf3"));
         }
 
+        /// <summary>
+        /// Verifies skipped test names stop at the limit while the skipped count still covers every test.
+        /// </summary>
         [Test]
         public void FromTestResult_WithMoreSkipsThanTheLimit_KeepsOnlyTheFirstNames()
         {
-            // Verifies skipped test names stop at the limit while the skipped count still covers every test.
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
                 SuiteOfLeaves(TestResultStatus.Skipped));
 
@@ -92,10 +102,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.skippedTests.Last(), Is.EqualTo("Example.Tests.Group1.Leaf3"));
         }
 
+        /// <summary>
+        /// Verifies inconclusive details stop at the limit while the inconclusive count still covers every test.
+        /// </summary>
         [Test]
         public void FromTestResult_WithMoreInconclusivesThanTheLimit_KeepsOnlyTheFirstDetails()
         {
-            // Verifies inconclusive details stop at the limit while the inconclusive count still covers every test.
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
                 SuiteOfLeaves(TestResultStatus.Inconclusive));
 
@@ -104,10 +116,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.inconclusiveTests.Last().FullName, Is.EqualTo("Example.Tests.Group1.Leaf3"));
         }
 
+        /// <summary>
+        /// Verifies suite failures outside their tests stop at the limit.
+        /// </summary>
         [Test]
         public void FromTestResult_WithMoreFailedSuitesThanTheLimit_KeepsOnlyTheFirstSuites()
         {
-            // Verifies suite failures outside their tests stop at the limit.
             List<ITestResultAdaptor> suites = new List<ITestResultAdaptor>();
             for (int i = 0; i < OverLimitCount; i++)
             {
@@ -121,10 +135,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.failedSuites[0].FullName, Is.EqualTo("Example.Tests.Fixture0"));
         }
 
+        /// <summary>
+        /// Verifies a finished run raises the completion event with the converted result and the raw adaptor.
+        /// </summary>
         [Test]
         public void UnifiedTestCallback_RunFinished_PublishesTheConvertedResult()
         {
-            // Verifies a finished run raises the completion event with the converted result and the raw adaptor.
             UnifiedTestCallback callback = new UnifiedTestCallback();
             ITestResultAdaptor rawResult = Suite("Root", TestResultStatus.Passed, new List<ITestResultAdaptor>
             {
@@ -146,10 +162,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(publishedRaw[0], Is.SameAs(rawResult));
         }
 
+        /// <summary>
+        /// Verifies disposing the callback drops its subscribers so a late finish publishes nothing.
+        /// </summary>
         [Test]
         public void UnifiedTestCallback_AfterDispose_StopsPublishing()
         {
-            // Verifies disposing the callback drops its subscribers so a late finish publishes nothing.
             UnifiedTestCallback callback = new UnifiedTestCallback();
             int publishedCount = 0;
             callback.OnTestCompleted += (result, raw) => publishedCount++;
@@ -160,10 +178,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(publishedCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies every entry point answers with the unavailable result instead of running tests.
+        /// </summary>
         [Test]
         public async Task TestFrameworkUnavailableExecutionService_ReturnsUnavailableResults()
         {
-            // Verifies every entry point answers with the unavailable result instead of running tests.
             TestFrameworkUnavailableExecutionService service = new TestFrameworkUnavailableExecutionService();
 
             SerializableTestResult playMode = await service.ExecutePlayModeTestAsync(null, CancellationToken.None, null);
@@ -179,10 +199,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(findings.TotalCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a canceled request is rejected before the unavailable result is produced.
+        /// </summary>
         [Test]
         public void TestFrameworkUnavailableExecutionService_WithACanceledToken_Throws()
         {
-            // Verifies a canceled request is rejected before the unavailable result is produced.
             TestFrameworkUnavailableExecutionService service = new TestFrameworkUnavailableExecutionService();
             CancellationToken canceled = new CancellationToken(true);
 
@@ -192,10 +214,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => service.RetrieveUnfilteredTestNamesAsync(UnityCliLoopTestMode.EditMode, canceled));
         }
 
+        /// <summary>
+        /// Verifies a canceled request never reaches the Test Runner.
+        /// </summary>
         [Test]
         public void TestExecutionService_WithACanceledToken_ThrowsBeforeDispatching()
         {
-            // Verifies a canceled request never reaches the Test Runner.
             TestExecutionService service = new TestExecutionService();
             CancellationToken canceled = new CancellationToken(true);
 
@@ -205,10 +229,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => service.RetrieveUnfilteredTestNamesAsync(UnityCliLoopTestMode.EditMode, canceled));
         }
 
+        /// <summary>
+        /// Verifies the bridge exposes exactly the cancel helpers the lookup finds on this Test Framework.
+        /// </summary>
         [Test]
         public void TestRunnerApiCancelBridge_ReportsTheMethodsTheLookupResolves()
         {
-            // Verifies the bridge exposes exactly the cancel helpers the lookup finds on this Test Framework.
             (MethodInfo cancel, MethodInfo isRunActive, string _) =
                 TestRunnerApiCancelMethodLookup.Resolve(typeof(TestRunnerApi));
 
@@ -216,10 +242,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(TestRunnerApiCancelBridge.HasIsRunActive, Is.EqualTo(isRunActive != null));
         }
 
+        /// <summary>
+        /// Verifies a missing run GUID never cancels a run.
+        /// </summary>
         [Test]
         public void TestRunnerApiCancelBridge_WithoutARunGuid_DoesNotCancel()
         {
-            // Verifies a missing run GUID never cancels a run.
             Assert.That(TestRunnerApiCancelBridge.TryCancelTestRun(null), Is.False);
             Assert.That(TestRunnerApiCancelBridge.TryCancelTestRun(string.Empty), Is.False);
         }

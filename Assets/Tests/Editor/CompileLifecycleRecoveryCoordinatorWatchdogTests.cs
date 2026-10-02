@@ -31,10 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _currentCompileTask = null;
         }
 
+        /// <summary>
+        /// Verifies a request canceled before Unity started compiling is aborted with the before-start reason.
+        /// </summary>
         [Test]
         public void StartWatchdog_WithACanceledToken_AbortsAsCanceledBeforeStart()
         {
-            // Verifies a request canceled before Unity started compiling is aborted with the before-start reason.
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator();
 
             coordinator.StartWatchdog(new TaskCompletionSource<CompileResult>(), new CancellationToken(true));
@@ -45,10 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_editorCompilingQueries, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a request that already completed is neither polled nor aborted.
+        /// </summary>
         [Test]
         public void StartWatchdog_WithACompletedRequest_StopsWithoutPolling()
         {
-            // Verifies a request that already completed is neither polled nor aborted.
             _isRequestCompleted = true;
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator();
 
@@ -58,10 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_editorCompilingQueries, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a faulted watchdog aborts the request it was watching while that request is still current.
+        /// </summary>
         [Test]
         public void AbortCompileAfterWatchdogFault_ForTheCurrentRequest_Aborts()
         {
-            // Verifies a faulted watchdog aborts the request it was watching while that request is still current.
             TaskCompletionSource<CompileResult> compileTask = new TaskCompletionSource<CompileResult>();
             _currentCompileTask = compileTask;
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator();
@@ -71,10 +77,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_abortReasons, Is.EqualTo(new List<string> { "Compilation watchdog failed unexpectedly." }));
         }
 
+        /// <summary>
+        /// Verifies a stale watchdog fault never aborts the newer request that replaced its own.
+        /// </summary>
         [Test]
         public void AbortCompileAfterWatchdogFault_AfterANewerRequest_LeavesItAlone()
         {
-            // Verifies a stale watchdog fault never aborts the newer request that replaced its own.
             _currentCompileTask = new TaskCompletionSource<CompileResult>();
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator();
 
@@ -83,10 +91,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_abortReasons, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies a fault that arrives after the request finished aborts nothing.
+        /// </summary>
         [Test]
         public void AbortCompileAfterWatchdogFault_WithoutACurrentRequest_LeavesItAlone()
         {
-            // Verifies a fault that arrives after the request finished aborts nothing.
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator();
 
             coordinator.AbortCompileAfterWatchdogFault(new TaskCompletionSource<CompileResult>());

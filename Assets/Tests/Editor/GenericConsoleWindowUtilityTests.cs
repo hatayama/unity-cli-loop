@@ -27,11 +27,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _retriever.SetMask(_originalSimpleMask);
         }
 
+        /// <summary>
+        /// Verifies new logs and warnings are counted even while the Console shows only errors, and that the
+        /// error-only filter is still set afterwards.
+        /// </summary>
         [Test]
         public void GetConsoleLogCounts_WithAFilteredConsole_CountsEveryTypeAndRestoresTheFilter()
         {
-            // Verifies new logs and warnings are counted even while the Console shows only errors, and that
-            // the error-only filter is still set afterwards.
             _retriever.SetMask(1);
             int filteredMask = _retriever.GetCurrentMask();
             GenericConsoleWindowUtility.GetConsoleLogCounts(out int errorsBefore, out int warningsBefore, out int logsBefore);
@@ -46,11 +48,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_retriever.GetCurrentMask(), Is.EqualTo(filteredMask));
         }
 
+        /// <summary>
+        /// Verifies a filter that shows errors and logs but hides warnings is put back exactly, so each type's
+        /// flag is mapped back on its own.
+        /// </summary>
         [Test]
         public void GetConsoleLogCounts_WithOnlyWarningsHidden_KeepsWarningsHidden()
         {
-            // Verifies a filter that shows errors and logs but hides warnings is put back exactly, so each
-            // type's flag is mapped back on its own.
             _retriever.SetMask(5);
             int errorAndLogMask = _retriever.GetCurrentMask();
 

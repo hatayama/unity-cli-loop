@@ -23,10 +23,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _serializer = new HierarchySerializer();
         }
 
+        /// <summary>
+        /// Verifies null inputs are treated as no nodes and default options.
+        /// </summary>
         [Test]
         public void BuildGroups_WithNullNodesAndOptions_ReturnsAnEmptyResultWithTheContextNames()
         {
-            // Verifies null inputs are treated as no nodes and default options.
             HierarchySerializationResult result = _serializer.BuildGroups(null, Context, null);
 
             Assert.That(result.Groups, Is.Empty);
@@ -35,10 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Context.nodeCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies nodes are split by scene and each group counts its own roots, nodes, and depth.
+        /// </summary>
         [Test]
         public void BuildGroups_WithNodesFromTwoScenes_GroupsThemPerSceneWithStats()
         {
-            // Verifies nodes are split by scene and each group counts its own roots, nodes, and depth.
             List<HierarchyNode> nodes = new List<HierarchyNode>
             {
                 new HierarchyNode("1", "RootA", null, 0, true, null, "SceneA"),
@@ -60,10 +64,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Context.maxDepth, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies a node whose parent is not in the same scene group becomes a root instead of being dropped.
+        /// </summary>
         [Test]
         public void BuildGroups_WithAParentOutsideTheScene_PromotesTheNodeToARoot()
         {
-            // Verifies a node whose parent is not in the same scene group becomes a root instead of being dropped.
             List<HierarchyNode> nodes = new List<HierarchyNode>
             {
                 new HierarchyNode("1", "Root", null, 0, true, null, "SceneA"),
@@ -76,11 +82,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Groups[0].stats.rootCount, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies a forced lookup table lists each component once in first-seen order and swaps each node's
+        /// names for indexes into it.
+        /// </summary>
         [Test]
         public void BuildGroups_WithTheLookupTableForced_ReplacesComponentNamesWithIndexes()
         {
-            // Verifies a forced lookup table lists each component once in first-seen order and swaps each
-            // node's names for indexes into it.
             List<HierarchyNode> nodes = new List<HierarchyNode>
             {
                 new HierarchyNode("1", "Root", null, 0, true, new[] { "Transform", "Camera" }, "SceneA"),
@@ -99,10 +107,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(group.roots[0].components, Is.Null);
         }
 
+        /// <summary>
+        /// Verifies a disabled lookup table keeps names even when they are heavily duplicated.
+        /// </summary>
         [Test]
         public void BuildGroups_WithTheLookupTableDisabled_KeepsComponentNames()
         {
-            // Verifies a disabled lookup table keeps names even when they are heavily duplicated.
             HierarchySerializationResult result = _serializer.BuildGroups(
                 CreateNodesWithComponents(30, new[] { "Transform", "MeshRenderer" }),
                 Context,
@@ -112,10 +122,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Groups[0].roots[0].components, Is.EqualTo(new[] { "Transform", "MeshRenderer" }));
         }
 
+        /// <summary>
+        /// Verifies the automatic rule turns the lookup table on for at least 50 names that are mostly duplicates.
+        /// </summary>
         [Test]
         public void BuildGroups_AutoWithManyDuplicatedComponents_UsesTheLookupTable()
         {
-            // Verifies the automatic rule turns the lookup table on for at least 50 names that are mostly duplicates.
             HierarchySerializationResult result = _serializer.BuildGroups(
                 CreateNodesWithComponents(25, new[] { "Transform", "MeshRenderer" }),
                 Context,
@@ -124,10 +136,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Groups[0].componentsLut, Is.EqualTo(new List<string> { "Transform", "MeshRenderer" }));
         }
 
+        /// <summary>
+        /// Verifies the automatic rule stays off at 49 component names even when all are duplicates.
+        /// </summary>
         [Test]
         public void BuildGroups_AutoWithFewerThanFiftyNames_KeepsComponentNames()
         {
-            // Verifies the automatic rule stays off at 49 component names even when all are duplicates.
             HierarchySerializationResult result = _serializer.BuildGroups(
                 CreateNodesWithComponents(49, new[] { "Transform" }),
                 Context,
@@ -136,10 +150,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Groups[0].componentsLut, Is.Null);
         }
 
+        /// <summary>
+        /// Verifies the automatic rule stays off when half or more of the names are unique.
+        /// </summary>
         [Test]
         public void BuildGroups_AutoWithMostlyUniqueNames_KeepsComponentNames()
         {
-            // Verifies the automatic rule stays off when half or more of the names are unique.
             List<HierarchyNode> nodes = new List<HierarchyNode>();
             for (int i = 0; i < 25; i++)
             {
@@ -151,10 +167,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Groups[0].componentsLut, Is.Null);
         }
 
+        /// <summary>
+        /// Verifies requested paths join each node's ancestors with slashes from its scene root.
+        /// </summary>
         [Test]
         public void BuildGroups_WithPathsRequested_AssignsSlashSeparatedPaths()
         {
-            // Verifies requested paths join each node's ancestors with slashes from its scene root.
             List<HierarchyNode> nodes = new List<HierarchyNode>
             {
                 new HierarchyNode("1", "Root", null, 0, true, null, "SceneA"),
@@ -173,10 +191,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(root.children[0].children[0].path, Is.EqualTo("Root/Child/Leaf"));
         }
 
+        /// <summary>
+        /// Verifies paths stay unset unless requested.
+        /// </summary>
         [Test]
         public void BuildGroups_WithoutPathsRequested_LeavesPathsUnset()
         {
-            // Verifies paths stay unset unless requested.
             List<HierarchyNode> nodes = new List<HierarchyNode>
             {
                 new HierarchyNode("1", "Root", null, 0, true, null, "SceneA")

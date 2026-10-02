@@ -34,10 +34,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WatchExpressionServices.ResetForTesting();
         }
 
+        /// <summary>
+        /// Verifies an empty expression is rejected before compiling.
+        /// </summary>
         [Test]
         public void EnableAsync_WithAnEmptyExpression_ReturnsValidationFailure()
         {
-            // Verifies an empty expression is rejected before compiling.
             UseUnreachableCompiler();
 
             WatchResponse response = Complete(WatchUseCase.EnableAsync(
@@ -48,10 +50,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Is.EqualTo("Expression must not be null or empty."));
         }
 
+        /// <summary>
+        /// Verifies a history size above the registry limit is rejected with the allowed range.
+        /// </summary>
         [Test]
         public void EnableAsync_WithMaxHistoryAboveTheLimit_ReturnsValidationFailure()
         {
-            // Verifies a history size above the registry limit is rejected with the allowed range.
             UseUnreachableCompiler();
 
             WatchResponse response = Complete(WatchUseCase.EnableAsync(
@@ -68,10 +72,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo($"MaxHistory must be between 1 and {WatchExpressionRegistry.MaxHistoryLimit}."));
         }
 
+        /// <summary>
+        /// Verifies a failed compile is returned with each compiler error and registers nothing.
+        /// </summary>
         [Test]
         public void EnableAsync_WhenCompilationFails_ReturnsTheCompilerErrors()
         {
-            // Verifies a failed compile is returned with each compiler error and registers nothing.
             CompilationError error = new CompilationError { Line = 1, Column = 5, Message = "bad token", ErrorCode = "CS1002" };
             WatchExpressionServices.OverrideCompilerForTesting(new StubWatchExpressionCompiler(
                 WatchCompilationResult.FailureResult("Compilation failed.", new List<CompilationError> { error })));
@@ -90,10 +96,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_store.SaveCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a second watch with the same id is rejected and the stored records stay untouched.
+        /// </summary>
         [Test]
         public void EnableAsync_WithAnIdAlreadyRegistered_ReturnsTheRegistryFailure()
         {
-            // Verifies a second watch with the same id is rejected and the stored records stay untouched.
             WatchExpressionServices.Registry.Register("speed", "1 + 2", new ConstantWatchExpressionEvaluator(3), 5);
             WatchExpressionServices.OverrideCompilerForTesting(new StubWatchExpressionCompiler(
                 WatchCompilationResult.SuccessResult(new ConstantWatchExpressionEvaluator(4))));
@@ -108,20 +116,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_store.SaveCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies clearing needs either an id or All.
+        /// </summary>
         [Test]
         public void Clear_WithoutAnIdOrAll_ReturnsValidationFailure()
         {
-            // Verifies clearing needs either an id or All.
             WatchResponse response = WatchUseCase.Clear(new ClearWatchSchema { Id = " " });
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("Id must not be null or empty unless All is true."));
         }
 
+        /// <summary>
+        /// Verifies clearing an unregistered watch fails without rewriting the stored records.
+        /// </summary>
         [Test]
         public void Clear_WithAnUnknownId_ReportsItWasNotFound()
         {
-            // Verifies clearing an unregistered watch fails without rewriting the stored records.
             WatchResponse response = WatchUseCase.Clear(new ClearWatchSchema { Id = "missing" });
 
             Assert.That(response.Success, Is.False);
@@ -129,10 +141,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_store.SaveCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies an empty registry answers with an empty list and its own message.
+        /// </summary>
         [Test]
         public void GetValues_WithoutWatches_ReportsThatNoneAreRegistered()
         {
-            // Verifies an empty registry answers with an empty list and its own message.
             WatchResponse response = WatchUseCase.GetValues(new GetWatchValuesSchema());
 
             Assert.That(response.Watches, Is.Empty);
@@ -140,20 +154,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Warning, Is.Null);
         }
 
+        /// <summary>
+        /// Verifies a restore with nothing stored completes with the empty report and registers nothing.
+        /// </summary>
         [Test]
         public void RestoreAfterDomainReload_WithAnEmptyStore_RecordsAnEmptyReport()
         {
-            // Verifies a restore with nothing stored completes with the empty report and registers nothing.
             WatchExpressionServices.RestoreAfterDomainReload();
 
             Assert.That(WatchExpressionServices.LastRestoreReport, Is.SameAs(WatchRestoreReport.Empty));
             Assert.That(WatchExpressionServices.Registry.GetEntries(), Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies a stored watch is recompiled and registered again, and the report counts it.
+        /// </summary>
         [Test]
         public void RestoreAfterDomainReload_WithAStoredWatch_RegistersItAgain()
         {
-            // Verifies a stored watch is recompiled and registered again, and the report counts it.
             _store.Save(new List<WatchPersistedRecord>
             {
                 new WatchPersistedRecord { Id = "speed", Expression = "1 + 2", MaxHistory = 7 }

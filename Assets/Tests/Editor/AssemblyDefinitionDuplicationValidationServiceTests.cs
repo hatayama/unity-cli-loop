@@ -10,10 +10,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class AssemblyDefinitionDuplicationValidationServiceTests
     {
+        /// <summary>
+        /// Verifies the check reads each asmdef's declared name and accepts a project whose names are unique.
+        /// </summary>
         [Test]
         public void ValidateNoDuplicateAsmdefNames_WithThisProjectsUniqueNames_Succeeds()
         {
-            // Verifies the check reads each asmdef's declared name and accepts a project whose names are unique.
             AssemblyDefinitionDuplicationValidationService service = new AssemblyDefinitionDuplicationValidationService();
 
             ValidationResult result = service.ValidateNoDuplicateAsmdefNames();

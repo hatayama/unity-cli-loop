@@ -40,10 +40,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Object.DestroyImmediate(_root);
         }
 
+        /// <summary>
+        /// Verifies the search walks below the scene roots and returns every nested match with its path.
+        /// </summary>
         [Test]
         public void ExecuteAsync_WithAContainsPattern_FindsNestedChildren()
         {
-            // Verifies the search walks below the scene roots and returns every nested match with its path.
             FindGameObjectsResponse response = Execute(new FindGameObjectsSchema
             {
                 NamePattern = "FindSearchFixture",
@@ -58,10 +60,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo($"{RootName}/{ChildName}/{GrandChildName}"));
         }
 
+        /// <summary>
+        /// Verifies a tag filter drops objects whose tag differs, and keeps those whose tag matches.
+        /// </summary>
         [Test]
         public void ExecuteAsync_WithATagThatDoesNotMatch_ExcludesTheObject()
         {
-            // Verifies a tag filter drops objects whose tag differs, and keeps those whose tag matches.
             FindGameObjectsResponse mismatch = Execute(new FindGameObjectsSchema
             {
                 NamePattern = ChildName,
@@ -77,11 +81,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(match.Results.Select(result => result.Name).ToArray(), Is.EqualTo(new[] { ChildName }));
         }
 
+        /// <summary>
+        /// Verifies an invalid regular expression is logged and answered with an empty failed search instead of
+        /// escaping the tool.
+        /// </summary>
         [Test]
         public void ExecuteAsync_WithAnInvalidRegex_ReturnsTheSearchFailure()
         {
-            // Verifies an invalid regular expression is logged and answered with an empty failed search
-            // instead of escaping the tool.
             LogAssert.Expect(LogType.Error, new Regex("^GameObject search failed: "));
 
             FindGameObjectsResponse response = Execute(new FindGameObjectsSchema

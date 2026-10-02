@@ -29,28 +29,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
 
+        /// <summary>
+        /// Verifies a clean scene is neither reported as unsaved nor as a save failure.
+        /// </summary>
         [Test]
         public void DetectAndSave_WithACleanScene_ReportNothing()
         {
-            // Verifies a clean scene is neither reported as unsaved nor as a save failure.
             Assert.That(_saver.DetectUnsavedEditorChanges(), Is.Empty);
             Assert.That(_saver.SaveUnsavedEditorChanges(), Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies a dirty scene without a path or name is reported under the untitled label.
+        /// </summary>
         [Test]
         public void DetectUnsavedEditorChanges_WithADirtyUntitledScene_ReportsItAsUntitled()
         {
-            // Verifies a dirty scene without a path or name is reported under the untitled label.
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
 
             Assert.That(_saver.DetectUnsavedEditorChanges(), Is.EqualTo(new[] { "Scene: Untitled scene" }));
         }
 
+        /// <summary>
+        /// Verifies a dirty scene with no disk path is reported as a failure and left dirty rather than saved
+        /// through a prompt.
+        /// </summary>
         [Test]
         public void SaveUnsavedEditorChanges_WithADirtyUntitledScene_ReportsAFailureWithoutSaving()
         {
-            // Verifies a dirty scene with no disk path is reported as a failure and left dirty rather than
-            // saved through a prompt.
             Scene scene = SceneManager.GetActiveScene();
             EditorSceneManager.MarkSceneDirty(scene);
 

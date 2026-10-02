@@ -38,38 +38,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Object.DestroyImmediate(_root);
         }
 
+        /// <summary>
+        /// Verifies a slash-prefixed path that names the root starts the traversal at the named descendant.
+        /// </summary>
         [Test]
         public void GetHierarchyNodes_WithAnAbsolutePathThroughTheRoot_StartsAtThatDescendant()
         {
-            // Verifies a slash-prefixed path that names the root starts the traversal at the named descendant.
             List<HierarchyNode> nodes = GetNodes($"/{RootName}/{ChildName}");
 
             Assert.That(nodes.Select(node => node.name).ToArray(), Is.EqualTo(new[] { ChildName, LeafName }));
             Assert.That(nodes[0].parent, Is.Null);
         }
 
+        /// <summary>
+        /// Verifies a path that omits the root name is looked up below each scene root.
+        /// </summary>
         [Test]
         public void GetHierarchyNodes_WithAPathBelowARoot_FindsItUnderThatRoot()
         {
-            // Verifies a path that omits the root name is looked up below each scene root.
             List<HierarchyNode> nodes = GetNodes($"{ChildName}/{LeafName}");
 
             Assert.That(nodes.Select(node => node.name).ToArray(), Is.EqualTo(new[] { LeafName }));
         }
 
+        /// <summary>
+        /// Verifies a slash-prefixed root name resolves to that root itself.
+        /// </summary>
         [Test]
         public void GetHierarchyNodes_WithASlashPrefixedRootName_StartsAtTheRoot()
         {
-            // Verifies a slash-prefixed root name resolves to that root itself.
             List<HierarchyNode> nodes = GetNodes("/" + RootName);
 
             Assert.That(nodes.Select(node => node.name).ToArray(), Is.EqualTo(new[] { RootName, ChildName, LeafName }));
         }
 
+        /// <summary>
+        /// Verifies a bare slash selects every scene root, including the fixture root and its children.
+        /// </summary>
         [Test]
         public void GetHierarchyNodes_WithOnlyASlash_IncludesEverySceneRoot()
         {
-            // Verifies a bare slash selects every scene root, including the fixture root and its children.
             List<HierarchyNode> nodes = GetNodes("/");
 
             HierarchyNode root = nodes.Single(node => node.name == RootName);
@@ -77,19 +85,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(nodes.Any(node => node.name == LeafName), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a path that matches nothing yields no fixture nodes.
+        /// </summary>
         [Test]
         public void GetHierarchyNodes_WithAnUnknownPath_ReturnsNothingFromTheFixture()
         {
-            // Verifies a path that matches nothing yields no fixture nodes.
             List<HierarchyNode> nodes = GetNodes($"/{RootName}/MissingChild");
 
             Assert.That(nodes.Any(node => node.name.StartsWith("HierarchyRootPathFixture")), Is.False);
         }
 
+        /// <summary>
+        /// Verifies an inactive root is skipped unless inactive objects are requested.
+        /// </summary>
         [Test]
         public void GetHierarchyNodes_WithoutInactiveObjects_SkipsAnInactiveRoot()
         {
-            // Verifies an inactive root is skipped unless inactive objects are requested.
             _root.SetActive(false);
 
             List<HierarchyNode> activeOnly = _service.GetHierarchyNodes(
