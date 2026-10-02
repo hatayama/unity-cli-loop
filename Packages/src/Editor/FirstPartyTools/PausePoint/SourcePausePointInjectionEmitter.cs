@@ -252,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (injection.IsStatic)
             {
-                emitted.Add(new CodeInstruction(OpCodes.Ldnull));
+                AppendStaticInstanceLoad(emitted, method);
                 return;
             }
 
@@ -274,6 +274,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 emitted.Add(new CodeInstruction(OpCodes.Ldobj, method.DeclaringType));
                 emitted.Add(new CodeInstruction(OpCodes.Box, method.DeclaringType));
             }
+        }
+
+        // Why a static method may still pass an instance: a local function receives its enclosing
+        // scopes as a by-ref closure struct, and the collector walks that struct to the variables
+        // and the instance it holds, as it does for a lambda's closure class. The struct is copied
+        // into the box, so the capture is a snapshot and cannot write back into the frame.
+        private static void AppendStaticInstanceLoad(List<CodeInstruction> emitted, MethodBase method)
+        {
+            int frameIndex = SourcePausePointClosureFrameArgument.FindIndexOrMinusOne(method);
+            if (frameIndex < 0)
+            {
+                emitted.Add(new CodeInstruction(OpCodes.Ldnull));
+                return;
+            }
+
+            Type frameType = SourcePausePointClosureFrameArgument.FrameTypeOrNull(
+                method.GetParameters()[frameIndex].ParameterType);
+            emitted.Add(CodeInstruction.LoadArgument(frameIndex, false));
+            emitted.Add(new CodeInstruction(OpCodes.Ldobj, frameType));
+            emitted.Add(new CodeInstruction(OpCodes.Box, frameType));
         }
 
         private static void AppendNameValueArray<T>(

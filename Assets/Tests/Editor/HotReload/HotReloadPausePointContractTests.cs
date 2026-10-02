@@ -747,6 +747,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a pause point inside a local function of a hot-reloaded method captures the
+        /// instance as "this" with its fields, although the shim compiles that local function
+        /// to a static method that receives the instance inside a by-ref closure struct.
+        /// </summary>
+        [Test]
+        public async Task Enable_OnHotReloadedLocalFunctionBody_CapturesInstanceAsThis()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            const string compiledBody =
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            return _secret + delta;\n"
+                + "        }";
+            Assert.That(onDisk, Does.Contain(compiledBody), "Precondition: ComputeWithPrivate body must exist.");
+            string editedSource = onDisk.Replace(
+                compiledBody,
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            int Local()\n            {\n"
+                + "                int localSum = _secret + delta + 200;\n"
+                + "                return localSum;\n"
+                + "            }\n\n"
+                + "            return Local();\n"
+                + "        }",
+                StringComparison.Ordinal);
+            int enableLine = FindLineNumber(editedSource, "return localSum;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractLocalFunction.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(fixture.SecretForAssert + 5 + 200));
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "this"),
+                Is.True,
+                FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == HotReloadShimMethodLookup.ShimReceiverParameterName),
+                Is.False,
+                FormatCaptured(status));
+        }
+
+        /// <summary>
         /// What: RevertAll after enable on a hot-reloaded async body restores instrumentation
         /// onto the compiled MoveNext and hits with the original (non-edited) return value.
         /// </summary>
