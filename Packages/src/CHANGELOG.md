@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.0](https://github.com/hatayama/unity-cli-loop/compare/v3.10.2...v3.11.0) (2026-10-02)
+
+
+### Features
+
+* Hot reload applies field-like events added to a compiled class ([#3060](https://github.com/hatayama/unity-cli-loop/issues/3060)) ([21d862e](https://github.com/hatayama/unity-cli-loop/commit/21d862e8b7ad8366300b58b0ec7ce706e28c8c8a))
+
 ## [3.10.2](https://github.com/hatayama/unity-cli-loop/compare/v3.10.1...v3.10.2) (2026-09-30)
 
 
