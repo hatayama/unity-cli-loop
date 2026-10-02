@@ -36,6 +36,7 @@ type mockCliPathConfig struct {
 	ShowContentPath string `json:"showContentPath,omitempty"`
 	ShowStderr      string `json:"showStderr,omitempty"`
 	ProbeSleeps     bool   `json:"probeSleeps,omitempty"`
+	ProbeMarkerPath string `json:"probeMarkerPath,omitempty"`
 }
 
 func main() {
@@ -155,6 +156,14 @@ func runExistenceGit(config mockCliConfig, args []string) int {
 			}
 			behavior := config.Paths[key]
 			if behavior.ProbeSleeps {
+				// Mirrors the shell mock: announce that this probe started before
+				// blocking, so the test can cancel on that event.
+				if behavior.ProbeMarkerPath != "" {
+					if err := os.WriteFile(behavior.ProbeMarkerPath, nil, 0o600); err != nil {
+						fmt.Fprintf(os.Stderr, "mockcli: failed to write probe marker: %v\n", err)
+						return 1
+					}
+				}
 				time.Sleep(10 * time.Second)
 				return 0
 			}

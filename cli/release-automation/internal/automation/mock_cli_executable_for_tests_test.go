@@ -41,6 +41,7 @@ type mockCliPathConfig struct {
 	ShowContentPath string `json:"showContentPath,omitempty"`
 	ShowStderr      string `json:"showStderr,omitempty"`
 	ProbeSleeps     bool   `json:"probeSleeps,omitempty"`
+	ProbeMarkerPath string `json:"probeMarkerPath,omitempty"`
 }
 
 func TestMain(m *testing.M) {
@@ -135,6 +136,7 @@ func existenceMockCliConfig(fixture mockGitExistenceFixture) mockCliExecutableCo
 			ShowContentPath: behavior.showContentPath,
 			ShowStderr:      behavior.showStderr,
 			ProbeSleeps:     behavior.probeSleeps,
+			ProbeMarkerPath: behavior.probeStartedMarkerPath,
 		}
 	}
 
