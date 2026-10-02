@@ -1,6 +1,7 @@
 package automation
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -429,4 +430,169 @@ func runGitInRepoOutput(t *testing.T, repoRoot string, args ...string) string {
 		t.Fatalf("git %v failed: %v\n%s", args, err, output)
 	}
 	return string(output)
+}
+
+// releaseTriggerGuardRepo is a temporary git repository whose first commit is tagged base and holds the initial catalog.
+type releaseTriggerGuardRepo struct {
+	t    *testing.T
+	root string
+}
+
+func newReleaseTriggerGuardRepo(t *testing.T) releaseTriggerGuardRepo {
+	t.Helper()
+	repo := releaseTriggerGuardRepo{t: t, root: t.TempDir()}
+	runGitInRepo(t, repo.root, "init", "-b", "main")
+	repo.commitFile(CatalogRelativePath, mergeBaseCatalogInitial+"\n")
+	runGitInRepo(t, repo.root, "tag", "base")
+	t.Chdir(repo.root)
+	return repo
+}
+
+func (repo releaseTriggerGuardRepo) commitFile(relativePath string, content string) {
+	repo.t.Helper()
+	absolutePath := filepath.Join(repo.root, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+		repo.t.Fatalf("failed to create %s directory: %v", relativePath, err)
+	}
+	if err := os.WriteFile(absolutePath, []byte(content), 0o644); err != nil {
+		repo.t.Fatalf("failed to write %s: %v", relativePath, err)
+	}
+	runGitInRepo(repo.t, repo.root, "add", relativePath)
+	runGitInRepo(repo.t, repo.root, "commit", "-m", "change "+relativePath)
+}
+
+func (repo releaseTriggerGuardRepo) removeFile(relativePath string) {
+	repo.t.Helper()
+	runGitInRepo(repo.t, repo.root, "rm", "-q", relativePath)
+	runGitInRepo(repo.t, repo.root, "commit", "-m", "remove "+relativePath)
+}
+
+func runReleaseTriggerGuardForTest(config ReleaseTriggerGuardConfig) (int, string, string) {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunReleaseTriggerGuard(context.Background(), &stdout, &stderr, config)
+	return exitCode, stdout.String(), stderr.String()
+}
+
+// Verifies changes outside the shared release inputs pass, and an empty head ref compares against HEAD.
+func TestRunReleaseTriggerGuardPassesForUnrelatedChangesUpToHead(t *testing.T) {
+	repo := newReleaseTriggerGuardRepo(t)
+	repo.commitFile("docs/notes.md", "notes\n")
+
+	exitCode, stdout, stderr := runReleaseTriggerGuardForTest(ReleaseTriggerGuardConfig{BaseRef: "base"})
+
+	if exitCode != 0 || !strings.Contains(stdout, "Release trigger guard passed.") {
+		t.Fatalf("exit code = %d, stdout = %q, stderr = %q", exitCode, stdout, stderr)
+	}
+}
+
+// Verifies a committed shared common change without trigger updates fails with the warning naming the change.
+func TestRunReleaseTriggerGuardFailsForUntriggeredSharedChange(t *testing.T) {
+	repo := newReleaseTriggerGuardRepo(t)
+	repo.commitFile("cli/common/clicore/output.go", "package clicore\n")
+
+	exitCode, _, stderr := runReleaseTriggerGuardForTest(ReleaseTriggerGuardConfig{BaseRef: "base", HeadRef: "HEAD"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr, "Out-of-package release inputs changed without matching release triggers.") ||
+		!strings.Contains(stderr, "- `cli/common/clicore/output.go`") {
+		t.Fatalf("expected the trigger warning naming the change, got %q", stderr)
+	}
+}
+
+// Verifies a description-only catalog change is reported as skipped and does not demand release triggers.
+func TestRunReleaseTriggerGuardSkipsDescriptionOnlyCatalogChange(t *testing.T) {
+	repo := newReleaseTriggerGuardRepo(t)
+	repo.commitFile(CatalogRelativePath, mergeBaseCatalogDescriptionOnly+"\n")
+
+	exitCode, stdout, stderr := runReleaseTriggerGuardForTest(ReleaseTriggerGuardConfig{BaseRef: "base"})
+
+	if exitCode != 0 || !strings.Contains(stdout, "catalog changed only in descriptions; not counted as a shared release input") {
+		t.Fatalf("exit code = %d, stdout = %q, stderr = %q", exitCode, stdout, stderr)
+	}
+}
+
+// Verifies a catalog shape change and a catalog removed at head are both kept as shared input changes.
+func TestAnalyzeReleaseTriggerGuardForRefsKeepsCatalogUnlessOnlyDescriptionsChanged(t *testing.T) {
+	cases := []struct {
+		name   string
+		change func(releaseTriggerGuardRepo)
+	}{
+		{"shape change", func(repo releaseTriggerGuardRepo) {
+			repo.commitFile(CatalogRelativePath, mergeBaseCatalogStructural+"\n")
+		}},
+		{"removed at head", func(repo releaseTriggerGuardRepo) { repo.removeFile(CatalogRelativePath) }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			repo := newReleaseTriggerGuardRepo(t)
+			testCase.change(repo)
+
+			result, err := AnalyzeReleaseTriggerGuardForRefs(context.Background(), ReleaseTriggerGuardConfig{BaseRef: "base"})
+			if err != nil {
+				t.Fatalf("AnalyzeReleaseTriggerGuardForRefs failed: %v", err)
+			}
+			if result.DescriptionOnlyCatalogSkipped || len(result.Violations) != 1 || result.Violations[0].ChangedInputs[0] != CatalogRelativePath {
+				t.Fatalf("expected the catalog to stay a shared input change, got %+v", result)
+			}
+		})
+	}
+}
+
+// Verifies a catalog added after the base is kept as a shared input change because there is no base shape to compare.
+func TestAnalyzeReleaseTriggerGuardForRefsKeepsCatalogAddedAfterBase(t *testing.T) {
+	repoRoot := t.TempDir()
+	runGitInRepo(t, repoRoot, "init", "-b", "main")
+	repo := releaseTriggerGuardRepo{t: t, root: repoRoot}
+	repo.commitFile("docs/notes.md", "notes\n")
+	runGitInRepo(t, repoRoot, "tag", "base")
+	repo.commitFile(CatalogRelativePath, mergeBaseCatalogInitial+"\n")
+	t.Chdir(repoRoot)
+
+	result, err := AnalyzeReleaseTriggerGuardForRefs(context.Background(), ReleaseTriggerGuardConfig{BaseRef: "base"})
+	if err != nil {
+		t.Fatalf("AnalyzeReleaseTriggerGuardForRefs failed: %v", err)
+	}
+	if result.DescriptionOnlyCatalogSkipped || len(result.Violations) != 1 || result.Violations[0].ChangedInputs[0] != CatalogRelativePath {
+		t.Fatalf("expected the added catalog to stay a shared input change, got %+v", result)
+	}
+}
+
+// Verifies a missing base, an unknown base, an unparsable catalog, and a directory outside git each fail with their own error.
+func TestRunReleaseTriggerGuardReportsUnusableInputs(t *testing.T) {
+	cases := []struct {
+		name    string
+		setup   func(t *testing.T)
+		config  ReleaseTriggerGuardConfig
+		wantErr string
+	}{
+		{"missing base", func(t *testing.T) { newReleaseTriggerGuardRepo(t) }, ReleaseTriggerGuardConfig{}, "--base is required"},
+		{"unknown base", func(t *testing.T) { newReleaseTriggerGuardRepo(t) }, ReleaseTriggerGuardConfig{BaseRef: "missing-ref"}, "failed to inspect changed files"},
+		{"unparsable catalog", func(t *testing.T) { newReleaseTriggerGuardRepo(t).commitFile(CatalogRelativePath, "{\n") }, ReleaseTriggerGuardConfig{BaseRef: "base"}, "failed to compare catalog shape"},
+		{"outside git", func(t *testing.T) { t.Chdir(t.TempDir()) }, ReleaseTriggerGuardConfig{BaseRef: "base"}, "failed to resolve git repository root"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			testCase.setup(t)
+
+			exitCode, _, stderr := runReleaseTriggerGuardForTest(testCase.config)
+
+			if exitCode != 1 || !strings.Contains(stderr, testCase.wantErr) {
+				t.Fatalf("exit code = %d, expected stderr containing %q, got %q", exitCode, testCase.wantErr, stderr)
+			}
+		})
+	}
+}
+
+// Verifies an unknown base ref fails the catalog merge-base lookup with its own error when the catalog is in the change list.
+func TestFilterDescriptionOnlyCatalogChangeReportsUnknownBase(t *testing.T) {
+	repo := newReleaseTriggerGuardRepo(t)
+
+	_, _, err := filterDescriptionOnlyCatalogChange(context.Background(), repo.root, ReleaseTriggerGuardConfig{BaseRef: "missing-ref", HeadRef: "HEAD"}, []string{CatalogRelativePath})
+
+	if err == nil || !strings.Contains(err.Error(), "failed to resolve merge-base for catalog shape") {
+		t.Fatalf("expected a merge-base error, got %v", err)
+	}
 }

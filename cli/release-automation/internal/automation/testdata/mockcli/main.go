@@ -382,6 +382,10 @@ func runProtocolMinimumVersionGh(args []string) int {
 	appendLogLine("GH_LOG", args)
 
 	if argAt(args, 0) == "release" && argAt(args, 1) == "view" {
+		if os.Getenv("GH_FAIL_RELEASE_VIEW") != "" {
+			fmt.Fprintln(os.Stderr, "release not found")
+			return 1
+		}
 		releaseView := os.Getenv("GH_RELEASE_VIEW")
 		if releaseView == "" {
 			releaseView = `{"isDraft":false,"assets":[{"name":"uloop-project-runner-darwin-amd64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-windows-amd64.zip","size":1},{"name":"uloop-project-runner-windows-amd64.zip.sha256","size":1}]}`
@@ -390,7 +394,21 @@ func runProtocolMinimumVersionGh(args []string) int {
 		return 0
 	}
 
+	if argAt(args, 0) == "repo" && argAt(args, 1) == "view" {
+		repoView := os.Getenv("GH_REPO_VIEW")
+		if repoView == "" {
+			fmt.Fprintln(os.Stderr, "repo view failed")
+			return 1
+		}
+		fmt.Fprintf(os.Stdout, "%s\n", repoView)
+		return 0
+	}
+
 	if argAt(args, 0) == "api" && argAt(args, 1) == "--paginate" {
+		if os.Getenv("GH_FAIL_PAGINATE") != "" {
+			fmt.Fprintln(os.Stderr, "comment lookup failed")
+			return 1
+		}
 		if commentIDs := os.Getenv("GH_COMMENT_IDS"); commentIDs != "" {
 			fmt.Fprintf(os.Stdout, "%s\n", commentIDs)
 		}
@@ -398,6 +416,16 @@ func runProtocolMinimumVersionGh(args []string) int {
 	}
 
 	if argAt(args, 0) == "api" && argAt(args, 1) == "--method" {
+		// The comment body travels in the --input file, which is removed after the call, so it is
+		// copied into the log for the tests to read, matching the Unix mock gh.
+		if argAt(args, 4) == "--input" && argAt(args, 5) != "" {
+			input, err := os.ReadFile(argAt(args, 5))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "mockcli: failed to read --input: %v\n", err)
+				return 1
+			}
+			appendLogLine("GH_LOG", []string{"input:", strings.ReplaceAll(string(input), "\n", "")})
+		}
 		return 0
 	}
 
