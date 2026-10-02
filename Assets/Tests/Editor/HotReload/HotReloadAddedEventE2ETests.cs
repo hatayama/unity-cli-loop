@@ -188,7 +188,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string publisher = ReplaceInSource(
                 ReadFixture(PublisherFileName),
                 RaiseBodyAnchor,
-                "            (Existing) += forwarded => RaiseStatic(forwarded);\n" + RaiseBodyAnchor);
+                "            (Existing) += forwarded => LastForwarded = forwarded * 10;\n" + RaiseBodyAnchor);
+            HotReloadAddedEventApplyPublisher.LastForwarded = 0;
 
             HotReloadOrchestratorResult result = await RunAsync(publisher, ReadFixture(SubscriberFileName));
 
@@ -197,6 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadAddedEventApplySubscriber subscriber = new HotReloadAddedEventApplySubscriber();
             target.Existing += subscriber.Accept;
             target.Raise(3);
+            Assert.That(HotReloadAddedEventApplyPublisher.LastForwarded, Is.EqualTo(30), FormatOutcomes(result));
             Assert.That(subscriber.Received, Is.EqualTo(3), FormatOutcomes(result));
         }
 

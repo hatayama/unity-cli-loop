@@ -11,6 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         public event Action<int> Existing;
 
+        // Written only by a handler an edited body subscribes, so a test can tell that handler ran.
+        public static int LastForwarded;
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void Raise(int value)
         {
