@@ -160,5 +160,115 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(plan.ConfigurationFilePath, Is.EqualTo("/Users/ExampleUser/.zshrc"));
             Assert.That(plan.ConfigurationLine, Is.EqualTo("export PATH=\"$HOME/.local/bin:$PATH\""));
         }
+
+        /// <summary>
+        /// Verifies that bash setup prefers an existing .bash_profile over other login profiles.
+        /// </summary>
+        [Test]
+        public void ResolvePlan_WhenBashProfileAndProfileExist_UsesBashProfile()
+        {
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                CliPathSetupPlatform.Posix,
+                "/bin/bash",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "/Users/ExampleUser/.local/bin",
+                path => path == "/Users/ExampleUser/.bash_profile" || path == "/Users/ExampleUser/.profile");
+
+            Assert.That(plan.ConfigurationFilePath, Is.EqualTo("/Users/ExampleUser/.bash_profile"));
+        }
+
+        /// <summary>
+        /// Verifies that bash setup uses an existing .bash_login before falling back to .profile.
+        /// </summary>
+        [Test]
+        public void ResolvePlan_WhenBashLoginAndProfileExist_UsesBashLogin()
+        {
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                CliPathSetupPlatform.Posix,
+                "/bin/bash",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "/Users/ExampleUser/.local/bin",
+                path => path == "/Users/ExampleUser/.bash_login" || path == "/Users/ExampleUser/.profile");
+
+            Assert.That(plan.ConfigurationFilePath, Is.EqualTo("/Users/ExampleUser/.bash_login"));
+        }
+
+        /// <summary>
+        /// Verifies that the PATH line keeps the literal install directory when no home directory is known.
+        /// </summary>
+        [Test]
+        public void ResolvePlan_WhenHomeDirectoryIsMissing_KeepsLiteralInstallDirectory()
+        {
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                CliPathSetupPlatform.Posix,
+                "/bin/zsh",
+                null,
+                "/opt/zsh-config",
+                null,
+                "/opt/uloop/bin",
+                path => false);
+
+            Assert.That(plan.ProfileInstallDirectory, Is.EqualTo("/opt/uloop/bin"));
+            Assert.That(plan.ConfigurationLine, Is.EqualTo("export PATH=\"/opt/uloop/bin:$PATH\""));
+        }
+
+        /// <summary>
+        /// Verifies that an install directory equal to the home directory is written as $HOME.
+        /// </summary>
+        [Test]
+        public void ResolvePlan_WhenInstallDirectoryIsHomeDirectory_WritesHomeReference()
+        {
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                CliPathSetupPlatform.Posix,
+                "/bin/zsh",
+                "/Users/ExampleUser/",
+                null,
+                null,
+                "/Users/ExampleUser",
+                path => false);
+
+            Assert.That(plan.ProfileInstallDirectory, Is.EqualTo("$HOME"));
+            Assert.That(plan.ConfigurationLine, Is.EqualTo("export PATH=\"$HOME:$PATH\""));
+        }
+
+        /// <summary>
+        /// Verifies that characters special inside POSIX double quotes are escaped in the PATH line.
+        /// </summary>
+        [Test]
+        public void ResolvePlan_WhenInstallDirectoryHasShellSpecialCharacters_EscapesThemForPosixShell()
+        {
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                CliPathSetupPlatform.Posix,
+                "/bin/zsh",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "/opt/a\"b$c`d\\e",
+                path => false);
+
+            Assert.That(plan.ConfigurationLine, Is.EqualTo("export PATH=\"/opt/a\\\"b\\$c\\`d\\\\e:$PATH\""));
+        }
+
+        /// <summary>
+        /// Verifies that fish setup escapes quotes and dollars but leaves backticks, which fish does not expand.
+        /// </summary>
+        [Test]
+        public void ResolvePlan_WhenFishInstallDirectoryHasBacktick_DoesNotEscapeBacktick()
+        {
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                CliPathSetupPlatform.Posix,
+                "/usr/bin/fish",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "/opt/a`b$c",
+                path => false);
+
+            Assert.That(plan.ConfigurationLine, Is.EqualTo("fish_add_path --move \"/opt/a`b\\$c\""));
+        }
     }
 }

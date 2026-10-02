@@ -105,6 +105,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.False);
         }
 
+        /// <summary>
+        /// Verifies that a version with an empty core part is rejected instead of being read as zero.
+        /// </summary>
+        [Test]
+        public void TryCompareCliVersions_WhenCorePartIsEmpty_ReturnsFalse()
+        {
+            bool parsed = CliVersionComparer.TryCompareCliVersions("3..0", "3.0.0", out int comparison);
+
+            Assert.That(parsed, Is.False);
+            Assert.That(comparison, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a core part larger than Int32.MaxValue is rejected instead of overflowing.
+        /// </summary>
+        [Test]
+        public void TryCompareCliVersions_WhenCorePartOverflowsInt32_ReturnsFalse()
+        {
+            bool parsed = CliVersionComparer.TryCompareCliVersions("2147483648.0.0", "1.0.0", out int comparison);
+
+            Assert.That(parsed, Is.False);
+            Assert.That(comparison, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that upper-case prerelease identifiers are accepted and compared.
+        /// </summary>
+        [Test]
+        public void IsVersionGreaterThan_WhenPrereleaseUsesUpperCaseLetters_ComparesIdentifiers()
+        {
+            bool result = CliVersionComparer.IsVersionGreaterThan("3.0.0-RC.2", "3.0.0-RC.1");
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that an alphanumeric prerelease identifier ranks above a numeric one, as SemVer requires.
+        /// </summary>
+        [Test]
+        public void IsVersionGreaterThan_WhenOnlyRightPrereleaseIdentifierIsNumeric_ReturnsTrue()
+        {
+            bool result = CliVersionComparer.IsVersionGreaterThan("3.0.0-beta", "3.0.0-1");
+
+            Assert.That(result, Is.True);
+        }
+
         private static CompareCaseCatalog ReadCompareCaseCatalog()
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
