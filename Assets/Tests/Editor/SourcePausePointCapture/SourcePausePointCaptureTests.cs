@@ -244,6 +244,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(frame.Entries.Any(entry => entry.Name == "bonus"), Is.True);
         }
 
+        [Test]
+        public void Collect_WithShimNestedClosure_FollowsTheEnclosingClosureToTheReceiver()
+        {
+            // Verifies a closure nested in a loop scope, which reaches the shim's receiver only
+            // through its enclosing closure, emits the receiver as "this" and lists the loop
+            // local instead of the compiler's link to the enclosing closure.
+            AsyncStateMachineFixture receiver = new() { OuterField = 7 };
+            Func<int> closure = ShimShapedFixture.CaptureReceiverInLoop(receiver, 2);
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                closure.Target, Array.Empty<object>(), Array.Empty<object>());
+
+            AssertReceiverSurfacesAsThis(frame, receiver);
+            Assert.That(frame.Entries.Any(entry => entry.Name == "x"), Is.True);
+            Assert.That(frame.Entries.Any(entry => entry.Name.StartsWith("CS$", StringComparison.Ordinal)), Is.False);
+        }
+
+        [Test]
+        public void Collect_WithShimAsyncLambdaStateMachine_ResolvesThisThroughItsClosure()
+        {
+            // Verifies an async lambda's state machine inside a shim, which links to its closure
+            // rather than to the receiver, emits the receiver as "this" and never the state machine.
+            AsyncStateMachineFixture receiver = new() { OuterField = 7 };
+            Func<int, Task<int>> asyncLambda = ShimShapedFixture.CaptureReceiverInAsyncLambda(receiver);
+
+            object stateMachine = CreateAsyncLambdaStateMachine(asyncLambda.Target);
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+
+            AssertReceiverSurfacesAsThis(frame, receiver);
+            Assert.That(frame.Entries.Any(entry => ReferenceEquals(entry.Value, stateMachine)), Is.False);
+        }
+
+        [Test]
+        public void Collect_WithCompiledAsyncLambdaStateMachine_ResolvesThisToTheInstance()
+        {
+            // Verifies an ordinary compiled async lambda's state machine, which has no
+            // [CompilerGenerated] attribute, emits the declaring instance as "this" with its fields.
+            AsyncStateMachineFixture instance = new() { OuterField = 7 };
+            Func<int, Task<int>> asyncLambda = instance.MakeAsyncLambda(3);
+
+            object stateMachine = CreateAsyncLambdaStateMachine(asyncLambda.Target);
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+
+            AssertReceiverSurfacesAsThis(frame, instance);
+            Assert.That(frame.Entries.Any(entry => entry.Name == "bonus"), Is.True);
+        }
+
+        // Builds the state machine an async lambda would run, linked to the lambda's closure the
+        // same way the compiler links it, so the collector sees what a paused MoveNext would pass.
+        private static object CreateAsyncLambdaStateMachine(object closure)
+        {
+            Type stateMachineType = closure.GetType()
+                .GetNestedTypes(BindingFlags.NonPublic)
+                .Single(type => type.Name.StartsWith("<<", StringComparison.Ordinal));
+            object stateMachine = Activator.CreateInstance(stateMachineType);
+            FieldInfo closureField = stateMachineType.GetField(
+                "<>4__this", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(closureField, Is.Not.Null, "compiler must link the state machine to its closure");
+            closureField.SetValue(stateMachine, closure);
+            return stateMachine;
+        }
+
         private static void AssertReceiverSurfacesAsThis(
             UloopPausePointCapturedVariableFrame frame,
             AsyncStateMachineFixture receiver)
@@ -382,6 +446,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 OuterField += localValue;
                 return localValue;
             }
+
+            public Func<int, Task<int>> MakeAsyncLambda(int bonus)
+            {
+                return async d =>
+                {
+                    await Task.Yield();
+                    return OuterField + bonus + d;
+                };
+            }
         }
 
         // Mirrors a hot-reload shim: a static method whose first parameter stands for "this".
@@ -396,6 +469,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public static Func<int> CaptureReceiver(AsyncStateMachineFixture __uloopInstance, int bonus)
             {
                 return () => __uloopInstance.OuterField + bonus;
+            }
+
+            public static Func<int> CaptureReceiverInLoop(AsyncStateMachineFixture __uloopInstance, int count)
+            {
+                Func<int> last = null;
+                for (int i = 0; i < count; i++)
+                {
+                    int x = i;
+                    last = () => __uloopInstance.OuterField + x;
+                }
+
+                return last;
+            }
+
+            public static Func<int, Task<int>> CaptureReceiverInAsyncLambda(AsyncStateMachineFixture __uloopInstance)
+            {
+                return async d =>
+                {
+                    await Task.Yield();
+                    return __uloopInstance.OuterField + d;
+                };
             }
         }
 
