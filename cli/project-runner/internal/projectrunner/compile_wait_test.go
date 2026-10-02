@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -1240,4 +1242,73 @@ func vibeLogContextString(t *testing.T, entry map[string]any, key string) string
 		t.Fatalf("vibe log context %s mismatch: %#v", key, contextMap[key])
 	}
 	return value
+}
+
+// Verifies the timeout parser accepts each positive whole-number form and rejects zero,
+// negatives, malformed json.Number values, and unsupported types.
+func TestPositiveInt64FromAny(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  any
+		want   int64
+		wantOK bool
+	}{
+		{name: "int32", value: int32(4), want: 4, wantOK: true},
+		{name: "int32 zero", value: int32(0)},
+		{name: "int64", value: int64(5), want: 5, wantOK: true},
+		{name: "int64 negative", value: int64(-5)},
+		{name: "json.Number", value: json.Number("6"), want: 6, wantOK: true},
+		{name: "json.Number fraction", value: json.Number("6.5")},
+		{name: "json.Number negative", value: json.Number("-6")},
+		{name: "string", value: "7"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, ok := positiveInt64FromAny(testCase.value)
+			if got != testCase.want || ok != testCase.wantOK {
+				t.Fatalf("positiveInt64FromAny(%#v) = (%d, %v), want (%d, %v)", testCase.value, got, ok, testCase.want, testCase.wantOK)
+			}
+		})
+	}
+}
+
+// Verifies the compile status query reports an undecodable Unity result as a decode error.
+func TestQueryCompileStatusFromUnityRejectsUndecodableResult(t *testing.T) {
+	server := startFakeUnityResultServer(t, t.TempDir(), compileStatusCommandName, `[1]`)
+
+	_, err := queryCompileStatusFromUnity(context.Background(), server.connection, "compile_status_decode")
+
+	if err == nil || !strings.Contains(err.Error(), "cannot unmarshal array") {
+		t.Fatalf("expected a decode error, got %v", err)
+	}
+	if request := server.receivedRequest(t); request[compileRequestIDParam] != "compile_status_decode" {
+		t.Fatalf("unexpected request: %#v", request)
+	}
+}
+
+// Verifies an unanswered status probe still unwraps to its transport cause.
+func TestClassifyCompileStatusQueryErrorKeepsCause(t *testing.T) {
+	cause := os.ErrDeadlineExceeded
+
+	err := classifyCompileStatusQueryError(unityipc.UnitySendOutcome{RequestAccepted: true}, cause)
+
+	if !isUnansweredStatusProbe(err) {
+		t.Fatalf("an acknowledged deadline must be marked unanswered: %v", err)
+	}
+	if !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("the unanswered error must unwrap to its cause: %v", err)
+	}
+}
+
+// Verifies the domain-reload flag is ignored when the result fails to decode, even after the flag
+// itself was decoded as true, and that the control-field strip leaves undecodable output untouched.
+func TestExecuteDynamicCodeControlResultHandlesUndecodableOutput(t *testing.T) {
+	// Why the duplicate key: the decoder sets the flag to true before the second value fails, so
+	// only the decode-error branch keeps the wait from being requested.
+	if executeDynamicCodeDomainReloadWaitRequired([]byte(`{"DomainReloadWaitRequired":true,"DomainReloadWaitRequired":"yes"}`)) {
+		t.Fatal("output that fails to decode must not request a domain reload wait")
+	}
+	if stripped := stripExecuteDynamicCodeControlResult([]byte("not json")); string(stripped) != "not json" {
+		t.Fatalf("undecodable output must be returned unchanged, got %q", stripped)
+	}
 }

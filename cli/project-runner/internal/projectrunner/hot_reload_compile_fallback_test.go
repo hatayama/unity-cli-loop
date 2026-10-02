@@ -317,3 +317,54 @@ func assertCompactJSONEqual(t *testing.T, output string, expected string) {
 		t.Fatalf("response must pass through unchanged:\nwant %s\ngot  %s", expectedCompact.String(), actualCompact.String())
 	}
 }
+
+// Verifies a hot-reload request Unity rejects exits with the failure on stderr and never compiles.
+func TestRunHotReloadWithCompileFallbackSkipsCompileWhenReloadFails(t *testing.T) {
+	original := hotReloadFallbackCompile
+	t.Cleanup(func() { hotReloadFallbackCompile = original })
+	hotReloadFallbackCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
+		t.Fatal("the fallback compile must not run after a failed reload request")
+		return compileExecutionResult{}
+	}
+	server := startFakeUnityServer(t, t.TempDir(), hotReloadCommandName, testUnityRPCFailureResponse)
+	var stdout, stderr bytes.Buffer
+
+	code := runHotReloadWithCompileFallback(context.Background(), server.connection, map[string]any{}, &stdout, &stderr)
+
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q", code, stdout.String())
+	}
+	server.receivedRequest(t)
+	if !strings.Contains(stderr.String(), "tool exploded in Unity") {
+		t.Fatalf("stderr must carry the Unity error:\n%s", stderr.String())
+	}
+}
+
+// Verifies a fallback compile result that cannot be decoded fails the command instead of
+// printing a merged response with a guessed Success.
+func TestRunHotReloadFailsWhenFallbackCompileResultIsUndecodable(t *testing.T) {
+	stdout, stderr, compileCalls, code := runHotReloadWithFakeCompile(
+		t,
+		`{"Success":false,"CompileFallback":"Requested","Message":"Hot reload left edits unapplied."}`,
+		compileExecutionResult{result: json.RawMessage(`[1]`), exitCode: 0},
+	)
+
+	if code != 1 || stdout != "" || compileCalls != 1 {
+		t.Fatalf("code=%d compileCalls=%d stdout=%q", code, compileCalls, stdout)
+	}
+	if !strings.Contains(stderr, "cannot unmarshal array") {
+		t.Fatalf("stderr must report the decode failure:\n%s", stderr)
+	}
+}
+
+// Verifies an undecodable reload answer never counts as a fallback request, and a JSON null
+// reload response is rejected rather than merged.
+func TestHotReloadCompileFallbackRejectsNonObjectResponses(t *testing.T) {
+	if isHotReloadCompileFallbackRequested([]byte("not json")) {
+		t.Fatal("an undecodable answer must not request a compile")
+	}
+	_, err := injectHotReloadCompileFallback(json.RawMessage(`null`), json.RawMessage(`{"Success":true}`))
+	if err == nil || err.Error() != "hot-reload response must be a JSON object" {
+		t.Fatalf("expected the non-object error, got %v", err)
+	}
+}

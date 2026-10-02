@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -647,5 +651,107 @@ func TestRunCompileTimeoutWritesPendingRecord(t *testing.T) {
 	case err := <-serverErr:
 		t.Fatalf("server failed: %v", err)
 	default:
+	}
+}
+
+// Verifies the pending-compile probe stops retrying and returns the context error when the
+// context ends between failed queries, instead of waiting out the probe window.
+func TestProbePendingCompileStatusReturnsContextErrorBetweenRetries(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queries := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		queries++
+		cancel()
+		return compileStatusResponse{}, io.ErrUnexpectedEOF
+	})
+	deps.attachProbeTimeout = time.Minute
+	deps.attachProbeInterval = time.Minute
+
+	_, err := probePendingCompileStatus(ctx, unityipc.Connection{ProjectRoot: t.TempDir()}, "compile_probe_cancel", deps)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if queries != 1 {
+		t.Fatalf("queries = %d, want 1", queries)
+	}
+}
+
+// Verifies a reattach wait that ends with the caller's context reports the cancellation, keeps the
+// pending record for a later retry, and never sends a fresh compile.
+func TestRunCompileAttachReportsCancellationDuringWait(t *testing.T) {
+	projectRoot := t.TempDir()
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     "compile_attach_cancel",
+		TimedOutAtUtc: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queries := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		queries++
+		if queries > 1 {
+			cancel()
+		}
+		return compileStatusResponse{IsCompiling: true}, nil
+	})
+	deps.sendCompile = func(context.Context, unityipc.Connection, string, map[string]any, unityipc.ProgressFunc, time.Duration) (unityipc.UnitySendOutcome, error) {
+		t.Fatal("a fresh compile must not be sent while reattaching")
+		return unityipc.UnitySendOutcome{}, nil
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(ctx, unreachableConnection(projectRoot), map[string]any{}, &stdout, &stderr, deps)
+
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), context.Canceled.Error()) {
+		t.Fatalf("stderr must report the cancellation:\n%s", stderr.String())
+	}
+	if _, err := os.Stat(compilePendingRecordPath(projectRoot)); err != nil {
+		t.Fatalf("pending record must survive a cancelled reattach: %v", err)
+	}
+}
+
+// Verifies a successful compile whose post-compile warmup fails still returns the compile
+// result and only warns about the skipped warmup.
+func TestCompleteCompileResultWarnsWhenWarmupFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stderr bytes.Buffer
+	result := json.RawMessage(`{"Success":true,"ErrorCount":0}`)
+
+	execution := completeCompileResult(
+		ctx,
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		result,
+		&stderr,
+		clicore.NewToolSpinner(&stderr, clicore.CompileCommandName),
+		time.Now(),
+		unityipc.UnitySendOutcome{},
+	)
+
+	if execution.exitCode != 0 || string(execution.result) != string(result) {
+		t.Fatalf("unexpected execution: %#v", execution)
+	}
+	if !strings.Contains(stderr.String(), "warning: post-compile warmup skipped: context canceled") {
+		t.Fatalf("stderr must warn about the skipped warmup:\n%s", stderr.String())
+	}
+}
+
+// Verifies a pending record that cannot be written produces a warning instead of failing silently.
+func TestPersistCompilePendingRecordOrWarnReportsWriteFailure(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".uloop"), "not a directory")
+	var stderr bytes.Buffer
+
+	persistCompilePendingRecordOrWarn(projectRoot, "compile_persist_fail", &stderr)
+
+	if !strings.Contains(stderr.String(), "warning: failed to persist pending compile request for retry attach: mkdir ") {
+		t.Fatalf("stderr must warn about the failed write:\n%s", stderr.String())
 	}
 }
