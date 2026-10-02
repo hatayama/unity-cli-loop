@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -17,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private static readonly Regex HoistedLocalFieldNamePattern = new(@"^<([^>]+)>5__\d+$", RegexOptions.Compiled);
         private const string StateMachineOuterThisFieldName = "<>4__this";
+        private static readonly Regex EnclosingClosureFieldPattern = new(@"^CS\$<>8__locals\d+$", RegexOptions.Compiled);
 
         // The synthetic entry name for the paused instance itself. C# identifiers cannot be named
         // "this", so this never collides with a captured local, parameter, or field.
@@ -83,12 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ref int truncatedVariableCount,
             ref bool truncated)
         {
-            bool isCompilerGeneratedStateMachine =
-                Attribute.IsDefined(instance.GetType(), typeof(CompilerGeneratedAttribute));
-
             // Normal method: the paused instance itself is `this`, emitted before its fields so the
             // count cap keeps prioritizing locals and parameters over instance state.
-            if (!isCompilerGeneratedStateMachine)
+            if (!IsCompilerGeneratedHolder(instance.GetType()))
             {
                 TryAppendEntry(
                     entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount, ref truncated,
@@ -103,8 +102,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            // Async/coroutine state machine: the real `this` is the hoisted outer instance, never the
-            // compiler-generated state machine object. Emit it before the outer instance's fields.
+            // State machine or closure: the real `this` is the outer instance found through the
+            // compiler-generated holders, never a holder itself. Emit it before its fields.
             TryAppendEntry(
                 entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount, ref truncated,
                 ThisEntryName, UloopCapturedVariableScope.This, outerThis);
@@ -124,16 +123,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool followOuterThis)
         {
             object outerThis = null;
-            bool isCompilerGeneratedStateMachine = Attribute.IsDefined(source.GetType(), typeof(CompilerGeneratedAttribute));
-            string plainFieldScope = isCompilerGeneratedStateMachine
+            bool isCompilerGeneratedHolder = IsCompilerGeneratedHolder(source.GetType());
+            string plainFieldScope = isCompilerGeneratedHolder
                 ? UloopCapturedVariableScope.Parameter
                 : UloopCapturedVariableScope.InstanceField;
 
             foreach (FieldInfo field in EnumerateInstanceFields(source.GetType()))
             {
-                if (followOuterThis && field.Name == StateMachineOuterThisFieldName)
+                if (followOuterThis && IsOuterLinkField(field, isCompilerGeneratedHolder))
                 {
-                    outerThis = field.GetValue(source);
+                    object linked = field.GetValue(source);
+                    object linkedOuterThis = FollowOuterLink(
+                        field, linked, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
+                        ref truncated);
+                    outerThis ??= linkedOuterThis;
                     continue;
                 }
 
@@ -160,6 +163,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return outerThis;
+        }
+
+        // Returns the outer instance a link field leads to. A link to another compiler-generated
+        // holder (an async lambda's state machine pointing at its closure, a nested closure
+        // pointing at the enclosing one) is walked so the variables it holds are listed and the
+        // real instance behind it is found, instead of showing the holder as "this" or a variable.
+        private static object FollowOuterLink(
+            FieldInfo field,
+            object linked,
+            List<UloopPausePointCapturedVariableEntry> entries,
+            HashSet<string> capturedNames,
+            List<string> truncatedVariableNames,
+            ref int truncatedVariableCount,
+            ref bool truncated)
+        {
+            if (linked == null)
+            {
+                return null;
+            }
+
+            if (IsCompilerGeneratedHolder(linked.GetType()))
+            {
+                return CollectDirectFieldVariables(
+                    linked, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
+                    ref truncated, followOuterThis: true);
+            }
+
+            return EnclosingClosureFieldPattern.IsMatch(field.Name) ? null : linked;
+        }
+
+        // Links from a compiler-generated holder outward: "<>4__this" to the instance or the
+        // enclosing closure, "CS$<>8__localsN" to the enclosing closure, and the hot-reload shim's
+        // receiver parameter, which a shim's holders keep under its own name because the shim is a
+        // static method taking the instance as that parameter.
+        private static bool IsOuterLinkField(FieldInfo field, bool isCompilerGeneratedHolder)
+        {
+            if (field.Name == StateMachineOuterThisFieldName)
+            {
+                return true;
+            }
+
+            if (!isCompilerGeneratedHolder)
+            {
+                return false;
+            }
+
+            return field.Name == HotReloadShimMethodLookup.ShimReceiverParameterName
+                || EnclosingClosureFieldPattern.IsMatch(field.Name);
+        }
+
+        // An async lambda's state machine carries no [CompilerGenerated], so the "<" that no C#
+        // identifier can start with also marks a compiler-generated type.
+        private static bool IsCompilerGeneratedHolder(Type type)
+        {
+            return Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute))
+                || type.Name.StartsWith("<", StringComparison.Ordinal);
         }
 
         private static IEnumerable<FieldInfo> EnumerateInstanceFields(Type type)
