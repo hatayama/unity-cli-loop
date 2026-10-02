@@ -578,3 +578,155 @@ func flagValue(args []string, name string) string {
 	}
 	return ""
 }
+
+// TestRunUpdateWingetManifestRejectsIncompleteFlags verifies unknown flags and each missing required flag fail with exit code 1.
+func TestRunUpdateWingetManifestRejectsIncompleteFlags(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{"unknown flag", []string{"--unknown"}, "flag provided but not defined"},
+		{"missing repo", []string{"--tag", "dispatcher-v3.1.0", "--fork-repo", "owner/fork"}, "--repo is required"},
+		{"missing tag", []string{"--repo", "owner/repo", "--fork-repo", "owner/fork"}, "--tag is required"},
+		{"missing fork repo", []string{"--repo", "owner/repo", "--tag", "dispatcher-v3.1.0"}, "--fork-repo is required"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stdout := bytes.Buffer{}
+			stderr := bytes.Buffer{}
+
+			code := RunUpdateWingetManifest(context.Background(), &stdout, &stderr, testCase.args)
+
+			if code != 1 {
+				t.Fatalf("exit code = %d, want 1", code)
+			}
+			if !strings.Contains(stderr.String(), testCase.wantErr) {
+				t.Fatalf("stderr = %q, want it to contain %q", stderr.String(), testCase.wantErr)
+			}
+		})
+	}
+}
+
+// TestRunUpdateWingetManifestSkipsWithCompleteFlagsAndNoToken verifies the exported command parses valid flags and skips without a token.
+func TestRunUpdateWingetManifestSkipsWithCompleteFlagsAndNoToken(t *testing.T) {
+	t.Setenv(wingetPkgsTokenEnvName, "")
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	code := RunUpdateWingetManifest(context.Background(), &stdout, &stderr, []string{
+		"--repo", "owner/repo", "--tag", "dispatcher-v3.1.0", "--fork-repo", "owner/fork",
+	})
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "WINGET_PKGS_TOKEN is not configured") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+// wingetOverride replaces the scenario's answer for the first command whose
+// joined arguments satisfy matches.
+type wingetOverride struct {
+	matches func(joined string) bool
+	output  string
+	err     error
+}
+
+func (s *wingetTestScenario) runOutputWithOverride(override wingetOverride) func(context.Context, []string, string, ...string) (string, error) {
+	return func(ctx context.Context, extraEnv []string, name string, args ...string) (string, error) {
+		if override.matches(strings.Join(args, " ")) {
+			return override.output, override.err
+		}
+		return s.runOutput(ctx, extraEnv, name, args...)
+	}
+}
+
+func wingetJoinedContains(parts ...string) func(string) bool {
+	return func(joined string) bool {
+		for _, part := range parts {
+			if !strings.Contains(joined, part) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func wingetForkContentRead(joined string) bool {
+	return strings.Contains(joined, "repos/hatayama/winget-pkgs/contents/") && !strings.Contains(joined, "-X PUT")
+}
+
+func runWingetOverrideScenario(t *testing.T, tag string, override wingetOverride) (string, string, int) {
+	t.Helper()
+	t.Setenv(wingetPkgsTokenEnvName, "winget-token")
+	scenario := newWingetTestScenario()
+	scenario.version = strings.TrimPrefix(tag, "dispatcher-v")
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	code := runUpdateWingetManifestWithDeps(
+		context.Background(),
+		&stdout,
+		&stderr,
+		testWingetConfig(tag),
+		wingetManifestUpdateDeps{runOutput: scenario.runOutputWithOverride(override)},
+	)
+	return stdout.String(), stderr.String(), code
+}
+
+// TestUpdateWingetManifestReportsEachFailingStep verifies every failing or malformed gh response exits 1 with its error instead of opening a pull request.
+func TestUpdateWingetManifestReportsEachFailingStep(t *testing.T) {
+	serverError := errors.New("gh api failed: HTTP 500")
+	never := func(string) bool { return false }
+	cases := []struct {
+		name     string
+		tag      string
+		override wingetOverride
+		wantErr  string
+	}{
+		{"invalid tag", "v3.1.0", wingetOverride{matches: never}, "must start with dispatcher-v"},
+		{"package lookup", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("uloop?ref=master"), err: serverError}, "HTTP 500"},
+		{"version lookup", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("uloop/3.1.0?ref=master"), err: serverError}, "HTTP 500"},
+		{"release view", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release view"), err: serverError}, "HTTP 500"},
+		{"release view JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release view"), output: "{"}, "failed to parse release metadata"},
+		{"release date", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release view"), output: `{"publishedAt":"2026"}`}, `invalid publishedAt value "2026"`},
+		{"checksum download", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release download"), err: serverError}, "HTTP 500"},
+		{"fork sync", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("merge-upstream"), err: serverError}, "HTTP 500"},
+		{"upstream ref", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("git/ref/heads/master"), err: serverError}, "HTTP 500"},
+		{"empty upstream ref", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("git/ref/heads/master"), output: "\n"}, "winget upstream master SHA is empty"},
+		{"branch creation", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("git/refs"), err: errors.New("gh api failed: HTTP 422 Validation Failed")}, "HTTP 422 Validation Failed"},
+		{"fork content read", "dispatcher-v3.1.0", wingetOverride{matches: wingetForkContentRead, err: serverError}, "HTTP 500"},
+		{"fork content JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetForkContentRead, output: "{"}, "failed to parse winget fork content response"},
+		{"manifest write", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("-X PUT"), err: serverError}, "HTTP 500"},
+		{"pull request list", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("state=open"), err: serverError}, "HTTP 500"},
+		{"pull request list JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("state=open"), output: "{"}, "failed to parse winget pull request list"},
+		{"pull request create", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("/pulls", "-X POST"), err: serverError}, "HTTP 500"},
+		{"pull request create JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("/pulls", "-X POST"), output: "{"}, "failed to parse created winget pull request"},
+		{"pull request URL", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("/pulls", "-X POST"), output: `{}`}, "created winget pull request URL is empty"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stdout, stderr, code := runWingetOverrideScenario(t, testCase.tag, testCase.override)
+
+			if code != 1 {
+				t.Fatalf("exit code = %d, want 1 (stdout=%s)", code, stdout)
+			}
+			if !strings.Contains(stderr, testCase.wantErr) {
+				t.Fatalf("stderr = %q, want it to contain %q", stderr, testCase.wantErr)
+			}
+		})
+	}
+}
+
+// TestUpdateWingetManifestPrintsCreatedPullRequestURL verifies a full submission prints the URL of the pull request it opened.
+func TestUpdateWingetManifestPrintsCreatedPullRequestURL(t *testing.T) {
+	stdout, stderr, code := runWingetOverrideScenario(t, "dispatcher-v3.1.0", wingetOverride{matches: func(string) bool { return false }})
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr=%s", code, stderr)
+	}
+	if strings.TrimSpace(stdout) != "https://example.invalid/new" {
+		t.Fatalf("stdout = %q", stdout)
+	}
+}
