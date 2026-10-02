@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.11.2](https://github.com/hatayama/unity-cli-loop/compare/v3.11.1...v3.11.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* Hot reload skips a brought-back file's property getter instead of failing the run ([#3068](https://github.com/hatayama/unity-cli-loop/issues/3068)) ([c70fca8](https://github.com/hatayama/unity-cli-loop/commit/c70fca854ae23e192a9304b5458a0afdc903699b))
+* Pause points in a hot-reloaded method's local functions now show the instance as this ([#3071](https://github.com/hatayama/unity-cli-loop/issues/3071)) ([1b40496](https://github.com/hatayama/unity-cli-loop/commit/1b40496c12e8afcc8553836a5706f3218a68866e))
+
 ## [3.11.1](https://github.com/hatayama/unity-cli-loop/compare/v3.11.0...v3.11.1) (2026-10-02)
 
 
