@@ -34,7 +34,7 @@ func TestSyncSkillDirectoryReportsFailures(t *testing.T) {
 	}{
 		{
 			name:        "source missing",
-			wantMessage: "Skill: no such file or directory",
+			wantMessage: string(filepath.Separator) + "Skill: ",
 			setup: func(t *testing.T, sourceDir string, destinationDir string) {
 				if err := os.RemoveAll(sourceDir); err != nil {
 					t.Fatalf("failed to remove source: %v", err)

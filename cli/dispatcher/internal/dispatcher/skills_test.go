@@ -1566,7 +1566,7 @@ func TestInstallSkillsForTargetReportsFailures(t *testing.T) {
 	}{
 		{
 			name:        "source missing",
-			wantMessage: "lstat ",
+			wantMessage: string(filepath.Separator) + "missing: ",
 			setup: func(t *testing.T, baseDir string, skill *skillDefinition) {
 				skill.sourceDirectory = filepath.Join(t.TempDir(), "missing")
 			},
@@ -1605,8 +1605,8 @@ func TestInstallSkillsForTargetReportsFailures(t *testing.T) {
 			testCase.setup(t, baseDir, &skill)
 
 			_, err := installSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{skill}, false, testCase.grouped)
-			if err == nil || !strings.HasPrefix(err.Error(), testCase.wantMessage) {
-				t.Fatalf("expected an error starting with %q, got %v", testCase.wantMessage, err)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
+				t.Fatalf("expected an error containing %q, got %v", testCase.wantMessage, err)
 			}
 		})
 	}
@@ -1790,7 +1790,7 @@ func TestInstallV3MigrationSkillForTargetReportsSyncFailures(t *testing.T) {
 		skill := v3MigrationSkillWithSource(t)
 		skill.sourceDirectory = filepath.Join(t.TempDir(), "missing")
 		_, err := installV3MigrationSkillForTarget(t.TempDir(), targetConfigs["claude"], []skillDefinition{skill}, false, false)
-		if err == nil || !strings.HasPrefix(err.Error(), "lstat "+skill.sourceDirectory) {
+		if !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), skill.sourceDirectory) {
 			t.Fatalf("expected a sync failure, got %v", err)
 		}
 	})

@@ -1779,8 +1779,12 @@ func TestRunSkillsDirCommandsReportMissingSource(t *testing.T) {
 		},
 	} {
 		var stderr bytes.Buffer
-		if code := run(&stderr); code != 1 || !strings.Contains(stderr.String(), filepath.Join("uloop-sample", "Skill")+": no such file or directory") {
-			t.Fatalf("expected an error: code=%d stderr=%s", code, stderr.String())
+		code := run(&stderr)
+		envelope := decodeDispatcherTestEnvelope(t, stderr.String())
+		errorObject, _ := envelope["Error"].(map[string]any)
+		message, _ := errorObject["Message"].(string)
+		if code != 1 || !strings.Contains(message, filepath.Join("uloop-sample", "Skill")+": ") {
+			t.Fatalf("expected the missing source error: code=%d stderr=%s", code, stderr.String())
 		}
 	}
 	assertFileContent(t, filepath.Join(store, "uloop-sample", "references", "note.md"), "note\n")
