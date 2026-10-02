@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     source,
                     codeTextMask,
                     openParenthesisIndex);
-                if (closingParenthesisIndex >= 0 &&
+                if (closingParenthesisIndex < 0 ||
                     IsCaptureGameRenderingLegacyTupleProjection(source, closingParenthesisIndex + 1))
                 {
                     continue;
@@ -171,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     source,
                     codeTextMask,
                     openParenthesisIndex);
-                if (closingParenthesisIndex >= 0 &&
+                if (closingParenthesisIndex < 0 ||
                     IsCaptureGameRenderingLegacyTupleProjection(source, closingParenthesisIndex + 1))
                 {
                     continue;
