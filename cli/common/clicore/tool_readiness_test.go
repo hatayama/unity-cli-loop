@@ -6,11 +6,14 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
@@ -153,5 +156,111 @@ func TestExecuteDynamicCodeReadinessProbeParamsUseForegroundWarmup(t *testing.T)
 	}
 	if params[DomainReloadWaitParam] != false {
 		t.Fatalf("readiness probe should not wait for its own reload check: %#v", params[DomainReloadWaitParam])
+	}
+}
+
+// Verifies that a readiness wait whose probes keep failing ends at the timeout with the last probe
+// error wrapped, when no Unity process is running.
+func TestWaitForToolReadinessTimesOutWithLastProbeError(t *testing.T) {
+	probeErr := errors.New("probe failed")
+	probeCount := 0
+	deps := toolReadinessDeps{
+		probeToolReadinessSequence: func(context.Context, string) error {
+			probeCount++
+			return probeErr
+		},
+		findRunningUnityProcess: func(context.Context, string) (*UnityProcess, error) {
+			return nil, nil
+		},
+	}
+
+	err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), ToolReadinessPoll/100, deps)
+
+	if !errors.Is(err, probeErr) || !strings.HasPrefix(err.Error(), "timed out waiting for Unity tool readiness: ") || probeCount == 0 {
+		t.Fatalf("expected the timeout to wrap the probe error after probing, got %v (probes=%d)", err, probeCount)
+	}
+}
+
+// Verifies that the public readiness wait returns the caller's cancellation for a directory that is
+// not a Unity project, rather than a timeout or the probe error.
+func TestWaitForToolReadinessReturnsCallerCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := WaitForToolReadiness(ctx, t.TempDir())
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+}
+
+// Verifies that a probe sequence against a Unity project with no running server fails on both the
+// execute-dynamic-code probe and the get-version probe used when that tool is not in the catalog.
+func TestProbeToolReadinessSequenceFailsWithoutAServer(t *testing.T) {
+	cases := map[string]string{
+		"execute-dynamic-code probe": "",
+		"get-version probe":          `{"tools":[{"name":"compile"}]}`,
+	}
+	for name, toolCache := range cases {
+		t.Run(name, func(t *testing.T) {
+			projectRoot := createReadinessUnityProject(t)
+			if toolCache != "" {
+				writeToolCache(t, projectRoot, toolCache)
+			}
+			if available := isExecuteDynamicCodeAvailable(projectRoot); available != (toolCache == "") {
+				t.Fatalf("execute-dynamic-code availability mismatch: %v", available)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), ToolReadinessProbeTimeout)
+			defer cancel()
+			err := ProbeToolReadinessSequence(ctx, projectRoot)
+
+			assertConnectionAttemptToProject(t, err, projectRoot)
+		})
+	}
+}
+
+// Verifies that the server-not-responding error carries the project's IPC endpoint when the
+// directory is a Unity project.
+func TestToolReadinessDoneErrorIncludesProjectEndpoint(t *testing.T) {
+	projectRoot := createReadinessUnityProject(t)
+	deps := toolReadinessDeps{
+		findRunningUnityProcess: func(context.Context, string) (*UnityProcess, error) {
+			return &UnityProcess{Pid: 123}, nil
+		},
+	}
+
+	err := toolReadinessDoneErrorWithDeps(context.Background(), projectRoot, errors.New("probe failed"), deps)
+
+	var notRespondingErr clierrors.UnityServerNotRespondingError
+	if !errors.As(err, &notRespondingErr) || !strings.Contains(notRespondingErr.Endpoint, "UnityCliLoop-") {
+		t.Fatalf("expected an endpoint in the not-responding error, got %#v", err)
+	}
+}
+
+func createReadinessUnityProject(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	for _, directory := range []string{"Assets", "ProjectSettings"} {
+		if err := os.MkdirAll(filepath.Join(projectRoot, directory), 0o755); err != nil {
+			t.Fatalf("failed to create %s: %v", directory, err)
+		}
+	}
+	return projectRoot
+}
+
+// assertConnectionAttemptToProject checks that err is a failed connection to projectRoot's own endpoint.
+func assertConnectionAttemptToProject(t *testing.T, err error, projectRoot string) {
+	t.Helper()
+	canonicalRoot, evalErr := filepath.EvalSymlinks(projectRoot)
+	if evalErr != nil {
+		t.Fatalf("failed to resolve project root: %v", evalErr)
+	}
+	var attemptErr *unityipc.ConnectionAttemptError
+	if !errors.As(err, &attemptErr) {
+		t.Fatalf("expected a connection attempt error, got %v", err)
+	}
+	if expected := project.CreateEndpoint(canonicalRoot).Address; attemptErr.Endpoint != expected {
+		t.Fatalf("connection endpoint = %q, want %q", attemptErr.Endpoint, expected)
 	}
 }

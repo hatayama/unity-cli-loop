@@ -401,3 +401,45 @@ func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, conten
 	t.Helper()
 	clitest.WriteSkillFile(t, projectRoot, relativeDir, skillscan.SkillFileName, content)
 }
+
+// Verifies that the project tool cache drops internal skill tools and that a project without a cache
+// reports no cache instead of falling back.
+func TestLoadProjectToolCacheFiltersInternalToolsAndReportsMissingCache(t *testing.T) {
+	if _, ok := LoadProjectToolCache(t.TempDir()); ok {
+		t.Fatal("a project without a tool cache should report no cache")
+	}
+
+	projectRoot := t.TempDir()
+	writeTestSkill(t, projectRoot, "Assets/Editor/InternalTool/Skill", "---\nname: uloop-internal-tool\ninternal: true\n---\n")
+	writeToolCache(t, projectRoot, `{"tools":[{"name":"internal-tool"},{"name":"public-tool"}]}`)
+
+	cache, ok := LoadProjectToolCache(projectRoot)
+
+	if !ok {
+		t.Fatal("project tool cache should load")
+	}
+	if len(cache.Tools) != 1 || cache.Tools[0].Name != "public-tool" {
+		t.Fatalf("unexpected cached tools: %#v", cache.Tools)
+	}
+}
+
+// Verifies that a cached tool with no description takes the embedded catalog's description.
+func TestApplyEmbeddedDescriptionFallbackFillsMissingToolDescription(t *testing.T) {
+	embeddedCompile, ok := FindDefaultTool("compile")
+	if !ok || embeddedCompile.Description == "" {
+		t.Fatalf("embedded compile tool should have a description: %#v", embeddedCompile)
+	}
+
+	cache := ApplyEmbeddedDescriptionFallback(ToolsCache{Tools: []ToolDefinition{{Name: "compile"}}})
+
+	if cache.Tools[0].Description != embeddedCompile.Description {
+		t.Fatalf("description was not filled: %q", cache.Tools[0].Description)
+	}
+}
+
+// Verifies that FindDefaultTool reports a miss for a command the embedded catalog does not define.
+func TestFindDefaultToolReportsUnknownTool(t *testing.T) {
+	if _, ok := FindDefaultTool("no-such-tool"); ok {
+		t.Fatal("unknown tool should not be found")
+	}
+}

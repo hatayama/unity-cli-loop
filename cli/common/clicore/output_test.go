@@ -46,3 +46,14 @@ func TestWriteJSONFallsBackToRawOutputForInvalidJSON(t *testing.T) {
 		t.Fatalf("WriteJSON fallback mismatch: %q", stdout.String())
 	}
 }
+
+// Verifies that WriteFormat writes the formatted text without adding a newline.
+func TestWriteFormatWritesFormattedText(t *testing.T) {
+	var output bytes.Buffer
+
+	WriteFormat(&output, "%s=%d", "count", 3)
+
+	if output.String() != "count=3" {
+		t.Fatalf("unexpected output: %q", output.String())
+	}
+}
