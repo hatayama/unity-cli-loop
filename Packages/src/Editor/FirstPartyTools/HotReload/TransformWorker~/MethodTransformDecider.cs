@@ -103,7 +103,6 @@ internal static class MethodTransformDecider
         return MethodTransformDecision.Delegation();
     }
 
-    // Null when the body needs accessors only for its event uses: there is no skip to rescue.
     // Why an async or iterator body drops the '+=' advice: its whole state machine is rewritten,
     // so leaving the '+= Handler' line and moving other code out still leaves a private access the
     // rewrite has no shape for; only wrapping the handler in a lambda lets it apply.
@@ -117,6 +116,7 @@ internal static class MethodTransformDecider
         return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape, accessorRejectReason.Args);
     }
 
+    // Null when the body needs accessors only for its event uses: there is no skip to rescue.
     private static HotReloadWorkerReasonCode? BuildAccessorRescueReason(
         bool closureInaccessible,
         bool asyncIteratorInaccessible)
