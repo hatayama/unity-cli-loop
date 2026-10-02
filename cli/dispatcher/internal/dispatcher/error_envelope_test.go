@@ -76,9 +76,24 @@ func TestClassifyInstallUnsupportedOS(t *testing.T) {
 	if cliErr.Phase != clierrors.ErrorPhaseExecution {
 		t.Fatalf("phase mismatch: %#v", cliErr)
 	}
-	expectedAction := "Run `uloop install` on macOS or Windows."
+	expectedAction := "Run `uloop install` on macOS, Linux, or Windows."
 	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != expectedAction {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+}
+
+func TestUnsupportedPlatformErrorPointsAtEverySupportedPlatform(t *testing.T) {
+	// Verifies install, update, and uninstall guidance names Linux too, matching the platforms the commands support.
+	cases := map[string]string{
+		installUnsupportedOSMessage:   "Run `uloop install` on macOS, Linux, or Windows.",
+		updateUnsupportedOSMessage:    "Run `uloop update` on macOS, Linux, or Windows.",
+		uninstallUnsupportedOSMessage: "Run `uloop uninstall` on macOS, Linux, or Windows.",
+	}
+	for message, wantAction := range cases {
+		cliErr, ok := unsupportedPlatformError(message, clierrors.ErrorContext{})
+		if !ok || len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != wantAction {
+			t.Fatalf("%q: next actions mismatch: ok=%t actions=%#v", message, ok, cliErr.NextActions)
+		}
 	}
 }
 
