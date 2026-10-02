@@ -837,3 +837,158 @@ func stringSlicesEqual(left []string, right []string) bool {
 	}
 	return true
 }
+
+func TestParseUpdateOptionsRejectsInvalidOptions(t *testing.T) {
+	// Verifies unknown, duplicated, valueless, and positional update arguments are rejected with an argument error.
+	cases := []struct {
+		name        string
+		args        []string
+		wantMessage string
+	}{
+		{name: "unknown option", args: []string{"--channel", "beta"}, wantMessage: "Unknown update option: --channel"},
+		{name: "duplicate option", args: []string{"--to-version", "3.0.0", "--to-version=3.0.1"}, wantMessage: "Duplicate update option: --to-version"},
+		{name: "missing value", args: []string{"--to-version"}, wantMessage: "--to-version requires a value"},
+		{name: "positional argument", args: []string{"3.0.0"}, wantMessage: "3.0.0"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			options, err := parseUpdateOptions(testCase.args)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
+				t.Fatalf("expected error containing %q, got options=%+v err=%v", testCase.wantMessage, options, err)
+			}
+		})
+	}
+}
+
+func TestTryHandleUpdateRequestReportsInvalidOptions(t *testing.T) {
+	// Verifies an invalid update option exits with code 1 before resolving or running an installer.
+	restore := stubManualUpdateHooks(t, "999.0.0")
+	defer restore()
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("installer must not run for invalid options")
+		return nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName, "--channel", "beta"}, io.Discard, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !strings.Contains(stderr.String(), "Unknown update option: --channel") {
+		t.Fatalf("missing option error: %s", stderr.String())
+	}
+}
+
+func TestTryHandleUpdateRequestReportsInstallerFailure(t *testing.T) {
+	// Verifies a failing installer is reported as a retryable update failure with its cause.
+	skipWhenNativeUpdateIsUnsupported(t)
+	restore := stubManualUpdateHooks(t, "999.0.0")
+	defer restore()
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		return errors.New("installer exited 1")
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !strings.Contains(stderr.String(), "Update failed: installer exited 1") {
+		t.Fatalf("missing installer failure: %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Updating global uloop dispatcher...") {
+		t.Fatalf("missing progress line: %s", stdout.String())
+	}
+}
+
+func TestUpdateCommandForOSReturnsInstallerCommand(t *testing.T) {
+	// Verifies the default update command for a supported OS names the installer runner.
+	name, args, err := updateCommandForOS("linux")
+	if err != nil {
+		t.Fatalf("updateCommandForOS failed: %v", err)
+	}
+	if name != "sh" || len(args) != 0 {
+		t.Fatalf("command mismatch: name=%q args=%q", name, args)
+	}
+}
+
+func TestRunUpdateCommandRunsVerifiedInstallerWithManifest(t *testing.T) {
+	// Verifies the downloaded installer runs with the command env and the Sigstore-derived archive manifest.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell installers are not executable on Windows.")
+	}
+	installerContent := []byte("echo \"manifest=$" + updateArchiveManifestEnvName + "\"\necho \"extra=$ULOOP_TEST_EXTRA\"\necho \"args=$*\" >&2\n")
+	checksum := sha256.Sum256(installerContent)
+	restoreHTTPClient := stubUpdateInstallerHTTPClient(installerContent, []byte(hex.EncodeToString(checksum[:])+"  install.sh\n"))
+	defer restoreHTTPClient()
+	restoreAttestation := stubAttestationVerifyPasses()
+	defer restoreAttestation()
+	restoreHooks := stubManualUpdateHooks(t, "999.0.0")
+	defer restoreHooks()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runUpdateCommand(context.Background(), update.Command{
+		Name:                 "/bin/sh",
+		Env:                  []string{"ULOOP_TEST_EXTRA=from-command"},
+		InstallerName:        update.PosixScriptName,
+		InstallerURL:         "https://example.test/install.sh",
+		InstallerChecksumURL: "https://example.test/install.sh.sha256",
+		ReleaseTag:           "dispatcher-v9.9.9",
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("runUpdateCommand failed: %v stderr=%s", err, stderr.String())
+	}
+	if stdout.String() != "manifest=deadbeef  install.sh\n\nextra=from-command\n" {
+		t.Fatalf("installer stdout mismatch: %q", stdout.String())
+	}
+	if stderr.String() != "args=\n" {
+		t.Fatalf("installer stderr mismatch: %q", stderr.String())
+	}
+}
+
+func TestRunUpdateCommandStopsBeforeInstallerOnFailures(t *testing.T) {
+	// Verifies a failed installer download or manifest lookup returns an error without running the installer.
+	cases := []struct {
+		name        string
+		installer   []byte
+		manifestErr error
+		wantMessage string
+	}{
+		{name: "download failure", wantMessage: "download failed"},
+		{name: "manifest failure", installer: []byte("exit 0\n"), manifestErr: errors.New("manifest lookup failed"), wantMessage: "manifest lookup failed"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			restoreHooks := stubManualUpdateHooks(t, "999.0.0")
+			defer restoreHooks()
+			restoreAttestation := stubAttestationVerifyPasses()
+			defer restoreAttestation()
+			bodies := map[string][]byte{}
+			if testCase.installer != nil {
+				checksum := sha256.Sum256(testCase.installer)
+				bodies["/install.sh"] = testCase.installer
+				bodies["/install.sh.sha256"] = []byte(hex.EncodeToString(checksum[:]) + "  install.sh\n")
+			}
+			stubDispatcherHTTPResponses(t, bodies)
+			fetchAttestationSubjectManifestFunc = func(context.Context, string) (string, error) {
+				return "", testCase.manifestErr
+			}
+
+			err := runUpdateCommand(context.Background(), update.Command{
+				Name:                 filepath.Join(t.TempDir(), "must-not-run"),
+				InstallerName:        update.PosixScriptName,
+				InstallerURL:         "https://example.test/install.sh",
+				InstallerChecksumURL: "https://example.test/install.sh.sha256",
+			}, io.Discard, io.Discard)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantMessage, err)
+			}
+		})
+	}
+}

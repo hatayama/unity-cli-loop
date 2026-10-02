@@ -3,8 +3,11 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
 func TestRunDispatcherUninstallHelpDoesNotRequireUnityProject(t *testing.T) {
@@ -56,5 +59,58 @@ func TestPrintUninstallHelpDescribesPosixPathBlockRemoval(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), "On macOS and Linux, removes the uloop PATH block from the shell profile.") {
 		t.Fatalf("uninstall help output mismatch: %s", stdout.String())
+	}
+}
+
+func TestTryHandleUninstallRequestRejectsExtraArguments(t *testing.T) {
+	// Verifies uninstall refuses any option before resolving or removing anything.
+	unsetNativeInstallLocation(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleUninstallRequest(context.Background(), []string{"uninstall", "--force"}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !strings.Contains(stderr.String(), "Unknown uninstall option: --force") {
+		t.Fatalf("missing option error: %s", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("no removal progress may be printed: %s", stdout.String())
+	}
+}
+
+func TestResolveUninstallInstallDir(t *testing.T) {
+	// Verifies uninstall honors ULOOP_INSTALL_DIR and reports the uninstall-specific message on unsupported platforms.
+	t.Setenv(nativepath.InstallDirEnvName, "/opt/uloop/bin")
+
+	installDir, err := resolveUninstallInstallDir("linux")
+	if err != nil || installDir != "/opt/uloop/bin" {
+		t.Fatalf("unexpected result: dir=%q err=%v", installDir, err)
+	}
+
+	t.Setenv(nativepath.InstallDirEnvName, "")
+	if _, err := resolveUninstallInstallDir("plan9"); err == nil || err.Error() != uninstallUnsupportedOSMessage {
+		t.Fatalf("expected %q, got %v", uninstallUnsupportedOSMessage, err)
+	}
+}
+
+func TestTryHandleUninstallRequestReportsUnresolvableInstallDirectory(t *testing.T) {
+	// Verifies uninstall stops with code 1 when no install directory can be resolved.
+	unsetNativeInstallLocation(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleUninstallRequest(context.Background(), []string{"uninstall"}, &stdout, &stderr)
+
+	if !handled || code != 1 || stdout.Len() != 0 {
+		t.Fatalf("result mismatch: handled=%t code=%d stdout=%q", handled, code, stdout.String())
+	}
+	_, wantErr := resolveUninstallInstallDir(runtime.GOOS)
+	envelope := decodeDispatcherTestEnvelope(t, stderr.String())
+	errorObject, _ := envelope["Error"].(map[string]any)
+	if errorObject["Message"] != wantErr.Error() {
+		t.Fatalf("expected the install directory error %q: %s", wantErr, stderr.String())
 	}
 }
