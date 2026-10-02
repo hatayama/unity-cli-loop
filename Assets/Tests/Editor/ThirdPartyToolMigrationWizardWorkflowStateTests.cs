@@ -158,6 +158,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(false, SkillInstallState.Installed)));
         }
 
+        /// <summary>
+        /// Verifies the migration skill target names the selected agent directory and starts as missing.
+        /// </summary>
         [TestCase(SkillsTarget.Claude, "Claude Code", ".claude", "--claude")]
         [TestCase(SkillsTarget.Codex, "Codex CLI", ".codex", "--codex")]
         [TestCase(SkillsTarget.Agents, "Common", ".agents", "--agents")]
@@ -167,7 +170,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string expectedDirectoryName,
             string expectedInstallFlag)
         {
-            // Verifies the migration skill target names the selected agent directory and starts as missing.
             SkillSetupTargetInfo info =
                 ThirdPartyToolMigrationWizardWorkflowController.CreateMigrationSkillTargetInfo(target);
 
@@ -198,11 +200,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_skillPort.StateQueries.Count, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies the toggle removes an installed or outdated migration skill instead of reinstalling it.
+        /// </summary>
         [TestCase(SkillInstallState.Installed)]
         [TestCase(SkillInstallState.Outdated)]
         public async Task HandleToggleMigrationSkill_WhenPresent_RemovesTheSelectedTarget(SkillInstallState installState)
         {
-            // Verifies the toggle removes an installed or outdated migration skill instead of reinstalling it.
             _skillPort.InstallState = installState;
             _controller.HandleMigrationSkillTargetChanged(SkillsTarget.Agents);
 
@@ -241,6 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task HandleToggleMigrationSkill_WhenCanceled_SkipsTheRefresh()
         {
             _skillPort.InstallState = SkillInstallState.Missing;
+            _skillPort.ObservesCancellation = true;
             _skillPort.OnInstall = () => _controller.CancelMigrationSkillOperation();
 
             await _controller.HandleToggleMigrationSkill();
@@ -253,7 +258,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// Verifies a toggle superseded by a newer skill operation while installing does not re-read the install
-        /// state for the stale operation.
+        /// state for the stale operation. The installer here ignores the cancellation, which models the race
+        /// where the newer toggle arrives after the installer's last cancellation check.
         /// </summary>
         [Test]
         public async Task HandleToggleMigrationSkill_WhenSupersededDuringInstall_LeavesTheRefreshToTheNewerToggle()
@@ -389,6 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal SkillInstallState InstallState { get; set; } = SkillInstallState.Missing;
             internal Exception InstallFailure { get; set; }
             internal Action OnInstall { get; set; }
+            internal bool ObservesCancellation { get; set; }
             internal List<StateQuery> StateQueries { get; } = new List<StateQuery>();
             internal List<MigrationSkillFilesCall> InstallCalls { get; } = new List<MigrationSkillFilesCall>();
             internal List<MigrationSkillFilesCall> RemoveCalls { get; } = new List<MigrationSkillFilesCall>();
@@ -410,7 +417,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 InstallCalls.Add(new MigrationSkillFilesCall(projectRoot, targets, groupSkillsUnderUnityCliLoop));
                 OnInstall?.Invoke();
-                if (ct.IsCancellationRequested)
+                if (ObservesCancellation && ct.IsCancellationRequested)
                 {
                     // Mirrors the production installer, whose only cancellation is ct.ThrowIfCancellationRequested.
                     return Task.FromCanceled(ct);
