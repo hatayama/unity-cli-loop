@@ -3,6 +3,7 @@ package automation
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,27 @@ func TestRunProtocolMinimumVersionComment_WhenNoCommentExists_PostsNewComment(t 
 	}
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Posted protocol minimum version comment.")
 	assertProtocolMinimumVersionLogContains(t, result.ghLog, "api --method POST repos/owner/repository/issues/456/comments --input")
+	assertProtocolMinimumVersionPostedBody(t, result.ghLog, "Protocol version changed, but")
+}
+
+// assertProtocolMinimumVersionPostedBody checks the comment body the mock gh copied from --input carries the marker that
+// later runs search for and the expected warning text.
+func assertProtocolMinimumVersionPostedBody(t *testing.T, ghLog string, wantText string) {
+	t.Helper()
+	_, input, found := strings.Cut(ghLog, "input: ")
+	if !found {
+		t.Fatalf("expected the mock gh to log the --input body, got:\n%s", ghLog)
+	}
+	input, _, _ = strings.Cut(input, "\n")
+	payload := struct {
+		Body string `json:"body"`
+	}{}
+	if err := json.Unmarshal([]byte(input), &payload); err != nil {
+		t.Fatalf("failed to parse the posted body %q: %v", input, err)
+	}
+	if !strings.HasPrefix(payload.Body, protocolMinimumVersionMarker+"\n") || !strings.Contains(payload.Body, wantText) {
+		t.Fatalf("posted body lacks the marker or %q:\n%s", wantText, payload.Body)
+	}
 }
 
 func TestRunProtocolMinimumVersionComment_WhenResolvedWithoutComment_DoesNothing(t *testing.T) {

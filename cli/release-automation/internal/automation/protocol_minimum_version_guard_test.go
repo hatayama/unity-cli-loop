@@ -385,6 +385,7 @@ func TestRunProtocolMinimumVersionComment_WhenWarningExists_UpsertsComment(t *te
 	}
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Updated protocol minimum version comment.")
 	assertProtocolMinimumVersionLogContains(t, result.ghLog, "api --method PATCH repos/owner/repository/issues/comments/123 --input")
+	assertProtocolMinimumVersionPostedBody(t, result.ghLog, "Protocol version changed, but")
 	assertProtocolMinimumVersionLogContains(t, result.ghLog, ".user.login == \"github-actions[bot]\"")
 }
 
@@ -422,6 +423,7 @@ func TestRunProtocolMinimumVersionComment_WhenMinimumReleaseProtocolDiffers_Upse
 	}
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Updated protocol minimum version comment.")
 	assertProtocolMinimumVersionLogContains(t, result.ghLog, "api --method PATCH repos/owner/repository/issues/comments/123 --input")
+	assertProtocolMinimumVersionPostedBody(t, result.ghLog, "does not point to a published project runner release")
 }
 
 type protocolMinimumVersionRefCase struct {
@@ -757,6 +759,11 @@ if [ "$1" = "api" ] && [ "$2" = "--paginate" ]; then
 fi
 
 if [ "$1" = "api" ] && [ "$2" = "--method" ]; then
+  # The comment body travels in the --input file, which is removed after the call, so it is copied
+  # into the log for the tests to read.
+  if [ "${5:-}" = "--input" ] && [ -n "${6:-}" ]; then
+    { printf 'input: '; tr -d '\n' < "$6"; printf '\n'; } >> "$GH_LOG"
+  fi
   exit 0
 fi
 
@@ -840,7 +847,7 @@ func TestRunMinimumCliReleaseProtocolCheck_FailsOnUnusableInputs(t *testing.T) {
 		{"missing pin", validConstants, "", validRelease, nil, "failed to read " + unityPackageCliPinFile},
 		{"invalid pin", validConstants, "{", validRelease, nil, "invalid"},
 		{"no required protocol", "public static class CliConstants {}", validPin, validRelease, nil, "does not define REQUIRED_CLI_PROTOCOL_VERSION"},
-		{"no release contract", validConstants, validPin, "", nil, "uloop-project-runner-v3.0.0-beta.33"},
+		{"no release contract", validConstants, validPin, "", nil, releaseContractMissingSentinel + ": project runner release uloop-project-runner-v3.0.0-beta.33 does not provide"},
 		{"invalid release contract", validConstants, validPin, "{", nil, "project runner release contract is invalid JSON"},
 		{"unpublished release", validConstants, validPin, validRelease, map[string]string{"GH_FAIL_RELEASE_VIEW": "1"}, "is not published with complete native assets"},
 		{"invalid release metadata", validConstants, validPin, validRelease, map[string]string{"GH_RELEASE_VIEW": "{"}, "metadata is invalid JSON"},
@@ -861,6 +868,13 @@ func TestRunMinimumCliReleaseProtocolCheck_FailsOnUnusableInputs(t *testing.T) {
 				t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout.String())
 			}
 			assertProtocolMinimumVersionLogContains(t, stderr.String(), testCase.wantErr)
+			if testCase.name == "no required protocol" {
+				// The working-tree precondition must stop the check before any release is looked up.
+				gitLog, _ := os.ReadFile(filepath.Join(workDir, "git.log"))
+				if strings.Contains(string(gitLog), "show uloop-project-runner-v") {
+					t.Fatalf("expected no release lookup, got git log:\n%s", gitLog)
+				}
+			}
 		})
 	}
 }

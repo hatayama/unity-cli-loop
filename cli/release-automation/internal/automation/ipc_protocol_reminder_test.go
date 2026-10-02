@@ -98,7 +98,7 @@ func writeIPCProtocolReminderRepo(t *testing.T) {
 }
 
 func TestRunIPCProtocolReminder_WhenIPCFileChangesWithoutDeclaration_NotifiesAndWritesSummary(t *testing.T) {
-	// Verifies an IPC-only change prints the review notice and appends the step summary, defaulting the head ref to HEAD.
+	// Verifies an IPC-only change prints the review notice and appends the step summary.
 	writeIPCProtocolReminderRepo(t)
 	summaryPath := filepath.Join(t.TempDir(), "summary.md")
 	stdout := bytes.Buffer{}
@@ -178,6 +178,9 @@ func TestFormatIPCProtocolReminder_WhenDeclarationsChangeWithIPCFiles_AsksToVeri
 	}
 	if len(result.ChangedProtocolFiles) != 1 || result.ChangedProtocolFiles[0] != "cli/common/clicontract/contract.json" {
 		t.Fatalf("protocol files = %v", result.ChangedProtocolFiles)
+	}
+	if strings.Join(result.ChangedIPCFiles, ",") != "cli/common/clicontract/contract.json,cli/common/tools/x.json" {
+		t.Fatalf("IPC files = %v", result.ChangedIPCFiles)
 	}
 }
 

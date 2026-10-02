@@ -416,6 +416,16 @@ func runProtocolMinimumVersionGh(args []string) int {
 	}
 
 	if argAt(args, 0) == "api" && argAt(args, 1) == "--method" {
+		// The comment body travels in the --input file, which is removed after the call, so it is
+		// copied into the log for the tests to read, matching the Unix mock gh.
+		if argAt(args, 4) == "--input" && argAt(args, 5) != "" {
+			input, err := os.ReadFile(argAt(args, 5))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "mockcli: failed to read --input: %v\n", err)
+				return 1
+			}
+			appendLogLine("GH_LOG", []string{"input:", strings.ReplaceAll(string(input), "\n", "")})
+		}
 		return 0
 	}
 
