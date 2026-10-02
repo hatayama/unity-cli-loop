@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.11.1](https://github.com/hatayama/unity-cli-loop/compare/v3.11.0...v3.11.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* Adding a lambda next to an existing private event handler no longer stops hot reload ([#3062](https://github.com/hatayama/unity-cli-loop/issues/3062)) ([7e65f96](https://github.com/hatayama/unity-cli-loop/commit/7e65f966d714755eb21cfacf471c02d606735f2d))
+* Pause points in async methods and lambdas show the real instance as this ([#3065](https://github.com/hatayama/unity-cli-loop/issues/3065)) ([ea47137](https://github.com/hatayama/unity-cli-loop/commit/ea471372f92038ab673570d539e8d8f15ee73e10))
+
 ## [3.11.0](https://github.com/hatayama/unity-cli-loop/compare/v3.10.2...v3.11.0) (2026-10-02)
 
 
