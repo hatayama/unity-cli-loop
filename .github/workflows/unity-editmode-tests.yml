@@ -40,6 +40,10 @@ jobs:
           - unity-version: 2022.3.62f3
             test-filter: ''
             strict-compile-check: true
+            # Only the full-suite leg measures C# coverage: the other legs run the hot-reload
+            # suites alone, so their figures would not describe the package. The filters keep
+            # the shipped package assemblies and drop tests, dev tooling, and samples.
+            coverage-options: generateAdditionalMetrics;generateHtmlReport;assemblyFilters:+UnityCLILoop.*,-UnityCLILoop.Tests.*,-UnityCLILoop.Dev,-UnityCLILoop.CustomCommandSamples.*
           # Newer editors open the committed 2022.3 project through an ephemeral
           # in-place upgrade, so obsolete-API warnings are expected there; skip the
           # zero-warning gate and run only the hot-reload suites, which are the
@@ -174,6 +178,14 @@ jobs:
           customParameters: ${{ matrix.test-filter != '' && format('-testFilter {0}', matrix.test-filter) || '' }}
           checkName: Unity Test Results (${{ matrix.unity-version }})
           githubToken: ${{ secrets.GITHUB_TOKEN }}
+          coverageOptions: ${{ matrix.coverage-options }}
+
+      - name: Upload C# coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && env.HAS_UNITY_LICENSE == 'true' && matrix.coverage-options != ''
+        with:
+          name: csharp-coverage
+          path: CodeCoverage
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
