@@ -703,14 +703,13 @@ func assertPausePointRecoveryWarningsAgree(t *testing.T, payload map[string]any,
 	}
 }
 
-// Verifies the success probe treats undecodable enable output as a failure, and nil or failed
-// responses never gain the switch warning.
+// Verifies the success probe treats enable output that fails to decode as a failure even when
+// Success was already decoded as true, and nil or failed responses never gain the switch warning.
 func TestPausePointRecoveryProbesIgnoreUnusableResponses(t *testing.T) {
-	if isSuccessfulEnableResponse([]byte("not json")) {
-		t.Fatal("undecodable output must not count as a successful enable")
-	}
-	if isRetryablePausePointRecoveryCompileResult([]byte("not json")) {
-		t.Fatal("undecodable compile output must not be retried")
+	// Why this input: the decoder assigns Success=true before it hits the mistyped ErrorCode, so
+	// only the decode-error branch keeps the probe from reporting success.
+	if isSuccessfulEnableResponse([]byte(`{"Success":true,"ErrorCode":5}`)) {
+		t.Fatal("output that fails to decode must not count as a successful enable")
 	}
 
 	applyPausePointRecoverySwitchWarning(nil)
@@ -857,11 +856,13 @@ func TestSendCompileWithBusyRetryStopsRetrying(t *testing.T) {
 	})
 }
 
-// Verifies the default recovery compile sends through the busy-retry sender and reports an
-// undispatched send failure without waiting on compile status.
+// Verifies the default recovery compile sends through the busy-retry sender with its budget: a
+// busy answer is retried after one wait capped by that budget, and the following undispatched
+// send failure is reported without waiting on compile status.
 func TestRunOneFreshCompileForPausePointRecoveryUsesBusyRetrySender(t *testing.T) {
-	sends, _ := stubFreshCompileSends(t, []error{io.ErrUnexpectedEOF}, nil)
+	sends, waits := stubFreshCompileSends(t, []error{serverBusyRPCError(t), io.ErrUnexpectedEOF}, nil)
 	var stdout, stderr bytes.Buffer
+	budget := 500 * time.Millisecond
 
 	code := runOneFreshCompileForPausePointRecoveryDefault(
 		context.Background(),
@@ -869,14 +870,17 @@ func TestRunOneFreshCompileForPausePointRecoveryUsesBusyRetrySender(t *testing.T
 		map[string]any{},
 		&stdout,
 		&stderr,
-		time.Minute,
+		budget,
 	)
 
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if *sends != 1 {
-		t.Fatalf("sends = %d, want 1", *sends)
+	if *sends != 2 {
+		t.Fatalf("sends = %d, want 2", *sends)
+	}
+	if len(*waits) != 1 || (*waits)[0] > budget {
+		t.Fatalf("waits = %v, want one wait no longer than %v", *waits, budget)
 	}
 	if !strings.Contains(stderr.String(), "unexpected EOF") {
 		t.Fatalf("stderr must report the send failure:\n%s", stderr.String())
