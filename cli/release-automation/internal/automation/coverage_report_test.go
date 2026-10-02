@@ -223,6 +223,19 @@ func TestRunCoverageReportRejectsABaselineOutsideZeroToHundred(t *testing.T) {
 	}
 }
 
+func TestRunCoverageReportRejectsANullBaseline(t *testing.T) {
+	// Verifies a null figure is not read as 0%, which would pass the gate at any coverage.
+	fixture := newCoverageFixture(t, map[string]float64{"common": 10})
+	fixture.writeProfile("common", 0, 10)
+	if err := os.WriteFile(fixture.baselinePath, []byte(`{"go":{"modules":{"common":null}}}`), 0o600); err != nil {
+		t.Fatalf("write baseline: %v", err)
+	}
+
+	if code, stdout, stderr := fixture.run(coverageModeGate); code == 0 {
+		t.Fatalf("expected a non-zero exit, got 0\n%s%s", stdout, stderr)
+	}
+}
+
 func TestRunCoverageReportWritesTheTableToTheStepSummary(t *testing.T) {
 	// Verifies the same table is appended to the step summary file when one is given.
 	fixture := newCoverageFixture(t, map[string]float64{"common": 40.0})

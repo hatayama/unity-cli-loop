@@ -44,8 +44,9 @@ type GoCoverageTotals struct {
 
 type coverageBaseline struct {
 	Go struct {
-		Exclude []string           `json:"exclude"`
-		Modules map[string]float64 `json:"modules"`
+		Exclude []string `json:"exclude"`
+		// Pointers so a null figure is told apart from 0 and rejected.
+		Modules map[string]*float64 `json:"modules"`
 	} `json:"go"`
 }
 
@@ -198,8 +199,11 @@ func readCoverageBaseline(path string) (coverageBaseline, error) {
 		return coverageBaseline{}, errors.New("baseline lists no Go modules")
 	}
 	for name, figure := range baseline.Go.Modules {
-		if figure < 0 || figure > 100 {
-			return coverageBaseline{}, fmt.Errorf("baseline for module %q is %v, outside 0 to 100", name, figure)
+		if figure == nil {
+			return coverageBaseline{}, fmt.Errorf("baseline for module %q has no figure", name)
+		}
+		if *figure < 0 || *figure > 100 {
+			return coverageBaseline{}, fmt.Errorf("baseline for module %q is %v, outside 0 to 100", name, *figure)
 		}
 	}
 	return baseline, nil
@@ -238,7 +242,7 @@ func measureGoModules(baseline coverageBaseline, profiles map[string]string) ([]
 		results = append(results, coverageModuleResult{
 			Name:     name,
 			Percent:  float64(totals.Covered) * 100 / float64(totals.Statements),
-			Baseline: baseline.Go.Modules[name],
+			Baseline: *baseline.Go.Modules[name],
 		})
 	}
 	return results, nil
