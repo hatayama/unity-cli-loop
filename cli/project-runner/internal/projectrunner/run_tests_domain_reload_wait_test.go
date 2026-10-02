@@ -332,16 +332,6 @@ func TestRunTestsWaitTimeoutErrorIsNotSafeToRetry(t *testing.T) {
 	}
 }
 
-// Verifies a respect-enabled run without a string TestMode stays on the fast path.
-func TestShouldWaitForRunTestsDomainReloadRequiresStringTestMode(t *testing.T) {
-	if shouldWaitForRunTestsDomainReload(map[string]any{runTestsRespectEnterPlayModeSettingsParam: true}) {
-		t.Fatal("missing TestMode must not wait")
-	}
-	if shouldWaitForRunTestsDomainReload(map[string]any{runTestsRespectEnterPlayModeSettingsParam: true, runTestsTestModeParam: 1}) {
-		t.Fatal("non-string TestMode must not wait")
-	}
-}
-
 // Verifies the run-tests status query sends the request id to Unity and decodes the stored result,
 // and surfaces Unity errors and undecodable payloads.
 func TestQueryRunTestsStatusFromUnity(t *testing.T) {

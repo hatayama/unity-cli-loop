@@ -357,11 +357,13 @@ func TestRunHotReloadFailsWhenFallbackCompileResultIsUndecodable(t *testing.T) {
 	}
 }
 
-// Verifies an undecodable reload answer never counts as a fallback request, and a JSON null
-// reload response is rejected rather than merged.
+// Verifies a reload answer that fails to decode never counts as a fallback request, even after the
+// request value itself was decoded, and a JSON null reload response is rejected rather than merged.
 func TestHotReloadCompileFallbackRejectsNonObjectResponses(t *testing.T) {
-	if isHotReloadCompileFallbackRequested([]byte("not json")) {
-		t.Fatal("an undecodable answer must not request a compile")
+	// Why the duplicate key: the decoder keeps "Requested" when the second value fails, so only the
+	// decode-error check keeps the half-read answer from requesting a compile.
+	if isHotReloadCompileFallbackRequested([]byte(`{"CompileFallback":"Requested","CompileFallback":1}`)) {
+		t.Fatal("an answer that fails to decode must not request a compile")
 	}
 	_, err := injectHotReloadCompileFallback(json.RawMessage(`null`), json.RawMessage(`{"Success":true}`))
 	if err == nil || err.Error() != "hot-reload response must be a JSON object" {

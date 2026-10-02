@@ -866,12 +866,18 @@ func TestRunControlPlayModeWithStateWaitHandlesInitialResponse(t *testing.T) {
 }
 
 // serveDroppedConnections reads each request and closes the connection without answering, so
-// the client sees a transport disconnect after dispatch.
-func serveDroppedConnections(listener net.Listener) {
+// the client sees a transport disconnect after dispatch. It calls onSecondAccept once the second
+// connection arrives, which is the first state probe after the dropped action request.
+func serveDroppedConnections(listener net.Listener, onSecondAccept func()) {
+	accepted := 0
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			return
+		}
+		accepted++
+		if accepted == 2 {
+			onSecondAccept()
 		}
 		_, _ = unityipc.Read(bufio.NewReader(conn))
 		_ = conn.Close()
@@ -884,14 +890,16 @@ func TestRunControlPlayModeWithStateWaitReportsContextEndDuringWait(t *testing.T
 	originalPoll := controlPlayModeStatePoll
 	controlPlayModeStatePoll = time.Millisecond
 	t.Cleanup(func() { controlPlayModeStatePoll = originalPoll })
+	// Why the cancel comes from the server rather than a timer: only a state probe proves the action
+	// request already ended in a disconnect, so the wait is cancelled at that point on any machine.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	listener := newLoopbackIpcListener(t)
-	go serveDroppedConnections(listener)
+	go serveDroppedConnections(listener, cancel)
 	connection := unityipc.Connection{
 		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
 		ProjectRoot: t.TempDir(),
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
 	var stdout, stderr bytes.Buffer
 
 	code := runControlPlayModeWithStateWait(
@@ -905,8 +913,8 @@ func TestRunControlPlayModeWithStateWaitReportsContextEndDuringWait(t *testing.T
 	if code != 1 || stdout.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "deadline") {
-		t.Fatalf("stderr must report the ended wait as a deadline:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), context.Canceled.Error()) {
+		t.Fatalf("stderr must report the cancelled wait:\n%s", stderr.String())
 	}
 }
 
@@ -941,8 +949,8 @@ func TestShouldWaitForControlPlayModeDisconnect(t *testing.T) {
 	}
 }
 
-// Verifies the action defaults to Play and the timeout accepts every JSON number form, falling
-// back to the default for missing, non-positive, or overflowing values.
+// Verifies the action defaults to Play and the timeout accepts int, int64, and float64 values,
+// falling back to the default for missing, non-positive, non-numeric, or too-large float values.
 func TestControlPlayModeParamDefaults(t *testing.T) {
 	if action := controlPlayModeAction(map[string]any{}); action != "Play" {
 		t.Fatalf("default action = %q, want Play", action)
@@ -956,6 +964,9 @@ func TestControlPlayModeParamDefaults(t *testing.T) {
 		{name: "int64", value: int64(6), want: 6},
 		{name: "float64", value: float64(7), want: 7},
 		{name: "negative", value: -1, want: controlPlayModeDefaultTimeout},
+		// On amd64 int(1e300) is negative even without the guard; on arm64 it saturates, so only the
+		// guard keeps it from becoming a huge timeout there.
+		{name: "too-large float64", value: float64(1e300), want: controlPlayModeDefaultTimeout},
 		{name: "string", value: "8", want: controlPlayModeDefaultTimeout},
 	}
 	for _, testCase := range cases {
