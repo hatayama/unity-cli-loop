@@ -164,3 +164,119 @@ func readUnityReleaseFixture(t *testing.T, name string) []byte {
 	}
 	return body
 }
+
+// unityReleaseRoundTripper serves a canned response without opening a connection.
+type unityReleaseRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTripper unityReleaseRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTripper(request)
+}
+
+// unityReleaseFailingBody fails every read so the response body cannot be consumed.
+type unityReleaseFailingBody struct{}
+
+func (unityReleaseFailingBody) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+func (unityReleaseFailingBody) Close() error             { return nil }
+
+func TestResolveUnityReleaseDefaultsToTheUnityServicesAPI(t *testing.T) {
+	// What: an empty API base URL resolves against the Unity services API with the release query.
+	requestedURL := ""
+	client := &http.Client{Transport: unityReleaseRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requestedURL = request.URL.String()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(string(readUnityReleaseFixture(t, "unity-release-latest-first.json")))),
+		}, nil
+	})}
+
+	release, err := ResolveUnityRelease(context.Background(), ResolveUnityReleaseRequest{Series: "6000.7", HTTPClient: client})
+	if err != nil {
+		t.Fatalf("ResolveUnityRelease failed: %v", err)
+	}
+	if release.Version == "" {
+		t.Fatal("expected a resolved release")
+	}
+	if !strings.HasPrefix(requestedURL, defaultUnityReleaseAPIBaseURL+unityEditorReleasesPath+"?") ||
+		!strings.Contains(requestedURL, "version=6000.7") {
+		t.Fatalf("requested URL = %q", requestedURL)
+	}
+}
+
+func TestResolveUnityReleaseUsesTheDefaultHTTPClient(t *testing.T) {
+	// What: a request without an HTTP client still reaches the given API through the default client.
+	body := readUnityReleaseFixture(t, "unity-release-latest-first.json")
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write(body)
+	}))
+	defer server.Close()
+
+	release, err := ResolveUnityRelease(context.Background(), ResolveUnityReleaseRequest{Series: "6000.7", APIBaseURL: server.URL})
+	if err != nil {
+		t.Fatalf("ResolveUnityRelease failed: %v", err)
+	}
+	if release.Version == "" || release.EditorURL == "" {
+		t.Fatalf("release = %+v", release)
+	}
+}
+
+func TestResolveUnityReleaseRejectsUnusableInputs(t *testing.T) {
+	// What: a missing series, an unparsable base URL, and an unreadable response body each fail with a specific error.
+	failingBodyClient := &http.Client{Transport: unityReleaseRoundTripper(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: unityReleaseFailingBody{}}, nil
+	})}
+	cases := []struct {
+		name    string
+		request ResolveUnityReleaseRequest
+		wantErr string
+	}{
+		{"missing series", ResolveUnityReleaseRequest{}, "--series is required"},
+		{"invalid base URL", ResolveUnityReleaseRequest{Series: "6000.7", APIBaseURL: "://missing-scheme"}, "parse unity release API base URL"},
+		{"unreadable body", ResolveUnityReleaseRequest{Series: "6000.7", APIBaseURL: "https://example.invalid", HTTPClient: failingBodyClient}, "read unity release API response"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := ResolveUnityRelease(context.Background(), testCase.request)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestSelectUnityReleaseRejectsMalformedResults(t *testing.T) {
+	// What: invalid JSON, a result without a version or a short revision, and a Linux archive without a URL are rejected.
+	cases := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{"invalid JSON", "{", "parse unity release response"},
+		{"missing version", `{"results":[{"shortRevision":"abc"}]}`, "missing version or shortRevision"},
+		{"missing short revision", `{"results":[{"version":"6000.7.0"}]}`, "missing version or shortRevision"},
+		{"archive without URL", `{"results":[{"version":"6000.7.0","shortRevision":"abc","downloads":[{"platform":"LINUX","architecture":"X86_64","type":"TAR_XZ"}]}]}`, "download is missing url"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := selectUnityRelease([]byte(testCase.body))
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestRunResolveUnityReleaseRejectsUnknownFlags(t *testing.T) {
+	// What: an unknown flag exits non-zero before any API request.
+	stderr := strings.Builder{}
+
+	exitCode := RunResolveUnityRelease(io.Discard, &stderr, []string{"--unknown"})
+
+	if exitCode != 1 {
+		t.Fatalf("exit code = %d, want 1", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "flag provided but not defined") || strings.Contains(stderr.String(), "--series is required") {
+		t.Fatalf("expected only the flag parse error, got %q", stderr.String())
+	}
+}
