@@ -91,3 +91,76 @@ func (r *fakeUnixMetadataReader) Stat(path string) (unixFileMetadata, error) {
 	}
 	return v, nil
 }
+
+// erroringUnixMetadataReader returns configured errors per path before falling back to secure metadata.
+type erroringUnixMetadataReader struct {
+	*fakeUnixMetadataReader
+	lstatErrors map[string]error
+	statErrors  map[string]error
+}
+
+func (r *erroringUnixMetadataReader) Lstat(path string) (unixFileMetadata, error) {
+	if err, ok := r.lstatErrors[path]; ok {
+		return unixFileMetadata{}, err
+	}
+	return r.fakeUnixMetadataReader.Lstat(path)
+}
+
+func (r *erroringUnixMetadataReader) Stat(path string) (unixFileMetadata, error) {
+	if err, ok := r.statErrors[path]; ok {
+		return unixFileMetadata{}, err
+	}
+	return r.fakeUnixMetadataReader.Stat(path)
+}
+
+// Verifies each validation step reports its own failure, so an inspection error or an unexpected parent
+// kind is never mistaken for a missing endpoint or a later policy check.
+func TestValidateUnixEndpointPathsReportsEachFailingStep(t *testing.T) {
+	inspectErr := errors.New("inspect failed")
+	tests := []struct {
+		name            string
+		configure       func(*erroringUnixMetadataReader)
+		expectedMessage string
+	}{
+		{"parent lstat error", func(r *erroringUnixMetadataReader) {
+			r.lstatErrors[testUnixParentPath] = inspectErr
+		}, "inspect Unix endpoint parent without following links: inspect failed"},
+		{"parent is a socket", func(r *erroringUnixMetadataReader) {
+			r.noFollow[testUnixParentPath] = unixFileMetadata{Kind: unixFileKindSocket, OwnerUserID: 0, Permissions: 0o1777}
+		}, "unix endpoint parent /tmp is neither a directory nor a symbolic link"},
+		{"parent stat error", func(r *erroringUnixMetadataReader) {
+			r.statErrors[testUnixParentPath] = inspectErr
+		}, "inspect resolved Unix endpoint parent: inspect failed"},
+		{"parent not root owned", func(r *erroringUnixMetadataReader) {
+			r.follow[testUnixParentPath] = unixFileMetadata{Kind: unixFileKindDirectory, OwnerUserID: testEffectiveUserID, Permissions: 0o1777}
+		}, "resolved Unix endpoint parent /tmp must be a root-owned sticky directory"},
+		{"endpoint lstat error", func(r *erroringUnixMetadataReader) {
+			r.lstatErrors[testUnixEndpointPath] = inspectErr
+		}, "inspect Unix endpoint directory: inspect failed"},
+		{"endpoint symlink", func(r *erroringUnixMetadataReader) {
+			r.noFollow[testUnixEndpointPath] = unixFileMetadata{Kind: unixFileKindSymbolicLink, OwnerUserID: testEffectiveUserID, Permissions: 0o700}
+		}, "unix endpoint directory /tmp/uloop-501 must be a real directory"},
+		{"endpoint owner", func(r *erroringUnixMetadataReader) {
+			r.noFollow[testUnixEndpointPath] = unixFileMetadata{Kind: unixFileKindDirectory, OwnerUserID: testEffectiveUserID + 1, Permissions: 0o700}
+		}, "unix endpoint directory /tmp/uloop-501 is not owned by the current user"},
+		{"endpoint mode", func(r *erroringUnixMetadataReader) {
+			r.noFollow[testUnixEndpointPath] = unixFileMetadata{Kind: unixFileKindDirectory, OwnerUserID: testEffectiveUserID, Permissions: 0o770}
+		}, "unix endpoint directory /tmp/uloop-501 must have mode 0700"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &erroringUnixMetadataReader{
+				fakeUnixMetadataReader: secureUnixMetadataReader(),
+				lstatErrors:            map[string]error{},
+				statErrors:             map[string]error{},
+			}
+			test.configure(reader)
+
+			err := validateUnixEndpointPaths(testUnixParentPath, testUnixEndpointPath, testEffectiveUserID, reader)
+
+			if err == nil || err.Error() != test.expectedMessage {
+				t.Fatalf("validation error = %v, want %q", err, test.expectedMessage)
+			}
+		})
+	}
+}
