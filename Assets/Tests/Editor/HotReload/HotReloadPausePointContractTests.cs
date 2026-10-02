@@ -726,6 +726,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Mode = UloopPausePointCaptureMode.Continuous
             });
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            // Without the retarget the compiled state machine would pass the capture checks below.
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = await fixture.AsyncPrivateFieldAndMethod(5);

@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// The parameter a shim takes in place of the patched method's "this". The compiler keeps
         /// this name when it hoists the parameter into a state machine or a closure's display class.
         /// </summary>
+        // Keep in sync with TransformWorker~/TransformWorkerProgramMarker.InstanceParameterName.
         public const string ShimReceiverParameterName = "__uloopInstance";
 
         public MethodBase OriginalMethod { get; }
