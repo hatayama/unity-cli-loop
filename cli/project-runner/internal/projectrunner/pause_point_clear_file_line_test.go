@@ -101,3 +101,41 @@ func TestPrepareDynamicToolParamsRejectsClearPausePointCombinedIDAndFile(t *test
 		t.Fatalf("stderr missing combination error: %s", stderr.String())
 	}
 }
+
+// Verifies clear-pause-point args without --file/--line pass through untouched with no composed id.
+func TestExtractPausePointClearFileLineFlagsPassesThroughWithoutFileLine(t *testing.T) {
+	args := []string{"--all", "--other", "value"}
+
+	remaining, queryID, err := extractPausePointClearFileLineFlags(pausePointClearCommandName, args)
+
+	if err != nil || queryID != "" {
+		t.Fatalf("unexpected result: queryID=%q err=%v", queryID, err)
+	}
+	if strings.Join(remaining, " ") != strings.Join(args, " ") {
+		t.Fatalf("remaining = %#v, want %#v", remaining, args)
+	}
+}
+
+// Verifies --file or --id with no value is rejected as a missing value.
+func TestExtractPausePointClearFileLineFlagsRejectsMissingValues(t *testing.T) {
+	for _, args := range [][]string{{"--file"}, {"--file", "Assets/A.cs", "--line", "3", "--id"}} {
+		_, _, err := extractPausePointClearFileLineFlags(pausePointClearCommandName, args)
+		if requireArgumentError(t, err).ExpectedType != "string" {
+			t.Fatalf("args %v: expected a missing-value error, got %v", args, err)
+		}
+	}
+}
+
+// Verifies a composed file:line id never overwrites an explicit Id param.
+func TestApplyPausePointClearFileLineIDRejectsExplicitID(t *testing.T) {
+	params := map[string]any{pausePointClearIdPropertyName: "named"}
+
+	err := applyPausePointClearFileLineID(params, "Assets/A.cs:3")
+
+	if argumentError := requireArgumentError(t, err); argumentError.Option != "--id" {
+		t.Fatalf("Option = %q, want --id", argumentError.Option)
+	}
+	if params[pausePointClearIdPropertyName] != "named" {
+		t.Fatalf("explicit Id must be kept: %#v", params)
+	}
+}

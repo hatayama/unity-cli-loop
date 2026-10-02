@@ -702,3 +702,356 @@ func assertPausePointRecoveryWarningsAgree(t *testing.T, payload map[string]any,
 		t.Fatalf("Warning must be the joined form of Warnings: %q vs %#v", warning, entries)
 	}
 }
+
+// Verifies the success probe treats undecodable enable output as a failure, and nil or failed
+// responses never gain the switch warning.
+func TestPausePointRecoveryProbesIgnoreUnusableResponses(t *testing.T) {
+	if isSuccessfulEnableResponse([]byte("not json")) {
+		t.Fatal("undecodable output must not count as a successful enable")
+	}
+	if isRetryablePausePointRecoveryCompileResult([]byte("not json")) {
+		t.Fatal("undecodable compile output must not be retried")
+	}
+
+	applyPausePointRecoverySwitchWarning(nil)
+	appendPausePointWarningToBothForms(nil, "ignored")
+	failed := pausePointStatusResponse{Success: false}
+	applyPausePointRecoverySwitchWarning(&failed)
+	if failed.Warning != "" || len(failed.Warnings) != 0 {
+		t.Fatalf("failed response must not gain warnings: %#v", failed)
+	}
+}
+
+// Verifies a response carrying only the joined Warning string keeps that text as its own entry
+// ahead of the switch note.
+func TestInjectPausePointRecoveryWarningKeepsWarningOnlyResponse(t *testing.T) {
+	rewritten, err := injectPausePointRecoveryWarning([]byte(`{"Success":true,"Warning":"physics dispatch warning.","Extra":7}`))
+	if err != nil {
+		t.Fatalf("inject failed: %v", err)
+	}
+	payload := decodePausePointRecoveryPayload(t, string(rewritten))
+	assertPausePointRecoveryWarningsAgree(t, payload, 2)
+	if warnings, _ := payload["Warnings"].([]any); warnings[0] != "physics dispatch warning." {
+		t.Fatalf("existing warning must stay first: %#v", payload["Warnings"])
+	}
+	if payload["Extra"] != float64(7) {
+		t.Fatalf("unrelated keys must survive: %#v", payload)
+	}
+}
+
+// Verifies malformed enable responses are rejected instead of being rewritten with a guessed shape.
+func TestInjectPausePointRecoveryWarningRejectsMalformedFields(t *testing.T) {
+	for name, raw := range map[string]string{
+		"not an object":        `[1,2]`,
+		"warnings not a list":  `{"Success":true,"Warnings":"one"}`,
+		"warning not a string": `{"Success":true,"Warning":5}`,
+		"message not a string": `{"Success":true,"Message":["a"]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if rewritten, err := injectPausePointRecoveryWarning([]byte(raw)); err == nil {
+				t.Fatalf("expected an error, got %s", rewritten)
+			}
+		})
+	}
+}
+
+// Verifies the retry wait returns nil once the duration elapses and the context error when cancelled.
+func TestWaitContextDuration(t *testing.T) {
+	if err := waitContextDuration(context.Background(), time.Millisecond); err != nil {
+		t.Fatalf("elapsed wait must succeed: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitContextDuration(ctx, time.Hour); err != context.Canceled {
+		t.Fatalf("cancelled wait must return context.Canceled, got %v", err)
+	}
+}
+
+const serverBusyRPCErrorJSON = `{"code":-32603,"message":"busy","data":{"type":"server_busy"}}`
+
+func serverBusyRPCError(t *testing.T) error {
+	t.Helper()
+	rpcErr := &unityipc.RPCError{}
+	if err := json.Unmarshal([]byte(serverBusyRPCErrorJSON), rpcErr); err != nil {
+		t.Fatalf("failed to build busy error: %v", err)
+	}
+	if !isUnityServerBusyRPCError(rpcErr) {
+		t.Fatal("fixture must be recognized as server_busy")
+	}
+	return rpcErr
+}
+
+// stubFreshCompileSends replaces the compile sender with one that returns the given errors in
+// order, then succeeds, and records the retry waits requested in between.
+func stubFreshCompileSends(t *testing.T, errs []error, waitErr error) (*int, *[]time.Duration) {
+	t.Helper()
+	originalSend := sendFreshCompileRequest
+	originalWait := waitPausePointRecoveryBusyRetry
+	t.Cleanup(func() {
+		sendFreshCompileRequest = originalSend
+		waitPausePointRecoveryBusyRetry = originalWait
+	})
+	sends := 0
+	waits := []time.Duration{}
+	sendFreshCompileRequest = func(context.Context, unityipc.Connection, string, map[string]any, unityipc.ProgressFunc, time.Duration) (unityipc.UnitySendOutcome, error) {
+		sends++
+		if sends <= len(errs) {
+			return unityipc.UnitySendOutcome{}, errs[sends-1]
+		}
+		return unityipc.UnitySendOutcome{RequestDispatched: true, Result: json.RawMessage(`{"Success":true}`)}, nil
+	}
+	waitPausePointRecoveryBusyRetry = func(_ context.Context, duration time.Duration) error {
+		waits = append(waits, duration)
+		return waitErr
+	}
+	return &sends, &waits
+}
+
+// Verifies busy compile sends are retried within the budget, with each wait capped by the time left.
+func TestSendCompileWithBusyRetryRetriesBusyUntilSuccess(t *testing.T) {
+	sends, waits := stubFreshCompileSends(t, []error{serverBusyRPCError(t)}, nil)
+
+	outcome, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, time.Second)
+
+	if err != nil || string(outcome.Result) != `{"Success":true}` {
+		t.Fatalf("unexpected result: outcome=%#v err=%v", outcome, err)
+	}
+	if *sends != 2 {
+		t.Fatalf("sends = %d, want 2", *sends)
+	}
+	if len(*waits) != 1 || (*waits)[0] > time.Second || (*waits)[0] <= 0 {
+		t.Fatalf("retry wait must be capped by the remaining budget: %v", *waits)
+	}
+}
+
+// Verifies a busy send with no budget left, a non-busy error, and a cancelled retry wait all stop retrying.
+func TestSendCompileWithBusyRetryStopsRetrying(t *testing.T) {
+	t.Run("budget exhausted", func(t *testing.T) {
+		busy := serverBusyRPCError(t)
+		sends, waits := stubFreshCompileSends(t, []error{busy, busy}, nil)
+		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, 0)
+		if err != busy || *sends != 1 || len(*waits) != 0 {
+			t.Fatalf("err=%v sends=%d waits=%v", err, *sends, *waits)
+		}
+	})
+	t.Run("non-busy error", func(t *testing.T) {
+		failure := io.ErrUnexpectedEOF
+		sends, _ := stubFreshCompileSends(t, []error{failure}, nil)
+		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, time.Minute)
+		if err != failure || *sends != 1 {
+			t.Fatalf("err=%v sends=%d", err, *sends)
+		}
+	})
+	t.Run("retry wait cancelled", func(t *testing.T) {
+		sends, _ := stubFreshCompileSends(t, []error{serverBusyRPCError(t)}, context.Canceled)
+		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, time.Minute)
+		if err != context.Canceled || *sends != 1 {
+			t.Fatalf("err=%v sends=%d", err, *sends)
+		}
+	})
+}
+
+// Verifies the default recovery compile sends through the busy-retry sender and reports an
+// undispatched send failure without waiting on compile status.
+func TestRunOneFreshCompileForPausePointRecoveryUsesBusyRetrySender(t *testing.T) {
+	sends, _ := stubFreshCompileSends(t, []error{io.ErrUnexpectedEOF}, nil)
+	var stdout, stderr bytes.Buffer
+
+	code := runOneFreshCompileForPausePointRecoveryDefault(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		map[string]any{},
+		&stdout,
+		&stderr,
+		time.Minute,
+	)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if *sends != 1 {
+		t.Fatalf("sends = %d, want 1", *sends)
+	}
+	if stderr.Len() == 0 {
+		t.Fatal("stderr must report the send failure")
+	}
+}
+
+// Verifies the recovery compile loop rejects an invalid timeout before compiling.
+func TestRunFreshCompileWithBusyRetryRejectsInvalidTimeout(t *testing.T) {
+	originalAttempt := runOneFreshCompileForPausePointRecovery
+	t.Cleanup(func() { runOneFreshCompileForPausePointRecovery = originalAttempt })
+	runOneFreshCompileForPausePointRecovery = func(context.Context, unityipc.Connection, map[string]any, io.Writer, io.Writer, time.Duration) int {
+		t.Fatal("compile must not run")
+		return 0
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runFreshCompileWithBusyRetryForPausePointRecovery(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		map[string]any{compileWaitTimeoutParam: 0},
+		&stdout,
+		&stderr,
+	)
+
+	if code != 1 || !strings.Contains(stderr.String(), "--timeout-seconds") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+// stubRecoveryCompileAttempts makes each recovery compile attempt write the next result and
+// return its code, and records retry waits.
+func stubRecoveryCompileAttempts(t *testing.T, results []string, codes []int) (*int, *[]time.Duration) {
+	t.Helper()
+	originalAttempt := runOneFreshCompileForPausePointRecovery
+	originalWait := waitPausePointRecoveryBusyRetry
+	t.Cleanup(func() {
+		runOneFreshCompileForPausePointRecovery = originalAttempt
+		waitPausePointRecoveryBusyRetry = originalWait
+	})
+	attempts := 0
+	waits := []time.Duration{}
+	runOneFreshCompileForPausePointRecovery = func(_ context.Context, _ unityipc.Connection, _ map[string]any, stdout io.Writer, _ io.Writer, _ time.Duration) int {
+		attempts++
+		_, _ = stdout.Write([]byte(results[attempts-1]))
+		return codes[attempts-1]
+	}
+	waitPausePointRecoveryBusyRetry = func(_ context.Context, duration time.Duration) error {
+		waits = append(waits, duration)
+		return nil
+	}
+	return &attempts, &waits
+}
+
+// Verifies a compile result meaning Unity is still updating is retried, with the wait capped by
+// the time left, and a later success returns 0 without writing the busy result.
+func TestRunFreshCompileWithBusyRetryRetriesEditorUpdating(t *testing.T) {
+	attempts, waits := stubRecoveryCompileAttempts(t,
+		[]string{`{"Success":false,"ErrorCode":"COMPILE_EDITOR_UPDATING"}`, `{"Success":true}`},
+		[]int{1, 0})
+	var stdout bytes.Buffer
+
+	code := runFreshCompileWithBusyRetryForPausePointRecovery(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		map[string]any{compileWaitTimeoutParam: 1},
+		&stdout,
+		io.Discard,
+	)
+
+	if code != 0 || *attempts != 2 {
+		t.Fatalf("code=%d attempts=%d", code, *attempts)
+	}
+	if len(*waits) != 1 || (*waits)[0] > time.Second {
+		t.Fatalf("retry wait must be capped by the 1s budget: %v", *waits)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("busy result must not be written: %s", stdout.String())
+	}
+}
+
+// Verifies a non-retryable compile failure is written to stdout once and returned without retrying.
+func TestRunFreshCompileWithBusyRetryReturnsNonRetryableFailure(t *testing.T) {
+	failure := `{"Success":false,"ErrorCount":3}`
+	attempts, waits := stubRecoveryCompileAttempts(t, []string{failure}, []int{1})
+	var stdout bytes.Buffer
+
+	code := runFreshCompileWithBusyRetryForPausePointRecovery(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		map[string]any{},
+		&stdout,
+		io.Discard,
+	)
+
+	if code != 1 || *attempts != 1 || len(*waits) != 0 {
+		t.Fatalf("code=%d attempts=%d waits=%v", code, *attempts, *waits)
+	}
+	if stdout.String() != failure {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), failure)
+	}
+}
+
+// Verifies a failed Debug switch stops recovery before any compile runs.
+func TestRecoverReleaseCodeOptimizationStopsWhenSwitchFails(t *testing.T) {
+	originalSwitch := sendSetCodeOptimizationDebug
+	originalCompile := runFreshCompileForPausePointRecovery
+	t.Cleanup(func() {
+		sendSetCodeOptimizationDebug = originalSwitch
+		runFreshCompileForPausePointRecovery = originalCompile
+	})
+	sendSetCodeOptimizationDebug = func(context.Context, unityipc.Connection) error {
+		return io.ErrUnexpectedEOF
+	}
+	runFreshCompileForPausePointRecovery = func(context.Context, unityipc.Connection, map[string]any, io.Writer, io.Writer) int {
+		t.Fatal("compile must not run after a failed switch")
+		return 0
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := recoverReleaseCodeOptimization(context.Background(), unityipc.Connection{ProjectRoot: t.TempDir()}, &stdout, &stderr)
+
+	if code != 1 || stdout.Len() != 0 || stderr.Len() == 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+// Verifies a successful resend whose warnings cannot be rewritten fails instead of printing a
+// response that silently drops the switch note.
+func TestCompleteEnableWithReleaseRecoveryFailsWhenRewriteFails(t *testing.T) {
+	stubPausePointRecoverySwitchAndCompile(t)
+	sendCount := 0
+	var stdout, stderr bytes.Buffer
+
+	code := completeEnableWithReleaseRecovery(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		&stdout,
+		&stderr,
+		func(writer io.Writer) int {
+			sendCount++
+			if sendCount == 1 {
+				_, _ = writer.Write([]byte(releaseCodeOptimizationEnableFailureJSON))
+				return 1
+			}
+			_, _ = writer.Write([]byte(`{"Success":true,"Warnings":"not-a-list"}`))
+			return 0
+		},
+	)
+
+	if code != 1 || stdout.Len() != 0 || stderr.Len() == 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+// Verifies enable send failures and undecodable enable results are reported and returned as errors.
+func TestSendEnablePausePointAndDecodeReportsFailures(t *testing.T) {
+	original := sendEnablePausePointIPC
+	t.Cleanup(func() { sendEnablePausePointIPC = original })
+
+	cases := map[string]struct {
+		outcome unityipc.UnitySendOutcome
+		err     error
+	}{
+		"send failure":       {err: io.ErrUnexpectedEOF},
+		"undecodable result": {outcome: unityipc.UnitySendOutcome{Result: json.RawMessage(`"text"`)}},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			sendEnablePausePointIPC = func(context.Context, unityipc.Connection, map[string]any, io.Writer) (unityipc.UnitySendOutcome, error) {
+				return testCase.outcome, testCase.err
+			}
+			var stderr bytes.Buffer
+
+			raw, _, _, err := sendEnablePausePointAndDecode(context.Background(), unityipc.Connection{ProjectRoot: t.TempDir()}, map[string]any{}, &stderr)
+
+			if err == nil || raw != nil {
+				t.Fatalf("expected an error and no raw result, got raw=%s err=%v", raw, err)
+			}
+			if stderr.Len() == 0 {
+				t.Fatal("stderr must report the failure")
+			}
+		})
+	}
+}

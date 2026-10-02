@@ -5,12 +5,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -1247,5 +1252,244 @@ func readIPCRequest(t *testing.T, requests <-chan map[string]any) map[string]any
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for request")
 		return nil
+	}
+}
+
+// Verifies invalid values for the CLI-only enable flags are rejected while parsing, before any request.
+func TestExtractPausePointEnableAwaitFlagsRejectsInvalidValues(t *testing.T) {
+	cases := map[string][]string{
+		"resume-play with non-true value": {"--await", "--resume-play=yes"},
+		"trigger without value":           {"--await", "--trigger"},
+		"trigger with blank command":      {"--await", "--trigger", "   "},
+		"captured-variables unknown mode": {"--await", "--captured-variables", "everything"},
+		"expect without name":             {"--await", "--expect", "=5"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			remaining, _, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags(args)
+			if argumentError := requireArgumentError(t, err); argumentError.Message == "" {
+				t.Fatal("argument error must carry a message")
+			}
+			if remaining != nil {
+				t.Fatalf("remaining args must be nil on error: %#v", remaining)
+			}
+		})
+	}
+}
+
+// Verifies --captured-variable-names alone without --await is named as the offending option.
+func TestExtractPausePointEnableAwaitFlagsNamesCapturedVariableNamesWithoutAwait(t *testing.T) {
+	_, _, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags([]string{"--captured-variable-names", "speed"})
+
+	if argumentError := requireArgumentError(t, err); argumentError.Option != "--captured-variable-names" {
+		t.Fatalf("Option = %q, want --captured-variable-names", argumentError.Option)
+	}
+}
+
+// Verifies enable-pause-point argument and catalog failures on the --await path exit 1 without
+// sending the enable request.
+func TestRunEnablePausePointCommandRejectsBeforeSending(t *testing.T) {
+	cacheWithoutEnable := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cacheWithoutEnable, ".uloop"), 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	writeTestFile(t, filepath.Join(cacheWithoutEnable, ".uloop", "tools.json"), `{"tools":[]}`)
+	otherProject := writeFakeUnityProject(t)
+
+	cases := []struct {
+		name        string
+		projectRoot string
+		args        []string
+		wantStderr  string
+	}{
+		{name: "invalid CLI-only flag", projectRoot: t.TempDir(), args: []string{"--await", "--resume-play=no"}, wantStderr: "--resume-play"},
+		{name: "tool missing from project cache", projectRoot: cacheWithoutEnable, args: []string{"--await", "--id", "jump"}, wantStderr: pausePointEnableCommandName},
+		{name: "unknown schema option", projectRoot: t.TempDir(), args: []string{"--await", "--bogus-flag"}, wantStderr: "--bogus-flag"},
+		{name: "nested project path for another project", projectRoot: writeFakeUnityProject(t), args: []string{"--await", "--project-path", otherProject}, wantStderr: "--project-path must target the same Unity project"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+
+			code := runEnablePausePointCommand(
+				context.Background(),
+				unreachableConnection(testCase.projectRoot),
+				testCase.args,
+				t.TempDir(),
+				&stdout,
+				&stderr,
+			)
+
+			if code != 1 || stdout.Len() != 0 {
+				t.Fatalf("code=%d stdout=%q stderr=%s", code, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stderr.String(), testCase.wantStderr) {
+				t.Fatalf("stderr must mention %q:\n%s", testCase.wantStderr, stderr.String())
+			}
+		})
+	}
+}
+
+// stubEnablePausePointSends makes each enable send return the next scripted outcome or error.
+func stubEnablePausePointSends(t *testing.T, results []string, errs []error) *int {
+	t.Helper()
+	original := sendEnablePausePointIPC
+	t.Cleanup(func() { sendEnablePausePointIPC = original })
+	sends := 0
+	sendEnablePausePointIPC = func(context.Context, unityipc.Connection, map[string]any, io.Writer) (unityipc.UnitySendOutcome, error) {
+		sends++
+		if errs[sends-1] != nil {
+			return unityipc.UnitySendOutcome{}, errs[sends-1]
+		}
+		return unityipc.UnitySendOutcome{Result: json.RawMessage(results[sends-1])}, nil
+	}
+	return &sends
+}
+
+// Verifies each failure on the --await enable path (send failure, failed Release recovery, failed
+// resend after recovery) exits 1 without starting the wait.
+func TestRunEnablePausePointAndAwaitStopsOnEnableFailures(t *testing.T) {
+	sendFailure := errors.New("enable send failed")
+
+	t.Run("send failure", func(t *testing.T) {
+		sends := stubEnablePausePointSends(t, []string{""}, []error{sendFailure})
+		code, stderr := runEnablePausePointAndAwaitForTest(t)
+		if code != 1 || *sends != 1 || !strings.Contains(stderr, "enable send failed") {
+			t.Fatalf("code=%d sends=%d stderr=%s", code, *sends, stderr)
+		}
+	})
+	t.Run("Release recovery fails", func(t *testing.T) {
+		sends := stubEnablePausePointSends(t, []string{releaseCodeOptimizationEnableFailureJSON}, []error{nil})
+		originalSwitch := sendSetCodeOptimizationDebug
+		t.Cleanup(func() { sendSetCodeOptimizationDebug = originalSwitch })
+		sendSetCodeOptimizationDebug = func(context.Context, unityipc.Connection) error {
+			return errors.New("switch refused")
+		}
+		code, stderr := runEnablePausePointAndAwaitForTest(t)
+		if code != 1 || *sends != 1 || !strings.Contains(stderr, "switch refused") {
+			t.Fatalf("code=%d sends=%d stderr=%s", code, *sends, stderr)
+		}
+	})
+	t.Run("resend after recovery fails", func(t *testing.T) {
+		stubPausePointRecoverySwitchAndCompile(t)
+		sends := stubEnablePausePointSends(t, []string{releaseCodeOptimizationEnableFailureJSON, ""}, []error{nil, sendFailure})
+		code, stderr := runEnablePausePointAndAwaitForTest(t)
+		if code != 1 || *sends != 2 || !strings.Contains(stderr, "enable send failed") {
+			t.Fatalf("code=%d sends=%d stderr=%s", code, *sends, stderr)
+		}
+	})
+}
+
+func runEnablePausePointAndAwaitForTest(t *testing.T) (int, string) {
+	t.Helper()
+	original := queryPausePointStatus
+	t.Cleanup(func() { queryPausePointStatus = original })
+	queryPausePointStatus = func(context.Context, unityipc.Connection, string) (pausePointStatusResponse, error) {
+		t.Fatal("the wait must not start after a failed enable")
+		return pausePointStatusResponse{}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := runEnablePausePointAndAwait(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		map[string]any{"Id": "jump"},
+		pausePointCapturedVariablesModeFull,
+		nil, nil, "", nil, false,
+		t.TempDir(),
+		&stdout,
+		&stderr,
+	)
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout must stay empty: %s", stdout.String())
+	}
+	return code, stderr.String()
+}
+
+// stubPausePointWaitAlwaysEnabled keeps the marker armed and unhit for every status poll, with
+// a 1ms poll so a short wait times out quickly.
+func stubPausePointWaitAlwaysEnabled(t *testing.T) {
+	t.Helper()
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalClear := clearPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	originalLogs := fetchMatchingLogs
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		clearPausePointStatus = originalClear
+		resumePlayModeForPausePoint = originalResume
+		fetchMatchingLogs = originalLogs
+	})
+	pausePointStatusPoll = time.Millisecond
+	queryPausePointStatus = func(_ context.Context, _ unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Success: true, Id: id, Status: pausePointStatusEnabled, IsEnabled: true, Mode: "continuous"}, nil
+	}
+	clearPausePointStatus = func(_ context.Context, _ unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Success: true, Id: id, Status: pausePointStatusCleared}, nil
+	}
+	resumePlayModeForPausePoint = func(context.Context, unityipc.Connection) pausePointResumePlayResult {
+		return pausePointResumePlayResult{WasPaused: true, Resumed: true}
+	}
+}
+
+// Verifies an --await timeout after --resume-play reports the resume result and the matching
+// logs with their single-fire warning in the error details.
+func TestRunPausePointWaitAfterEnableTimeoutReportsResumeAndMatchingLogs(t *testing.T) {
+	stubPausePointWaitAlwaysEnabled(t)
+	fetchMatchingLogs = func(context.Context, unityipc.Connection, string, int) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{TotalCount: 2, Logs: []pausePointMatchingLog{{Message: "a"}, {Message: "b"}}}, nil
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runPausePointWaitAfterEnable(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 1, timeout: 20 * time.Millisecond, resumePlay: true, markerJustEnabled: true},
+		enablePausePointPropagatedFields{},
+		&stdout,
+		&stderr,
+	)
+
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%s", code, stdout.String(), stderr.String())
+	}
+	envelope := clierrors.CLIErrorEnvelope{}
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not an error envelope: %v\n%s", err, stderr.String())
+	}
+	details := envelope.Error.Details
+	if resume, _ := details["ResumePlayResult"].(map[string]any); resume["Resumed"] != true {
+		t.Fatalf("ResumePlayResult missing: %#v", details)
+	}
+	if logs, _ := details["MatchingLogs"].([]any); len(logs) != 2 {
+		t.Fatalf("MatchingLogs missing: %#v", details)
+	}
+	if warning, _ := details["Warning"].(string); !strings.Contains(warning, "Multiple matching logs") {
+		t.Fatalf("Warning missing: %#v", details)
+	}
+}
+
+// Verifies a wait that ends with an error (here a cancelled context) is reported on stderr with exit 1.
+func TestRunPausePointWaitAfterEnableReportsWaitError(t *testing.T) {
+	stubPausePointWaitAlwaysEnabled(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stdout, stderr bytes.Buffer
+
+	code := runPausePointWaitAfterEnable(
+		ctx,
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 1, timeout: time.Second, markerJustEnabled: true},
+		enablePausePointPropagatedFields{},
+		&stdout,
+		&stderr,
+	)
+
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "canceled") {
+		t.Fatalf("stderr must report the cancellation:\n%s", stderr.String())
 	}
 }
