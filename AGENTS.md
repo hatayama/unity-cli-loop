@@ -166,6 +166,16 @@ When you touch a reported file, split it before adding behavior. Commands, the
 exclusion list, and the two places the threshold is declared:
 `docs/file-length.md`.
 
+## Test Coverage
+
+Go statement coverage per CLI module may not fall more than 0.1 point below the
+figures in `coverage-baseline.json`; the Linux `build-cli` job fails the pull
+request otherwise.
+When your tests lift a module a point or more, the job summary suggests a new
+figure; raise it in the same pull request. Never lower a figure without a reason
+in the pull request description. What is measured and how to run it locally:
+`docs/coverage.md`.
+
 ## Nested Type Name Forms
 
 A nested type has three spellings, and a name that crosses a boundary between them silently

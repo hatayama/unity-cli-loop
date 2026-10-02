@@ -128,7 +128,21 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Check native Go CLI
+        env:
+          GO_COVERAGE_DIR: ${{ runner.temp }}/go-coverage
         run: scripts/check-go-cli.sh
+
+      # Fails when a module's statement coverage falls below coverage-baseline.json.
+      # Runs only on Linux: build-tagged files make the figures differ per OS.
+      - name: Check Go test coverage against the baseline
+        working-directory: cli/release-automation
+        env:
+          GO_COVERAGE_DIR: ${{ runner.temp }}/go-coverage
+        run: |
+          go run ./cmd/coverage-report \
+            --baseline ../../coverage-baseline.json \
+            --mode gate \
+            --go-coverage-dir "$GO_COVERAGE_DIR"
 
       - name: Package native Go CLI installers
         run: scripts/package-go-cli.sh
