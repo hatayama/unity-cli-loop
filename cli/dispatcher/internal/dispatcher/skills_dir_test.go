@@ -1719,6 +1719,7 @@ func TestSyncSkillDirectoryPreservingForeignFilesReportsUncreatableDestination(t
 
 func TestRunSkillsDirCommandsReportStoreThatIsAFile(t *testing.T) {
 	// Verifies dir-mode install and uninstall exit with code 1 and name the store when it is a regular file.
+	skipDispatcherTestOnWindows(t, "Windows reports a path below a file as not found, so the store reads as empty instead of failing.")
 	root := t.TempDir()
 	skill := writeDirModeSkillSource(t, root, "uloop-sample")
 	storeFile := filepath.Join(root, "store-file")
