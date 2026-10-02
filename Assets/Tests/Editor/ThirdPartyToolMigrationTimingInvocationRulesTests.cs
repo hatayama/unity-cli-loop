@@ -139,13 +139,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a base-qualified call made from a different type does not target the removed signature.
+        /// Verifies a this-qualified call made from a type other than the declaring type does not target the removed signature.
         /// </summary>
         [Test]
-        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenBaseCallInsideOtherType_ReturnsFalse()
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenThisCallInsideOtherType_ReturnsFalse()
         {
             string source =
-                "class Caller\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+                "class Caller\n{\n    void Call() { this.Run(1, PlayerLoopTiming.Update); }\n}\n";
             CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
 
             bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(

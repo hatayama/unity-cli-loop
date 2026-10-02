@@ -113,12 +113,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies that a named description argument is removed from a ToolSettingsCatalogItem constructor.
+        /// Verifies that a named description argument is removed from a ToolSettingsCatalogItem constructor even when it is not in the second position.
         /// </summary>
         [Test]
         public void ReplaceLegacyToolSettingsCatalogItemConstructorsInCode_WhenDescriptionIsNamed_RemovesNamedDescription()
         {
-            const string source = "new ToolSettingsCatalogItem(\"a\", description: \"desc\", dev);";
+            const string source =
+                "new ToolSettingsCatalogItem(\"a\", displayDevelopmentOnly: dev, isThirdParty: third, description: \"desc\");";
             int replacementCount = 0;
 
             string content =
@@ -128,7 +129,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     true,
                     ref replacementCount);
 
-            Assert.That(content, Is.EqualTo(CurrentToolSettingsCatalogItemConstructor + "\"a\", dev);"));
+            Assert.That(
+                content,
+                Is.EqualTo(
+                    CurrentToolSettingsCatalogItemConstructor + "\"a\", displayDevelopmentOnly: dev, isThirdParty: third);"));
             Assert.That(replacementCount, Is.EqualTo(1));
         }
 

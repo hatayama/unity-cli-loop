@@ -14,7 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string Timeout = "TIMEOUT";
 
         /// <summary>
-        /// Verifies that a CaptureWindowAsync argument list naming the same parameter twice cannot be migrated.
+        /// Verifies that the CaptureWindowAsync migration entry point returns no arguments for a three-argument call that names window twice.
+        /// With exactly three arguments a duplicate always leaves a slot unfilled, so this does not isolate the duplicate check; the GetOrdered test does.
         /// </summary>
         [Test]
         public void GetMigratedEditorWindowCaptureUtilityArguments_WhenNamedArgumentIsDuplicated_ReturnsEmpty()
@@ -77,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies that a CaptureGameRenderingAsync argument list naming resolutionScale twice cannot be migrated.
+        /// Verifies that the CaptureGameRenderingAsync migration entry point returns no arguments for a two-argument call that names resolutionScale twice.
+        /// With exactly two arguments a duplicate always leaves a slot unfilled, so this does not isolate the duplicate check; the GetOrdered test does.
         /// </summary>
         [Test]
         public void GetMigratedEditorWindowCaptureUtilityGameRenderingArguments_WhenNamedArgumentIsDuplicated_ReturnsEmpty()
@@ -136,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ReplaceLegacyToolInfoConstructorsInCode_WhenConstructorIsLegacyNamespaceQualified_RewritesConstructor()
         {
             string source =
-                "ToolInfo info = new io.github.hatayama.uLoopMCP.ToolInfo(\"sample-tool\", \"Sample description\", \"Development\");\n";
+                "ToolInfo info = new io.github.hatayama.uLoopMCP.ToolInfo(\"sample-tool\", \"Sample description\", schema);\n";
             int replacementCount = 0;
 
             string content = ThirdPartyToolMigrationMetadataConstructorRules.ReplaceLegacyToolInfoConstructorsInCode(
@@ -150,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 content,
                 Is.EqualTo(
-                    "ToolInfo info = new io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo(\"sample-tool\", \"Development\");\n"));
+                    "ToolInfo info = new io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo(\"sample-tool\", schema);\n"));
             Assert.That(replacementCount, Is.EqualTo(1));
         }
     }

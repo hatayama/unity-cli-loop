@@ -52,6 +52,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies an expression-bodied member yields the range from after the arrow to its terminating semicolon.
+        /// </summary>
+        [Test]
+        public void FindMethodImplementationUsageRange_WhenExpressionBodyIsTerminated_ReturnsExpressionRange()
+        {
+            string source = "void Run() => Stop();";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            (int startIndex, int endIndex) =
+                ThirdPartyToolMigrationTimingMethodBodyRules.FindMethodImplementationUsageRange(
+                    source,
+                    codeTextMask,
+                    source.IndexOf(')') + 1);
+
+            Assert.That(startIndex, Is.EqualTo(source.IndexOf("=>", StringComparison.Ordinal) + 2));
+            Assert.That(endIndex, Is.EqualTo(source.LastIndexOf(';')));
+        }
+
+        /// <summary>
         /// Verifies an expression body without a terminating semicolon yields no usage range.
         /// </summary>
         [Test]
@@ -107,12 +126,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies balanced brackets and braces in an expression body are skipped before the terminating semicolon.
+        /// Verifies a semicolon inside a brace block of an expression body does not end the member.
         /// </summary>
         [Test]
-        public void FindExpressionBodiedMemberSemicolonIndex_WhenExpressionContainsBracketsAndBraces_ReturnsTerminatingSemicolon()
+        public void FindExpressionBodiedMemberSemicolonIndex_WhenBracesContainSemicolon_ReturnsTerminatingSemicolon()
         {
-            string source = " new[] { 1, 2 };";
+            string source = " () => { a; };";
             CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
 
             int result = ThirdPartyToolMigrationTimingMethodBodyRules.FindExpressionBodiedMemberSemicolonIndex(

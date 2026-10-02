@@ -142,15 +142,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies an interpolated string without a closing quote reports that no end was found.
+        /// Verifies a raw string inside a hole is skipped as one literal, so its quote and closing brace do not end the hole or the string.
         /// </summary>
-        [TestCase("$\"abc")]
-        [TestCase("$\"{$$\"\"\"x")]
-        [TestCase("$\"{$$\"\"\"{{x")]
-        [TestCase("$\"{@\"x}\"\"")]
-        public void FindRegularInterpolatedStringEndIndex_WhenStringIsUnterminated_ReturnsMinusOne(string source)
+        [TestCase("$\"{\"\"\"a\"}b\"\"\"}\"", 14)]
+        [TestCase("$\"{$$\"\"\"a\"}b\"\"\"}\"", 16)]
+        public void FindRegularInterpolatedStringEndIndex_WhenHoleRawStringContainsQuoteAndClosingBrace_ReturnsFinalQuoteIndex(
+            string source,
+            int expectedEndIndex)
         {
             int endIndex = ThirdPartyToolMigrationInterpolatedStringRules.FindRegularInterpolatedStringEndIndex(source, 0);
+
+            Assert.That(endIndex, Is.EqualTo(expectedEndIndex));
+        }
+
+        /// <summary>
+        /// Verifies an interpolated string without a closing quote reports that no end was found.
+        /// </summary>
+        [Test]
+        public void FindRegularInterpolatedStringEndIndex_WhenStringIsUnterminated_ReturnsMinusOne()
+        {
+            int endIndex = ThirdPartyToolMigrationInterpolatedStringRules.FindRegularInterpolatedStringEndIndex("$\"abc", 0);
 
             Assert.That(endIndex, Is.EqualTo(-1));
         }

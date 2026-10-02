@@ -10,15 +10,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class ThirdPartyToolMigrationArgumentRulesTests
     {
         /// <summary>
-        /// Verifies that commas and doubled quotes inside a verbatim string do not split the argument list.
+        /// Verifies that commas and doubled quotes inside a verbatim string do not split the argument list, and that a backslash after a doubled quote is not read as an escape.
         /// </summary>
         [Test]
         public void SplitAttributeArguments_WhenVerbatimStringContainsCommaAndDoubledQuote_KeepsStringAsOneArgument()
         {
             string[] arguments = ThirdPartyToolMigrationArgumentRules.SplitAttributeArguments(
-                "@\"a,\"\"b\", c");
+                "@\"a,\"\"\\\", c");
 
-            Assert.That(arguments, Is.EqualTo(new[] { "@\"a,\"\"b\"", " c" }));
+            Assert.That(arguments, Is.EqualTo(new[] { "@\"a,\"\"\\\"", " c" }));
         }
 
         /// <summary>

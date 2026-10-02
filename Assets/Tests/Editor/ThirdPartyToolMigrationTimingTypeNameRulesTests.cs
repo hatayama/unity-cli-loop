@@ -60,9 +60,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a declaration without an initializer has no initializer type name.
+        /// Verifies a declaration without an initializer has no initializer type name, even when an object creation follows the declaration.
         /// </summary>
-        [TestCase(" ;")]
+        [TestCase(" ; new Runner();")]
         [TestCase("")]
         public void ReadVarInitializerTypeName_WhenNoInitializerFollows_ReturnsEmpty(string remainder)
         {

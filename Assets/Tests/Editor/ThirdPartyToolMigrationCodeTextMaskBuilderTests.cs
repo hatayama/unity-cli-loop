@@ -181,16 +181,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies an unterminated raw string masks everything up to the end of the source.
+        /// Verifies an unterminated raw string masks everything up to the end of the source, including a lone quote inside it.
         /// </summary>
         [Test]
         public void CreateCodeCharacters_WhenRawStringIsUnterminated_MasksToEndOfSource()
         {
-            string source = "x = \"\"\"ab";
+            string source = "x = \"\"\"a\"b";
 
             string mask = RenderCodeMask(source);
 
-            Assert.That(mask, Is.EqualTo("cccc-----"));
+            Assert.That(mask, Is.EqualTo("cccc------"));
         }
 
         /// <summary>

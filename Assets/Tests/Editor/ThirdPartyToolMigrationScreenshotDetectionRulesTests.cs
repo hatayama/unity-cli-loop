@@ -66,6 +66,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies that a CaptureWindowAsync call qualified with a known legacy namespace alias is reported as needing migration.
+        /// </summary>
+        [Test]
+        public void ContainsLegacyEditorWindowCaptureUtilityMigration_WhenAliasIsKnownLegacyAlias_ReturnsTrue()
+        {
+            string source = "return await Legacy.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);\n";
+
+            bool result = ThirdPartyToolMigrationScreenshotDetectionRules.ContainsLegacyEditorWindowCaptureUtilityMigration(
+                source,
+                new[] { "Legacy" },
+                Array.Empty<string>(),
+                canMigrateBareLegacyEditorWindowCaptureUtility: false,
+                assemblyDeclaredTypeNames: Array.Empty<string>(),
+                requiresTimeoutArgumentMigration: true);
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
         /// Verifies that a legacy CaptureWindowAsync call without a closing parenthesis is not reported as needing migration.
         /// </summary>
         [Test]

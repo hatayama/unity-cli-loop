@@ -70,6 +70,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies that a deconstruction qualified with a current FirstPartyTools alias is reported as needing migration.
+        /// </summary>
+        [Test]
+        public void ContainsCurrentCaptureGameRenderingDeconstructionMigration_WhenAliasIsCurrentFirstPartyTools_ReturnsTrue()
+        {
+            string source =
+                "(Texture2D texture, int yOffset) = await Tools.EditorWindowCaptureUtility.CaptureGameRenderingAsync(1.0f, timeout, ct);\n";
+
+            bool result = ContainsDeconstructionMigration(source, new[] { "Tools" });
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
         /// Verifies that a deconstruction qualified with an alias that is not a current FirstPartyTools alias is not reported.
         /// </summary>
         [Test]
