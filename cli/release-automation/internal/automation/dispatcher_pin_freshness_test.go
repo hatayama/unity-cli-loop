@@ -226,3 +226,69 @@ func TestParseDispatcherPinFreshnessFlagsPrefersTheExplicitRepository(t *testing
 		t.Fatalf("expected the flag repository, got %q", config.repository)
 	}
 }
+
+func TestRunDispatcherPinFreshnessCheckRejectsUnknownFlags(t *testing.T) {
+	// Verifies an unknown flag fails the command with exit code 1 and a command-prefixed error.
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunDispatcherPinFreshnessCheck(context.Background(), &stdout, &stderr, []string{"--unknown"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), dispatcherPinFreshnessCommandName+":") {
+		t.Fatalf("expected a command-prefixed error, got %q", stderr.String())
+	}
+}
+
+func TestRunDispatcherPinFreshnessCheckReadsThePinRelativeToTheModule(t *testing.T) {
+	// Verifies the exported command reads the repo-relative pin, which is absent from the package directory, before any release lookup.
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunDispatcherPinFreshnessCheck(context.Background(), &stdout, &stderr, []string{"--repo", "owner/repository"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "read dispatcher pin") {
+		t.Fatalf("expected a pin read error, got %q", stderr.String())
+	}
+}
+
+func TestResolveDispatcherPinFreshnessRepositoryUsesWorkflowRepository(t *testing.T) {
+	// Verifies GITHUB_REPOSITORY is used when no --repo flag is given.
+	t.Setenv("GITHUB_REPOSITORY", "environment/repository")
+
+	if repository := resolveDispatcherPinFreshnessRepository(""); repository != "environment/repository" {
+		t.Fatalf("expected the workflow repository, got %q", repository)
+	}
+}
+
+func TestRunDispatcherPinFreshnessCheckFailsWhenPinIsInvalidJSON(t *testing.T) {
+	// Verifies a malformed pin fails the guard instead of comparing against an empty tag.
+	result := runDispatcherPinFreshnessCase(t, "{not json", nil, nil)
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	}
+	if !strings.Contains(result.stderr, "is invalid JSON") {
+		t.Fatalf("expected an invalid JSON error, got %q", result.stderr)
+	}
+}
+
+func TestNewestStableDispatcherReleaseKeepsHighestVersionRegardlessOfOrder(t *testing.T) {
+	// Verifies an older release listed after a newer one does not replace the newest stable release.
+	releases := []dispatcherRelease{
+		stableDispatcherRelease("dispatcher-v3.2.0"),
+		stableDispatcherRelease("dispatcher-v3.1.0"),
+		stableDispatcherRelease("dispatcher-v3.2.0"),
+	}
+
+	tag, version := newestStableDispatcherRelease(releases)
+
+	if tag != "dispatcher-v3.2.0" || version != "3.2.0" {
+		t.Fatalf("expected dispatcher-v3.2.0 / 3.2.0, got %q / %q", tag, version)
+	}
+}

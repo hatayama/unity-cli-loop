@@ -327,3 +327,139 @@ func assertDispatcherMinimumVersionLogDoesNotContain(t *testing.T, actual string
 		t.Fatalf("expected log not to contain %q, got:\n%s", unexpected, actual)
 	}
 }
+
+// Verifies the guard fails with a repository-root message when git cannot be run.
+func TestRunDispatcherMinimumVersionCheck_WhenGitIsUnavailable_Fails(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunDispatcherMinimumVersionCheck(context.Background(), &stdout, &stderr, "")
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertDispatcherMinimumVersionLogContains(t, stderr.String(), "failed to resolve git repository root")
+}
+
+// Verifies an older minimum dispatcher whose release tag has no contract at any known path fails and names every path tried.
+func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseHasNoContract_Fails(t *testing.T) {
+	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
+		currentProjectRunnerVersion: "3.0.0-beta.40",
+		currentDispatcherVersion:    "1.0.1",
+		minimumDispatcherVersion:    "1.0.0",
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertDispatcherMinimumVersionLogContains(t, result.stderr, "dispatcher release dispatcher-v1.0.0 does not provide")
+	assertDispatcherMinimumVersionLogContains(t, result.stderr, legacyDispatcherContractFile)
+}
+
+// Verifies a minimum dispatcher release whose contract declares another version fails the guard.
+func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseContractDeclaresAnotherVersion_Fails(t *testing.T) {
+	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
+		currentProjectRunnerVersion: "3.0.0-beta.40",
+		currentDispatcherVersion:    "1.0.1",
+		minimumDispatcherVersion:    "1.0.0",
+		releaseContract:             `{"dispatcherVersion":"0.9.0"}`,
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertDispatcherMinimumVersionLogContains(t, result.stderr, `contract declares dispatcherVersion "0.9.0"`)
+}
+
+// Verifies each in-tree file the guard needs is reported by path when it is missing from the working tree.
+func TestDispatcherMinimumVersionValuesAtRef_WhenFileIsMissing_ReportsThePath(t *testing.T) {
+	files := []string{cliContractFile, dispatcherContractFile, unityPackageCliPinFile, unityProjectCliPinFile}
+	for _, missingFile := range files {
+		t.Run(missingFile, func(t *testing.T) {
+			workDir := t.TempDir()
+			prepareDispatcherMinimumVersionFiles(t, workDir, dispatcherMinimumVersionCase{
+				currentProjectRunnerVersion: "3.0.0",
+				minimumDispatcherVersion:    "1.0.0",
+			})
+			if err := os.Remove(filepath.Join(workDir, missingFile)); err != nil {
+				t.Fatalf("remove %s: %v", missingFile, err)
+			}
+
+			_, err := dispatcherMinimumVersionValuesAtRef(context.Background(), workDir, "")
+
+			if err == nil || !strings.Contains(err.Error(), "failed to read "+missingFile) {
+				t.Fatalf("expected a read error for %s, got %v", missingFile, err)
+			}
+		})
+	}
+}
+
+// Verifies a non-empty ref reads the file through git show instead of the working tree.
+func TestDispatcherMinimumVersionFileAtRef_WithRef_ReadsThroughGit(t *testing.T) {
+	workDir := t.TempDir()
+	mockBin := filepath.Join(workDir, "bin")
+	if err := os.MkdirAll(mockBin, 0o755); err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+	writeDispatcherMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
+	releaseContractPath := filepath.Join(workDir, "release-contract.json")
+	writeFile(t, releaseContractPath, `{"dispatcherVersion":"1.0.0"}`)
+	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GIT_LOG", filepath.Join(workDir, "git.log"))
+	t.Setenv("GIT_RELEASE_CONTRACT", releaseContractPath)
+
+	content, err := dispatcherMinimumVersionFileAtRef(context.Background(), workDir, "dispatcher-v1.0.0", dispatcherContractFile)
+	if err != nil {
+		t.Fatalf("expected git show to succeed, got %v", err)
+	}
+	assertDispatcherMinimumVersionLogContains(t, content, `"dispatcherVersion":"1.0.0"`)
+}
+
+// Verifies malformed or incomplete contracts and pins, and drifting pin versions, are each rejected with the offending file named.
+func TestParseDispatcherMinimumVersionValues_RejectsInvalidInputs(t *testing.T) {
+	validCli := buildDispatcherMinimumVersionCliContract("3.0.0")
+	validDispatcher := buildDispatcherMinimumVersionContract("1.0.0")
+	validPin := buildDispatcherMinimumVersionPin("3.0.0", "1.0.0")
+	cases := []struct {
+		name       string
+		cli        string
+		dispatcher string
+		packagePin string
+		projectPin string
+		wantErr    string
+	}{
+		{"cli contract invalid", "{", validDispatcher, validPin, validPin, cliContractFile + " is invalid JSON"},
+		{"cli contract without version", `{}`, validDispatcher, validPin, validPin, cliContractFile + " does not define projectRunnerVersion"},
+		{"dispatcher contract invalid", validCli, "{", validPin, validPin, dispatcherContractFile + " is invalid JSON"},
+		{"dispatcher contract without version", validCli, `{}`, validPin, validPin, dispatcherContractFile + " does not define dispatcherVersion"},
+		{"package pin invalid", validCli, validDispatcher, "{", validPin, unityPackageCliPinFile + " is invalid JSON"},
+		{"package pin without runner", validCli, validDispatcher, `{"minimumDispatcherVersion":"1.0.0"}`, validPin, unityPackageCliPinFile + " does not define projectRunnerVersion"},
+		{"project pin without minimum", validCli, validDispatcher, validPin, `{"projectRunnerVersion":"3.0.0"}`, unityProjectCliPinFile + " does not define minimumDispatcherVersion"},
+		{"package pin runner drift", validCli, validDispatcher, buildDispatcherMinimumVersionPin("2.9.0", "1.0.0"), validPin, unityPackageCliPinFile + ` projectRunnerVersion "2.9.0"`},
+		{"project pin runner drift", validCli, validDispatcher, validPin, buildDispatcherMinimumVersionPin("2.9.0", "1.0.0"), unityProjectCliPinFile + ` projectRunnerVersion "2.9.0"`},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := parseDispatcherMinimumVersionValues(
+				[]byte(testCase.cli), []byte(testCase.dispatcher), []byte(testCase.packagePin), []byte(testCase.projectPin))
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+// Verifies an unparsable release contract fails, while one without dispatcherVersion passes because only a declared version can contradict the pin.
+func TestVerifyMinimumCliReleaseDispatcherContract_HandlesInvalidAndVersionlessContracts(t *testing.T) {
+	values := dispatcherMinimumVersionValues{PackagePinMinimumDispatcherVersion: "1.0.0"}
+
+	err := verifyMinimumCliReleaseDispatcherContract(values, []byte("{"))
+	if err == nil || !strings.Contains(err.Error(), "dispatcher release contract is invalid JSON") {
+		t.Fatalf("expected an invalid JSON error, got %v", err)
+	}
+	if err := verifyMinimumCliReleaseDispatcherContract(values, []byte(`{"protocolVersion":2}`)); err != nil {
+		t.Fatalf("expected a versionless contract to pass, got %v", err)
+	}
+}
