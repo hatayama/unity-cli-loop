@@ -284,3 +284,144 @@ func TestRunSyncToolDocsWritesThenPassesCheck(t *testing.T) {
 		t.Fatalf("check mode failed right after writing: %s", stderr.String())
 	}
 }
+
+const fixtureRunTestsCatalogEntry = `{
+      "name": "run-tests",
+      "description": "Stale run-tests description",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "TestMode": {
+            "type": "string",
+            "description": "Stale mode description"
+          }
+        }
+      }
+    },
+    `
+
+const fixtureRunTestsSkill = `---
+name: uloop-run-tests
+toolName: run-tests
+description: "Run Unity tests."
+---
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| ` + "`--test-mode`" + ` | string | - | EditMode or PlayMode |
+| ` + "`--skip-compile`" + ` | boolean | - | Parsed by the native runner |
+`
+
+// Verifies a table row for an option the native runner parses itself is accepted even though no schema property backs it.
+func TestGenerateCatalogAcceptsCliOnlyTableRows(t *testing.T) {
+	catalog := strings.Replace(fixtureCatalogContent, `"tools": [
+    `, `"tools": [
+    `+fixtureRunTestsCatalogEntry, 1)
+	skills := defaultGeneratorSkills()
+	skills["FirstPartyTools/RunTests"] = fixtureRunTestsSkill
+	repositoryRoot := writeGeneratorFixture(t, skills, catalog)
+
+	generated, err := GenerateCatalogWithSkillDescriptions([]byte(catalog), repositoryRoot)
+	if err != nil {
+		t.Fatalf("generation failed: %v", err)
+	}
+	if !strings.Contains(string(generated), `"EditMode or PlayMode"`) {
+		t.Fatalf("the run-tests property description was not replaced:\n%s", generated)
+	}
+}
+
+// Verifies an unparsable catalog, a root with no skills, a catalog missing the table-less tool, a catalog of only table-less tools, a skill without a tool description, and a parameterless tool not on the table-less list each stop generation with their own error.
+func TestGenerateCatalogRejectsInconsistentInputs(t *testing.T) {
+	withoutDescription := strings.Replace(fixtureFocusWindowSkill, "description: \"Bring the Unity Editor window to front.\"\n", "", 1)
+	parameterless := strings.Replace(fixtureCatalogContent, `"Key": {
+            "type": "string",
+            "description": "Stale key description"
+          },
+          "Action": {
+            "type": "string",
+            "description": "Stale action description",
+            "enum": [
+              "Press",
+              "ReleaseAll"
+            ],
+            "default": "Press"
+          },
+          "Duration": {
+            "type": "number",
+            "description": "Stale duration description",
+            "default": 0
+          },
+          `, "", 1)
+	cases := []struct {
+		name    string
+		catalog string
+		skills  map[string]string
+		noRepo  bool
+		wantErr string
+	}{
+		{"unparsable catalog", "{", defaultGeneratorSkills(), false, "failed to parse " + CatalogRelativePath},
+		{"no skills", fixtureCatalogContent, defaultGeneratorSkills(), true, "no skills were found under"},
+		{"table-less tool missing", `{"tools":[{"name":"simulate-keyboard","description":"d","inputSchema":{"type":"object","properties":{}}}]}`, defaultGeneratorSkills(), false, `"focus-window" is allowed to have no parameter table but is not in the catalog`},
+		{"only table-less tools", `{"tools":[{"name":"focus-window","description":"d","inputSchema":{"type":"object","properties":{}}}]}`, defaultGeneratorSkills(), false, "the catalog holds 1 tools, which cannot all be table-less"},
+		{"skill without tool description", fixtureCatalogContent, map[string]string{"FirstPartyTools/SimulateKeyboard": fixtureKeyboardSkill, "CliOnlyTools~/FocusWindow": withoutDescription}, false, "focus-window has a skill with no tool description"},
+		{"parameterless tool not table-less", parameterless, defaultGeneratorSkills(), false, "simulate-keyboard accepts no visible parameters but is not listed as table-less"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			repositoryRoot := writeGeneratorFixture(t, testCase.skills, testCase.catalog)
+			if testCase.noRepo {
+				repositoryRoot = t.TempDir()
+			}
+
+			_, err := GenerateCatalogWithSkillDescriptions([]byte(testCase.catalog), repositoryRoot)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+// Verifies the command fails without writing when the catalog is missing or generation fails, and a second write run reports the catalog as already up to date.
+func TestRunSyncToolDocsReportsEachOutcome(t *testing.T) {
+	t.Run("missing catalog", func(t *testing.T) {
+		stdout := strings.Builder{}
+		stderr := strings.Builder{}
+
+		code := RunSyncToolDocs(&stdout, &stderr, SyncToolDocsConfig{RepositoryRoot: t.TempDir()})
+
+		if code != 1 || !strings.Contains(stderr.String(), "failed to read "+CatalogRelativePath) {
+			t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+		}
+	})
+	t.Run("generation failure", func(t *testing.T) {
+		repositoryRoot := writeGeneratorFixture(t, map[string]string{"CliOnlyTools~/FocusWindow": fixtureFocusWindowSkill}, fixtureCatalogContent)
+		stdout := strings.Builder{}
+		stderr := strings.Builder{}
+
+		code := RunSyncToolDocs(&stdout, &stderr, SyncToolDocsConfig{RepositoryRoot: repositoryRoot})
+
+		if code != 1 || !strings.Contains(stderr.String(), "simulate-keyboard has no skill") {
+			t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+		}
+		content, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(CatalogRelativePath)))
+		if err != nil || string(content) != fixtureCatalogContent {
+			t.Fatalf("the catalog must stay untouched, err = %v", err)
+		}
+	})
+	t.Run("already up to date", func(t *testing.T) {
+		repositoryRoot := writeGeneratorFixture(t, defaultGeneratorSkills(), fixtureCatalogContent)
+		stdout := strings.Builder{}
+		stderr := strings.Builder{}
+		if code := RunSyncToolDocs(&stdout, &stderr, SyncToolDocsConfig{RepositoryRoot: repositoryRoot}); code != 0 {
+			t.Fatalf("first write failed: %s", stderr.String())
+		}
+		stdout.Reset()
+
+		code := RunSyncToolDocs(&stdout, &stderr, SyncToolDocsConfig{RepositoryRoot: repositoryRoot})
+
+		if code != 0 || !strings.Contains(stdout.String(), CatalogRelativePath+" is already up to date.") {
+			t.Fatalf("code = %d, stdout = %q", code, stdout.String())
+		}
+	})
+}

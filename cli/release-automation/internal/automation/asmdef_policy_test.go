@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -408,5 +409,121 @@ func TestRunAsmdefPolicyCheckRejectsMalformedAllowlist(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "reason") {
 		t.Fatalf("stderr did not explain the malformed entry: %q", stderr.String())
+	}
+}
+
+func writeAsmdefRawFile(t *testing.T, root string, relativePath string, content string) {
+	t.Helper()
+	absolutePath := filepath.Join(root, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(absolutePath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Verifies an unparsable .asmdef, an .asmdef without a name, and a .meta without a guid line each fail loading with their own error.
+func TestLoadAsmdefAssembliesRejectsMalformedFiles(t *testing.T) {
+	cases := []struct {
+		name    string
+		asmdef  string
+		meta    string
+		wantErr string
+	}{
+		{"unparsable asmdef", "{", "guid: " + fixtureGUIDDomain + "\n", "parse "},
+		{"asmdef without name", `{"references":[]}`, "guid: " + fixtureGUIDDomain + "\n", "has no assembly name"},
+		{"meta without guid", `{"name":"UnityCLILoop.Domain"}`, "fileFormatVersion: 2\n", "Broken.asmdef.meta has no guid line"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeAsmdefRawFile(t, root, "Packages/src/Editor/Broken.asmdef", testCase.asmdef)
+			writeAsmdefRawFile(t, root, "Packages/src/Editor/Broken.asmdef.meta", testCase.meta)
+
+			_, err := LoadAsmdefAssemblies(root)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+// Verifies the check fails with its prefix when assemblies cannot be loaded, when an assembly has no policy category, and when the allowlist is missing or unparsable.
+func TestRunAsmdefPolicyCheckReportsUnusableInputs(t *testing.T) {
+	cases := []struct {
+		name    string
+		setup   func(t *testing.T, root string) string
+		wantErr string
+	}{
+		{"unloadable assembly", func(t *testing.T, root string) string {
+			writeAsmdefRawFile(t, root, "Packages/src/Editor/Broken.asmdef", "{")
+			return ""
+		}, "check-asmdef-policy: parse "},
+		{"assembly without category", func(t *testing.T, root string) string {
+			writeAsmdefFixture(t, root, asmdefFixture{dir: "Editor/Mystery", name: "UnityCLILoop.Mystery", guid: fixtureGUIDDomain})
+			return ""
+		}, "matches no assembly category"},
+		{"missing allowlist", func(t *testing.T, root string) string {
+			writePolicyFixtureRepository(t, root, []string{guidReference(fixtureGUIDToolContracts)})
+			return filepath.Join(root, "missing-allowlist.json")
+		}, "check-asmdef-policy: read allowlist"},
+		{"unparsable allowlist", func(t *testing.T, root string) string {
+			writePolicyFixtureRepository(t, root, []string{guidReference(fixtureGUIDToolContracts)})
+			writeAsmdefRawFile(t, root, "allowlist.json", "{")
+			return filepath.Join(root, "allowlist.json")
+		}, "check-asmdef-policy: parse allowlist"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := t.TempDir()
+			allowlistPath := testCase.setup(t, root)
+			stdout := bytes.Buffer{}
+			stderr := bytes.Buffer{}
+
+			exitCode := RunAsmdefPolicyCheck(&stdout, &stderr, AsmdefPolicyCheckOptions{Root: root, AllowlistPath: allowlistPath})
+
+			if exitCode != 1 || !strings.Contains(stderr.String(), testCase.wantErr) {
+				t.Fatalf("exit code = %d, expected stderr containing %q, got %q", exitCode, testCase.wantErr, stderr.String())
+			}
+		})
+	}
+}
+
+// Verifies the check reads the repository's default allowlist when no allowlist path is given.
+func TestRunAsmdefPolicyCheckUsesTheDefaultAllowlist(t *testing.T) {
+	root := t.TempDir()
+	writePolicyFixtureRepository(t, root, []string{guidReference(fixtureGUIDToolB)})
+	defaultAllowlistPath := filepath.Join(root, filepath.FromSlash(DefaultAsmdefPolicyAllowlistPath))
+	if err := os.MkdirAll(filepath.Dir(defaultAllowlistPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeAsmdefAllowlist(t, defaultAllowlistPath, []asmdefAllowedReference{
+		{From: toolName("A"), To: toolName("B"), Reason: "pending extraction"},
+	})
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunAsmdefPolicyCheck(&stdout, &stderr, AsmdefPolicyCheckOptions{Root: root})
+
+	if exitCode != 0 {
+		t.Fatalf("expected the default allowlist to cover the violation, got exit %d (stdout %q, stderr %q)", exitCode, stdout.String(), stderr.String())
+	}
+}
+
+// Verifies a package source root whose parent is a file fails loading instead of being treated as an absent package.
+func TestLoadAsmdefAssembliesRejectsAnUnreadableSourceRoot(t *testing.T) {
+	// Windows reports a path through a file as not found, which loading rightly treats as an absent package.
+	if runtime.GOOS == "windows" {
+		t.Skip("a path through a file is reported as not found on Windows")
+	}
+	root := t.TempDir()
+	writeAsmdefRawFile(t, root, "Packages", "x")
+
+	_, err := LoadAsmdefAssemblies(root)
+
+	if err == nil || !strings.Contains(err.Error(), "stat ") {
+		t.Fatalf("expected the stat error, got %v", err)
 	}
 }

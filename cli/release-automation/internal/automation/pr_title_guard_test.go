@@ -1,6 +1,9 @@
 package automation
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Verifies conventional commit titles with common types and forms pass validation.
 func TestCheckPRTitleAcceptsValidConventionalCommitTitles(t *testing.T) {
@@ -62,5 +65,26 @@ func TestCheckPRTitleRejectsUppercaseType(t *testing.T) {
 	title := "Fix: x"
 	if isValid, _ := CheckPRTitle(title); isValid {
 		t.Fatalf("expected %q to be rejected", title)
+	}
+}
+
+// Verifies the guard prints the violation to stderr with exit code 1 for a bad title and the pass line to stdout for a good one.
+func TestRunPRTitleGuardReportsTheOutcome(t *testing.T) {
+	stdout := strings.Builder{}
+	stderr := strings.Builder{}
+	if exitCode := RunPRTitleGuard(&stdout, &stderr, "Update things"); exitCode != 1 {
+		t.Fatalf("expected exit code 1 for a bad title, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), `PR title "Update things" is not a conventional commit header.`) || stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := RunPRTitleGuard(&stdout, &stderr, "fix: handle empty input"); exitCode != 0 {
+		t.Fatalf("expected exit code 0 for a good title, got %d", exitCode)
+	}
+	if stdout.String() != "PR title guard passed.\n" || stderr.Len() != 0 {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
 	}
 }

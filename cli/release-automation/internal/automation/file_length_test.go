@@ -2,8 +2,10 @@ package automation
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -246,5 +248,109 @@ func TestCountSLOCHandlesDoubledQuotesInInterpolatedVerbatimStrings(t *testing.T
 				assertSLOC(t, strings.Replace(testCase.source, "PREFIX", prefix, 1), LanguageCSharp, testCase.want)
 			})
 		}
+	}
+}
+
+// Verifies a non-positive limit falls back to the default, files with other extensions or another root's language are ignored, and upper-case extensions still count.
+func TestRunFileLengthCheckAppliesTheDefaultLimitAndExtensionFilter(t *testing.T) {
+	root := t.TempDir()
+	writeRepoFile(t, root, "cli/notes.txt", goLines(DefaultMaxFileLength+1))
+	writeRepoFile(t, root, "cli/Other.cs", csharpLines(DefaultMaxFileLength+1))
+	writeRepoFile(t, root, "Packages/src/Upper.CS", csharpLines(DefaultMaxFileLength+1))
+	writeRepoFile(t, root, "Packages/src/AtLimit.cs", csharpLines(DefaultMaxFileLength))
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := RunFileLengthCheck(stdout, stderr, FileLengthCheckOptions{Root: root, FailOnExceeded: true})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit 1, got %d (stdout %q)", exitCode, stdout.String())
+	}
+	want := fmt.Sprintf("=== File length (SLOC, max %d) ===\nPackages/src/Upper.CS: %d SLOC (limit %d)\n1 files exceeded", DefaultMaxFileLength, DefaultMaxFileLength+1, DefaultMaxFileLength)
+	if !strings.HasPrefix(stdout.String(), want) {
+		t.Fatalf("stdout = %q, want prefix %q", stdout.String(), want)
+	}
+}
+
+// Verifies a tree with no file over the limit reports success and exits 0 even in fail mode.
+func TestRunFileLengthCheckPassesWhenNothingExceeds(t *testing.T) {
+	root := t.TempDir()
+	writeRepoFile(t, root, "cli/short.go", goLines(2))
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := RunFileLengthCheck(stdout, stderr, FileLengthCheckOptions{Root: root, MaxLength: 2, FailOnExceeded: true})
+
+	if exitCode != 0 || !strings.Contains(stdout.String(), "No files exceeded the file-length limit.") {
+		t.Fatalf("exit code = %d, stdout = %q", exitCode, stdout.String())
+	}
+}
+
+// Verifies a production root that is a file, or whose parent is a file, fails the check instead of being skipped as absent.
+func TestRunFileLengthCheckRejectsUnusableSourceRoots(t *testing.T) {
+	cases := []struct {
+		name     string
+		filePath string
+		wantErr  string
+	}{
+		{"root is a file", "cli", "check-file-length: production source root cli is not a directory"},
+		{"parent is a file", "Packages", "check-file-length: stat "},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Windows reports a path through a file as not found, which the scan rightly treats as an absent root.
+			if testCase.name == "parent is a file" && runtime.GOOS == "windows" {
+				t.Skip("a path through a file is reported as not found on Windows")
+			}
+			root := t.TempDir()
+			writeRepoFile(t, root, testCase.filePath, "x")
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			exitCode := RunFileLengthCheck(stdout, stderr, FileLengthCheckOptions{Root: root})
+
+			if exitCode != 1 || !strings.Contains(stderr.String(), testCase.wantErr) {
+				t.Fatalf("exit code = %d, expected stderr containing %q, got %q", exitCode, testCase.wantErr, stderr.String())
+			}
+		})
+	}
+}
+
+// Verifies the exclusion list matches Tests and testdata trees at the start of a path as well as nested, and _test.go files.
+func TestIsExcludedFromFileLength(t *testing.T) {
+	cases := map[string]bool{
+		"Tests/Sample.cs":              true,
+		"Packages/src/Tests/Sample.cs": true,
+		"testdata/sample.go":           true,
+		"cli/x/testdata/sample.go":     true,
+		"cli/x/sample_test.go":         true,
+		"cli/x/sample.go":              false,
+		"Packages/src/TestsHelper.cs":  false,
+	}
+	for path, want := range cases {
+		if got := isExcludedFromFileLength(path); got != want {
+			t.Fatalf("isExcludedFromFileLength(%q) = %t, want %t", path, got, want)
+		}
+	}
+}
+
+// Verifies C# constructs that change how later lines are read: a lone slash is code, braces nested in an interpolation hole keep the hole open, and escapes and doubled braces stay inside the string.
+func TestCountSLOCTracksCSharpStringAndHoleBoundaries(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+		want   int
+	}{
+		{"division on its own line", "var x = 4\n/ 2;\n", 2},
+		{"nested braces in a hole across lines", "var s = $\"{new { A = 1 }\n// comment inside the hole\n.A}\";\n", 2},
+		{"nested braces in a hole", "var s = $\"{new { A = 1 }.A}\";\n// c\n", 1},
+		{"doubled quote in a verbatim string", "var s = @\"a\"\"\\\";\n// c\n", 1},
+		{"escaped quote in an interpolated string", "var s = $\"\\\\\\\" /* \";\nint x = 1;\n// */\n", 2},
+		{"doubled brace in an interpolated string", "var s = $\"{{ /* \";\nint x = 1;\n// */\n", 2},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertSLOC(t, testCase.source, LanguageCSharp, testCase.want)
+		})
 	}
 }

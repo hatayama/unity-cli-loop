@@ -241,3 +241,38 @@ func assertDifferentShapeDigest(t *testing.T, left string, right string) {
 		t.Fatalf("expected different shape digests, both were %q", leftDigest)
 	}
 }
+
+// Verifies an unparsable base catalog fails the comparison instead of being treated as a shape change.
+func TestToolCatalogShapeChangedRejectsInvalidBase(t *testing.T) {
+	changed, err := ToolCatalogShapeChanged([]byte(`{"tools":[`), []byte(`{"tools":[]}`))
+
+	if err == nil || !strings.Contains(err.Error(), "invalid tool catalog JSON") {
+		t.Fatalf("expected an invalid JSON error, got changed=%t err=%v", changed, err)
+	}
+}
+
+// Verifies catalogs with unexpected structure still hash: descriptions that can be reached are ignored, and every other value still counts as shape.
+func TestToolCatalogShapeDigestHandlesUnexpectedStructure(t *testing.T) {
+	cases := []struct {
+		name     string
+		left     string
+		right    string
+		wantSame bool
+	}{
+		{"tools is not an array", `{"tools":"a"}`, `{"tools":"b"}`, false},
+		{"tool entry is not an object", `{"tools":["a"]}`, `{"tools":["b"]}`, false},
+		{"schema is not an object", `{"tools":[{"name":"x","description":"a","inputSchema":"s"}]}`, `{"tools":[{"name":"x","description":"b","inputSchema":"s"}]}`, true},
+		{"properties is not an object", `{"tools":[{"name":"x","description":"a","inputSchema":{"properties":[1]}}]}`, `{"tools":[{"name":"x","description":"b","inputSchema":{"properties":[1]}}]}`, true},
+		{"property is not an object", `{"tools":[{"name":"x","inputSchema":{"properties":{"A":"a","B":{"description":"a"}}}}]}`, `{"tools":[{"name":"x","inputSchema":{"properties":{"A":"a","B":{"description":"b"}}}}]}`, true},
+		{"non-object property value", `{"tools":[{"name":"x","inputSchema":{"properties":{"A":"a"}}}]}`, `{"tools":[{"name":"x","inputSchema":{"properties":{"A":"b"}}}]}`, false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if testCase.wantSame {
+				assertSameShapeDigest(t, testCase.left, testCase.right)
+				return
+			}
+			assertDifferentShapeDigest(t, testCase.left, testCase.right)
+		})
+	}
+}
