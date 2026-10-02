@@ -67,7 +67,7 @@ internal static class MethodTransformDecider
             && InaccessibleAccessScanner.SubtreeHasInaccessibleMemberAccess(semanticModel, new[] { bodyNode });
         // Why delegation is forced: a transplanted shim body still has to compile as C#, and C#
         // rejects raising or reading an event outside its declaring type whatever its visibility.
-        bool eventAccessorsRequired = EventAccessorRules.BodyRequiresEventAccessors(bodyNode, semanticModel);
+        bool eventAccessorsRequired = EventAccessorRules.BodyRequiresEventAccessors(bodyNode, semanticModel, addedEvents);
 
         if (!closureInaccessible && !asyncIteratorInaccessible && !eventAccessorsRequired)
         {
@@ -90,7 +90,7 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Skip(
                 WorkerReason.Composite(
                     rescuableSkipCode ?? HotReloadWorkerReasonCode.EventAccessorRewriteUnavailable,
-                    accessorRejectReason));
+                    asyncIteratorInaccessible ? AdviseForWholeBody(accessorRejectReason) : accessorRejectReason));
         }
 
         // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
@@ -101,6 +101,19 @@ internal static class MethodTransformDecider
         }
 
         return MethodTransformDecision.Delegation();
+    }
+
+    // Why an async or iterator body drops the '+=' advice: its whole state machine is rewritten,
+    // so leaving the '+= Handler' line and moving other code out still leaves a private access the
+    // rewrite has no shape for; only wrapping the handler in a lambda lets it apply.
+    private static WorkerReason AdviseForWholeBody(WorkerReason accessorRejectReason)
+    {
+        if (accessorRejectReason?.Code != HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape)
+        {
+            return accessorRejectReason;
+        }
+
+        return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape, accessorRejectReason.Args);
     }
 
     // Null when the body needs accessors only for its event uses: there is no skip to rescue.

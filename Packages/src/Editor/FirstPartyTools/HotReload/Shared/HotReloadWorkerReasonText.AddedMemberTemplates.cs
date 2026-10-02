@@ -20,12 +20,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Plain(
                     "Added generic methods are skipped; hot reload cannot emit a typed shim for them.",
                     0).EndingWith(CompileCallToAction));
+            // Why each method-group reason names a step before the compile: a call to an added
+            // method is rewritten, so a lambda applies without leaving Play Mode, and the compile
+            // the reason used to name alone sent readers out of Play Mode for an edit that applies.
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodMethodGroupReference,
                 Plain(
-                    "Methods that capture an added method as a method group or delegate are skipped; "
-                    + "the shim signature does not match.",
-                    0).EndingWith(CompileCallToAction));
+                    "Methods that capture the added method '{0}' as a method group or delegate are "
+                    + "skipped; the shim signature does not match. A call is rewritten, so wrapping the "
+                    + "method group in a lambda that calls it{1} keeps hot reloading; otherwise run "
+                    + "'uloop compile'.",
+                    2));
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodMethodGroupSubscription,
+                Plain(
+                    "Subscribing the added method '{0}' as a method group is skipped; the shim "
+                    + "signature does not match. Subscribe a lambda that calls it instead{1}; to remove "
+                    + "it later, keep that lambda in an added field and use '-=' with the same field. "
+                    + "Otherwise run 'uloop compile'.",
+                    2));
+            // Why no lambda is offered: a lambda on the right of '-=' is a new delegate, so it would
+            // compile and leave the handler subscribed.
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodMethodGroupUnsubscription,
+                Plain(
+                    "Removing the added method '{0}' as a method group with '-=' is skipped; the shim "
+                    + "signature does not match, and a lambda there would remove a different delegate. "
+                    + "Subscribe through a delegate kept in an added field and '-=' that same field, or "
+                    + "run 'uloop compile'.",
+                    1));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedMethodConditionalAccess,
                 Plain(
@@ -149,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver,
                 Plain(
-                    "Assignment to an added field would evaluate a receiver with possible side effects twice.",
+                    "Assignment to an added field or event would evaluate a receiver with possible side effects twice.",
                     0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,

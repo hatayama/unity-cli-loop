@@ -137,6 +137,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Adds to <paramref name="changedFullNames"/> each added field whose committed
+        /// declaration names another type than <paramref name="addedFieldDeclarations"/> does.
+        /// </summary>
+        /// <remarks>
+        /// Why the assembly-qualified name: it spells every generic argument, so Action&lt;int&gt;
+        /// and Action&lt;long&gt; differ, which a simple name would not show.
+        /// </remarks>
+        internal void CollectFieldsWithChangedDeclaredType(
+            IReadOnlyList<HotReloadAddedFieldDeclaration> addedFieldDeclarations,
+            List<string> changedFullNames)
+        {
+            Debug.Assert(changedFullNames != null, "changedFullNames must not be null.");
+            if (addedFieldDeclarations == null)
+            {
+                return;
+            }
+
+            foreach (HotReloadAddedFieldDeclaration declaration in addedFieldDeclarations)
+            {
+                if (declaration == null
+                    || string.IsNullOrEmpty(declaration.DeclaredTypeAssemblyQualifiedName)
+                    || !TryGetDeclaration(declaration.DeclaringTypeName, declaration.FieldName, out HotReloadAddedFieldDeclaration committed)
+                    || string.IsNullOrEmpty(committed.DeclaredTypeAssemblyQualifiedName)
+                    || string.Equals(
+                        committed.DeclaredTypeAssemblyQualifiedName,
+                        declaration.DeclaredTypeAssemblyQualifiedName,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                changedFullNames.Add(NormalizeTypeKey(declaration.DeclaringTypeName) + "." + declaration.FieldName);
+            }
+        }
+
+        /// <summary>
         /// The row describing one added field of <paramref name="typeName"/>, which may be spelled
         /// either way a nested type is spelled.
         /// </summary>

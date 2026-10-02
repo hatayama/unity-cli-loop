@@ -217,6 +217,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "A call is rewritten, so wrapping the method group in a lambda that calls "
                     + "it{1} keeps hot reloading.",
                     2));
+            // Why the added method comes first: a compiled '-= {0}' elsewhere removes only the
+            // method group, so wrapping this handler in a lambda would leave it subscribed for good.
+            // Moving the code that needs private access out of this body leaves the body nothing
+            // to rewrite, so this line applies unchanged.
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape,
+                Plain(
+                    "inaccessible method group '{0}' on the right of '+=' has no accessor rewrite "
+                    + "shape. If compiled code removes it with '-= {0}', leave this line as it is and "
+                    + "move the code here that needs private access (such as a lambda you added) into a "
+                    + "method this reload adds, called from here; otherwise, wrapping the method group in "
+                    + "a lambda that calls it{1} keeps hot reloading.",
+                    2));
             // Why no lambda is offered: a lambda on the right of '-=' is a new delegate, so the
             // rewrite would compile and silently leave the original handler subscribed.
             templates.Add(

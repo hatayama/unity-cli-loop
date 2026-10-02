@@ -1,0 +1,42 @@
+using System;
+using System.Runtime.CompilerServices;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    /// <summary>
+    /// Compiled publisher whose edited copy gains an event in an end-to-end apply, so a patched
+    /// body can raise an event the compiled class does not have.
+    /// </summary>
+    public sealed class HotReloadAddedEventApplyPublisher
+    {
+        public event Action<int> Existing;
+
+        // Written only by a handler an edited body subscribes, so a test can tell that handler ran.
+        public static int LastForwarded;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Raise(int value)
+        {
+            Existing?.Invoke(value);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void RaiseStatic(int value)
+        {
+        }
+
+        // A compiled getter an edit can make raise an added event.
+        public int Probe
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            get { return 0; }
+        }
+
+        // Private, so a body calling it is rewritten through accessor delegates, the path that
+        // must not plan a backing field for an added event.
+        private int Secret()
+        {
+            return 2;
+        }
+    }
+}

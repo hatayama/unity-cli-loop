@@ -790,6 +790,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(updated.FilePath, Is.EqualTo("Assets/Test.cs"));
             Assert.That(updated.LifecycleNote, Is.EqualTo("note"));
         }
+
+        /// <summary>
+        /// What: an indirect note with OnEnable among its callers says how to run the patched body
+        /// on live objects by toggling enabled, and that Awake and Start do not run again that way.
+        /// </summary>
+        [Test]
+        public void Build_OnEnableAmongCallers_AddsTheEnabledToggle()
+        {
+            IReadOnlyList<OneShotCallerClassification> callers =
+                new List<OneShotCallerClassification>
+                {
+                    new OneShotCallerClassification("OnEnable", true),
+                    new OneShotCallerClassification("Awake", true)
+                };
+
+            string note = HotReloadOneShotCallerNoteBuilder.Build("Bind", callers);
+
+            Assert.That(
+                note,
+                Does.EndWith(
+                    " To run it on live objects from OnEnable or OnDisable, set the component's "
+                    + "`enabled` to false and back to true (for example with `uloop execute-dynamic-code`); "
+                    + "Awake and Start do not run again that way."));
+        }
+
+        /// <summary>
+        /// What: an indirect note whose callers are only Awake or Start does not offer the enabled
+        /// toggle, because toggling never runs those again.
+        /// </summary>
+        [Test]
+        public void Build_OnlyAwakeAndStartCallers_DoesNotOfferTheEnabledToggle()
+        {
+            IReadOnlyList<OneShotCallerClassification> callers =
+                new List<OneShotCallerClassification>
+                {
+                    new OneShotCallerClassification("Awake", true),
+                    new OneShotCallerClassification("Start", true)
+                };
+
+            string note = HotReloadOneShotCallerNoteBuilder.Build("Bind", callers);
+
+            Assert.That(note, Does.Not.Contain("`enabled`"));
+        }
+
         /// <summary>
         /// What: one Awake caller produces the caller-aware lifecycle note.
         /// </summary>

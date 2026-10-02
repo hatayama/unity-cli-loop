@@ -254,9 +254,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodMethodGroupReference,
-                NoArgs,
-                "Methods that capture an added method as a method group or delegate are skipped; "
-                + "the shim signature does not match. Run 'uloop compile'.");
+                new[] { "Helper", " (such as 'a => Helper(a)')" },
+                "Methods that capture the added method 'Helper' as a method group or delegate are "
+                + "skipped; the shim signature does not match. A call is rewritten, so wrapping the "
+                + "method group in a lambda that calls it (such as 'a => Helper(a)') keeps hot "
+                + "reloading; otherwise run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodMethodGroupSubscription,
+                new[] { "Helper", " (such as 'a => Helper(a)')" },
+                "Subscribing the added method 'Helper' as a method group is skipped; the shim "
+                + "signature does not match. Subscribe a lambda that calls it instead (such as "
+                + "'a => Helper(a)'); to remove it later, keep that lambda in an added field and use "
+                + "'-=' with the same field. Otherwise run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodMethodGroupUnsubscription,
+                new[] { "Helper" },
+                "Removing the added method 'Helper' as a method group with '-=' is skipped; the shim "
+                + "signature does not match, and a lambda there would remove a different delegate. "
+                + "Subscribe through a delegate kept in an added field and '-=' that same field, or "
+                + "run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodConditionalAccess,
                 NoArgs,
@@ -360,7 +376,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldDoubleEvalReceiver,
                 NoArgs,
-                "Assignment to an added field would evaluate a receiver with possible side effects twice. "
+                "Assignment to an added field or event would evaluate a receiver with possible side effects twice. "
                 + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldDeconstructionTarget,
@@ -688,6 +704,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "inaccessible method group 'Helper' (non-invocation) has no accessor rewrite shape. "
                 + "A call is rewritten, so wrapping the method group in a lambda that calls it "
                 + "keeps hot reloading.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape,
+                new[] { "Helper", " (such as 'a => Helper(a)')" },
+                "inaccessible method group 'Helper' on the right of '+=' has no accessor rewrite "
+                + "shape. If compiled code removes it with '-= Helper', leave this line as it is and "
+                + "move the code here that needs private access (such as a lambda you added) into a "
+                + "method this reload adds, called from here; otherwise, wrapping the method group in "
+                + "a lambda that calls it (such as 'a => Helper(a)') keeps hot reloading.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape,
                 new[] { "Helper" },

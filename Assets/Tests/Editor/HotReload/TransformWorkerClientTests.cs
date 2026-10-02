@@ -1928,6 +1928,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 awakeEntry.lifecycleNote,
                 Does.Contain("A method hot reload added or patched that calls it runs the patched body."));
+            Assert.That(awakeEntry.lifecycleNote, Does.Not.Contain(ReEnableNoteFragment));
+        }
+
+        // The sentence only an OnEnable / OnDisable note carries: toggling enabled re-runs those two
+        // on live objects, and Awake or Start never run again that way.
+        private const string ReEnableNoteFragment = "set the component's `enabled` to false and back to true";
+
+        /// <summary>
+        /// What: patching OnEnable or OnDisable emits a direct note that tells how to run the patched
+        /// body on live objects by toggling enabled, instead of saying only new objects run it.
+        /// </summary>
+        [TestCase("OnEnable", "_count++;", "_count += 2;")]
+        [TestCase("OnDisable", "_count--;", "_count -= 2;")]
+        public async Task Run_WithOnEnableOrOnDisable_EmitsDirectNoteThatTogglesEnabled(
+            string methodName,
+            string originalStatement,
+            string editedStatement)
+        {
+            string source =
+                "using UnityEngine;\n"
+                + "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n{\n"
+                + "public class HotReloadLifecycleOnEnableFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private int _count;\n\n"
+                + "    private void OnEnable()\n    {\n        _count++;\n    }\n\n"
+                + "    private void OnDisable()\n    {\n        _count--;\n    }\n"
+                + "}\n}\n";
+            source = source.Replace(originalStatement, editedStatement);
+
+            TransformWorkerEntryDto entry =
+                await RunWorkerAndFindEntryAsync(source, "LifecycleOnEnable.cs", methodName);
+            Assert.That(entry.lifecycleNote, Does.Contain(methodName + " is a one-shot lifecycle method"));
+            Assert.That(entry.lifecycleNote, Does.Contain(ReEnableNoteFragment));
+            Assert.That(entry.lifecycleNote, Does.Not.Contain("only for newly created objects"));
         }
 
         private const string ExpectedUnsupportedMemberKindSkipReason =

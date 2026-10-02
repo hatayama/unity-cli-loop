@@ -63,7 +63,8 @@ changed are patched (`UnchangedTotal` counts the rest).
 ## Scope in Brief
 
 - Patched: ordinary method bodies and property getters with a body.
-- Added members: new methods, fields, and supported properties apply as `Added` rows,
+- Added members: new methods, fields, and supported properties apply as `Added` rows
+  (supported field-like events of a class are listed in `AddedFields`),
   visible to edited code of the same reload within the same assembly (pass the declaring
   file and its callers together), and gone on any compile or domain reload.
 - New types: a top-level class, struct, enum, or interface declared in an edited
@@ -88,7 +89,10 @@ While hot-reload changes are active, `AutoRefreshHeld` is true so returning focu
 recompile; `uloop compile` releases the hold, and `--revert-all` only when no introduced type
 remains.
 One-shot methods (`Awake`, `Start`, init helpers) patch but show no effect on the call that
-already ran; the response marks them with `LifecycleNote`.
+already ran; the response marks them with `LifecycleNote`. To re-run an edited compiled
+`OnEnable`, set `enabled = false` with `execute-dynamic-code`, reload, then set it back to `true`
+(Unity calls the old `OnDisable`, then the patched `OnEnable`). An edited `OnDisable` runs the
+next time the component is disabled; to run it now, toggle `enabled` after the reload.
 To tune a value while playing, expose a static property getter instead of a `const`; its
 body is patched on compiled and introduced types alike.
 

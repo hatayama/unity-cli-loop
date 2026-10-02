@@ -41,8 +41,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // The part of the hint that says a constructor is one of the places no patch can reach.
         private const string UnpatchableBodiesHintCore =
-            "Constructors, initializers, setters, indexers, operators, event accessors and "
-            + "subscriptions to an added event cannot.";
+            "Constructors, initializers, setters, indexers, operators and event accessors cannot";
+
+        // The part of the hint that sends a subscription to an added event outside the
+        // added-field store to a compile, the only step that makes that subscription bind.
+        private const string StorelessEventHintCore =
+            "A subscription to an added event the added-field store cannot hold (custom add/remove "
+            + "accessors, or a delegate type not visible outside the assembly) needs 'uloop compile' "
+            + "wherever it is written.";
+
+        private const string StorelessEventName = "AddedWithAccessors";
 
         private static readonly string CompiledTypeAddedMember =
             "        public int " + CompiledTypeAddedMethodName + "()\n"
@@ -74,6 +82,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "ConstructorSameReload");
 
                 AssertFailsWithHint(result);
+            });
+        }
+
+        /// <summary>
+        /// What: a new type whose method subscribes to an event the same reload adds to a compiled
+        /// type with custom accessors fails to compile, because that event stays out of the
+        /// added-field store, and the hint names that subscription as one that cannot be made.
+        /// </summary>
+        [Test]
+        public async Task Run_NewTypeSubscribesToAnAddedEventOutsideTheStore_FailsWithTheEventHint()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string host = File.ReadAllText(hostPath);
+            Assert.That(host, Does.Contain(HostValueAnchor), "Precondition: host value anchor must exist.");
+            host = host.Replace(
+                HostValueAnchor,
+                "        public event System.Action<int> " + StorelessEventName + "\n"
+                + "        {\n            add { }\n            remove { }\n        }\n\n" + HostValueAnchor,
+                StringComparison.Ordinal);
+
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult result = await RunAsync(
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = host,
+                        [UserOwnerPath] = BuildStatementUserSource(
+                            "new HotReloadCrossFileAddedMemberHost()." + StorelessEventName + " += value => { };")
+                    },
+                    "StorelessEventSameReload");
+
+                string reason = FindIntroducedTypeFailureReason(result, "CS1061");
+                Assert.That(reason, Does.Contain(HintCore), DescribeOutcomes(result));
+                Assert.That(reason, Does.Contain(StorelessEventHintCore), DescribeOutcomes(result));
             });
         }
 
@@ -214,6 +256,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        public int Run()\n"
                 + "        {\n"
                 + "            return " + expression + ";\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        }
+
+        private static string BuildStatementUserSource(string statement)
+        {
+            return
+                "namespace " + Namespace + "\n"
+                + "{\n"
+                + "    public sealed class " + UserSimpleName + "\n"
+                + "    {\n"
+                + "        public int Run()\n"
+                + "        {\n"
+                + "            " + statement + "\n"
+                + "            return 0;\n"
                 + "        }\n"
                 + "    }\n"
                 + "}\n";

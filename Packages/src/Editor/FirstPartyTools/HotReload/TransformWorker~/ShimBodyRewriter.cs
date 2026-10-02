@@ -297,7 +297,8 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitAssignmentExpression(node);
         }
 
-        AddedFieldBinding assignedField = AddedFields.FindStoreBinding(_semanticModel.GetSymbolInfo(node.Left).Symbol);
+        AddedFieldBinding assignedField = AddedFields.FindStoreBinding(
+            _semanticModel.GetSymbolInfo(AssignmentTargetRules.Unparenthesized(node.Left)).Symbol);
         if (assignedField != null)
         {
             return AddedFields.RewriteAddedFieldAssignment(node, assignedField);

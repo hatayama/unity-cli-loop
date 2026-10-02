@@ -233,10 +233,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "only from its methods and get-only properties, and only when the file that "
                     + "declares the addition belongs to the same assembly and is part of this "
                     + "reload: passed, or unchanged since it was last applied. Constructors, "
-                    + "initializers, setters, indexers, operators, event accessors and "
-                    + "subscriptions to an added event cannot. Pass that file too or move the call "
+                    + "initializers, setters, indexers, operators and event accessors cannot. Pass that "
+                    + "file too or move the call "
                     + "into a method, or run 'uloop compile' to make the added members compiled, "
-                    + "then rerun."));
+                    + "then rerun. A subscription to an added event the added-field store cannot hold "
+                    + "(custom add/remove accessors, or a delegate type not visible outside the "
+                    + "assembly) needs 'uloop compile' wherever it is written."));
         }
 
         /// <summary>
@@ -383,7 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadIntroducedTypeAddedMemberNames(new[] { "Clear" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
-            Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
+            Assert.That(rows[0].Reason, Does.EndWith("needs 'uloop compile' wherever it is written."));
         }
 
         /// <summary>
@@ -411,7 +413,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadIntroducedTypeAddedMemberNames(new[] { "Reset" }, Array.Empty<string>()));
 
             Assert.That(rows, Has.Count.EqualTo(1));
-            Assert.That(rows[0].Reason, Does.EndWith("then rerun."));
+            Assert.That(rows[0].Reason, Does.EndWith("needs 'uloop compile' wherever it is written."));
         }
 
         /// <summary>

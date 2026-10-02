@@ -16,9 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// EditMode coverage for a body that subscribes to an event: a subscription to an event the
-    /// same edit adds is skipped with a reason that asks for a compile, because the shim is
-    /// compiled against the assembly that has no such event, while a subscription to an event the
-    /// compiled assembly already has is left alone.
+    /// same edit adds goes to the added-field store, and one to an event the compiled assembly
+    /// already has stays on the event's accessors. Either way the method is applied unless its
+    /// handler is a shape the shim cannot build.
     /// </summary>
     public class TransformWorkerAddedEventSubscriptionTests
     {
@@ -36,14 +36,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string SubscriberMethodAnchor = "        public int Received => _received;";
         private const string WireBody = "            publisher.Existing += Accept;";
         private const string AddedEvent = "\n        public event Action<int> Changed;";
+        private const string ChangedKey = PublisherTypeName + "::Changed";
         private const string AddedInnerEvent = "\n            public event Action<int> InnerChanged;";
 
         /// <summary>
-        /// What: an added method that subscribes a private method group to an event this edit adds
-        /// is skipped with the added-event reason, which names the event and offers no lambda.
+        /// What: an added method that subscribes a compiled private method group to an event this
+        /// edit adds is no longer refused for the event; it is refused for the private method
+        /// group, whose reason offers the lambda that does apply.
         /// </summary>
         [Test]
-        public async Task Run_AddedMethodSubscribesMethodGroupToAddedEvent_SkipsNamingTheEvent()
+        public async Task Run_AddedMethodSubscribesMethodGroupToAddedEvent_SkipsNamingTheMethodGroup()
         {
             TransformWorkerClientResult result = await RunAsync(
                 WithAddedEvent(),
@@ -54,23 +56,113 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             TransformWorkerSkippedDto skipped = FindSkipped(result, "WireChanged");
             Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
-            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent));
+            Assert.That(skipped.reason.code, Is.Not.EqualTo(HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent));
             string reason = HotReloadWorkerReasonText.Render(skipped.reason);
-            Assert.That(
-                reason,
-                Is.EqualTo(
-                    "Subscribes to the event '" + PublisherTypeName + ".Changed', which this edit adds; "
-                    + "the compiled assembly has no such event yet, so the subscription cannot bind "
-                    + "until 'uloop compile'."));
-            Assert.That(reason, Does.Not.Contain("lambda"));
+            Assert.That(reason, Does.Contain("OnValue").And.Contain("lambda"), reason);
         }
 
         /// <summary>
-        /// What: subscribing a lambda to an event this edit adds is skipped the same way, so
-        /// following a lambda hint does not end in a failed shim compile.
+        /// What: a method group of an added method is skipped with the reason that fits where it is
+        /// used: a '+=' handler is told to subscribe a lambda, a '-=' handler is told to remove a
+        /// kept delegate instead of a lambda, and any other use is told to wrap it in a lambda.
+        /// </summary>
+        [TestCase(
+            "publisher.Existing += AddedHandler;",
+            nameof(HotReloadWorkerReasonCode.AddedMethodMethodGroupSubscription),
+            "a => AddedHandler(a)")]
+        [TestCase(
+            "publisher.Existing -= AddedHandler;",
+            nameof(HotReloadWorkerReasonCode.AddedMethodMethodGroupUnsubscription),
+            "added field")]
+        [TestCase(
+            "System.Action<int> handler = AddedHandler;\n            handler(1);",
+            nameof(HotReloadWorkerReasonCode.AddedMethodMethodGroupReference),
+            "a => AddedHandler(a)")]
+        public async Task Skip_AddedMethodGroup_ReasonFitsWhereItIsUsed(
+            string body,
+            string expectedCode,
+            string expectedAdvice)
+        {
+            TransformWorkerClientResult result = await RunAsync(
+                ReadOnDisk(PublisherFileName),
+                WithSubscriberMethod(
+                    "public void AddedHandler(int value)\n        {\n            Accept(value);\n        }\n\n"
+                    + "        public void WireAdded(HotReloadAddedEventPublisher publisher)\n        {\n"
+                    + "            " + body + "\n        }"));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "WireAdded");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.code.ToString(), Is.EqualTo(expectedCode), reason);
+            Assert.That(reason, Does.Contain(expectedAdvice), reason);
+        }
+
+        /// <summary>
+        /// What: an edited compiled method that keeps a compiled private method group on the right
+        /// of '+=' and adds a lambda calling a private member is skipped with advice to move the
+        /// added code into an added method, not to wrap the existing handler in a lambda that a
+        /// compiled '-=' could no longer remove.
         /// </summary>
         [Test]
-        public async Task Run_AddedMethodSubscribesLambdaToAddedEvent_Skips()
+        public async Task Skip_PrivateHandlerKeptBesideAddedLambda_AdvisesAnAddedMethod()
+        {
+            string subscriber = ReadOnDisk(SubscriberFileName);
+            Assert.That(subscriber, Does.Contain(WireBody), "Precondition: Wire body must exist.");
+            subscriber = subscriber.Replace(
+                WireBody,
+                "            publisher.Existing += OnValue;\n"
+                + "            publisher.Existing += value => OnValue(value + 1);",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunAsync(ReadOnDisk(PublisherFileName), subscriber);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Wire");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupSubscribeNoShape),
+                reason);
+            Assert.That(reason, Does.Contain("method this reload adds"), reason);
+        }
+
+        /// <summary>
+        /// What: in an iterator, whose whole body is rewritten when it touches a private member, a
+        /// compiled private method group on the right of '+=' keeps the lambda advice: leaving the
+        /// line and moving other code out would not make the body apply.
+        /// </summary>
+        [Test]
+        public async Task Skip_PrivateHandlerInIterator_KeepsTheLambdaAdvice()
+        {
+            string subscriber = ReadOnDisk(SubscriberFileName);
+            const string iteratorBody = "            yield return null;\n        }\n\n        public void Accept";
+            Assert.That(subscriber, Does.Contain(iteratorBody), "Precondition: WireLater body must exist.");
+            subscriber = subscriber.Replace(
+                iteratorBody,
+                "            publisher.Existing += OnValue;\n" + iteratorBody,
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunAsync(ReadOnDisk(PublisherFileName), subscriber);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "WireLater");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row.\n" + FormatSkipped(result));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape),
+                reason);
+        }
+
+        /// <summary>
+        /// What: an added method that subscribes a lambda to an event this edit adds is applied.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodSubscribesLambdaToAddedEvent_IsApplied()
         {
             TransformWorkerClientResult result = await RunAsync(
                 WithAddedEvent(),
@@ -78,15 +170,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public void WireChanged(HotReloadAddedEventPublisher publisher)\n        {\n"
                     + "            publisher.Changed += value => OnValue(value);\n        }"));
 
-            AssertSkippedForAddedEvent(result, "WireChanged");
+            AssertAppliedThroughStore(result, "WireChanged", ChangedKey);
         }
 
         /// <summary>
-        /// What: an existing method whose edited body subscribes to an event this edit adds is
-        /// skipped instead of producing an entry whose shim cannot compile.
+        /// What: an existing method whose edited body subscribes a compiled public method group to
+        /// an event this edit adds is applied through the store.
         /// </summary>
         [Test]
-        public async Task Run_ExistingMethodSubscribesToAddedEvent_Skips()
+        public async Task Run_ExistingMethodSubscribesToAddedEvent_IsApplied()
         {
             string subscriber = ReadOnDisk(SubscriberFileName);
             Assert.That(subscriber, Does.Contain(WireBody), "Precondition: Wire body anchor must exist.");
@@ -94,16 +186,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WithAddedEvent(),
                 subscriber.Replace(WireBody, "            publisher.Changed += Accept;", StringComparison.Ordinal));
 
-            AssertSkippedForAddedEvent(result, "Wire");
-            Assert.That(FindEntry(result, "Wire"), Is.Null, "The subscription must not be emitted as an entry.");
+            AssertAppliedThroughStore(result, "Wire", ChangedKey);
         }
 
         /// <summary>
-        /// What: a method of the publisher itself that subscribes to the event this edit adds to it
-        /// is skipped the same way.
+        /// What: a method of the publisher itself that subscribes a compiled method group to the
+        /// event this edit adds to it is applied through the store.
         /// </summary>
         [Test]
-        public async Task Run_PublisherSubscribesToItsOwnAddedEvent_Skips()
+        public async Task Run_PublisherSubscribesToItsOwnAddedEvent_IsApplied()
         {
             string publisher = WithAddedEvent();
             Assert.That(publisher, Does.Contain(PublisherMethodAnchor), "Precondition: method anchor must exist.");
@@ -115,15 +206,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal),
                 ReadOnDisk(SubscriberFileName));
 
-            AssertSkippedForAddedEvent(result, "SelfWire");
+            AssertAppliedThroughStore(result, "SelfWire", ChangedKey, PublisherTypeName);
         }
 
         /// <summary>
-        /// What: a nested type's event this edit adds is recognized as added, because the compiled
-        /// nested type is looked up by its reflection name rather than its source spelling.
+        /// What: a nested type's event this edit adds is recognized as added and keyed by the
+        /// nested type's metadata name, because the compiled nested type is looked up by its
+        /// reflection name rather than its source spelling.
         /// </summary>
         [Test]
-        public async Task Run_AddedMethodSubscribesToAddedNestedEvent_SkipsNamingTheNestedEvent()
+        public async Task Run_AddedMethodSubscribesToAddedNestedEvent_UsesTheNestedKey()
         {
             string publisher = ReadOnDisk(PublisherFileName);
             Assert.That(publisher, Does.Contain(InnerEventAnchor), "Precondition: nested event anchor must exist.");
@@ -133,10 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "public void WireInner(HotReloadAddedEventPublisher.Inner inner)\n        {\n"
                     + "            inner.InnerChanged += Accept;\n        }"));
 
-            AssertSkippedForAddedEvent(result, "WireInner");
-            Assert.That(
-                HotReloadWorkerReasonText.Render(FindSkipped(result, "WireInner").reason),
-                Does.Contain("'" + PublisherTypeName + ".Inner.InnerChanged'"));
+            AssertAppliedThroughStore(result, "WireInner", PublisherTypeName + "/Inner::InnerChanged");
         }
 
         /// <summary>
@@ -175,15 +264,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, "WireLowMemory"), Is.Not.Null, "Missing entry.\n" + FormatSkipped(result));
         }
 
-        private static void AssertSkippedForAddedEvent(TransformWorkerClientResult result, string methodName)
+        private static void AssertAppliedThroughStore(
+            TransformWorkerClientResult result,
+            string methodName,
+            string storeKey,
+            string typeMetadataName = SubscriberTypeMetadataName)
         {
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName);
-            Assert.That(skipped, Is.Not.Null, "Missing skipped row for " + methodName + ".\n" + FormatSkipped(result));
+            Assert.That(FindSkipped(result, methodName), Is.Null, "Unexpected skip.\n" + FormatSkipped(result));
             Assert.That(
-                skipped.reason.code,
-                Is.EqualTo(HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent),
-                HotReloadWorkerReasonText.Render(skipped.reason));
+                FindEntry(result, methodName, typeMetadataName),
+                Is.Not.Null,
+                "Missing entry for " + methodName + ".\n" + FormatSkipped(result));
+            Assert.That(result.Output.shimSource, Does.Contain("\"" + storeKey + "\""));
         }
 
         private static string WithAddedEvent()
@@ -210,11 +303,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return File.ReadAllText(path);
         }
 
-        private static TransformWorkerEntryDto FindEntry(TransformWorkerClientResult result, string methodName)
+        private static TransformWorkerEntryDto FindEntry(
+            TransformWorkerClientResult result,
+            string methodName,
+            string typeMetadataName = SubscriberTypeMetadataName)
         {
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
-                if (entry.typeMetadataName == SubscriberTypeMetadataName && entry.methodName == methodName)
+                if (entry.typeMetadataName == typeMetadataName && entry.methodName == methodName)
                 {
                     return entry;
                 }

@@ -233,6 +233,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Adds to <paramref name="changedFullNames"/> each added field this generation already
+        /// holds under another declared type. Has to run before the generation starts, as the
+        /// initializer comparison does.
+        /// </summary>
+        internal void CollectAddedFieldsWithChangedDeclaredType(
+            IReadOnlyList<HotReloadAddedFieldDeclaration> addedFieldDeclarations,
+            List<string> changedFullNames)
+        {
+            _addedFields.CollectFieldsWithChangedDeclaredType(addedFieldDeclarations, changedFullNames);
+        }
+
+        /// <summary>
         /// The row describing one added field of <paramref name="typeName"/>, which may be spelled
         /// either way a nested type is spelled.
         /// </summary>

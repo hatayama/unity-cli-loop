@@ -23,9 +23,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 internal static class EventAccessorRules
 {
     /// <summary>
-    /// What: the skip reason for a body's event uses, or null when every use is either a
-    /// subscription (+= / -=) to an event the compiled assembly already has, or rewritable
-    /// through the backing field.
+    /// What: the skip reason for a body's event uses, or null when every use is a subscription
+    /// (+= / -=) to an event the compiled assembly already has, rewritable through the backing
+    /// field, or a use of an added event the added-field store keeps.
     /// </summary>
     internal static WorkerReason EvaluateEventUseSkipReason(
         SyntaxNode bodyNode,
@@ -35,38 +35,9 @@ internal static class EventAccessorRules
     {
         foreach (EventUse use in EnumerateEventUses(bodyNode, semanticModel))
         {
-            if (use.IsSubscription)
-            {
-                if (addedEvents.IsAddedInThisEdit(use.EventSymbol))
-                {
-                    return WorkerReason.Of(
-                        HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
-                        use.EventSymbol.ContainingType.ToDisplayString() + "." + use.EventSymbol.Name);
-                }
-
-                continue;
-            }
-
-            if (NameofRules.IsInsideNameofArgument(use.Node))
-            {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.EventNameof);
-            }
-
-            // 'a?.E' binds the event on a receiver the shim has no name for, so the accessor
-            // call cannot be built and the raw event access would reach the shim source.
-            if (use.Node is MemberBindingExpressionSyntax)
-            {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.EventConditionalReceiver);
-            }
-
-            // The rewrite turns the event read into a cast of an accessor call, and C# cannot
-            // pass that by reference, so the shim would fail to compile instead of skipping.
-            if (IsPassedByRef(use.Node))
-            {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.EventPassedByRef);
-            }
-
-            WorkerReason reason = EvaluateEventSkipReason(use.EventSymbol, compiledType);
+            WorkerReason reason = addedEvents.IsStoreBacked(use.EventSymbol)
+                ? EvaluateStoreBackedUseSkipReason(use)
+                : EvaluateAccessorUseSkipReason(use, compiledType, addedEvents);
             if (reason != null)
             {
                 return reason;
@@ -78,19 +49,96 @@ internal static class EventAccessorRules
 
     /// <summary>
     /// What: whether the body needs the event rewrite, which forces delegation even when nothing
-    /// else in the body is inaccessible (a transplanted shim would not compile).
+    /// else in the body is inaccessible (a transplanted shim would not compile). An added event
+    /// the store keeps does not: its uses become store calls any assembly can compile.
     /// </summary>
-    internal static bool BodyRequiresEventAccessors(SyntaxNode bodyNode, SemanticModel semanticModel)
+    internal static bool BodyRequiresEventAccessors(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedEventLookup addedEvents)
     {
         foreach (EventUse use in EnumerateEventUses(bodyNode, semanticModel))
         {
-            if (!use.IsSubscription && !NameofRules.IsInsideNameofArgument(use.Node))
+            if (!use.IsSubscription
+                && !NameofRules.IsInsideNameofArgument(use.Node)
+                && !addedEvents.IsStoreBacked(use.EventSymbol))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    // The store rewrite covers subscribing, raising, reading, and assigning; what is left are the
+    // shapes it has no receiver or no variable for.
+    private static WorkerReason EvaluateStoreBackedUseSkipReason(EventUse use)
+    {
+        // 'a?.E' has no receiver name the store call could take, for a subscription as for a read.
+        if (use.Node is MemberBindingExpressionSyntax)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventConditionalReceiver);
+        }
+
+        if (use.IsSubscription)
+        {
+            return null;
+        }
+
+        if (NameofRules.IsInsideNameofArgument(use.Node))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventNameof);
+        }
+
+        // A store read is a call result, which C# cannot pass by reference.
+        if (IsPassedByRef(use.Node))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventPassedByRef);
+        }
+
+        return null;
+    }
+
+    private static WorkerReason EvaluateAccessorUseSkipReason(
+        EventUse use,
+        INamedTypeSymbol compiledType,
+        AddedEventLookup addedEvents)
+    {
+        if (use.IsSubscription)
+        {
+            if (!addedEvents.IsAddedInThisEdit(use.EventSymbol))
+            {
+                return null;
+            }
+
+            // Why the visibility reason first: it is the one a reader can act on without a
+            // compile, while the added-event reason only says the event is new.
+            return DescribeInvisibleEvent(use.EventSymbol)
+                ?? WorkerReason.Of(
+                    HotReloadWorkerReasonCode.EventSubscriptionToAddedEvent,
+                    use.EventSymbol.ContainingType.ToDisplayString() + "." + use.EventSymbol.Name);
+        }
+
+        if (NameofRules.IsInsideNameofArgument(use.Node))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventNameof);
+        }
+
+        // 'a?.E' binds the event on a receiver the shim has no name for, so the accessor
+        // call cannot be built and the raw event access would reach the shim source.
+        if (use.Node is MemberBindingExpressionSyntax)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventConditionalReceiver);
+        }
+
+        // The rewrite turns the event read into a cast of an accessor call, and C# cannot
+        // pass that by reference, so the shim would fail to compile instead of skipping.
+        if (IsPassedByRef(use.Node))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventPassedByRef);
+        }
+
+        return EvaluateEventSkipReason(use.EventSymbol, compiledType);
     }
 
     /// <summary>
@@ -109,8 +157,11 @@ internal static class EventAccessorRules
             || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
     }
 
-    /// <summary>Whether the expression is the handler removed by a '-=' assignment.</summary>
-    internal static bool IsUnsubscribeOperand(ExpressionSyntax operand)
+    /// <summary>
+    /// The kind of the '+=' or '-=' assignment whose handler the expression is, or
+    /// SyntaxKind.None when the expression is not such a handler.
+    /// </summary>
+    internal static SyntaxKind FindHandlerAssignmentKind(ExpressionSyntax operand)
     {
         // Why parentheses and one cast are looked past: '-= (Handler)' and '-= (Action)Handler'
         // still remove the delegate the method group converts to.
@@ -129,9 +180,14 @@ internal static class EventAccessorRules
             }
         }
 
-        return unwrapped.Parent is AssignmentExpressionSyntax assignment
-            && assignment.Right == unwrapped
-            && assignment.IsKind(SyntaxKind.SubtractAssignmentExpression);
+        if (unwrapped.Parent is not AssignmentExpressionSyntax assignment
+            || assignment.Right != unwrapped
+            || !IsSubscriptionAssignment(assignment))
+        {
+            return SyntaxKind.None;
+        }
+
+        return assignment.Kind();
     }
 
     private static bool IsPassedByRef(SyntaxNode eventUseNode)
@@ -163,15 +219,26 @@ internal static class EventAccessorRules
             return WorkerReason.Of(HotReloadWorkerReasonCode.EventCustomAccessor);
         }
 
-        if (!AccessibilityRules.IsExternallyVisibleType(eventSymbol.Type)
-            || !AccessibilityRules.IsExternallyVisibleType(eventSymbol.ContainingType))
+        WorkerReason invisible = DescribeInvisibleEvent(eventSymbol);
+        if (invisible != null)
         {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.EventDelegateTypeNotVisible);
+            return invisible;
         }
 
         if (!CompiledBackingFieldExists(eventSymbol, compiledType))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.EventAddedInThisEdit);
+        }
+
+        return null;
+    }
+
+    private static WorkerReason DescribeInvisibleEvent(IEventSymbol eventSymbol)
+    {
+        if (!AccessibilityRules.IsExternallyVisibleType(eventSymbol.Type)
+            || !AccessibilityRules.IsExternallyVisibleType(eventSymbol.ContainingType))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.EventDelegateTypeNotVisible);
         }
 
         return null;
@@ -272,9 +339,16 @@ internal static class EventAccessorRules
                 effective = parentBinding;
             }
 
-            bool isSubscription = effective.Parent is AssignmentExpressionSyntax assignment
+            // Why parentheses are looked past: '(E) += h' subscribes as 'E += h' does.
+            SyntaxNode assignedSide = effective;
+            while (assignedSide.Parent is ParenthesizedExpressionSyntax parenthesized)
+            {
+                assignedSide = parenthesized;
+            }
+
+            bool isSubscription = assignedSide.Parent is AssignmentExpressionSyntax assignment
                 && IsSubscriptionAssignment(assignment)
-                && assignment.Left == effective;
+                && assignment.Left == assignedSide;
             yield return new EventUse(effective, eventSymbol, isSubscription);
         }
     }

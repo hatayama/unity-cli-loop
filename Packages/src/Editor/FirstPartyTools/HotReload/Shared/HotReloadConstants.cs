@@ -330,6 +330,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "read yet; assign the value inside a patched method (for a reference type, "
             + "'if (field == null) field = ...;'), rename the field, or run 'uloop compile'.";
 
+        // Why a warning: the store keeps a value under the field's key whatever its type, and a
+        // read with a type that cannot hold it starts over from the initializer, so a value (for
+        // an added event, its subscribers) is silently gone. The run is the only place that sees
+        // both declarations.
+        public const string AddedFieldDeclaredTypeChangedWarningFormat =
+            "A previous reload already added these fields with a different type, so a value stored "
+            + "under the old type is replaced by the initializer (or the default) wherever the new "
+            + "type cannot hold it; an added event loses its subscribers unless the new delegate type "
+            + "can still be read from the old one: {0}. Assign or subscribe "
+            + "again inside a patched method, or run 'uloop compile'.";
+
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
 
@@ -541,7 +552,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The row must also say how to trigger the next call, because for
         // initialization-only methods that is the non-obvious step.
         public const string ActivePatchNeverInvokedReason =
-            "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, or run 'uloop compile' and enter Play Mode again.";
+            "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, toggle the component's `enabled` to false and back to true when it runs from OnEnable or OnDisable (for example with `uloop execute-dynamic-code`), or run 'uloop compile' and enter Play Mode again.";
 
         // Format: replacement display name for an Active row whose compiled signature was
         // replaced in a later edit. Supersedes ActivePatchNeverInvokedReason when both apply.

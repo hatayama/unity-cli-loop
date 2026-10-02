@@ -302,10 +302,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an event declared in this edit has no backing field in the compiled assembly, so
-        /// the raiser is skipped with a reason that names compiling as the way forward.
+        /// the raiser reads it from the added-field store instead of a backing-field accessor.
         /// </summary>
         [Test]
-        public async Task Skip_EventAddedInThisEdit_ReportsMissingCompiledBackingField()
+        public async Task Rewrite_EventAddedInThisEdit_RaisesThroughTheAddedFieldStore()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -323,10 +323,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(
-                result,
-                nameof(HotReloadEventAccessorHost.RaiseScored),
-                "the compiled assembly has no backing field yet");
+            Assert.That(FindEntry(result, nameof(HotReloadEventAccessorHost.RaiseScored)), Is.Not.Null);
+            Assert.That(result.Output.shimSource, Does.Contain("HotReloadAddedFieldStore"));
+            Assert.That(result.Output.shimSource, Does.Contain("::AddedScored\""));
+            Assert.That(result.Output.shimSource, Does.Not.Contain("AddedScored?.Invoke"));
         }
 
         /// <summary>

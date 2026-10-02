@@ -11,11 +11,13 @@ internal sealed class AddedMemberAccessLookup
     private readonly INamedTypeSymbol _typeSymbol;
     private readonly INamedTypeSymbol _compiledType;
     private readonly AddedPropertyCatalog _addedPropertyCatalog;
+    private readonly AddedEventLookup _addedEvents;
 
     public AddedMemberAccessLookup(
         INamedTypeSymbol typeSymbol,
         INamedTypeSymbol compiledType,
-        AddedPropertyCatalog addedPropertyCatalog)
+        AddedPropertyCatalog addedPropertyCatalog,
+        AddedEventLookup addedEvents)
     {
         if (typeSymbol == null)
         {
@@ -27,7 +29,13 @@ internal sealed class AddedMemberAccessLookup
             throw new ArgumentNullException(nameof(addedPropertyCatalog));
         }
 
+        if (addedEvents == null)
+        {
+            throw new ArgumentNullException(nameof(addedEvents));
+        }
+
         _typeSymbol = typeSymbol;
+        _addedEvents = addedEvents;
         _compiledType = compiledType;
         _addedPropertyCatalog = addedPropertyCatalog;
     }
@@ -59,5 +67,12 @@ internal sealed class AddedMemberAccessLookup
         }
 
         return _addedPropertyCatalog.FindBySymbolOrNull(propertySymbol) != null;
+    }
+
+    // Why any declaring type, unlike the property question: the event answer comes from the
+    // compiled declaring type alone, which every type can ask regardless of classification order.
+    public bool IsStoreBackedEvent(IEventSymbol eventSymbol)
+    {
+        return eventSymbol != null && _addedEvents.IsStoreBacked(eventSymbol);
     }
 }
