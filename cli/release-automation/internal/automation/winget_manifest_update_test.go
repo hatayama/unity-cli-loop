@@ -579,8 +579,8 @@ func flagValue(args []string, name string) string {
 	return ""
 }
 
-// TestRunUpdateWingetManifestRejectsIncompleteFlags verifies unknown flags and each missing required flag fail with exit code 1.
-func TestRunUpdateWingetManifestRejectsIncompleteFlags(t *testing.T) {
+// TestParseWingetManifestUpdateFlagsRejectsIncompleteFlags verifies unknown flags and each missing required flag are rejected by their own message.
+func TestParseWingetManifestUpdateFlagsRejectsIncompleteFlags(t *testing.T) {
 	cases := []struct {
 		name    string
 		args    []string
@@ -593,36 +593,38 @@ func TestRunUpdateWingetManifestRejectsIncompleteFlags(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			stdout := bytes.Buffer{}
-			stderr := bytes.Buffer{}
+			_, err := parseWingetManifestUpdateFlags(testCase.args)
 
-			code := RunUpdateWingetManifest(context.Background(), &stdout, &stderr, testCase.args)
-
-			if code != 1 {
-				t.Fatalf("exit code = %d, want 1", code)
-			}
-			if !strings.Contains(stderr.String(), testCase.wantErr) {
-				t.Fatalf("stderr = %q, want it to contain %q", stderr.String(), testCase.wantErr)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
 			}
 		})
 	}
 }
 
-// TestRunUpdateWingetManifestSkipsWithCompleteFlagsAndNoToken verifies the exported command parses valid flags and skips without a token.
-func TestRunUpdateWingetManifestSkipsWithCompleteFlagsAndNoToken(t *testing.T) {
-	t.Setenv(wingetPkgsTokenEnvName, "")
+// TestRunUpdateWingetManifestReportsUnknownFlag verifies the exported command reports a flag error before building any deps.
+func TestRunUpdateWingetManifestReportsUnknownFlag(t *testing.T) {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	code := RunUpdateWingetManifest(context.Background(), &stdout, &stderr, []string{
+	code := RunUpdateWingetManifest(context.Background(), &stdout, &stderr, []string{"--unknown"})
+
+	if code != 1 || !strings.Contains(stderr.String(), "update-winget-manifest: flag provided but not defined") {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+}
+
+// TestParseWingetManifestUpdateFlagsReturnsCompleteConfig verifies complete flags are carried into the config unchanged.
+func TestParseWingetManifestUpdateFlagsReturnsCompleteConfig(t *testing.T) {
+	config, err := parseWingetManifestUpdateFlags([]string{
 		"--repo", "owner/repo", "--tag", "dispatcher-v3.1.0", "--fork-repo", "owner/fork",
 	})
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, stderr=%s", code, stderr.String())
+	if err != nil {
+		t.Fatalf("parseWingetManifestUpdateFlags failed: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "WINGET_PKGS_TOKEN is not configured") {
-		t.Fatalf("stdout = %q", stdout.String())
+	want := wingetManifestUpdateConfig{repository: "owner/repo", tag: "dispatcher-v3.1.0", forkRepo: "owner/fork"}
+	if config != want {
+		t.Fatalf("config = %+v, want %+v", config, want)
 	}
 }
 
@@ -677,7 +679,6 @@ func runWingetOverrideScenario(t *testing.T, tag string, override wingetOverride
 
 // TestUpdateWingetManifestReportsEachFailingStep verifies every failing or malformed gh response exits 1 with its error instead of opening a pull request.
 func TestUpdateWingetManifestReportsEachFailingStep(t *testing.T) {
-	serverError := errors.New("gh api failed: HTTP 500")
 	never := func(string) bool { return false }
 	cases := []struct {
 		name     string
@@ -686,22 +687,22 @@ func TestUpdateWingetManifestReportsEachFailingStep(t *testing.T) {
 		wantErr  string
 	}{
 		{"invalid tag", "v3.1.0", wingetOverride{matches: never}, "must start with dispatcher-v"},
-		{"package lookup", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("uloop?ref=master"), err: serverError}, "HTTP 500"},
-		{"version lookup", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("uloop/3.1.0?ref=master"), err: serverError}, "HTTP 500"},
-		{"release view", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release view"), err: serverError}, "HTTP 500"},
+		{"package lookup", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("uloop?ref=master"), err: errors.New("package lookup failed")}, "package lookup failed"},
+		{"version lookup", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("uloop/3.1.0?ref=master"), err: errors.New("version lookup failed")}, "version lookup failed"},
+		{"release view", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release view"), err: errors.New("release view failed")}, "release view failed"},
 		{"release view JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release view"), output: "{"}, "failed to parse release metadata"},
 		{"release date", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release view"), output: `{"publishedAt":"2026"}`}, `invalid publishedAt value "2026"`},
-		{"checksum download", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release download"), err: serverError}, "HTTP 500"},
-		{"fork sync", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("merge-upstream"), err: serverError}, "HTTP 500"},
-		{"upstream ref", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("git/ref/heads/master"), err: serverError}, "HTTP 500"},
+		{"checksum download", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("release download"), err: errors.New("checksum download failed")}, "checksum download failed"},
+		{"fork sync", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("merge-upstream"), err: errors.New("fork sync failed")}, "fork sync failed"},
+		{"upstream ref", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("git/ref/heads/master"), err: errors.New("upstream ref failed")}, "upstream ref failed"},
 		{"empty upstream ref", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("git/ref/heads/master"), output: "\n"}, "winget upstream master SHA is empty"},
 		{"branch creation", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("git/refs"), err: errors.New("gh api failed: HTTP 422 Validation Failed")}, "HTTP 422 Validation Failed"},
-		{"fork content read", "dispatcher-v3.1.0", wingetOverride{matches: wingetForkContentRead, err: serverError}, "HTTP 500"},
+		{"fork content read", "dispatcher-v3.1.0", wingetOverride{matches: wingetForkContentRead, err: errors.New("fork content read failed")}, "fork content read failed"},
 		{"fork content JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetForkContentRead, output: "{"}, "failed to parse winget fork content response"},
-		{"manifest write", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("-X PUT"), err: serverError}, "HTTP 500"},
-		{"pull request list", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("state=open"), err: serverError}, "HTTP 500"},
+		{"manifest write", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("-X PUT"), err: errors.New("manifest write failed")}, "manifest write failed"},
+		{"pull request list", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("state=open"), err: errors.New("pull request list failed")}, "pull request list failed"},
 		{"pull request list JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("state=open"), output: "{"}, "failed to parse winget pull request list"},
-		{"pull request create", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("/pulls", "-X POST"), err: serverError}, "HTTP 500"},
+		{"pull request create", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("/pulls", "-X POST"), err: errors.New("pull request create failed")}, "pull request create failed"},
 		{"pull request create JSON", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("/pulls", "-X POST"), output: "{"}, "failed to parse created winget pull request"},
 		{"pull request URL", "dispatcher-v3.1.0", wingetOverride{matches: wingetJoinedContains("/pulls", "-X POST"), output: `{}`}, "created winget pull request URL is empty"},
 	}

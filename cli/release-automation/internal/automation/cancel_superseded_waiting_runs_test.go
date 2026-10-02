@@ -196,7 +196,7 @@ func TestRunCancelSupersededWaitingRunsRejectsUnknownFlags(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
 	}
-	assertCancelSupersededWaitingRunsLogContains(t, stderr.String(), "cancel-superseded-waiting-runs:")
+	assertCancelSupersededWaitingRunsLogContains(t, stderr.String(), "cancel-superseded-waiting-runs: flag provided but not defined")
 }
 
 // Verifies complete flags produce a config carrying every value, including the numeric run id.

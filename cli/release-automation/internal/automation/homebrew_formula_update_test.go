@@ -405,8 +405,8 @@ func containsFlagValue(args []string, name string, value string) bool {
 	return false
 }
 
-// TestRunUpdateHomebrewFormulaRejectsIncompleteFlags verifies unknown flags and each missing required flag fail with exit code 1.
-func TestRunUpdateHomebrewFormulaRejectsIncompleteFlags(t *testing.T) {
+// TestParseHomebrewFormulaUpdateFlagsRejectsIncompleteFlags verifies unknown flags and each missing required flag are rejected by their own message.
+func TestParseHomebrewFormulaUpdateFlagsRejectsIncompleteFlags(t *testing.T) {
 	cases := []struct {
 		name    string
 		args    []string
@@ -419,36 +419,38 @@ func TestRunUpdateHomebrewFormulaRejectsIncompleteFlags(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			var stdout bytes.Buffer
-			var stderr bytes.Buffer
+			_, err := parseHomebrewFormulaUpdateFlags(testCase.args)
 
-			code := RunUpdateHomebrewFormula(context.Background(), &stdout, &stderr, testCase.args)
-
-			if code != 1 {
-				t.Fatalf("exit code = %d, want 1", code)
-			}
-			if !strings.Contains(stderr.String(), testCase.wantErr) {
-				t.Fatalf("stderr = %q, want it to contain %q", stderr.String(), testCase.wantErr)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
 			}
 		})
 	}
 }
 
-// TestRunUpdateHomebrewFormulaSkipsWithCompleteFlagsAndNoToken verifies the exported command parses valid flags and skips without a tap token.
-func TestRunUpdateHomebrewFormulaSkipsWithCompleteFlagsAndNoToken(t *testing.T) {
-	t.Setenv(homebrewTapTokenEnvName, " ")
+// TestRunUpdateHomebrewFormulaReportsUnknownFlag verifies the exported command reports a flag error before building any deps.
+func TestRunUpdateHomebrewFormulaReportsUnknownFlag(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunUpdateHomebrewFormula(context.Background(), &stdout, &stderr, []string{
+	code := RunUpdateHomebrewFormula(context.Background(), &stdout, &stderr, []string{"--unknown"})
+
+	if code != 1 || !strings.Contains(stderr.String(), "update-homebrew-formula: flag provided but not defined") {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+}
+
+// TestParseHomebrewFormulaUpdateFlagsReturnsCompleteConfig verifies complete flags are carried into the config unchanged.
+func TestParseHomebrewFormulaUpdateFlagsReturnsCompleteConfig(t *testing.T) {
+	config, err := parseHomebrewFormulaUpdateFlags([]string{
 		"--repo", "owner/repo", "--tag", "dispatcher-v3.0.0", "--tap-repo", "owner/tap",
 	})
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, stderr=%s", code, stderr.String())
+	if err != nil {
+		t.Fatalf("parseHomebrewFormulaUpdateFlags failed: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "HOMEBREW_TAP_TOKEN is not configured") {
-		t.Fatalf("stdout = %q", stdout.String())
+	want := homebrewFormulaUpdateConfig{repository: "owner/repo", tag: "dispatcher-v3.0.0", tapRepo: "owner/tap"}
+	if config != want {
+		t.Fatalf("config = %+v, want %+v", config, want)
 	}
 }
 
@@ -480,8 +482,8 @@ func TestUpdateHomebrewFormulaReportsEachFailingStep(t *testing.T) {
 		wantErr     string
 	}{
 		{"invalid tag", "v3.0.0", "", "", `must start with dispatcher-v`},
-		{"arm64 checksum", "dispatcher-v3.0.0", homebrewDarwinArm64AssetName + ".sha256", "", "failed"},
-		{"amd64 checksum", "dispatcher-v3.0.0", homebrewDarwinAmd64AssetName + ".sha256", "", "failed"},
+		{"arm64 checksum", "dispatcher-v3.0.0", homebrewDarwinArm64AssetName + ".sha256", "", "gh " + homebrewDarwinArm64AssetName + ".sha256 failed"},
+		{"amd64 checksum", "dispatcher-v3.0.0", homebrewDarwinAmd64AssetName + ".sha256", "", "gh " + homebrewDarwinAmd64AssetName + ".sha256 failed"},
 		{"tap read", "dispatcher-v3.0.0", "?ref=", "", "?ref= failed"},
 		{"tap contents JSON", "dispatcher-v3.0.0", "", "{", "failed to parse tap formula contents"},
 		{"tap contents base64", "dispatcher-v3.0.0", "", `{"sha":"s","content":"!!!"}`, "failed to decode tap formula contents"},
