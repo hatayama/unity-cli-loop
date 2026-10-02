@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -123,5 +124,112 @@ func TestInstallSetupFailureErrorIncludesInstallerStderr(t *testing.T) {
 	}
 	if cliErr.Details["InstallerStderr"] != "warning before failure" {
 		t.Fatalf("installer stderr detail mismatch: %#v", cliErr.Details)
+	}
+}
+
+func TestParseInstallOptionsReadsDirFlagForms(t *testing.T) {
+	// Verifies --dir accepts both the separate-value and equals forms.
+	for _, args := range [][]string{{"--dir", "/opt/uloop"}, {"--dir=/opt/uloop"}} {
+		options, err := parseInstallOptions(args)
+		if err != nil {
+			t.Fatalf("args %v: parseInstallOptions failed: %v", args, err)
+		}
+		if options.installDir != "/opt/uloop" {
+			t.Fatalf("args %v: install dir mismatch: %s", args, options.installDir)
+		}
+	}
+}
+
+func TestParseInstallOptionsRejectsInvalidArguments(t *testing.T) {
+	// Verifies unknown, duplicated, valueless, and positional install arguments are rejected with an argument error.
+	cases := []struct {
+		name        string
+		args        []string
+		wantMessage string
+	}{
+		{name: "unknown option", args: []string{"--prefix", "/opt"}, wantMessage: "Unknown install option: --prefix"},
+		{name: "duplicate short flag", args: []string{"-d", "/a", "-d", "/b"}, wantMessage: "Duplicate install option: -d"},
+		{name: "short flag after long flag", args: []string{"--dir", "/a", "-d", "/b"}, wantMessage: "Duplicate install option: -d"},
+		{name: "long flag after short flag", args: []string{"-d", "/a", "--dir=/b"}, wantMessage: "Duplicate install option: --dir"},
+		{name: "short flag without value", args: []string{"-d"}, wantMessage: "-d"},
+		{name: "short flag followed by option", args: []string{"-d", "--dir"}, wantMessage: "-d"},
+		{name: "positional argument", args: []string{"/opt/uloop"}, wantMessage: "/opt/uloop"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			options, err := parseInstallOptions(testCase.args)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
+				t.Fatalf("expected error containing %q, got options=%+v err=%v", testCase.wantMessage, options, err)
+			}
+		})
+	}
+}
+
+func TestTryHandleInstallRequestReportsInvalidOptions(t *testing.T) {
+	// Verifies an invalid install option exits with code 1 before any installer step runs.
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleInstallRequest(context.Background(), []string{"install", "--prefix", "/opt"}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !strings.Contains(stderr.String(), "Unknown install option: --prefix") {
+		t.Fatalf("missing option error: %s", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("no setup progress may be printed for invalid options: %s", stdout.String())
+	}
+}
+
+// unsetNativeInstallLocation clears every input the default install directory is derived from
+// and fails the test unless resolution now fails, so callers can never reach the real installer.
+func unsetNativeInstallLocation(t *testing.T) {
+	t.Helper()
+	t.Setenv(nativepath.InstallDirEnvName, "")
+	t.Setenv(nativepath.LocalAppDataEnvName, "")
+	t.Setenv("HOME", "")
+	if _, err := resolveNativeInstallDir(runtime.GOOS, ""); err == nil {
+		t.Fatal("precondition failed: the install directory still resolves, so the real installer could run")
+	}
+}
+
+func TestTryHandleInstallRequestReportsUnresolvableInstallDirectory(t *testing.T) {
+	// Verifies install stops with code 1 when no install directory can be resolved.
+	unsetNativeInstallLocation(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleInstallRequest(context.Background(), []string{"install"}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("result mismatch: handled=%t code=%d", handled, code)
+	}
+	if stderr.Len() == 0 || stdout.Len() != 0 {
+		t.Fatalf("expected only an error envelope: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestResolveNativeInstallDirRejectsUnsupportedOS(t *testing.T) {
+	// Verifies platforms without an install convention report the install-specific unsupported message.
+	t.Setenv(nativepath.InstallDirEnvName, "")
+
+	_, err := resolveNativeInstallDir("plan9", "")
+
+	if err == nil || err.Error() != installUnsupportedOSMessage {
+		t.Fatalf("expected %q, got %v", installUnsupportedOSMessage, err)
+	}
+}
+
+func TestWriteInstallCompletionForOtherOSPrintsGenericMessage(t *testing.T) {
+	// Verifies platforms without PATH integration get a generic completion line.
+	var stdout bytes.Buffer
+
+	writeInstallCompletion(&stdout, "plan9")
+
+	if stdout.String() != "Install setup completed.\n" {
+		t.Fatalf("completion mismatch: %q", stdout.String())
 	}
 }

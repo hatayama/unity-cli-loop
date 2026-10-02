@@ -839,3 +839,215 @@ func assertPackageLockSourceKeepsPinnedRunner(t *testing.T, lockVersion string, 
 		t.Fatalf("pinned runner was not used: code=%d forwarded=%v", code, forwarded)
 	}
 }
+
+func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
+	// Verifies a manifest or packages-lock that cannot be read or parsed is reported instead of guessing the package generation.
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, projectRoot string)
+		want  string
+	}{
+		{
+			name: "manifest is a directory",
+			setup: func(t *testing.T, projectRoot string) {
+				mkdirDispatcherTestDirectory(t, filepath.Join(projectRoot, "Packages", "manifest.json"))
+			},
+		},
+		{
+			name: "manifest is not JSON",
+			setup: func(t *testing.T, projectRoot string) {
+				writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages", "manifest.json"), "{")
+			},
+			want: "parse ",
+		},
+		{
+			name: "lock is a directory",
+			setup: func(t *testing.T, projectRoot string) {
+				writeV2PackageManifest(t, projectRoot)
+				mkdirDispatcherTestDirectory(t, filepath.Join(projectRoot, "Packages", "packages-lock.json"))
+			},
+		},
+		{
+			name: "lock is not JSON",
+			setup: func(t *testing.T, projectRoot string) {
+				writeV2PackageManifest(t, projectRoot)
+				writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages", "packages-lock.json"), "{")
+			},
+			want: "parse ",
+		},
+		{
+			name: "package cache is a file",
+			setup: func(t *testing.T, projectRoot string) {
+				writeV2PackageManifest(t, projectRoot)
+				writeDispatcherTestFile(t, filepath.Join(projectRoot, "Library", "PackageCache"), "not a directory")
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectRoot := createDispatcherUnityProject(t)
+			testCase.setup(t, projectRoot)
+
+			project, err := detectV2DispatcherProject(projectRoot)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("expected error containing %q, got project=%+v err=%v", testCase.want, project, err)
+			}
+		})
+	}
+}
+
+func mkdirDispatcherTestDirectory(t *testing.T, directory string) {
+	t.Helper()
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatalf("failed to create %s: %v", directory, err)
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsV3PackageMatchedByGitHash(t *testing.T) {
+	// Verifies a git lock hash that selects a V3 cache generation stops detection even when a V2 generation is also cached.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writePackagesLockWithGitHash(t, projectRoot, "bbbbbb1234")
+	writeV2PackageCachePackageJSON(t, projectRoot, "aaaaaa", "2.2.0")
+	writeV2PackageCachePackageJSON(t, projectRoot, "bbbbbb", "3.0.0")
+
+	project, err := detectV2DispatcherProject(projectRoot)
+
+	if err != nil || project.IsV2 {
+		t.Fatalf("expected a non-V2 result, got project=%+v err=%v", project, err)
+	}
+}
+
+func TestDetectV2DispatcherProjectFromGitDependencyCacheVersions(t *testing.T) {
+	// Verifies git manifest dependencies without a lock fall back to PackageCache and only report V2 for V2-only caches.
+	cases := []struct {
+		name          string
+		cacheVersions map[string]string
+		wantV2        bool
+		wantError     string
+	}{
+		{name: "no cache", cacheVersions: nil},
+		{name: "single V3 cache", cacheVersions: map[string]string{"aaaaaa": "3.0.0"}},
+		{name: "mixed generations", cacheVersions: map[string]string{"aaaaaa": "2.2.0", "bbbbbb": "3.0.0"}, wantError: "multiple package generations found"},
+		{name: "invalid entries are ignored", cacheVersions: map[string]string{"aaaaaa": "2.2.0", "bbbbbb": "not-a-version"}, wantV2: true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectRoot := createDispatcherUnityProject(t)
+			writeV2PackageManifest(t, projectRoot)
+			for suffix, version := range testCase.cacheVersions {
+				writeV2PackageCachePackageJSON(t, projectRoot, suffix, version)
+			}
+			writeDispatcherTestFile(t, filepath.Join(projectRoot, "Library", "PackageCache", "README.md"), "not a package")
+			mkdirDispatcherTestDirectory(t, filepath.Join(projectRoot, "Library", "PackageCache", "com.example.other@1.0.0"))
+
+			project, err := detectV2DispatcherProject(projectRoot)
+
+			if testCase.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), testCase.wantError) {
+					t.Fatalf("expected error containing %q, got %v", testCase.wantError, err)
+				}
+				return
+			}
+			if err != nil || project.IsV2 != testCase.wantV2 {
+				t.Fatalf("unexpected result: project=%+v err=%v", project, err)
+			}
+		})
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsLockWithoutUnityPackage(t *testing.T) {
+	// Verifies a packages-lock without the Unity package entry is treated as unresolved and falls back to the git cache.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages", "packages-lock.json"), `{"dependencies":{"com.example.other":{"version":"1.0.0"}}}`)
+	writeV2PackageCachePackageJSON(t, projectRoot, "aaaaaa", "2.2.0")
+
+	project, err := detectV2DispatcherProject(projectRoot)
+
+	if err != nil || !project.IsV2 || project.PackageVersion != "2.2.0" {
+		t.Fatalf("expected V2 from the cache, got project=%+v err=%v", project, err)
+	}
+}
+
+func TestDetectV2DispatcherProjectIgnoresNonStringManifestDependency(t *testing.T) {
+	// Verifies a manifest dependency that is not a string is neither a file: nor a git dependency.
+	projectRoot := createDispatcherUnityProject(t)
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages", "manifest.json"), `{"dependencies":{"`+dispatcherUnityPackageName+`":{"version":"2.2.0"}}}`)
+	writeV2PackageCachePackageJSON(t, projectRoot, "aaaaaa", "2.2.0")
+
+	project, err := detectV2DispatcherProject(projectRoot)
+
+	if err != nil || project.IsV2 {
+		t.Fatalf("expected a non-V2 result, got project=%+v err=%v", project, err)
+	}
+}
+
+func TestDetectV2DispatcherFileDependencyProjectIgnoresUnresolvableValues(t *testing.T) {
+	// Verifies non-string and empty file: dependency values resolve to no project rather than an error.
+	projectRoot := createDispatcherUnityProject(t)
+	for _, dependency := range []string{`{"path":"x"}`, `"file:"`} {
+		project, err := detectV2DispatcherFileDependencyProject(projectRoot, json.RawMessage(dependency))
+		if err != nil || project.IsV2 {
+			t.Fatalf("dependency %s: unexpected result project=%+v err=%v", dependency, project, err)
+		}
+	}
+}
+
+func TestResolveDispatcherFileDependencyTarget(t *testing.T) {
+	// Verifies file: values resolve absolute paths as-is, relative paths against Packages/, and reject other values.
+	projectRoot := createDispatcherUnityProject(t)
+	absoluteTarget := filepath.Join(t.TempDir(), "package")
+	cases := []struct {
+		value  string
+		want   string
+		wantOK bool
+	}{
+		{value: "https://example.invalid/package.git"},
+		{value: "file:"},
+		{value: "file:" + absoluteTarget + string(filepath.Separator), want: absoluteTarget, wantOK: true},
+		{value: " file:../LocalPackage ", want: filepath.Join(projectRoot, "LocalPackage"), wantOK: true},
+	}
+	for _, testCase := range cases {
+		target, ok := resolveDispatcherFileDependencyTarget(projectRoot, testCase.value)
+		if ok != testCase.wantOK || target != testCase.want {
+			t.Fatalf("value %q: got (%q, %v) want (%q, %v)", testCase.value, target, ok, testCase.want, testCase.wantOK)
+		}
+	}
+}
+
+func TestDetectV2DispatcherEmbeddedProjectReportsUnreadablePackagesDirectory(t *testing.T) {
+	// Verifies a Packages path that exists but is not a directory is reported as an error.
+	projectRoot := t.TempDir()
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages"), "not a directory")
+
+	if _, err := detectV2DispatcherEmbeddedProject(projectRoot); err == nil {
+		t.Fatal("expected an error for an unreadable Packages directory")
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsEmbeddedFilesAndInvalidVersions(t *testing.T) {
+	// Verifies loose files in Packages/ and embedded packages with an invalid version are not treated as V2.
+	projectRoot := createDispatcherUnityProject(t)
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages", "README.md"), "docs")
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "Packages", "embedded", "package.json"), dispatcherUnityPackageName, "not-a-version")
+
+	project, err := detectV2DispatcherProject(projectRoot)
+
+	if err != nil || project.IsV2 {
+		t.Fatalf("expected a non-V2 result, got project=%+v err=%v", project, err)
+	}
+}
+
+func TestIsDispatcherGitPackageDependencyRejectsNonGitValues(t *testing.T) {
+	// Verifies non-string, unparsable, and non-git URL dependencies are not treated as git packages.
+	for _, dependency := range []string{`{"url":"x"}`, `"http://[::1"`, `"https://example.invalid/package.tgz"`, `"git@example.invalid:owner/repo"`} {
+		if isDispatcherGitPackageDependency(json.RawMessage(dependency)) {
+			t.Fatalf("dependency %s must not be a git dependency", dependency)
+		}
+	}
+	if !isDispatcherGitPackageDependency(json.RawMessage(`"git@example.invalid:owner/repo.git#v2.0.0"`)) {
+		t.Fatal("scp-style git dependency must be accepted")
+	}
+}
