@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/attestation"
 )
 
 func TestStampDispatcherPinWritesOnlyVerifiedReleaseSubjects(t *testing.T) {
@@ -187,15 +189,21 @@ func TestStampDispatcherPinReportsEachDependencyFailure(t *testing.T) {
 }
 
 func TestStampDispatcherPinFetchesInstallerBundleAndTagCommit(t *testing.T) {
-	// Verifies the bundle is fetched from the installer URL and the tag commit is resolved for the requested tag before verification.
+	// Verifies assets, the installer bundle, and the tag commit are fetched for the requested tag in the release repository before verification.
 	pinPath := writeDispatcherPinForStamp(t, `{}`)
 	deps := validDispatcherPinStampDeps()
-	var bundleURL, resolvedTag, verifiedCommit string
+	var assetTag, bundleURL, resolvedRepository, resolvedTag, verifiedCommit string
+	baseAssets := deps.fetchReleaseAssets
+	deps.fetchReleaseAssets = func(ctx context.Context, tag string) ([]dispatcherReleaseAsset, error) {
+		assetTag = tag
+		return baseAssets(ctx, tag)
+	}
 	deps.fetchBundle = func(_ context.Context, url string) ([]byte, error) {
 		bundleURL = url
 		return []byte("bundle"), nil
 	}
-	deps.fetchTagCommitSHA = func(_ context.Context, _ string, tag string) (string, error) {
+	deps.fetchTagCommitSHA = func(_ context.Context, repository string, tag string) (string, error) {
+		resolvedRepository = repository
 		resolvedTag = tag
 		return "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", nil
 	}
@@ -211,8 +219,11 @@ func TestStampDispatcherPinFetchesInstallerBundleAndTagCommit(t *testing.T) {
 	if bundleURL != "https://example.test/install.sh.sigstore.json" {
 		t.Fatalf("bundle URL = %q", bundleURL)
 	}
-	if resolvedTag != "dispatcher-v3.0.1" {
-		t.Fatalf("resolved tag = %q", resolvedTag)
+	if assetTag != "dispatcher-v3.0.1" || resolvedTag != "dispatcher-v3.0.1" {
+		t.Fatalf("asset tag = %q, resolved tag = %q", assetTag, resolvedTag)
+	}
+	if resolvedRepository != attestation.ReleaseRepository {
+		t.Fatalf("resolved repository = %q", resolvedRepository)
 	}
 	if verifiedCommit != "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
 		t.Fatalf("verified commit = %q", verifiedCommit)
@@ -263,7 +274,7 @@ func TestBuildDispatcherArchiveManifestAcceptsUppercaseDigests(t *testing.T) {
 }
 
 func TestWriteDispatcherPinStampReportsUnreadableAndInvalidPins(t *testing.T) {
-	// Verifies a missing pin, a malformed pin, and an unwritable pin each fail with a path-specific error.
+	// Verifies a missing pin and a malformed pin each fail with a step-specific error.
 	directory := t.TempDir()
 	missingPath := filepath.Join(directory, "missing.json")
 	if err := writeDispatcherPinStamp(missingPath, "tag", "manifest"); err == nil || !strings.Contains(err.Error(), "read dispatcher pin") {
@@ -274,12 +285,22 @@ func TestWriteDispatcherPinStampReportsUnreadableAndInvalidPins(t *testing.T) {
 	if err := writeDispatcherPinStamp(invalidPath, "tag", "manifest"); err == nil || !strings.Contains(err.Error(), "parse dispatcher pin") {
 		t.Fatalf("expected parse error, got %v", err)
 	}
+}
 
+func TestWriteDispatcherPinStampReportsUnwritablePin(t *testing.T) {
+	// Verifies a pin that can be read but not written fails with a write error instead of reporting success.
+	// A read-only file is the only way to make the write fail after a successful read, and root ignores it.
+	if os.Geteuid() == 0 {
+		t.Skip("root can write read-only files")
+	}
 	readOnlyPath := writeDispatcherPinForStamp(t, `{}`)
 	if err := os.Chmod(readOnlyPath, 0o444); err != nil {
 		t.Fatalf("chmod pin: %v", err)
 	}
-	if err := writeDispatcherPinStamp(readOnlyPath, "tag", "manifest"); err == nil || !strings.Contains(err.Error(), "write stamped dispatcher pin") {
+
+	err := writeDispatcherPinStamp(readOnlyPath, "tag", "manifest")
+
+	if err == nil || !strings.Contains(err.Error(), "write stamped dispatcher pin") {
 		t.Fatalf("expected write error, got %v", err)
 	}
 }
@@ -351,7 +372,7 @@ func TestFetchDispatcherReleaseAssetsReadsTheReleaseByTag(t *testing.T) {
 	if len(assets) != 1 || assets[0].Name != "install.sh" || assets[0].URL != "https://example.test/install.sh" {
 		t.Fatalf("assets = %+v", assets)
 	}
-	if !strings.HasSuffix(requestPath, "/releases/tags/dispatcher-v3.0.1") {
+	if requestPath != "/repos/"+attestation.ReleaseRepository+"/releases/tags/dispatcher-v3.0.1" {
 		t.Fatalf("request path = %q", requestPath)
 	}
 	if authorization != "Bearer test-token" || apiVersion != "2022-11-28" {

@@ -177,7 +177,7 @@ func TestPackagePinConsistencyRejectsUnusableFlags(t *testing.T) {
 		wantErr string
 	}{
 		{"unknown flag", []string{"--unknown"}, false, "flag provided but not defined"},
-		{"empty ref", []string{"--ref", ""}, false, "--ref must not be empty"},
+		{"empty ref", []string{"--repo-root", t.TempDir(), "--ref", ""}, false, "--ref must not be empty"},
 		{"git unavailable for the default root", []string{"--ref", "HEAD"}, true, "failed to resolve the repository root"},
 	}
 	for _, testCase := range cases {

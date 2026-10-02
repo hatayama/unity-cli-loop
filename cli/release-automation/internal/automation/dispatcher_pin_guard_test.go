@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/attestation"
 )
 
 func TestValidateDispatcherPinOfflineRejectsManifestWithoutRequiredArchive(t *testing.T) {
@@ -297,5 +299,44 @@ func TestDispatcherPinScriptDriftWarningsIsSilentWhenScriptsMatchThePin(t *testi
 	}
 	if len(warnings) != 0 {
 		t.Fatalf("expected no warnings, got %v", warnings)
+	}
+}
+
+func TestVerifyDispatcherPinSubjectsVerifiesTheReleaseThePinNames(t *testing.T) {
+	// Verifies the release assets, installer bundle, tag commit, and attestation are all looked up for the tag the pin records.
+	deps := validDispatcherPinGuardDeps()
+	baseAssets := deps.fetchReleaseAssets
+	baseVerify := deps.verifySubjects
+	var assetTag, bundleURL, commitRepository, commitTag, verifiedCommit string
+	deps.fetchReleaseAssets = func(ctx context.Context, tag string) ([]dispatcherReleaseAsset, error) {
+		assetTag = tag
+		return baseAssets(ctx, tag)
+	}
+	deps.fetchBundle = func(_ context.Context, url string) ([]byte, error) {
+		bundleURL = url
+		return []byte("bundle"), nil
+	}
+	deps.fetchTagCommitSHA = func(_ context.Context, repository string, tag string) (string, error) {
+		commitRepository = repository
+		commitTag = tag
+		return "pinned-commit", nil
+	}
+	deps.verifySubjects = func(bundle []byte, commit string) (map[string]string, error) {
+		verifiedCommit = commit
+		return baseVerify(bundle, commit)
+	}
+
+	if err := verifyDispatcherPinSubjects(context.Background(), validDispatcherPinGuardFixture(), deps); err != nil {
+		t.Fatalf("verifyDispatcherPinSubjects failed: %v", err)
+	}
+
+	if assetTag != "dispatcher-v3.0.1-beta.6" || commitTag != "dispatcher-v3.0.1-beta.6" {
+		t.Fatalf("asset tag = %q, commit tag = %q", assetTag, commitTag)
+	}
+	if bundleURL != "https://example.invalid/install.sh.sigstore.json" {
+		t.Fatalf("bundle URL = %q", bundleURL)
+	}
+	if commitRepository != attestation.ReleaseRepository || verifiedCommit != "pinned-commit" {
+		t.Fatalf("commit repository = %q, verified commit = %q", commitRepository, verifiedCommit)
 	}
 }

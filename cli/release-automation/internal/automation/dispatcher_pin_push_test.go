@@ -257,26 +257,21 @@ func assertNoDispatcherPinPushCommand(t *testing.T, recorder *dispatcherPinPushC
 }
 
 func TestParseDispatcherPinPushFlagsRejectsInvalidInput(t *testing.T) {
-	// Verifies unknown flags and tags that are not dispatcher release tags are refused before any git command runs.
+	// Verifies unknown flags and tags that are not dispatcher release tags are refused by flag parsing itself.
 	cases := []struct {
-		name string
-		args []string
+		name    string
+		args    []string
+		wantErr string
 	}{
-		{"unknown flag", []string{"--unknown"}},
-		{"not a dispatcher tag", []string{"--tag", "v3.0.1", "--base-branch", "main"}},
+		{"unknown flag", []string{"--unknown"}, "flag provided but not defined"},
+		{"not a dispatcher tag", []string{"--tag", "v3.0.1", "--base-branch", "main"}, `release tag "v3.0.1" must start with dispatcher-v`},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			stdout := bytes.Buffer{}
-			stderr := bytes.Buffer{}
+			_, err := parseDispatcherPinPushFlags(testCase.args)
 
-			exitCode := RunPushDispatcherPin(context.Background(), &stdout, &stderr, testCase.args)
-
-			if exitCode != 1 {
-				t.Fatalf("expected exit code 1, got %d", exitCode)
-			}
-			if !strings.Contains(stderr.String(), dispatcherPinPushCommandName+":") {
-				t.Fatalf("expected a command-prefixed error, got %q", stderr.String())
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
 			}
 		})
 	}

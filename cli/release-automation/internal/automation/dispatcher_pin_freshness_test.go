@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -239,23 +240,20 @@ func TestRunDispatcherPinFreshnessCheckRejectsUnknownFlags(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
 	}
-	if !strings.Contains(stderr.String(), dispatcherPinFreshnessCommandName+":") {
-		t.Fatalf("expected a command-prefixed error, got %q", stderr.String())
+	if !strings.Contains(stderr.String(), dispatcherPinFreshnessCommandName+": flag provided but not defined") {
+		t.Fatalf("expected an unknown flag error, got %q", stderr.String())
 	}
 }
 
-func TestRunDispatcherPinFreshnessCheckReadsThePinRelativeToTheModule(t *testing.T) {
-	// Verifies the exported command reads the repo-relative pin, which is absent from the package directory, before any release lookup.
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
-	exitCode := RunDispatcherPinFreshnessCheck(context.Background(), &stdout, &stderr, []string{"--repo", "owner/repository"})
-
-	if exitCode != 1 {
-		t.Fatalf("expected exit code 1, got %d", exitCode)
+func TestParseDispatcherPinFreshnessFlagsPointsAtThePackagePin(t *testing.T) {
+	// Verifies the pin path is the package pin two directories above the module, where the command runs.
+	config, err := parseDispatcherPinFreshnessFlags([]string{"--repo", "owner/repository"})
+	if err != nil {
+		t.Fatalf("expected flag parsing to succeed, got %v", err)
 	}
-	if !strings.Contains(stderr.String(), "read dispatcher pin") {
-		t.Fatalf("expected a pin read error, got %q", stderr.String())
+	want := filepath.Join("..", "..", "Packages", "src", "project-runner-pin.json")
+	if config.pinPath != want {
+		t.Fatalf("pinPath = %q, want %q", config.pinPath, want)
 	}
 }
 
@@ -285,7 +283,6 @@ func TestNewestStableDispatcherReleaseKeepsHighestVersionRegardlessOfOrder(t *te
 	releases := []dispatcherRelease{
 		stableDispatcherRelease("dispatcher-v3.2.0"),
 		stableDispatcherRelease("dispatcher-v3.1.0"),
-		stableDispatcherRelease("dispatcher-v3.2.0"),
 	}
 
 	tag, version := newestStableDispatcherRelease(releases)
@@ -309,9 +306,13 @@ func TestFetchDispatcherReleasesFollowsPagesUntilAShortPage(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("GH_TOKEN", "test-token")
 	requestedPages := []string{}
+	requestedPaths := []string{}
+	requestedPageSizes := []string{}
 	authorization := ""
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requestedPages = append(requestedPages, request.URL.Query().Get("page"))
+		requestedPaths = append(requestedPaths, request.URL.Path)
+		requestedPageSizes = append(requestedPageSizes, request.URL.Query().Get("per_page"))
 		authorization = request.Header.Get("Authorization")
 		if request.URL.Query().Get("page") == "1" {
 			_, _ = writer.Write([]byte(fullDispatcherReleasePage()))
@@ -334,6 +335,12 @@ func TestFetchDispatcherReleasesFollowsPagesUntilAShortPage(t *testing.T) {
 	}
 	if strings.Join(requestedPages, ",") != "1,2" {
 		t.Fatalf("requested pages = %v", requestedPages)
+	}
+	wantPageSize := fmt.Sprint(dispatcherPinFreshnessPageSize)
+	for index := range requestedPaths {
+		if requestedPaths[index] != "/repos/owner/repository/releases" || requestedPageSizes[index] != wantPageSize {
+			t.Fatalf("request %d path = %q, per_page = %q", index, requestedPaths[index], requestedPageSizes[index])
+		}
 	}
 	if authorization != "Bearer test-token" {
 		t.Fatalf("authorization = %q", authorization)

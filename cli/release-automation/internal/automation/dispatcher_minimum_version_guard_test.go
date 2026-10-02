@@ -354,7 +354,9 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseHasNoContract_Fails(
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
 	assertDispatcherMinimumVersionLogContains(t, result.stderr, "dispatcher release dispatcher-v1.0.0 does not provide")
-	assertDispatcherMinimumVersionLogContains(t, result.stderr, legacyDispatcherContractFile)
+	for _, path := range dispatcherContractPathChain {
+		assertDispatcherMinimumVersionLogContains(t, result.stderr, path)
+	}
 }
 
 // Verifies a minimum dispatcher release whose contract declares another version fails the guard.
@@ -436,8 +438,8 @@ func TestParseDispatcherMinimumVersionValues_RejectsInvalidInputs(t *testing.T) 
 		{"package pin invalid", validCli, validDispatcher, "{", validPin, unityPackageCliPinFile + " is invalid JSON"},
 		{"package pin without runner", validCli, validDispatcher, `{"minimumDispatcherVersion":"1.0.0"}`, validPin, unityPackageCliPinFile + " does not define projectRunnerVersion"},
 		{"project pin without minimum", validCli, validDispatcher, validPin, `{"projectRunnerVersion":"3.0.0"}`, unityProjectCliPinFile + " does not define minimumDispatcherVersion"},
-		{"package pin runner drift", validCli, validDispatcher, buildDispatcherMinimumVersionPin("2.9.0", "1.0.0"), validPin, unityPackageCliPinFile + ` projectRunnerVersion "2.9.0"`},
-		{"project pin runner drift", validCli, validDispatcher, validPin, buildDispatcherMinimumVersionPin("2.9.0", "1.0.0"), unityProjectCliPinFile + ` projectRunnerVersion "2.9.0"`},
+		{"package pin runner drift", validCli, validDispatcher, buildDispatcherMinimumVersionPin("2.9.0", "1.0.0"), validPin, unityPackageCliPinFile + ` projectRunnerVersion "2.9.0" does not match ` + cliContractFile},
+		{"project pin runner drift", validCli, validDispatcher, validPin, buildDispatcherMinimumVersionPin("2.9.0", "1.0.0"), unityProjectCliPinFile + ` projectRunnerVersion "2.9.0" does not match ` + unityPackageCliPinFile},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
