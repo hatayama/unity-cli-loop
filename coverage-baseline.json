@@ -2,10 +2,10 @@
   "go": {
     "exclude": ["/cmd/", "/common/clitest"],
     "modules": {
-      "common": 71.5,
-      "dispatcher": 78.5,
-      "project-runner": 83.3,
-      "release-automation": 75.6
+      "common": 75.0,
+      "dispatcher": 79.6,
+      "project-runner": 84.3,
+      "release-automation": 77.0
     }
   }
 }
