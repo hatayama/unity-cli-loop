@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,6 +54,8 @@ type coverageModuleResult struct {
 	Percent  float64
 	Baseline float64
 }
+
+var goCoverModes = map[string]bool{"mode: set": true, "mode: count": true, "mode: atomic": true}
 
 type goCoverBlock struct {
 	statements int
@@ -104,11 +107,14 @@ func RunCoverageReport(stdout io.Writer, stderr io.Writer, options CoverageRepor
 // whose file path contains any of the exclude patterns.
 func ParseGoCoverProfile(reader io.Reader, exclude []string) (GoCoverageTotals, error) {
 	scanner := bufio.NewScanner(reader)
-	if !scanner.Scan() || !strings.HasPrefix(scanner.Text(), "mode:") {
+	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
 			return GoCoverageTotals{}, err
 		}
-		return GoCoverageTotals{}, errors.New("profile does not start with a mode line")
+		return GoCoverageTotals{}, errors.New("profile is empty")
+	}
+	if !goCoverModes[strings.TrimSpace(scanner.Text())] {
+		return GoCoverageTotals{}, fmt.Errorf("profile does not start with a go test mode line: %q", scanner.Text())
 	}
 
 	blocks := map[string]goCoverBlock{}
@@ -145,22 +151,27 @@ func ParseGoCoverProfile(reader io.Reader, exclude []string) (GoCoverageTotals, 
 	return totals, nil
 }
 
-// parseGoCoverLine splits "file:start,end numStmts count" into the block key and its counts.
+// goCoverLinePattern is the block line go test -coverprofile writes:
+// "file:startLine.startCol,endLine.endCol numStmts count", all counts non-negative.
+var goCoverLinePattern = regexp.MustCompile(`^(.+:\d+\.\d+,\d+\.\d+) (\d+) (\d+)$`)
+
+// parseGoCoverLine splits a block line into the block key and its counts, rejecting anything
+// go test would not write so a damaged profile cannot inflate the figure the gate compares.
 func parseGoCoverLine(line string) (string, goCoverBlock, error) {
-	fields := strings.Fields(line)
-	if len(fields) != 3 || !strings.Contains(fields[0], ":") {
+	match := goCoverLinePattern.FindStringSubmatch(line)
+	if match == nil {
 		return "", goCoverBlock{}, fmt.Errorf("malformed profile line %q", line)
 	}
 
-	statements, err := strconv.Atoi(fields[1])
+	statements, err := strconv.Atoi(match[2])
 	if err != nil {
 		return "", goCoverBlock{}, fmt.Errorf("malformed statement count in %q", line)
 	}
-	count, err := strconv.Atoi(fields[2])
+	count, err := strconv.Atoi(match[3])
 	if err != nil {
 		return "", goCoverBlock{}, fmt.Errorf("malformed hit count in %q", line)
 	}
-	return fields[0], goCoverBlock{statements: statements, covered: count > 0}, nil
+	return match[1], goCoverBlock{statements: statements, covered: count > 0}, nil
 }
 
 func pathMatchesAny(blockKey string, patterns []string) bool {
@@ -185,6 +196,11 @@ func readCoverageBaseline(path string) (coverageBaseline, error) {
 	}
 	if len(baseline.Go.Modules) == 0 {
 		return coverageBaseline{}, errors.New("baseline lists no Go modules")
+	}
+	for name, figure := range baseline.Go.Modules {
+		if figure < 0 || figure > 100 {
+			return coverageBaseline{}, fmt.Errorf("baseline for module %q is %v, outside 0 to 100", name, figure)
+		}
 	}
 	return baseline, nil
 }

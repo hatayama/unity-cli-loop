@@ -44,11 +44,15 @@ func TestParseGoCoverProfileCountsARepeatedBlockOnceAsCoveredWhenAnyRunCoveredIt
 }
 
 func TestParseGoCoverProfileRejectsMalformedInput(t *testing.T) {
-	// Verifies an empty profile, a missing mode header, and a malformed block line are errors.
+	// Verifies input go test would not write is an error rather than a figure, including a negative
+	// statement count that would otherwise push coverage past 100%.
 	cases := map[string]string{
 		"empty":          "",
 		"no mode header": coverageTestModulePath + "/a/a.go:1.1,3.2 5 1\n",
 		"malformed line": "mode: set\n" + coverageTestModulePath + "/a/a.go 5 1\n",
+		"unknown mode":   "mode: bogus\n" + coverageTestModulePath + "/a/a.go:1.1,3.2 5 1\n",
+		"bad range":      "mode: set\n" + coverageTestModulePath + "/a/a.go:whatever 5 1\n",
+		"negative count": "mode: set\n" + coverageTestModulePath + "/a/a.go:1.1,3.2 -6 0\n",
 	}
 	for name, profile := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -143,7 +147,9 @@ func TestCollectGoCoverProfilesNamesEachProfileAfterItsModule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(profiles) != 2 || profiles["common"] != filepath.Join(dir, "common.out") || profiles["new-module"] == "" {
+	if len(profiles) != 2 ||
+		profiles["common"] != filepath.Join(dir, "common.out") ||
+		profiles["new-module"] != filepath.Join(dir, "new-module.out") {
 		t.Fatalf("expected common and new-module profiles, got %v", profiles)
 	}
 }
@@ -203,6 +209,17 @@ func TestRunCoverageReportFailsClosedOnMismatchedInputs(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestRunCoverageReportRejectsABaselineOutsideZeroToHundred(t *testing.T) {
+	// Verifies a negative baseline, which no coverage could fall below, fails instead of disabling
+	// the gate for that module.
+	fixture := newCoverageFixture(t, map[string]float64{"common": -1})
+	fixture.writeProfile("common", 0, 10)
+
+	if code, stdout, stderr := fixture.run(coverageModeGate); code == 0 {
+		t.Fatalf("expected a non-zero exit, got 0\n%s%s", stdout, stderr)
 	}
 }
 

@@ -33,12 +33,13 @@ that added the tests. Lowering a figure needs a reason in the pull request descr
 ## Local usage
 
 ```sh
-export GO_COVERAGE_DIR="${TMPDIR:-/tmp}/go-coverage"
+export GO_COVERAGE_DIR="$(mktemp -d)"
 scripts/check-go-cli-source.sh
 cd cli/release-automation
 go run ./cmd/coverage-report --baseline ../../coverage-baseline.json --mode report \
   --go-coverage-dir "$GO_COVERAGE_DIR"
 ```
 
-`GO_COVERAGE_DIR` must be absolute, because each module's tests run from that module's
+Use a fresh directory each time: the report reads every `<module>.out` in it, so a profile left
+from an earlier run would be compared too. `GO_COVERAGE_DIR` must be absolute, because each module's tests run from that module's
 directory. Figures measured on macOS or Windows can differ slightly from the Linux gate.
