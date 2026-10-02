@@ -34,6 +34,12 @@ type CoverageReportOptions struct {
 	GoProfiles  map[string]string
 	Mode        string
 	SummaryPath string
+	// CSharpSummaryPath is a ReportGenerator Summary.json; when empty, C# is neither read nor
+	// validated, so the pull-request Go gate does not depend on the csharp baseline section.
+	CSharpSummaryPath string
+	// MarkdownOutPath receives the step summary content without workflow commands, replacing any
+	// existing file.
+	MarkdownOutPath string
 }
 
 // GoCoverageTotals is the statement count of a profile after exclusions.
@@ -48,6 +54,8 @@ type coverageBaseline struct {
 		// Pointers so a null figure is told apart from 0 and rejected.
 		Modules map[string]*float64 `json:"modules"`
 	} `json:"go"`
+	// CSharp stays raw until a C# summary is given, so a malformed section cannot fail a Go-only run.
+	CSharp json.RawMessage `json:"csharp"`
 }
 
 type coverageModuleResult struct {
@@ -83,25 +91,68 @@ func RunCoverageReport(stdout io.Writer, stderr io.Writer, options CoverageRepor
 		return 2
 	}
 
-	table := formatCoverageTable(results)
-	_, _ = fmt.Fprint(stdout, table)
-	if err := appendCoverageSummary(options.SummaryPath, table); err != nil {
-		_, _ = fmt.Fprintf(stderr, "write step summary: %v\n", err)
+	csharp, err := measureOptionalCSharpCoverage(baseline, options.CSharpSummaryPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "measure C# coverage: %v\n", err)
 		return 2
 	}
 
+	table := formatCoverageTable(results)
 	below := modulesBelowBaseline(results)
-	if len(below) == 0 {
-		return 0
+	writeCoverageStdout(stdout, options.Mode, table, below, csharp)
+
+	markdown := "## Go test coverage\n\n" + table + "\n" + formatOptionalCSharpSection(csharp)
+	if err := appendCoverageSummary(options.SummaryPath, markdown); err != nil {
+		_, _ = fmt.Fprintf(stderr, "write step summary: %v\n", err)
+		return 2
+	}
+	if err := writeCoverageMarkdown(options.MarkdownOutPath, markdown); err != nil {
+		_, _ = fmt.Fprintf(stderr, "write coverage markdown: %v\n", err)
+		return 2
 	}
 
-	if options.Mode == coverageModeReport {
-		_, _ = fmt.Fprintf(stdout, "::warning::Coverage fell below the baseline in: %s\n", strings.Join(below, ", "))
+	if len(below) == 0 || options.Mode == coverageModeReport {
 		return 0
 	}
 
 	_, _ = fmt.Fprintf(stderr, "Coverage fell below the baseline in: %s. Add tests, or lower the figure in the baseline file with a reason in the pull request.\n", strings.Join(below, ", "))
 	return 1
+}
+
+// measureOptionalCSharpCoverage returns nil when no C# summary was given.
+func measureOptionalCSharpCoverage(baseline coverageBaseline, summaryPath string) (*csharpCoverageResult, error) {
+	if summaryPath == "" {
+		return nil, nil
+	}
+	result, err := measureCSharpCoverage(baseline.CSharp, summaryPath)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// writeCoverageStdout prints the Go table and its report-mode warning exactly as before the C#
+// report existed, then the C# section and its warning when C# was measured. The C# warning is
+// printed in both modes because C# never gates.
+func writeCoverageStdout(stdout io.Writer, mode string, table string, below []string, csharp *csharpCoverageResult) {
+	_, _ = fmt.Fprint(stdout, table)
+	if len(below) > 0 && mode == coverageModeReport {
+		_, _ = fmt.Fprintf(stdout, "::warning::Coverage fell below the baseline in: %s\n", strings.Join(below, ", "))
+	}
+	if csharp == nil {
+		return
+	}
+	_, _ = fmt.Fprint(stdout, formatCSharpCoverageSection(*csharp))
+	if csharp.belowBaseline() {
+		_, _ = fmt.Fprint(stdout, formatCSharpCoverageWarning(*csharp))
+	}
+}
+
+func formatOptionalCSharpSection(csharp *csharpCoverageResult) string {
+	if csharp == nil {
+		return ""
+	}
+	return formatCSharpCoverageSection(*csharp)
 }
 
 // ParseGoCoverProfile totals the statements of a `go test -coverprofile` file, leaving out blocks
@@ -323,7 +374,7 @@ func floorToOneDecimal(value float64) float64 {
 	return math.Floor(value*10+1e-9) / 10
 }
 
-func appendCoverageSummary(path string, table string) error {
+func appendCoverageSummary(path string, markdown string) error {
 	if path == "" {
 		return nil
 	}
@@ -332,6 +383,13 @@ func appendCoverageSummary(path string, table string) error {
 	if err != nil {
 		return err
 	}
-	_, writeErr := io.WriteString(file, "## Go test coverage\n\n"+table+"\n")
+	_, writeErr := io.WriteString(file, markdown)
 	return errors.Join(writeErr, file.Close())
+}
+
+func writeCoverageMarkdown(path string, markdown string) error {
+	if path == "" {
+		return nil
+	}
+	return os.WriteFile(path, []byte(markdown), 0o600)
 }
