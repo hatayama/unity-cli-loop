@@ -103,7 +103,8 @@ internal static class PropertyGetterEmitter
                     addedFieldCatalog,
                     addedPropertyCatalog,
                     typeState.HomeAssemblyName,
-                    typeState.SourceUnit.Input.ReappliedSibling ? typeState.TargetAssembly : null);
+                    typeState.SourceUnit.Input.ReappliedSibling,
+                    typeState.TargetAssembly);
         }
     }
 
@@ -133,7 +134,8 @@ internal static class PropertyGetterEmitter
             AddedFieldCatalog addedFieldCatalog,
             AddedPropertyCatalog addedPropertyCatalog,
             string homeAssemblyName,
-            IAssemblySymbol reappliedSiblingTargetAssembly)
+            bool reappliedSibling,
+            IAssemblySymbol targetAssembly)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -219,13 +221,13 @@ internal static class PropertyGetterEmitter
 
         // Why the same guard as an ordinary method: a getter of a file pulled back in whose body no
         // longer binds would otherwise reach the shim and fail the run over code the reader never
-        // passed. Null means the reader passed this file, so its errors stay Failed.
-        if (reappliedSiblingTargetAssembly != null)
+        // passed. A file the reader passed keeps its errors as Failed.
+        if (reappliedSibling)
         {
             WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
                 semanticModel,
                 getterBodyNode,
-                reappliedSiblingTargetAssembly);
+                targetAssembly);
             if (siblingSkip != null)
             {
                 skipped.Add(new WorkerSkipped
