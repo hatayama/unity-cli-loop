@@ -118,10 +118,13 @@ func TestExtractPausePointClearFileLineFlagsPassesThroughWithoutFileLine(t *test
 
 // Verifies --file or --id with no value is rejected as a missing value.
 func TestExtractPausePointClearFileLineFlagsRejectsMissingValues(t *testing.T) {
-	for _, args := range [][]string{{"--file"}, {"--file", "Assets/A.cs", "--line", "3", "--id"}} {
-		_, _, err := extractPausePointClearFileLineFlags(pausePointClearCommandName, args)
-		if requireArgumentError(t, err).ExpectedType != "string" {
-			t.Fatalf("args %v: expected a missing-value error, got %v", args, err)
+	for args, wantMessage := range map[string]string{
+		"--file":                           "--file requires a value",
+		"--file Assets/A.cs --line 3 --id": "--id requires a value",
+	} {
+		_, _, err := extractPausePointClearFileLineFlags(pausePointClearCommandName, strings.Fields(args))
+		if message := requireArgumentError(t, err).Message; message != wantMessage {
+			t.Fatalf("args %q: Message = %q, want %q", args, message, wantMessage)
 		}
 	}
 }
@@ -132,8 +135,8 @@ func TestApplyPausePointClearFileLineIDRejectsExplicitID(t *testing.T) {
 
 	err := applyPausePointClearFileLineID(params, "Assets/A.cs:3")
 
-	if argumentError := requireArgumentError(t, err); argumentError.Option != "--id" {
-		t.Fatalf("Option = %q, want --id", argumentError.Option)
+	if argumentError := requireArgumentError(t, err); argumentError.Message != "--id cannot be combined with --file or --line." {
+		t.Fatalf("Message = %q", argumentError.Message)
 	}
 	if params[pausePointClearIdPropertyName] != "named" {
 		t.Fatalf("explicit Id must be kept: %#v", params)

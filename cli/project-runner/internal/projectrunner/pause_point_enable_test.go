@@ -1257,18 +1257,21 @@ func readIPCRequest(t *testing.T, requests <-chan map[string]any) map[string]any
 
 // Verifies invalid values for the CLI-only enable flags are rejected while parsing, before any request.
 func TestExtractPausePointEnableAwaitFlagsRejectsInvalidValues(t *testing.T) {
-	cases := map[string][]string{
-		"resume-play with non-true value": {"--await", "--resume-play=yes"},
-		"trigger without value":           {"--await", "--trigger"},
-		"trigger with blank command":      {"--await", "--trigger", "   "},
-		"captured-variables unknown mode": {"--await", "--captured-variables", "everything"},
-		"expect without name":             {"--await", "--expect", "=5"},
+	cases := map[string]struct {
+		args        []string
+		wantMessage string
+	}{
+		"resume-play with non-true value": {args: []string{"--await", "--resume-play=yes"}, wantMessage: "Invalid boolean flag (pass with no value, or =true) value for --resume-play: yes"},
+		"trigger without value":           {args: []string{"--await", "--trigger"}, wantMessage: "--trigger requires a value"},
+		"trigger with blank command":      {args: []string{"--await", "--trigger", "   "}, wantMessage: "--trigger requires a value"},
+		"captured-variables unknown mode": {args: []string{"--await", "--captured-variables", "everything"}, wantMessage: "Invalid full or names value for --captured-variables: everything"},
+		"expect without name":             {args: []string{"--await", "--expect", "=5"}, wantMessage: "Invalid --expect value: =5"},
 	}
-	for name, args := range cases {
+	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
-			remaining, _, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags(args)
-			if argumentError := requireArgumentError(t, err); argumentError.Message == "" {
-				t.Fatal("argument error must carry a message")
+			remaining, _, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags(testCase.args)
+			if argumentError := requireArgumentError(t, err); argumentError.Message != testCase.wantMessage {
+				t.Fatalf("Message = %q, want %q", argumentError.Message, testCase.wantMessage)
 			}
 			if remaining != nil {
 				t.Fatalf("remaining args must be nil on error: %#v", remaining)
@@ -1302,9 +1305,9 @@ func TestRunEnablePausePointCommandRejectsBeforeSending(t *testing.T) {
 		args        []string
 		wantStderr  string
 	}{
-		{name: "invalid CLI-only flag", projectRoot: t.TempDir(), args: []string{"--await", "--resume-play=no"}, wantStderr: "--resume-play"},
-		{name: "tool missing from project cache", projectRoot: cacheWithoutEnable, args: []string{"--await", "--id", "jump"}, wantStderr: pausePointEnableCommandName},
-		{name: "unknown schema option", projectRoot: t.TempDir(), args: []string{"--await", "--bogus-flag"}, wantStderr: "--bogus-flag"},
+		{name: "invalid CLI-only flag", projectRoot: t.TempDir(), args: []string{"--await", "--resume-play=no"}, wantStderr: "boolean flag (pass with no value, or =true)"},
+		{name: "tool missing from project cache", projectRoot: cacheWithoutEnable, args: []string{"--await", "--id", "jump"}, wantStderr: `"ErrorCode": "UNKNOWN_COMMAND"`},
+		{name: "unknown schema option", projectRoot: t.TempDir(), args: []string{"--await", "--bogus-flag"}, wantStderr: "Unknown option for enable-pause-point: --bogus-flag"},
 		{name: "nested project path for another project", projectRoot: writeFakeUnityProject(t), args: []string{"--await", "--project-path", otherProject}, wantStderr: "--project-path must target the same Unity project"},
 	}
 	for _, testCase := range cases {

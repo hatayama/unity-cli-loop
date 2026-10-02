@@ -1072,14 +1072,14 @@ func TestSendControlPlayModeForPausePointFromUnity(t *testing.T) {
 	})
 	t.Run("Unity error", func(t *testing.T) {
 		server := startFakeUnityServer(t, t.TempDir(), pausePointResumePlayCommandName, testUnityRPCFailureResponse)
-		if _, err := sendControlPlayModeForPausePointFromUnity(context.Background(), server.connection, "Play"); err == nil {
-			t.Fatal("expected the Unity error")
+		if _, err := sendControlPlayModeForPausePointFromUnity(context.Background(), server.connection, "Play"); err == nil || !strings.Contains(err.Error(), "tool exploded in Unity") {
+			t.Fatalf("expected the Unity error, got %v", err)
 		}
 	})
 	t.Run("undecodable result", func(t *testing.T) {
 		server := startFakeUnityResultServer(t, t.TempDir(), pausePointResumePlayCommandName, `"text"`)
-		if _, err := sendControlPlayModeForPausePointFromUnity(context.Background(), server.connection, "Play"); err == nil {
-			t.Fatal("expected a decode error")
+		if _, err := sendControlPlayModeForPausePointFromUnity(context.Background(), server.connection, "Play"); err == nil || !strings.Contains(err.Error(), "cannot unmarshal") {
+			t.Fatalf("expected a decode error, got %v", err)
 		}
 	})
 }

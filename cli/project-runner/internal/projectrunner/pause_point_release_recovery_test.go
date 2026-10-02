@@ -741,15 +741,21 @@ func TestInjectPausePointRecoveryWarningKeepsWarningOnlyResponse(t *testing.T) {
 
 // Verifies malformed enable responses are rejected instead of being rewritten with a guessed shape.
 func TestInjectPausePointRecoveryWarningRejectsMalformedFields(t *testing.T) {
-	for name, raw := range map[string]string{
-		"not an object":        `[1,2]`,
-		"warnings not a list":  `{"Success":true,"Warnings":"one"}`,
-		"warning not a string": `{"Success":true,"Warning":5}`,
-		"message not a string": `{"Success":true,"Message":["a"]}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			if rewritten, err := injectPausePointRecoveryWarning([]byte(raw)); err == nil {
-				t.Fatalf("expected an error, got %s", rewritten)
+	cases := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{name: "not an object", raw: `[1,2]`, wantErr: "cannot unmarshal array into Go value of type map"},
+		{name: "warnings not a list", raw: `{"Success":true,"Warnings":"one"}`, wantErr: "cannot unmarshal string into Go value of type []string"},
+		{name: "warning not a string", raw: `{"Success":true,"Warning":5}`, wantErr: "cannot unmarshal number into Go value of type string"},
+		{name: "message not a string", raw: `{"Success":true,"Message":["a"]}`, wantErr: "cannot unmarshal array into Go value of type string"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			rewritten, err := injectPausePointRecoveryWarning([]byte(testCase.raw))
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got rewritten=%s err=%v", testCase.wantErr, rewritten, err)
 			}
 		})
 	}
@@ -872,8 +878,8 @@ func TestRunOneFreshCompileForPausePointRecoveryUsesBusyRetrySender(t *testing.T
 	if *sends != 1 {
 		t.Fatalf("sends = %d, want 1", *sends)
 	}
-	if stderr.Len() == 0 {
-		t.Fatal("stderr must report the send failure")
+	if !strings.Contains(stderr.String(), "unexpected EOF") {
+		t.Fatalf("stderr must report the send failure:\n%s", stderr.String())
 	}
 }
 
@@ -895,7 +901,7 @@ func TestRunFreshCompileWithBusyRetryRejectsInvalidTimeout(t *testing.T) {
 		&stderr,
 	)
 
-	if code != 1 || !strings.Contains(stderr.String(), "--timeout-seconds") {
+	if code != 1 || !strings.Contains(stderr.String(), "Invalid positive integer value for --timeout-seconds") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 }
@@ -992,7 +998,7 @@ func TestRecoverReleaseCodeOptimizationStopsWhenSwitchFails(t *testing.T) {
 
 	code := recoverReleaseCodeOptimization(context.Background(), unityipc.Connection{ProjectRoot: t.TempDir()}, &stdout, &stderr)
 
-	if code != 1 || stdout.Len() != 0 || stderr.Len() == 0 {
+	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "unexpected EOF") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
@@ -1020,7 +1026,7 @@ func TestCompleteEnableWithReleaseRecoveryFailsWhenRewriteFails(t *testing.T) {
 		},
 	)
 
-	if code != 1 || stdout.Len() != 0 || stderr.Len() == 0 {
+	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "cannot unmarshal string into Go value of type []string") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
@@ -1031,11 +1037,12 @@ func TestSendEnablePausePointAndDecodeReportsFailures(t *testing.T) {
 	t.Cleanup(func() { sendEnablePausePointIPC = original })
 
 	cases := map[string]struct {
-		outcome unityipc.UnitySendOutcome
-		err     error
+		outcome    unityipc.UnitySendOutcome
+		err        error
+		wantStderr string
 	}{
-		"send failure":       {err: io.ErrUnexpectedEOF},
-		"undecodable result": {outcome: unityipc.UnitySendOutcome{Result: json.RawMessage(`"text"`)}},
+		"send failure":       {err: io.ErrUnexpectedEOF, wantStderr: "unexpected EOF"},
+		"undecodable result": {outcome: unityipc.UnitySendOutcome{Result: json.RawMessage(`"text"`)}, wantStderr: "cannot unmarshal string"},
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -1049,8 +1056,8 @@ func TestSendEnablePausePointAndDecodeReportsFailures(t *testing.T) {
 			if err == nil || raw != nil {
 				t.Fatalf("expected an error and no raw result, got raw=%s err=%v", raw, err)
 			}
-			if stderr.Len() == 0 {
-				t.Fatal("stderr must report the failure")
+			if !strings.Contains(stderr.String(), testCase.wantStderr) {
+				t.Fatalf("stderr must contain %q:\n%s", testCase.wantStderr, stderr.String())
 			}
 		})
 	}

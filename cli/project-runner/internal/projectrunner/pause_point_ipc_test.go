@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -18,8 +19,8 @@ func TestSendSetCodeOptimizationDebugFromUnity(t *testing.T) {
 	})
 	t.Run("Unity error", func(t *testing.T) {
 		server := startFakeUnityServer(t, t.TempDir(), setCodeOptimizationDebugCommandName, testUnityRPCFailureResponse)
-		if err := sendSetCodeOptimizationDebugFromUnity(context.Background(), server.connection); err == nil {
-			t.Fatal("expected the Unity error")
+		if err := sendSetCodeOptimizationDebugFromUnity(context.Background(), server.connection); err == nil || !strings.Contains(err.Error(), "tool exploded in Unity") {
+			t.Fatalf("expected the Unity error, got %v", err)
 		}
 	})
 }
@@ -28,20 +29,20 @@ func TestSendSetCodeOptimizationDebugFromUnity(t *testing.T) {
 func TestPausePointStatusQueriesReportFailures(t *testing.T) {
 	t.Run("status undecodable", func(t *testing.T) {
 		server := startFakeUnityResultServer(t, t.TempDir(), pausePointStatusCommandName, `[1]`)
-		if _, err := queryPausePointStatusFromUnity(context.Background(), server.connection, "jump"); err == nil {
-			t.Fatal("expected a decode error")
+		if _, err := queryPausePointStatusFromUnity(context.Background(), server.connection, "jump"); err == nil || !strings.Contains(err.Error(), "cannot unmarshal") {
+			t.Fatalf("expected a decode error, got %v", err)
 		}
 	})
 	t.Run("list Unity error", func(t *testing.T) {
 		server := startFakeUnityServer(t, t.TempDir(), pausePointStatusCommandName, testUnityRPCFailureResponse)
-		if _, err := queryPausePointStatusListFromUnity(context.Background(), server.connection); err == nil {
-			t.Fatal("expected the Unity error")
+		if _, err := queryPausePointStatusListFromUnity(context.Background(), server.connection); err == nil || !strings.Contains(err.Error(), "tool exploded in Unity") {
+			t.Fatalf("expected the Unity error, got %v", err)
 		}
 	})
 	t.Run("list undecodable", func(t *testing.T) {
 		server := startFakeUnityResultServer(t, t.TempDir(), pausePointStatusCommandName, `"text"`)
-		if _, err := queryPausePointStatusListFromUnity(context.Background(), server.connection); err == nil {
-			t.Fatal("expected a decode error")
+		if _, err := queryPausePointStatusListFromUnity(context.Background(), server.connection); err == nil || !strings.Contains(err.Error(), "cannot unmarshal") {
+			t.Fatalf("expected a decode error, got %v", err)
 		}
 	})
 }
