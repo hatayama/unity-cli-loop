@@ -46,10 +46,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => _isRefreshingVersion);
         }
 
+        /// <summary>
+        /// Verifies a fresh presenter reports the flat Claude target as missing with no scan result yet.
+        /// </summary>
         [Test]
         public void GetSnapshot_BeforeAnyScan_DescribesAnUnscannedFlatClaudeTarget()
         {
-            // Verifies a fresh presenter reports the flat Claude target as missing with no scan result yet.
             UnityCliLoopSettingsSkillsSnapshot snapshot = _presenter.GetSnapshot();
 
             Assert.That(snapshot.InstallSkillsFlat, Is.True);
@@ -60,20 +62,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.HasSkillTargetScanResult, Is.False);
         }
 
+        /// <summary>
+        /// Verifies the Settings window stores the forced flat skill layout.
+        /// </summary>
         [Test]
         public void ApplyFlatSkillInstallPreference_PersistsTheFlatLayout()
         {
-            // Verifies the Settings window stores the forced flat skill layout.
             _presenter.ApplyFlatSkillInstallPreference();
 
             Assert.That(_editorSettingsPort.InstallSkillsFlatValues, Is.EqualTo(new List<bool> { true }));
         }
 
+        /// <summary>
+        /// Verifies that without a CLI the fast refresh skips the scan, reports the target as missing with no
+        /// installable targets, and refreshes the CLI section with skill checks.
+        /// </summary>
         [Test]
         public void RefreshSelectedTargetInstallStateFast_WithoutACli_ReportsAScannedEmptyState()
         {
-            // Verifies that without a CLI the fast refresh skips the scan, reports the target as missing
-            // with no installable targets, and refreshes the CLI section with skill checks.
             _cliDetector.IsCliInstalledValue = false;
             _presenter.MarkSelectedTargetInstallStateChecking();
 
@@ -87,11 +93,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sectionRefreshCalls, Is.EqualTo(new List<bool> { true }));
         }
 
+        /// <summary>
+        /// Verifies the fast refresh scans the flat layout at the project root, takes the selected target's
+        /// install state, and keeps only targets that have a skills directory.
+        /// </summary>
         [Test]
         public void RefreshSelectedTargetInstallStateFast_WithACli_ReadsTheSelectedTargetFromTheFastScan()
         {
-            // Verifies the fast refresh scans the flat layout at the project root, takes the selected
-            // target's install state, and keeps only targets that have a skills directory.
             _cliDetector.IsCliInstalledValue = true;
             _skillPort.FastTargets = new List<SkillSetupTargetInfo>
             {
@@ -113,10 +121,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_skillPort.FullScanCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a scan that does not list the selected target reports it as missing.
+        /// </summary>
         [Test]
         public void RefreshSelectedTargetInstallStateFast_WhenTheSelectedTargetIsAbsent_ReportsMissing()
         {
-            // Verifies a scan that does not list the selected target reports it as missing.
             _cliDetector.IsCliInstalledValue = true;
             _skillPort.FastTargets = new List<SkillSetupTargetInfo>
             {
@@ -129,11 +139,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_presenter.GetSnapshot().SelectedTargetInstallState, Is.EqualTo(SkillInstallState.Missing));
         }
 
+        /// <summary>
+        /// Verifies that a refresh which cannot start without a CLI replaces a checking state with missing and
+        /// refreshes the section once.
+        /// </summary>
         [Test]
         public void RefreshSelectedTargetInstallStateInBackground_WithoutACli_ResetsACheckingStateToMissing()
         {
-            // Verifies that a refresh which cannot start without a CLI replaces a checking state with missing
-            // and refreshes the section once.
             _cliDetector.IsCliInstalledValue = false;
             _presenter.MarkSelectedTargetInstallStateChecking();
 
@@ -143,10 +155,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sectionRefreshCalls, Is.EqualTo(new List<bool> { true }));
         }
 
+        /// <summary>
+        /// Verifies an unchanged missing state does not refresh the section again.
+        /// </summary>
         [Test]
         public void RefreshSelectedTargetInstallStateInBackground_WithoutACli_WhenAlreadyMissing_SkipsTheRefresh()
         {
-            // Verifies an unchanged missing state does not refresh the section again.
             _cliDetector.IsCliInstalledValue = false;
 
             _presenter.RefreshSelectedTargetInstallStateInBackground();
@@ -154,10 +168,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sectionRefreshCalls, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies choosing another target is reflected in the snapshot even before a CLI exists.
+        /// </summary>
         [Test]
         public void HandleSkillsTargetChanged_WithoutACli_SwitchesTheSelectedTarget()
         {
-            // Verifies choosing another target is reflected in the snapshot even before a CLI exists.
             _cliDetector.IsCliInstalledValue = false;
 
             _presenter.HandleSkillsTargetChanged(SkillsTarget.Codex);
@@ -166,12 +182,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_presenter.GetSnapshot().SelectedTargetInstallState, Is.EqualTo(SkillInstallState.Missing));
         }
 
+        /// <summary>
+        /// Verifies a layout change re-applies the flat layout and refreshes the selected target's install state
+        /// from the scan.
+        /// </summary>
         [Test]
-        public void HandleGroupSkillsChanged_DuringACliRefresh_PersistsTheLayoutAndRefreshesFast()
+        public void HandleGroupSkillsChanged_PersistsTheLayoutAndRefreshesTheInstallState()
         {
-            // Verifies a layout change during a CLI version refresh re-applies the flat layout and refreshes
-            // from the fast scan only.
             _cliDetector.IsCliInstalledValue = true;
+            // A CLI refresh in progress keeps the background full scan (Task.Run) from starting during the
+            // test; that guard itself is covered by UnityCliLoopSettingsWindowRefreshPolicyTests.
             _isRefreshingVersion = true;
             _skillPort.FastTargets = new List<SkillSetupTargetInfo>
             {
@@ -185,21 +205,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies disabling a tool removes its skill files and installs nothing.
+        /// </summary>
         [Test]
         public async Task ApplyToolToggleSideEffects_WhenDisabled_RemovesTheToolSkill()
         {
-            // Verifies disabling a tool removes its skill files and installs nothing.
             await _presenter.ApplyToolToggleSideEffects("sample-tool", false);
 
             Assert.That(_skillPort.RemovedTools, Is.EqualTo(new List<string> { "sample-tool" }));
             Assert.That(_skillPort.InstalledToolSkills, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies enabling a tool installs its skill in the flat layout without a warning when the skill is
+        /// present afterwards.
+        /// </summary>
         [Test]
         public async Task ApplyToolToggleSideEffects_WhenEnabled_InstallsTheToolSkillFlat()
         {
-            // Verifies enabling a tool installs its skill in the flat layout without a warning when the
-            // skill is present afterwards.
             _skillPort.InstalledToolNames.Add("sample-tool");
 
             await _presenter.ApplyToolToggleSideEffects("sample-tool", true);
@@ -209,10 +233,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             LogAssert.NoUnexpectedReceived();
         }
 
+        /// <summary>
+        /// Verifies an enabled tool whose skill did not appear logs a warning about the skill source layout.
+        /// </summary>
         [Test]
         public async Task ApplyToolToggleSideEffects_WhenTheSkillIsStillMissing_WarnsAboutTheSkillSource()
         {
-            // Verifies an enabled tool whose skill did not appear logs a warning about the skill source layout.
             LogAssert.Expect(LogType.Warning, new Regex("Skill for 'sample-tool' was not installed after enabling"));
 
             await _presenter.ApplyToolToggleSideEffects("sample-tool", true);

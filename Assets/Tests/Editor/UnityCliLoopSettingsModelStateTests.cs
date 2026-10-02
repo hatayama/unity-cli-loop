@@ -40,11 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _model = new UnityCliLoopSettingsModel(_toolSettingsUseCase, _editorSettingsPort);
         }
 
+        /// <summary>
+        /// Verifies loading takes the security and tool-settings flags from the stored settings while keeping the
+        /// in-memory scroll position and configuration state.
+        /// </summary>
         [Test]
         public void LoadFromSettings_CopiesThePersistedSectionFlagsAndKeepsTheRest()
         {
-            // Verifies loading takes the security and tool-settings flags from the stored settings while
-            // keeping the in-memory scroll position and configuration state.
             Vector2 scrollPosition = new Vector2(0f, 42f);
             _model.UpdateUIState(ui => new UIState(scrollPosition, true, true, showConfiguration: false));
             _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
@@ -61,20 +63,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_model.UI.ShowConfiguration, Is.False);
         }
 
+        /// <summary>
+        /// Verifies toggling the Tool Settings section updates the UI state and stores the choice.
+        /// </summary>
         [Test]
         public void UpdateShowToolSettings_UpdatesTheStateAndPersistsIt()
         {
-            // Verifies toggling the Tool Settings section updates the UI state and stores the choice.
             _model.UpdateShowToolSettings(false);
 
             Assert.That(_model.UI.ShowToolSettings, Is.False);
             Assert.That(_editorSettingsPort.ShowToolSettingsValues, Is.EqualTo(new List<bool> { false }));
         }
 
+        /// <summary>
+        /// Verifies the configuration foldout state changes in memory and is never persisted.
+        /// </summary>
         [Test]
         public void UpdateShowConfiguration_UpdatesOnlyTheInMemoryState()
         {
-            // Verifies the configuration foldout state changes in memory and is never persisted.
             _model.UpdateShowConfiguration(false);
 
             Assert.That(_model.UI.ShowConfiguration, Is.False);
@@ -82,10 +88,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_editorSettingsPort.ShowToolSettingsValues, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies enabling or disabling a tool writes the tool setting and notifies tool-change listeners.
+        /// </summary>
         [Test]
         public void UpdateToolEnabled_StoresTheSettingAndAnnouncesTheChange()
         {
-            // Verifies enabling or disabling a tool writes the tool setting and notifies tool-change listeners.
             int toolsChangedCount = 0;
             _toolSettingsUseCase.AddToolsChangedHandler(() => toolsChangedCount++);
 
@@ -95,10 +103,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(toolsChangedCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies entering post-compile mode also asks for a repaint without forgetting the last server state.
+        /// </summary>
         [Test]
         public void EnablePostCompileMode_RequestsARepaintAndKeepsTheServerFlag()
         {
-            // Verifies entering post-compile mode also asks for a repaint without forgetting the last server state.
             _model.UpdateRuntimeState(runtime => new RuntimeState(lastServerRunning: true));
 
             _model.EnablePostCompileMode();
@@ -108,10 +118,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_model.Runtime.LastServerRunning, Is.True);
         }
 
+        /// <summary>
+        /// Verifies a repaint request can be cleared again while post-compile mode stays on.
+        /// </summary>
         [Test]
         public void ClearRepaintRequest_AfterARequest_KeepsThePostCompileMode()
         {
-            // Verifies a repaint request can be cleared again while post-compile mode stays on.
             _model.EnablePostCompileMode();
 
             _model.ClearRepaintRequest();

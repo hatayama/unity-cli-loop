@@ -63,10 +63,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _view.Dispose();
         }
 
+        /// <summary>
+        /// Verifies an unfinished CLI check renders the checking label and button.
+        /// </summary>
         [Test]
         public void RefreshSection_WhileTheCliCheckIsPending_ShowsChecking()
         {
-            // Verifies an unfinished CLI check renders the checking label and button.
             _cliDetector.IsCheckCompletedValue = false;
 
             _presenter.RefreshSection();
@@ -75,10 +77,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Button>("install-cli-button").text, Is.EqualTo("Checking..."));
         }
 
+        /// <summary>
+        /// Verifies a current dispatcher in the package-owned install path is offered for uninstall.
+        /// </summary>
         [Test]
         public void RefreshSection_WithAPackageOwnedCurrentDispatcher_OffersUninstall()
         {
-            // Verifies a current dispatcher in the package-owned install path is offered for uninstall.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
             _nativeCliInstaller.IsPackageOwnedPath = true;
@@ -89,11 +93,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Button>("install-cli-button").text, Is.EqualTo("Uninstall CLI"));
         }
 
+        /// <summary>
+        /// Verifies a CLI below the dispatcher minimum is offered an update to that minimum when the bootstrap pin
+        /// cannot name a newer target.
+        /// </summary>
         [Test]
         public void RefreshSection_WithAnOutdatedCli_OffersTheUpdateToTheMinimum()
         {
-            // Verifies a CLI below the dispatcher minimum is offered an update to that minimum when the
-            // bootstrap pin cannot name a newer target.
             _cliDetector.CliVersion = "2.0.0";
             _cliDetector.IsDispatcher = true;
 
@@ -104,10 +110,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(CliSetupLabelFormatter.GetCliReplacementButtonText("Update", "2.0.0", MinimumDispatcherVersion)));
         }
 
+        /// <summary>
+        /// Verifies a refresh that skips skill directory checks keeps the skills panel in its checking state.
+        /// </summary>
         [Test]
         public void RefreshSection_WithoutSkillDirectoryChecks_ShowsTheSkillsAsChecking()
         {
-            // Verifies a refresh that skips skill directory checks keeps the skills panel in its checking state.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
 
@@ -116,10 +124,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Label>("skill-target-status-summary").text, Is.EqualTo("Checking installed skills..."));
         }
 
+        /// <summary>
+        /// Verifies a finished skill scan with no installable targets leaves the checking state.
+        /// </summary>
         [Test]
         public void RefreshSection_WithAScannedEmptySkillList_ShowsTheResolvedSkillsPanel()
         {
-            // Verifies a finished skill scan with no installable targets leaves the checking state.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
 
@@ -128,11 +138,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Label>("skill-target-status-summary").text, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies the primary action asks the installer about the cached executable path and lets a managed
+        /// install disable the button.
+        /// </summary>
         [Test]
         public void ResolveCurrentPrimaryButtonAction_ResolvesFromTheCachedExecutablePath()
         {
-            // Verifies the primary action asks the installer about the cached executable path and lets a
-            // managed install disable the button.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
             _cliDetector.ExecutablePath = "<CLI_PATH>";
@@ -149,20 +161,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_nativeCliInstaller.ManagedKindQueries, Is.EqualTo(new List<string> { "<CLI_PATH>", "<CLI_PATH>" }));
         }
 
+        /// <summary>
+        /// Verifies a completed CLI check is not repeated and does not trigger a skills refresh.
+        /// </summary>
         [Test]
         public async Task RefreshCliVersionInBackground_WhenAlreadyChecked_DoesNothing()
         {
-            // Verifies a completed CLI check is not repeated and does not trigger a skills refresh.
             await _presenter.RefreshCliVersionInBackground();
 
             Assert.That(_cliDetector.RefreshCount, Is.EqualTo(0));
             Assert.That(_skillsRefreshCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies the first CLI check runs once and then asks for the skills install state.
+        /// </summary>
         [Test]
         public async Task RefreshCliVersionInBackground_WhenNotChecked_RefreshesAndRequestsASkillsRefresh()
         {
-            // Verifies the first CLI check runs once and then asks for the skills install state.
             _cliDetector.IsCheckCompletedValue = false;
 
             await _presenter.RefreshCliVersionInBackground();
@@ -171,30 +187,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_skillsRefreshCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies a package-owned install the shell cannot see switches the button to PATH repair, except on
+        /// Windows where the PATH check never runs and the section is not redrawn.
+        /// </summary>
         [Test]
         public async Task RefreshCliPathSetupInBackground_WithAHiddenPackageOwnedInstall_FlagsPathRepairOutsideWindows()
         {
-            // Verifies a package-owned install the shell cannot see switches the button to PATH repair, except
-            // on Windows where the PATH check never runs.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
             _cliDetector.IsVisibleFromShell = false;
             _nativeCliInstaller.IsPackageOwnedPath = true;
             _nativeCliInstaller.HasPackageOwnedInstall = true;
             bool isWindowsEditor = UnityEngine.Application.platform == RuntimePlatform.WindowsEditor;
+            string buttonTextBefore = _root.Q<Button>("install-cli-button").text;
 
             await _presenter.RefreshCliPathSetupInBackground();
 
             Assert.That(_cliDetector.ShellVisibilityChecks, Is.EqualTo(isWindowsEditor ? 0 : 1));
             Assert.That(
                 _root.Q<Button>("install-cli-button").text,
-                Is.EqualTo(isWindowsEditor ? "Uninstall CLI" : "Fix PATH"));
+                Is.EqualTo(isWindowsEditor ? buttonTextBefore : "Fix PATH"));
         }
 
+        /// <summary>
+        /// Verifies a click on a package-manager-owned CLI re-checks the state and then does nothing.
+        /// </summary>
         [Test]
         public async Task HandleInstallCli_WithAManagedCli_OnlyRefreshesTheState()
         {
-            // Verifies a click on a package-manager-owned CLI re-checks the state and then does nothing.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
             _nativeCliInstaller.ManagedKind = ManagedCliKind.Homebrew;
@@ -210,11 +231,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_presenter.IsRefreshingVersion, Is.False);
         }
 
+        /// <summary>
+        /// Verifies a first install uses the pinned dispatcher release and refreshes every section, including
+        /// skills, afterwards.
+        /// </summary>
         [Test]
         public async Task HandleInstallCli_WithoutACli_InstallsFromTheBootstrapPinAndRefreshesSkills()
         {
-            // Verifies a first install uses the pinned dispatcher release and refreshes every section,
-            // including skills, afterwards.
             _cliDetector.CliVersion = string.Empty;
             _cliDetector.IsCliInstalledValue = false;
             _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
@@ -225,10 +248,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_refreshAllSectionsCalls, Is.EqualTo(new List<bool> { true }));
         }
 
+        /// <summary>
+        /// Verifies an update over an installed CLI refreshes the sections but not the skills.
+        /// </summary>
         [Test]
         public async Task HandleInstallCli_OverAnInstalledCli_RefreshesWithoutTheSkills()
         {
-            // Verifies an update over an installed CLI refreshes the sections but not the skills.
             _cliDetector.CliVersion = "2.0.0";
             _cliDetector.IsDispatcher = true;
             _cliDetector.IsCliInstalledValue = true;

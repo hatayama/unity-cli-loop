@@ -60,12 +60,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _view.Dispose();
         }
 
+        /// <summary>
+        /// Verifies the catalog groups built-in and third-party tools under their headers, sorts each group by
+        /// name, drops development-only tools, and carries each tool's enabled state and skill description.
+        /// </summary>
         [Test]
         public void RefreshCatalogIfNeeded_WithAWarmRegistry_ListsSortedUserFacingTools()
         {
-            // Verifies the catalog groups built-in and third-party tools under their headers, sorts each
-            // group by name, drops development-only tools, and carries each tool's enabled state and
-            // skill description.
             _registrarService.WarmupRegistry();
             _presenter.SetViewReady(true);
 
@@ -89,10 +90,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<VisualElement>("tool-settings-info-container").style.display.value, Is.EqualTo(DisplayStyle.Flex));
         }
 
+        /// <summary>
+        /// Verifies a clean catalog is not rebuilt on the next refresh, and an invalidation rebuilds it.
+        /// </summary>
         [Test]
         public void RefreshCatalogIfNeeded_AfterARefresh_ReusesTheCatalogUntilInvalidated()
         {
-            // Verifies a clean catalog is not rebuilt on the next refresh, and an invalidation rebuilds it.
             _registrarService.WarmupRegistry();
             _presenter.SetViewReady(true);
             _presenter.RefreshCatalogIfNeeded(true);
@@ -106,10 +109,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_descriptionProvider.CallCount, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies the catalog is not read while the window is still building its view.
+        /// </summary>
         [Test]
         public void RefreshCatalogIfNeeded_BeforeTheViewIsReady_SkipsTheCatalog()
         {
-            // Verifies the catalog is not read while the window is still building its view.
             _registrarService.WarmupRegistry();
 
             _presenter.RefreshCatalogIfNeeded(true);
@@ -118,10 +123,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(GetRows(), Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies a collapsed Tool Settings section never reads the catalog.
+        /// </summary>
         [Test]
         public void RefreshCatalogIfNeeded_WhenHidden_SkipsTheCatalog()
         {
-            // Verifies a collapsed Tool Settings section never reads the catalog.
             _registrarService.WarmupRegistry();
             _presenter.SetViewReady(true);
 
@@ -130,11 +137,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_descriptionProvider.CallCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a missing registry shows the unavailable status and keeps the catalog dirty, so the next
+        /// refresh after the registry warms up lists the tools.
+        /// </summary>
         [Test]
         public void RefreshCatalogIfNeeded_WithoutARegistry_ShowsUnavailableAndRetriesLater()
         {
-            // Verifies a missing registry shows the unavailable status and keeps the catalog dirty, so the
-            // next refresh after the registry warms up lists the tools.
             _presenter.SetViewReady(true);
 
             _presenter.RefreshCatalogIfNeeded(true);
@@ -146,11 +155,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(GetRows().Count, Is.EqualTo(5));
         }
 
+        /// <summary>
+        /// Verifies collapsing the section forgets the catalog, so expanding it again rebuilds the list, and the
+        /// foldout follows each change.
+        /// </summary>
         [Test]
         public void HandleShowToolSettingsChanged_CollapsingMarksTheCatalogDirty()
         {
-            // Verifies collapsing the section forgets the catalog, so expanding it again rebuilds the list,
-            // and the foldout follows each change.
             _registrarService.WarmupRegistry();
             _presenter.SetViewReady(true);
             _presenter.RefreshCatalogIfNeeded(true);
@@ -164,10 +175,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_descriptionProvider.CallCount, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies the header-only update sets the foldout state and leaves the catalog untouched.
+        /// </summary>
         [Test]
         public void UpdateHeader_RendersTheFoldoutWithoutReadingTheCatalog()
         {
-            // Verifies the header-only update sets the foldout state and leaves the catalog untouched.
             _registrarService.WarmupRegistry();
             _presenter.SetViewReady(true);
 

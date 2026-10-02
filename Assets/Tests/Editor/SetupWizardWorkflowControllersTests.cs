@@ -47,11 +47,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _refreshUiCalls = new List<bool>();
         }
 
+        /// <summary>
+        /// Verifies a refresh re-reads the CLI, skips the PATH check when the package does not own the install,
+        /// and renders the installed state.
+        /// </summary>
         [Test]
         public async Task CliRefreshAndUpdate_WithACurrentDispatcher_ReportsInstalledWithoutAShellCheck()
         {
-            // Verifies a refresh re-reads the CLI, skips the PATH check when the package does not own
-            // the install, and renders the installed state.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
             SetupWizardCliWorkflowController controller = CreateCliWorkflow();
@@ -64,10 +66,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Button>("install-cli-button").text, Is.EqualTo("Installed"));
         }
 
+        /// <summary>
+        /// Verifies an empty CLI version reports the CLI as missing and offers the install action.
+        /// </summary>
         [Test]
         public async Task CliRefreshAndUpdate_WithoutACli_ReportsNotInstalled()
         {
-            // Verifies an empty CLI version reports the CLI as missing and offers the install action.
             _cliDetector.CliVersion = string.Empty;
             SetupWizardCliWorkflowController controller = CreateCliWorkflow();
 
@@ -77,11 +81,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Button>("install-cli-button").text, Is.EqualTo("Install CLI"));
         }
 
+        /// <summary>
+        /// Verifies a package-owned install that the shell cannot see asks for a PATH repair, except on Windows
+        /// where the PATH check never runs.
+        /// </summary>
         [Test]
         public async Task CliRefreshAndUpdate_WithAPackageOwnedInstallHiddenFromTheShell_OffersPathRepairOutsideWindows()
         {
-            // Verifies a package-owned install that the shell cannot see asks for a PATH repair, except on
-            // Windows where the PATH check never runs.
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
             _cliDetector.IsVisibleFromShell = false;
@@ -97,11 +103,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(isWindowsEditor ? "Installed" : "Fix PATH"));
         }
 
+        /// <summary>
+        /// Verifies the skills step stores the forced flat layout preference and shows grouping off until the
+        /// skill state is known.
+        /// </summary>
         [Test]
         public void SkillsInitializeGroupSkillsToggle_PersistsTheFlatLayoutAndDisablesTheToggle()
         {
-            // Verifies the skills step stores the forced flat layout preference and shows grouping off
-            // until the skill state is known.
             SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
 
             controller.InitializeGroupSkillsToggle();
@@ -112,11 +120,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(groupToggle.enabledSelf, Is.False);
         }
 
+        /// <summary>
+        /// Verifies a refresh without a CLI renders the fast flat-layout scan, keeps the selected target install
+        /// disabled, never starts the full background scan, and resizes once.
+        /// </summary>
         [Test]
         public void SkillsRefreshSection_WithoutACli_ShowsTheFastScanWithoutTheFullScan()
         {
-            // Verifies a refresh without a CLI renders the fast flat-layout scan, keeps the selected
-            // target install disabled, never starts the full background scan, and resizes once.
             _cliDetector.CliVersion = string.Empty;
             _skillPort.FastTargets = new List<SkillSetupTargetInfo>
             {
@@ -135,11 +145,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Button>("install-selected-skills-button").enabledSelf, Is.False);
         }
 
+        /// <summary>
+        /// Verifies the fast skills state applied by the wizard refresh renders the scan but leaves the resize to
+        /// its caller.
+        /// </summary>
         [Test]
         public void SkillsApplyFastSkillsState_WithoutACli_RendersWithoutResizing()
         {
-            // Verifies the fast skills state applied by the wizard refresh renders the scan but leaves the
-            // resize to its caller.
             _skillPort.FastTargets = new List<SkillSetupTargetInfo>
             {
                 CreateTarget("Claude Code", ".claude", SkillInstallState.Installed),
@@ -155,11 +167,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<VisualElement>("skill-target-status-list").childCount, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies the wizard opens with both steps checking and the auto-show toggle reflecting the stored
+        /// personal suppression flag.
+        /// </summary>
         [Test]
         public void WorkflowApplyInitialCheckingState_ShowsCheckingAndTheStoredSuppressFlag()
         {
-            // Verifies the wizard opens with both steps checking and the auto-show toggle reflecting the
-            // stored personal suppression flag.
             _editorSettingsPort.SuppressAutoShow = true;
             Toggle suppressToggle = new Toggle();
             VisualElement nodejsWarning = new VisualElement();
@@ -175,10 +189,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_root.Q<Label>("skill-target-status-summary").text, Is.EqualTo("Checking installed skills..."));
         }
 
+        /// <summary>
+        /// Verifies the wizard-level initialization persists the flat layout through the skills step.
+        /// </summary>
         [Test]
         public void WorkflowInitializeGroupSkillsToggle_DelegatesToTheSkillsStep()
         {
-            // Verifies the wizard-level initialization persists the flat layout through the skills step.
             SetupWizardWorkflowController controller = CreateWorkflow(new Toggle(), new VisualElement(), new VisualElement());
 
             controller.InitializeGroupSkillsToggle();

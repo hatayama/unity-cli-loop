@@ -50,11 +50,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => throw new InvalidOperationException("the migration auto-scan must not open"));
         }
 
+        /// <summary>
+        /// Verifies a project-level suppression records the current versions as seen without checking the CLI, so
+        /// the wizard stays quiet for this release.
+        /// </summary>
         [Test]
         public void TryShowOnVersionChange_WhenTheProjectSuppressesAutoShow_RecordsTheCurrentState()
         {
-            // Verifies a project-level suppression records the current versions as seen without
-            // checking the CLI, so the wizard stays quiet for this release.
             _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "3.0.0",
@@ -74,10 +76,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_cliDetector.ForceRefreshCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies the personal suppression flag alone is enough to record the current state.
+        /// </summary>
         [Test]
         public void TryShowOnVersionChange_WhenTheUserSuppressesAutoShow_RecordsTheCurrentState()
         {
-            // Verifies the personal suppression flag alone is enough to record the current state.
             _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "3.0.0",
@@ -94,10 +98,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_cliDetector.ForceRefreshCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies an unchanged package and dispatcher minimum neither record state nor refresh the CLI.
+        /// </summary>
         [Test]
         public void TryShowOnVersionChange_WhenNothingChanged_LeavesSettingsAndCliAlone()
         {
-            // Verifies an unchanged package and dispatcher minimum neither record state nor refresh the CLI.
             _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = UnityCliLoopConstants.PackageInfo.version,
@@ -111,11 +117,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_showWindowCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a raised dispatcher minimum re-checks the CLI and, when the installed dispatcher already
+        /// satisfies it, records the new minimum instead of showing the wizard.
+        /// </summary>
         [Test]
         public void TryShowOnVersionChange_WhenOnlyTheMinimumChangedAndTheCliIsCurrent_RecordsWithoutShowing()
         {
-            // Verifies a raised dispatcher minimum re-checks the CLI and, when the installed dispatcher
-            // already satisfies it, records the new minimum instead of showing the wizard.
             _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = UnityCliLoopConstants.PackageInfo.version,
@@ -133,10 +141,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(MinimumDispatcherVersion));
         }
 
+        /// <summary>
+        /// Verifies a missing CLI does not count as needing an update, so the new minimum is recorded.
+        /// </summary>
         [Test]
         public void TryShowOnVersionChange_WhenOnlyTheMinimumChangedAndNoCliIsInstalled_RecordsWithoutShowing()
         {
-            // Verifies a missing CLI does not count as needing an update, so the new minimum is recorded.
             _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = UnityCliLoopConstants.PackageInfo.version,
