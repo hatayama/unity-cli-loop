@@ -1,6 +1,7 @@
 package dispatcher
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -68,12 +69,12 @@ func TestResolveDispatcherV2CLIEntrypointRejectsInvalidPackages(t *testing.T) {
 		rawContent  string
 		wantMessage string
 	}{
-		{name: "missing package", wantMessage: "no such file"},
+		{name: "missing package", wantMessage: "open "},
 		{name: "unparsable package", rawContent: "{", wantMessage: "parse "},
 		{name: "bin is neither string nor object", bin: "5", wantMessage: "package bin must be a string or object"},
 		{name: "bin object without uloop", bin: `{"other":"cli.js"}`, wantMessage: "package bin does not define uloop"},
 		{name: "bin object with empty uloop", bin: `{"uloop":""}`, wantMessage: "package bin does not define uloop"},
-		{name: "absolute entrypoint", bin: `"` + filepath.ToSlash(filepath.Join(string(filepath.Separator), "abs", "cli.js")) + `"`, wantMessage: "bin entrypoint must be relative"},
+		{name: "absolute entrypoint", bin: dispatcherTestJSONString(t, filepath.Join(t.TempDir(), "cli.js")), wantMessage: "bin entrypoint must be relative"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -120,4 +121,13 @@ func writeDispatcherFakeNode(t *testing.T, body string) string {
 	}
 	t.Setenv("PATH", binDirectory)
 	return nodePath
+}
+
+func dispatcherTestJSONString(t *testing.T, value string) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("failed to encode %q: %v", value, err)
+	}
+	return string(encoded)
 }

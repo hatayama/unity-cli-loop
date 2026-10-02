@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -843,16 +844,17 @@ func assertPackageLockSourceKeepsPinnedRunner(t *testing.T, lockVersion string, 
 func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 	// Verifies a manifest or packages-lock that cannot be read or parsed is reported instead of guessing the package generation.
 	cases := []struct {
-		name  string
-		setup func(t *testing.T, projectRoot string)
-		want  string
+		name     string
+		setup    func(t *testing.T, projectRoot string)
+		want     string
+		wantPath string
 	}{
 		{
 			name: "manifest is a directory",
 			setup: func(t *testing.T, projectRoot string) {
 				mkdirDispatcherTestDirectory(t, filepath.Join(projectRoot, "Packages", "manifest.json"))
 			},
-			want: "manifest.json: is a directory",
+			want: "read ", wantPath: "manifest.json",
 		},
 		{
 			name: "manifest is not JSON",
@@ -867,7 +869,7 @@ func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 				writeV2PackageManifest(t, projectRoot)
 				mkdirDispatcherTestDirectory(t, filepath.Join(projectRoot, "Packages", "packages-lock.json"))
 			},
-			want: "packages-lock.json: is a directory",
+			want: "read ", wantPath: "packages-lock.json",
 		},
 		{
 			name: "lock is not JSON",
@@ -880,6 +882,7 @@ func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 		{
 			name: "package cache is a file",
 			setup: func(t *testing.T, projectRoot string) {
+				skipDispatcherTestOnWindows(t, "Windows reads a file passed to ReadDir as a missing directory.")
 				writeV2PackageManifest(t, projectRoot)
 				writeDispatcherTestFile(t, filepath.Join(projectRoot, "Library", "PackageCache"), "not a directory")
 			},
@@ -893,8 +896,8 @@ func TestDetectV2DispatcherProjectReportsUnreadableManifests(t *testing.T) {
 
 			project, err := detectV2DispatcherProject(projectRoot)
 
-			if err == nil || !strings.Contains(err.Error(), testCase.want) {
-				t.Fatalf("expected error containing %q, got project=%+v err=%v", testCase.want, project, err)
+			if err == nil || !strings.Contains(err.Error(), testCase.want) || !strings.Contains(err.Error(), testCase.wantPath) {
+				t.Fatalf("expected error containing %q and %q, got project=%+v err=%v", testCase.want, testCase.wantPath, project, err)
 			}
 		})
 	}
@@ -1022,6 +1025,7 @@ func TestResolveDispatcherFileDependencyTarget(t *testing.T) {
 
 func TestDetectV2DispatcherEmbeddedProjectReportsUnreadablePackagesDirectory(t *testing.T) {
 	// Verifies a Packages path that exists but is not a directory is reported as an error.
+	skipDispatcherTestOnWindows(t, "Windows reads a file passed to ReadDir as a missing directory.")
 	projectRoot := t.TempDir()
 	writeDispatcherTestFile(t, filepath.Join(projectRoot, "Packages"), "not a directory")
 
@@ -1052,5 +1056,12 @@ func TestIsDispatcherGitPackageDependencyRejectsNonGitValues(t *testing.T) {
 	}
 	if !isDispatcherGitPackageDependency(json.RawMessage(`"git@example.invalid:owner/repo.git#v2.0.0"`)) {
 		t.Fatal("scp-style git dependency must be accepted")
+	}
+}
+
+func skipDispatcherTestOnWindows(t *testing.T, reason string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip(reason)
 	}
 }

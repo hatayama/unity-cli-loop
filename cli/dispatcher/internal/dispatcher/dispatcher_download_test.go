@@ -181,7 +181,7 @@ func TestVerifyDispatcherChecksumFailures(t *testing.T) {
 		{name: "missing checksum file", assetPath: assetPath, checksumPath: filepath.Join(tempDir, "missing.sha256"), wantMessage: "missing.sha256", wantNotExist: true},
 		{name: "empty checksum file", assetPath: assetPath, checksumPath: emptyChecksumPath, wantMessage: "checksum file is empty"},
 		{name: "missing asset", assetPath: filepath.Join(tempDir, "missing.tar.gz"), checksumPath: validChecksumPath, wantMessage: "missing.tar.gz", wantNotExist: true},
-		{name: "unreadable asset", assetPath: tempDir, checksumPath: validChecksumPath, wantMessage: "is a directory"},
+		{name: "unreadable asset", assetPath: tempDir, checksumPath: validChecksumPath, wantMessage: "read " + tempDir},
 		{name: "mismatch", assetPath: assetPath, checksumPath: wrongChecksumPath, wantMessage: "checksum mismatch for asset.tar.gz"},
 	}
 	for _, testCase := range cases {
@@ -509,7 +509,7 @@ func TestDownloadDispatcherRealCLIForPinReportsUnusableCacheRoot(t *testing.T) {
 
 	_, err := downloadDispatcherRealCLIForPin(context.Background(), cacheRoot, dispatcherPin{ProjectRunnerVersion: "3.0.0"}, "linux", "amd64", io.Discard)
 
-	if err == nil || !strings.Contains(err.Error(), "mkdir "+cacheRoot+": not a directory") {
+	if err == nil || !strings.Contains(err.Error(), "mkdir "+cacheRoot) {
 		t.Fatalf("expected a cache directory creation error, got %v", err)
 	}
 }

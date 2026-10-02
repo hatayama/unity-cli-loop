@@ -140,7 +140,7 @@ func TestInstallDispatcherV2CLIReportsUnusableCacheRoot(t *testing.T) {
 	}
 
 	_, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", io.Discard, deps)
-	if err == nil || !strings.Contains(err.Error(), "mkdir "+cacheRoot+": not a directory") {
+	if err == nil || !strings.Contains(err.Error(), "mkdir "+cacheRoot) {
 		t.Fatalf("expected a cache directory error, got %v", err)
 	}
 }

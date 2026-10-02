@@ -81,7 +81,9 @@ func TestRunRealCLICommandReportsStartFailure(t *testing.T) {
 	if !strings.Contains(stderr.String(), "Failed to run resolved uloop CLI") {
 		t.Fatalf("missing start failure message: %s", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), missingPath) {
+	errorObject, _ := envelope["Error"].(map[string]any)
+	details, _ := errorObject["Details"].(map[string]any)
+	if details["ExecutablePath"] != missingPath {
 		t.Fatalf("envelope must name the executable path: %v", envelope)
 	}
 }
