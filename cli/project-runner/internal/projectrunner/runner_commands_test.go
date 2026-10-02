@@ -129,20 +129,28 @@ func writeFakeUnityProject(t *testing.T) string {
 
 // Verifies that native commands with their own parsers reject an unknown flag themselves,
 // naming the command, instead of falling through to the dynamic tool catalog.
+// Each input is one only the native parser rejects this way: the dynamic catalog path reports
+// await-pause-point and pause-point-status as unknown commands, and enable-pause-point's
+// --resume-play as an unknown option instead of requiring --await.
 func TestRunResolvedProjectCommandRoutesNativeCommandsToTheirOwnParsers(t *testing.T) {
-	for _, command := range []string{
-		clicore.PausePointAwaitCommandName,
-		clicore.PausePointStatusUserCommandName,
-		pausePointEnableCommandName,
-	} {
-		t.Run(command, func(t *testing.T) {
+	cases := []struct {
+		command     string
+		args        []string
+		wantMessage string
+	}{
+		{command: clicore.PausePointAwaitCommandName, args: []string{"--bogus-flag"}, wantMessage: `"Message": "--bogus-flag requires a value"`},
+		{command: clicore.PausePointStatusUserCommandName, args: []string{"--bogus-flag"}, wantMessage: `"Message": "--bogus-flag requires a value"`},
+		{command: pausePointEnableCommandName, args: []string{"--resume-play"}, wantMessage: "require --await"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.command, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 
 			code := runResolvedProjectCommand(
 				context.Background(),
 				unreachableConnection(t.TempDir()),
-				command,
-				[]string{"--bogus-flag"},
+				testCase.command,
+				testCase.args,
 				t.TempDir(),
 				&stdout,
 				&stderr,
@@ -154,11 +162,8 @@ func TestRunResolvedProjectCommandRoutesNativeCommandsToTheirOwnParsers(t *testi
 			if stdout.Len() != 0 {
 				t.Fatalf("stdout must stay empty on argument errors: %s", stdout.String())
 			}
-			if !strings.Contains(stderr.String(), "--bogus-flag") {
-				t.Fatalf("stderr must name the rejected flag:\n%s", stderr.String())
-			}
-			if strings.Contains(stderr.String(), "Unknown command") {
-				t.Fatalf("native command must not be looked up in the tool catalog:\n%s", stderr.String())
+			if !strings.Contains(stderr.String(), testCase.wantMessage) {
+				t.Fatalf("stderr must carry the native parser's error %q:\n%s", testCase.wantMessage, stderr.String())
 			}
 		})
 	}
@@ -215,17 +220,20 @@ func TestRunSyncReportsUnityFailureWithoutWritingCache(t *testing.T) {
 // Verifies that sync fails without claiming success when the cache directory or file cannot be written.
 func TestRunSyncFailsWhenCacheCannotBeWritten(t *testing.T) {
 	cases := []struct {
-		name    string
-		prepare func(t *testing.T, projectRoot string)
+		name       string
+		prepare    func(t *testing.T, projectRoot string)
+		wantStderr string
 	}{
 		{
-			name: "cache directory path is a file",
+			name:       "cache directory path is a file",
+			wantStderr: "mkdir ",
 			prepare: func(t *testing.T, projectRoot string) {
 				writeTestFile(t, filepath.Join(projectRoot, clicore.CacheDirectoryName), "not a directory")
 			},
 		},
 		{
-			name: "cache file path is a directory",
+			name:       "cache file path is a directory",
+			wantStderr: "is a directory",
 			prepare: func(t *testing.T, projectRoot string) {
 				if err := os.MkdirAll(filepath.Join(projectRoot, clicore.CacheDirectoryName, clicore.CacheFileName), 0o755); err != nil {
 					t.Fatalf("failed to create blocking directory: %v", err)
@@ -248,8 +256,8 @@ func TestRunSyncFailsWhenCacheCannotBeWritten(t *testing.T) {
 			if stdout.Len() != 0 {
 				t.Fatalf("stdout must not report a sync: %s", stdout.String())
 			}
-			if stderr.Len() == 0 {
-				t.Fatal("stderr must explain the write failure")
+			if !strings.Contains(stderr.String(), testCase.wantStderr) {
+				t.Fatalf("stderr must contain %q:\n%s", testCase.wantStderr, stderr.String())
 			}
 		})
 	}
@@ -335,8 +343,8 @@ func TestRunDynamicProjectToolRejectsUnknownCommand(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "no-such-tool") {
-		t.Fatalf("stderr must name the unknown command:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), `"Message": "Unknown command: no-such-tool"`) {
+		t.Fatalf("stderr must report the unknown command:\n%s", stderr.String())
 	}
 }
 
@@ -353,12 +361,12 @@ func TestRunDynamicProjectToolRejectsInvalidArgumentsBeforeSending(t *testing.T)
 		args       []string
 		wantStderr string
 	}{
-		{name: "code-file without value", command: clicore.ExecuteDynamicCodeCommandName, args: []string{"--code-file"}, wantStderr: "--code-file"},
-		{name: "code-file that does not exist", command: clicore.ExecuteDynamicCodeCommandName, args: []string{"--code-file", missingCodeFile}, wantStderr: "missing.cs"},
-		{name: "code and code-file together", command: clicore.ExecuteDynamicCodeCommandName, args: []string{"--code", "return 2;", "--code-file", existingCodeFile}, wantStderr: "cannot be combined"},
-		{name: "clear-pause-point file without line", command: pausePointClearCommandName, args: []string{"--file", "Assets/Sample.cs"}, wantStderr: "--line"},
-		{name: "unknown tool option", command: "get-logs", args: []string{"--bogus-flag"}, wantStderr: "--bogus-flag"},
-		{name: "nested project path that is not a Unity project", command: "get-logs", args: []string{"--project-path", notAProject}, wantStderr: "Unity project"},
+		{name: "code-file without value", command: clicore.ExecuteDynamicCodeCommandName, args: []string{"--code-file"}, wantStderr: "--code-file requires a value"},
+		{name: "code-file that does not exist", command: clicore.ExecuteDynamicCodeCommandName, args: []string{"--code-file", missingCodeFile}, wantStderr: "failed to read --code-file"},
+		{name: "code and code-file together", command: clicore.ExecuteDynamicCodeCommandName, args: []string{"--code", "return 2;", "--code-file", existingCodeFile}, wantStderr: "--code and --code-file cannot be combined"},
+		{name: "clear-pause-point file without line", command: pausePointClearCommandName, args: []string{"--file", "Assets/Sample.cs"}, wantStderr: "--file requires --line."},
+		{name: "unknown tool option", command: "get-logs", args: []string{"--bogus-flag"}, wantStderr: "Unknown option for get-logs: --bogus-flag"},
+		{name: "nested project path that is not a Unity project", command: "get-logs", args: []string{"--project-path", notAProject}, wantStderr: "not a Unity project: "},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -466,8 +474,28 @@ func TestRunDynamicProjectToolWithCompileNoteSkipsNoteWhenUnityFails(t *testing.
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout must stay empty when Unity fails: %s", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "tool exploded in Unity") {
-		t.Fatalf("stderr must carry the Unity error message:\n%s", stderr.String())
+	assertSingleErrorEnvelope(t, stderr.Bytes(), "tool exploded in Unity")
+}
+
+// assertSingleErrorEnvelope checks stderr holds exactly one JSON error envelope and that it
+// carries wantMessage, so a second failure written after the first cannot go unnoticed.
+func assertSingleErrorEnvelope(t *testing.T, stderr []byte, wantMessage string) {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(stderr))
+	var envelope struct {
+		Error struct {
+			Message string `json:"Message"`
+		} `json:"Error"`
+	}
+	if err := decoder.Decode(&envelope); err != nil {
+		t.Fatalf("stderr must start with an error envelope: %v\n%s", err, stderr)
+	}
+	if !strings.Contains(envelope.Error.Message, wantMessage) {
+		t.Fatalf("envelope message = %q, want it to contain %q", envelope.Error.Message, wantMessage)
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		t.Fatalf("stderr must hold exactly one envelope, found more:\n%s", stderr)
 	}
 }
 

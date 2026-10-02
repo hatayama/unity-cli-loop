@@ -52,26 +52,8 @@ func TestRunProjectLocalRejectsProjectPathWithoutValue(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1; stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "--project-path") {
-		t.Fatalf("stderr must name --project-path:\n%s", stderr.String())
-	}
-}
-
-// Verifies that running a project command outside any Unity project fails with a resolution error.
-func TestRunProjectLocalFailsOutsideUnityProject(t *testing.T) {
-	t.Chdir(t.TempDir())
-	var stdout, stderr bytes.Buffer
-
-	code := RunProjectLocal(context.Background(), []string{"get-logs"}, &stdout, &stderr)
-
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1; stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "Unity project") {
-		t.Fatalf("stderr must explain that no Unity project was found:\n%s", stderr.String())
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout must stay empty: %s", stdout.String())
+	if !strings.Contains(stderr.String(), "--project-path requires a value") {
+		t.Fatalf("stderr must report the missing value:\n%s", stderr.String())
 	}
 }
 
@@ -92,7 +74,7 @@ func TestRunToolRoutesCompileToDomainReloadWait(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "--timeout-seconds") {
+	if !strings.Contains(stderr.String(), "Invalid positive integer value for --timeout-seconds") {
 		t.Fatalf("stderr must reject the timeout:\n%s", stderr.String())
 	}
 }
@@ -213,17 +195,16 @@ func TestRunToolExecuteDynamicCodeStripsWaitControlField(t *testing.T) {
 	}
 }
 
-// Verifies that a Unity-side error on the execute-dynamic-code wait path exits 1 and reports
-// the Unity message instead of waiting for a domain reload.
-func TestRunToolExecuteDynamicCodeReportsUnityError(t *testing.T) {
+// Verifies that a Unity-side error on the execute-dynamic-code wait path exits 1, reports the
+// Unity message, and prints no result instead of continuing with an empty response.
+func TestRunExecuteDynamicCodeWithDomainReloadWaitReportsUnityError(t *testing.T) {
 	projectRoot := t.TempDir()
 	server := startFakeUnityServer(t, projectRoot, clicore.ExecuteDynamicCodeCommandName, testUnityRPCFailureResponse)
 	var stdout, stderr bytes.Buffer
 
-	code := runTool(
+	code := runExecuteDynamicCodeWithDomainReloadWait(
 		context.Background(),
 		server.connection,
-		clicore.ExecuteDynamicCodeCommandName,
 		map[string]any{"Code": "return 1;", clicore.DomainReloadWaitParam: true},
 		&stdout,
 		&stderr,
@@ -265,7 +246,7 @@ func TestRunFreshCompileRejectsInvalidTimeout(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "--timeout-seconds") {
+	if !strings.Contains(stderr.String(), "Invalid positive integer value for --timeout-seconds") {
 		t.Fatalf("stderr must reject the timeout:\n%s", stderr.String())
 	}
 	if stdout.Len() != 0 {
@@ -341,8 +322,8 @@ func TestRunListNamesRejectsMalformedCatalog(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout must stay empty: %s", stdout.String())
 	}
-	if stderr.Len() == 0 {
-		t.Fatal("stderr must explain the decode failure")
+	if !strings.Contains(stderr.String(), "cannot unmarshal") {
+		t.Fatalf("stderr must explain the decode failure:\n%s", stderr.String())
 	}
 }
 

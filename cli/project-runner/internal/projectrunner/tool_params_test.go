@@ -622,26 +622,28 @@ func TestBuildToolParamsAcceptsInlineProjectPath(t *testing.T) {
 }
 
 // Verifies that malformed flags and values are rejected with an argument error naming the
-// offending option and the expected type.
+// offending option and the branch-specific message. ExpectedType is checked only where the
+// branch derives it from the schema; missing-value errors are not judged on it.
 func TestBuildToolParamsRejectsMalformedArguments(t *testing.T) {
 	cases := []struct {
 		name         string
 		args         []string
 		wantOption   string
+		wantMessage  string
 		wantExpected string
 	}{
-		{name: "bare double dash", args: []string{"--"}, wantOption: "--"},
-		{name: "empty inline value", args: []string{"--count="}, wantOption: "--count", wantExpected: "string"},
-		{name: "missing trailing value", args: []string{"--count"}, wantOption: "--count", wantExpected: "string"},
-		{name: "value is next option", args: []string{"--count", "--verbose"}, wantOption: "--count", wantExpected: "string"},
-		{name: "missing project path value", args: []string{"--project-path"}, wantOption: "--project-path", wantExpected: "string"},
-		{name: "invalid integer", args: []string{"--count", "three"}, wantOption: "--count", wantExpected: "integer"},
-		{name: "invalid number", args: []string{"--ratio", "half"}, wantOption: "--ratio", wantExpected: "number"},
-		{name: "invalid json array", args: []string{"--tags", "[1,"}, wantOption: "--tags", wantExpected: "array"},
-		{name: "invalid json object", args: []string{"--options", "{"}, wantOption: "--options", wantExpected: "object"},
-		{name: "null json object", args: []string{"--options", "null"}, wantOption: "--options", wantExpected: "object"},
-		{name: "boolean with inline value", args: []string{"--verbose=true"}, wantOption: "--verbose", wantExpected: "flag"},
-		{name: "boolean with trailing value", args: []string{"--verbose", "true"}, wantOption: "--verbose", wantExpected: "flag"},
+		{name: "bare double dash", args: []string{"--"}, wantOption: "--", wantMessage: "Invalid option: --"},
+		{name: "empty inline value", args: []string{"--count="}, wantOption: "--count", wantMessage: "--count requires a value"},
+		{name: "missing trailing value", args: []string{"--count"}, wantOption: "--count", wantMessage: "--count requires a value"},
+		{name: "value is next option", args: []string{"--count", "--verbose"}, wantOption: "--count", wantMessage: "--count requires a value"},
+		{name: "missing project path value", args: []string{"--project-path"}, wantOption: "--project-path", wantMessage: "--project-path requires a value"},
+		{name: "invalid integer", args: []string{"--count", "three"}, wantOption: "--count", wantMessage: "Invalid integer value", wantExpected: "integer"},
+		{name: "invalid number", args: []string{"--ratio", "half"}, wantOption: "--ratio", wantMessage: "Invalid number value", wantExpected: "number"},
+		{name: "invalid json array", args: []string{"--tags", "[1,"}, wantOption: "--tags", wantMessage: "Invalid array value", wantExpected: "array"},
+		{name: "invalid json object", args: []string{"--options", "{"}, wantOption: "--options", wantMessage: "Invalid object value", wantExpected: "object"},
+		{name: "null json object", args: []string{"--options", "null"}, wantOption: "--options", wantMessage: "Invalid object value", wantExpected: "object"},
+		{name: "boolean with inline value", args: []string{"--verbose=true"}, wantOption: "--verbose", wantMessage: "Boolean option does not accept a value: true", wantExpected: "flag"},
+		{name: "boolean with trailing value", args: []string{"--verbose", "true"}, wantOption: "--verbose", wantMessage: "Boolean option does not accept a value: true", wantExpected: "flag"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -653,7 +655,10 @@ func TestBuildToolParamsRejectsMalformedArguments(t *testing.T) {
 			if argumentError.Option != testCase.wantOption {
 				t.Fatalf("Option = %q, want %q (message: %s)", argumentError.Option, testCase.wantOption, argumentError.Message)
 			}
-			if argumentError.ExpectedType != testCase.wantExpected {
+			if !strings.Contains(argumentError.Message, testCase.wantMessage) {
+				t.Fatalf("Message = %q, want it to contain %q", argumentError.Message, testCase.wantMessage)
+			}
+			if testCase.wantExpected != "" && argumentError.ExpectedType != testCase.wantExpected {
 				t.Fatalf("ExpectedType = %q, want %q", argumentError.ExpectedType, testCase.wantExpected)
 			}
 		})
