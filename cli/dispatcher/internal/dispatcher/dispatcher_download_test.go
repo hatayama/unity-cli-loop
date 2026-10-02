@@ -505,7 +505,7 @@ func TestDownloadDispatcherRealCLIForPinReportsUnusableCacheRoot(t *testing.T) {
 	// Verifies a cache root that is a regular file fails before any download starts.
 	cacheRoot := filepath.Join(t.TempDir(), "cache-file")
 	writeDispatcherTestFile(t, cacheRoot, "not a directory")
-	stubDispatcherHTTPResponses(t, nil)
+	forbidDispatcherHTTPRequests(t)
 
 	_, err := downloadDispatcherRealCLIForPin(context.Background(), cacheRoot, dispatcherPin{ProjectRunnerVersion: "3.0.0"}, "linux", "amd64", io.Discard)
 
@@ -553,14 +553,11 @@ func TestResolveDispatcherRealCLIDownloadsOnCacheMiss(t *testing.T) {
 
 func TestResolveDispatcherRealCLIReportsMissingCacheRoot(t *testing.T) {
 	// Verifies an unresolvable cache root is reported instead of downloading into an arbitrary directory.
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows resolves the cache root from LOCALAPPDATA, not HOME.")
-	}
-	t.Setenv(nativepath.CacheDirEnvName, "")
+	unsetDispatcherCacheRoot(t)
 	t.Setenv(nativepath.ProjectRunnerPathEnvName, "")
-	t.Setenv("XDG_CACHE_HOME", "")
-	t.Setenv("HOME", "")
-	stubDispatcherHTTPResponses(t, nil)
+	// A regression must not download into the working directory.
+	t.Chdir(t.TempDir())
+	forbidDispatcherHTTPRequests(t)
 
 	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{ProjectRunnerVersion: "3.0.0"}, io.Discard)
 
@@ -594,5 +591,20 @@ func writeDispatcherTarGzArchiveWithDirectory(t *testing.T, archivePath string, 
 	}
 	if err := os.WriteFile(archivePath, buffer.Bytes(), 0o644); err != nil {
 		t.Fatalf("failed to write tar archive: %v", err)
+	}
+}
+
+// forbidDispatcherHTTPRequests fails the test on any HTTP request, for paths that must stop before downloading.
+func forbidDispatcherHTTPRequests(t *testing.T) {
+	t.Helper()
+	previousHTTPClient := dispatcherHTTPClient
+	t.Cleanup(func() {
+		dispatcherHTTPClient = previousHTTPClient
+	})
+	dispatcherHTTPClient = &http.Client{
+		Transport: dispatcherRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			t.Errorf("unexpected HTTP request: %s", request.URL)
+			return nil, errors.New("HTTP requests are forbidden in this test")
+		}),
 	}
 }

@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -167,6 +168,7 @@ func TestParseInstallOptionsRejectsInvalidArguments(t *testing.T) {
 
 func TestTryHandleInstallRequestReportsInvalidOptions(t *testing.T) {
 	// Verifies an invalid install option exits with code 1 before any installer step runs.
+	unsetNativeInstallLocation(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -202,5 +204,39 @@ func TestWriteInstallCompletionForOtherOSPrintsGenericMessage(t *testing.T) {
 
 	if stdout.String() != "Install setup completed.\n" {
 		t.Fatalf("completion mismatch: %q", stdout.String())
+	}
+}
+
+// unsetNativeInstallLocation clears every input the install directory is resolved from and
+// fails the test if it still resolves, so a regression can never reach the real installer.
+func unsetNativeInstallLocation(t *testing.T) {
+	t.Helper()
+	t.Setenv(nativepath.InstallDirEnvName, "")
+	t.Setenv(nativepath.LocalAppDataEnvName, "")
+	t.Setenv("HOME", "")
+	if _, err := resolveNativeInstallDir(runtime.GOOS, ""); err == nil {
+		t.Fatal("precondition failed: the install directory still resolves, so the real installer could run")
+	}
+	if _, err := resolveUninstallInstallDir(runtime.GOOS); err == nil {
+		t.Fatal("precondition failed: the uninstall directory still resolves, so the real uninstaller could run")
+	}
+}
+
+func TestTryHandleInstallRequestReportsUnresolvableInstallDirectory(t *testing.T) {
+	// Verifies install stops with code 1 when no install directory can be resolved.
+	unsetNativeInstallLocation(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleInstallRequest(context.Background(), []string{"install"}, &stdout, &stderr)
+
+	if !handled || code != 1 || stdout.Len() != 0 {
+		t.Fatalf("result mismatch: handled=%t code=%d stdout=%q", handled, code, stdout.String())
+	}
+	_, wantErr := resolveNativeInstallDir(runtime.GOOS, "")
+	envelope := decodeDispatcherTestEnvelope(t, stderr.String())
+	errorObject, _ := envelope["Error"].(map[string]any)
+	if errorObject["Message"] != wantErr.Error() {
+		t.Fatalf("expected the install directory error %q: %s", wantErr, stderr.String())
 	}
 }

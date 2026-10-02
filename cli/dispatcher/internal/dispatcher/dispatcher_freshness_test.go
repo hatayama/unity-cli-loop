@@ -23,6 +23,9 @@ func unsetDispatcherCacheRoot(t *testing.T) {
 	t.Setenv(nativepath.CacheDirEnvName, "")
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("HOME", "")
+	if _, err := dispatcherCacheRoot(runtime.GOOS); err == nil {
+		t.Fatal("precondition failed: the cache root still resolves, so the test could write to the real cache")
+	}
 }
 
 func TestDetectManagedDispatcherInstallIgnoresExecutablePathFailure(t *testing.T) {

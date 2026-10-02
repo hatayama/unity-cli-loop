@@ -32,8 +32,9 @@ func TestDispatcherInstalledVersionOrEmptyHidesReadFailure(t *testing.T) {
 	t.Cleanup(func() {
 		dispatcherReadInstalledVersion = previous
 	})
+	// The version would leak through if the error were ignored.
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
-		return "", errors.New("version probe failed")
+		return "9.9.9", errors.New("version probe failed")
 	}
 
 	if version := dispatcherInstalledVersionOrEmpty(context.Background()); version != "" {

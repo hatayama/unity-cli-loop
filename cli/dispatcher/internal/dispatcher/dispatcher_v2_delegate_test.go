@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -64,12 +65,13 @@ func writeDispatcherV2PackageBin(t *testing.T, installPath string, bin string) {
 func TestResolveDispatcherV2CLIEntrypointRejectsInvalidPackages(t *testing.T) {
 	// Verifies a missing, unparsable, or unusable V2 package.json is reported instead of executing an arbitrary file.
 	cases := []struct {
-		name        string
-		bin         string
-		rawContent  string
-		wantMessage string
+		name         string
+		bin          string
+		rawContent   string
+		wantMessage  string
+		wantNotExist bool
 	}{
-		{name: "missing package", wantMessage: "open "},
+		{name: "missing package", wantNotExist: true},
 		{name: "unparsable package", rawContent: "{", wantMessage: "parse "},
 		{name: "bin is neither string nor object", bin: "5", wantMessage: "package bin must be a string or object"},
 		{name: "bin object without uloop", bin: `{"other":"cli.js"}`, wantMessage: "package bin does not define uloop"},
@@ -88,8 +90,8 @@ func TestResolveDispatcherV2CLIEntrypointRejectsInvalidPackages(t *testing.T) {
 
 			entrypoint, err := resolveDispatcherV2CLIEntrypoint(installPath)
 
-			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
-				t.Fatalf("expected error containing %q, got entrypoint=%q err=%v", testCase.wantMessage, entrypoint, err)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) || testCase.wantNotExist && !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("expected error containing %q (not-exist=%t), got entrypoint=%q err=%v", testCase.wantMessage, testCase.wantNotExist, entrypoint, err)
 			}
 		})
 	}

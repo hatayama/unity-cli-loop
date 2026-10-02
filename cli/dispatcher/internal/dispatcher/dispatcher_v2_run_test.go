@@ -43,7 +43,14 @@ func TestTryRunDetectedDispatcherV2ProjectKeepsLaunchNative(t *testing.T) {
 		return 0, nil
 	}
 
-	handled, code := tryRunDetectedDispatcherV2Project(context.Background(), t.TempDir(), []string{clicore.LaunchCommandName}, io.Discard, io.Discard, deps)
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	if project, err := detectV2DispatcherProject(projectRoot); err != nil || !project.IsV2 {
+		t.Fatalf("precondition failed: fixture must be a V2 project, got project=%+v err=%v", project, err)
+	}
+
+	handled, code := tryRunDetectedDispatcherV2Project(context.Background(), projectRoot, []string{clicore.LaunchCommandName}, io.Discard, io.Discard, deps)
 
 	if handled || code != 0 {
 		t.Fatalf("result mismatch: handled=%t code=%d", handled, code)
@@ -158,6 +165,9 @@ func TestRunDispatcherV2CLIReportsSetupFailures(t *testing.T) {
 func TestRunDispatcherV2CLIReportsMissingCacheRoot(t *testing.T) {
 	// Verifies an unresolvable cache root fails before installing the V2 CLI.
 	unsetDispatcherCacheRoot(t)
+	// A regression must not install into the working directory or reach a real npm.
+	t.Chdir(t.TempDir())
+	t.Setenv("PATH", t.TempDir())
 
 	_, err := runDispatcherV2CLI(context.Background(), "2.2.0", nil, io.Discard, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "$HOME is not defined") {

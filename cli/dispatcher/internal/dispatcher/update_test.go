@@ -907,12 +907,12 @@ func TestTryHandleUpdateRequestReportsInstallerFailure(t *testing.T) {
 
 func TestUpdateCommandForOSReturnsInstallerCommand(t *testing.T) {
 	// Verifies the default update command for a supported OS names the installer runner.
-	name, _, err := updateCommandForOS("linux")
+	name, args, err := updateCommandForOS("linux")
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
 	}
-	if name == "" {
-		t.Fatal("expected an installer command name")
+	if name != "sh" || len(args) != 0 {
+		t.Fatalf("command mismatch: name=%q args=%q", name, args)
 	}
 }
 
