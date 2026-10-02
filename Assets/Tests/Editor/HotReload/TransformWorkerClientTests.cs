@@ -131,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.shimSource, Is.Not.Null.And.Not.Empty);
 
             bool foundCompute = false;
-            bool foundQueryPrivateDelegation = false;
+            bool foundQueryPrivateTransplant = false;
             bool foundListEnumeratorFullName = false;
             bool foundCallsBareSiblings = false;
             bool foundAsyncPrivateAndBareSibling = false;
@@ -150,9 +150,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 if (entry.methodName == nameof(HotReloadE2EFixture.QueryPrivate))
                 {
-                    foundQueryPrivateDelegation = true;
-                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    foundQueryPrivateTransplant = true;
+                    Assert.That(entry.patchKind, Is.EqualTo("transplant"));
                     Assert.That(result.Output.shimSource, Does.Contain("__BindAccessors"));
+                    string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+                    Assert.That(slice, Does.Contain("__F__secret("), "The query's private read must use the accessor.\n" + slice);
                 }
 
                 if (entry.methodName == nameof(HotReloadE2EFixture.CallsBareSiblings))
@@ -207,9 +209,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(foundCompute, Is.True, "ComputeWithPrivate entry missing from worker output.");
             Assert.That(
-                foundQueryPrivateDelegation,
+                foundQueryPrivateTransplant,
                 Is.True,
-                "QueryPrivate must be a delegation entry (accessor rewrite), not a worker skip.");
+                "QueryPrivate must be a transplant entry with a query-scoped accessor, not a worker skip.");
             Assert.That(
                 foundCallsBareSiblings,
                 Is.True,
@@ -2436,6 +2438,115 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.entries[0].methodName, Is.EqualTo("Compute"));
             AssertSkippedDoesNotContain(result, "Compute");
             AssertSkippedDoesNotContain(result, "Local");
+        }
+
+        /// <summary>
+        /// What: in a transplanted body whose lambda reads a private field, only the read inside
+        /// the lambda goes through the field accessor; the same field read outside the lambda is
+        /// left direct, since the transplanted body runs with visibility checks skipped.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_PrivateFieldReadBesideLambda_RewritesOnlyInsideTheLambda()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedLambdaPrivateAsync(
+                "ClosureScopedFieldRead.cs",
+                "            int outer = _secret;\n"
+                + "            Func<int, bool> pred = v => v < _secret;\n"
+                + "            return pred(threshold) ? outer : 0;");
+
+            TransformWorkerEntryDto entry = FindEntryNamed(result, nameof(HotReloadE2EFixture.LambdaPrivate));
+            Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+            string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+            Assert.That(slice, Does.Contain("__F__secret("), "The lambda's read must use the accessor.\n" + slice);
+            Assert.That(
+                slice,
+                Does.Contain("int outer = __uloopInstance._secret;"),
+                "The read outside the lambda must stay direct.\n" + slice);
+        }
+
+        /// <summary>
+        /// What: a private indexer read outside the lambda no longer refuses the method, because
+        /// only the lambda is rewritten and the transplanted outer body may read it directly.
+        /// </summary>
+        [Test]
+        public async Task Run_PrivateIndexerOutsidePrivateLambda_IsTransplanted()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedLambdaPrivateAsync(
+                "ClosureScopedIndexer.cs",
+                "            int outer = this[0];\n"
+                + "            Func<int, bool> pred = v => v < _secret;\n"
+                + "            return pred(threshold) ? outer : 0;");
+
+            TransformWorkerEntryDto entry = FindEntryNamed(result, nameof(HotReloadE2EFixture.LambdaPrivate));
+            Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+            AssertSkippedDoesNotContain(result, nameof(HotReloadE2EFixture.LambdaPrivate));
+        }
+
+        /// <summary>
+        /// What: a private property '++' outside the lambda still refuses the method, because the
+        /// increment check keeps looking at the whole body.
+        /// </summary>
+        [Test]
+        public async Task Skip_PrivatePropertyIncrementOutsidePrivateLambda_KeepsTheIncrementReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedLambdaPrivateAsync(
+                "ClosureScopedPropertyIncrement.cs",
+                "            HiddenScore++;\n"
+                + "            Func<int, bool> pred = v => v < _secret;\n"
+                + "            return pred(threshold) ? 1 : 0;");
+
+            TransformWorkerSkippedDto skipped = null;
+            foreach (TransformWorkerSkippedDto row in result.Output.skipped)
+            {
+                if (row.method != null && row.method.Contains("." + nameof(HotReloadE2EFixture.LambdaPrivate) + "("))
+                {
+                    skipped = row;
+                }
+            }
+
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row; got: " + FormatSkippedMethodNames(result.Output.skipped));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess),
+                reason);
+            Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+            Assert.That(
+                skipped.reason.detail.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape),
+                reason);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnEditedLambdaPrivateAsync(
+            string fileName,
+            string editedBody)
+        {
+            const string compiledBody =
+                "            Func<int, bool> pred = v => v < _secret;\n"
+                + "            return pred(threshold) ? 1 : 0;";
+            return await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                onDisk =>
+                {
+                    Assert.That(onDisk, Does.Contain(compiledBody), "Precondition: LambdaPrivate body must exist.");
+                    return onDisk.Replace(compiledBody, editedBody, StringComparison.Ordinal);
+                });
+        }
+
+        private static TransformWorkerEntryDto FindEntryNamed(TransformWorkerClientResult result, string methodName)
+        {
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    return entry;
+                }
+            }
+
+            Assert.Fail(
+                "Expected entry for " + methodName + "; got: " + FormatEntryMethodNames(result.Output.entries)
+                + "; skipped=" + FormatSkippedMethodNames(result.Output.skipped));
+            return null;
         }
 
         private static async Task<TransformWorkerClientResult> RunWorkerOnUnsupportedKindEditAsync(

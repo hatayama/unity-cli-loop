@@ -1124,7 +1124,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadE2EFixture.Subscribe));
-            AssertSubscribeIsTransplanted();
+            AssertIsTransplanted(nameof(HotReloadE2EFixture.Subscribe));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             fixture.Subscribe();
@@ -1141,6 +1141,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 fixture.PingCountForAssert,
                 Is.EqualTo(2),
                 "The compiled '-= OnPing' must remove the delegates the transplanted body added.");
+        }
+
+        /// <summary>
+        /// What: an edited compiled method that keeps its private method-group subscription and
+        /// adds a lambda calling a private method is patched as a transplant; both handlers run,
+        /// and the compiled '-=' still removes the method group while the lambda stays.
+        /// </summary>
+        [Test]
+        public async Task Run_PrivateHandlerKeptBesideAddedLambda_PatchesAndKeepsTheRemovalPaired()
+        {
+            await AssertClosureBesidePrivateHandlerPatchesAsync(
+                "ClosureBesidePrivateHandler.cs",
+                nameof(HotReloadE2EFixture.Subscribe),
+                fixture => fixture.Subscribe(),
+                BuildFixtureSourceWithComputeOnly(
+                    subscribeMethod:
+                    "public void Subscribe()\n        {\n"
+                    + "            Pinged += OnPing;\n"
+                    + "            Pinged += v => RecordLambda(v);\n"
+                    + "        }"));
+        }
+
+        /// <summary>
+        /// What: an anonymous method calling a private method beside a private method-group
+        /// subscription is patched as a transplant and both handlers run.
+        /// </summary>
+        [Test]
+        public async Task Run_PrivateHandlerKeptBesideAnonymousMethod_PatchesAndKeepsTheRemovalPaired()
+        {
+            await AssertClosureBesidePrivateHandlerPatchesAsync(
+                "AnonymousMethodBesidePrivateHandler.cs",
+                nameof(HotReloadE2EFixture.SubscribeWithAnonymousMethod),
+                fixture => fixture.SubscribeWithAnonymousMethod(),
+                BuildFixtureSourceWithComputeOnly(
+                    subscribeWithAnonymousMethod:
+                    "public void SubscribeWithAnonymousMethod()\n        {\n"
+                    + "            Pinged += OnPing;\n"
+                    + "            Pinged += delegate (int v) { RecordLambda(v); };\n"
+                    + "        }"));
+        }
+
+        /// <summary>
+        /// What: a lambda inside a local function calling a private method, beside a private
+        /// method-group subscription, is patched as a transplant and both handlers run.
+        /// </summary>
+        [Test]
+        public async Task Run_PrivateHandlerKeptBesideNestedClosure_PatchesAndKeepsTheRemovalPaired()
+        {
+            await AssertClosureBesidePrivateHandlerPatchesAsync(
+                "NestedClosureBesidePrivateHandler.cs",
+                nameof(HotReloadE2EFixture.SubscribeWithNestedClosure),
+                fixture => fixture.SubscribeWithNestedClosure(),
+                BuildFixtureSourceWithComputeOnly(
+                    subscribeWithNestedClosureMethod:
+                    "public void SubscribeWithNestedClosure()\n        {\n"
+                    + "            Pinged += OnPing;\n"
+                    + "            void Wire()\n"
+                    + "            {\n"
+                    + "                Pinged += v => RecordLambda(v);\n"
+                    + "            }\n"
+                    + "            Wire();\n"
+                    + "        }"));
+        }
+
+        private static string BuildFixtureSourceWithComputeOnly(
+            string subscribeMethod = null,
+            string subscribeWithAnonymousMethod = null,
+            string subscribeWithNestedClosureMethod = null)
+        {
+            return BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                subscribeMethod: subscribeMethod,
+                subscribeWithAnonymousMethod: subscribeWithAnonymousMethod,
+                subscribeWithNestedClosureMethod: subscribeWithNestedClosureMethod);
+        }
+
+        private static async Task AssertClosureBesidePrivateHandlerPatchesAsync(
+            string editedFileName,
+            string methodName,
+            Action<HotReloadE2EFixture> subscribe,
+            string editedSource)
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(editedFileName, editedSource);
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, methodName);
+            AssertIsTransplanted(methodName);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            subscribe(fixture);
+            fixture.RaisePing(1);
+            Assert.That(fixture.PingCountForAssert, Is.EqualTo(1), "The kept method group must run.");
+            Assert.That(fixture.LambdaCountForAssert, Is.EqualTo(1), "The added closure must run.");
+
+            fixture.Unsubscribe();
+            fixture.RaisePing(1);
+            Assert.That(
+                fixture.PingCountForAssert,
+                Is.EqualTo(1),
+                "The compiled '-= OnPing' must remove the method group the patched body subscribed.");
+            Assert.That(fixture.LambdaCountForAssert, Is.EqualTo(2), "The closure stays subscribed.");
         }
 
         /// <summary>
@@ -7731,23 +7839,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.Fail("Expected Patched outcome for " + methodName + ".\n" + FormatOutcomes(result));
         }
 
-        private static void AssertSubscribeIsTransplanted()
+        private static void AssertIsTransplanted(string methodName)
         {
             HotReloadShimFileLookup lookup = HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(
                 "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs");
             Assert.That(lookup, Is.Not.Null);
-            HotReloadShimMethodLookup subscribeEntry = null;
+            HotReloadShimMethodLookup entry = null;
             foreach (HotReloadShimMethodLookup method in lookup.Methods)
             {
                 if (method.OriginalMethod != null
-                    && method.OriginalMethod.Name == nameof(HotReloadE2EFixture.Subscribe))
+                    && method.OriginalMethod.Name == methodName)
                 {
-                    subscribeEntry = method;
+                    entry = method;
                 }
             }
 
-            Assert.That(subscribeEntry, Is.Not.Null);
-            Assert.That(subscribeEntry.IsDelegation, Is.False, "Subscribe must be applied as a transplant.");
+            Assert.That(entry, Is.Not.Null, "No shim lookup entry for " + methodName);
+            Assert.That(entry.IsDelegation, Is.False, methodName + " must be applied as a transplant.");
         }
 
         private static void AssertHasAlreadyActive(
@@ -9001,10 +9109,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string explicitAccessorsBlock = null,
             string inlineRiskAlphaMethod = null,
             string inlineRiskBetaMethod = null,
-            string subscribeMethod = null)
+            string subscribeMethod = null,
+            string subscribeWithAnonymousMethod = null,
+            string subscribeWithNestedClosureMethod = null)
         {
             string subscribe = subscribeMethod ??
                 "public void Subscribe()\n        {\n            Pinged += OnPing;\n        }";
+            string subscribeWithAnonymous = subscribeWithAnonymousMethod ??
+                "public void SubscribeWithAnonymousMethod()\n        {\n            Pinged += OnPing;\n        }";
+            string subscribeWithNestedClosure = subscribeWithNestedClosureMethod ??
+                "public void SubscribeWithNestedClosure()\n        {\n            Pinged += OnPing;\n        }";
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
             string callsMissingHelper = callsMissingHelperMethod ??
@@ -9200,6 +9314,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _lambdaCount += value;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public void RaisePing(int value)
         {
             Pinged?.Invoke(value);
@@ -9213,6 +9328,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Pinged -= OnPing;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        " + subscribeWithAnonymous + @"
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        " + subscribeWithNestedClosure + @"
 
         " + asyncInternal + @"
     }

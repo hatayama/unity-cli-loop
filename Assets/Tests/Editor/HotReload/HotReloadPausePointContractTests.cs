@@ -162,24 +162,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after a delegation hot-reload, enable on the shim body hits with synthetic
-        /// "this" and never exposes __uloopInstance as a captured parameter name.
+        /// "this" and never exposes __uloopInstance as a captured parameter name. The target body
+        /// raises an event, which needs event accessors and so stays a whole-body delegation.
         /// </summary>
         [Test]
         public async Task Enable_OnHotReloadedDelegationBody_HitsWithoutUloopInstanceParameter()
         {
-            string editedSource = BuildEditedLambdaPrivateDelegation();
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            const string compiledBody =
+                "public void RaisePing(int value)\n        {\n"
+                + "            Pinged?.Invoke(value);\n"
+                + "        }";
+            Assert.That(onDisk, Does.Contain(compiledBody), "Precondition: RaisePing body must exist.");
+            string editedSource = onDisk.Replace(
+                compiledBody,
+                "public void RaisePing(int value)\n        {\n"
+                + "            int tagged = value + 7;\n"
+                + "            Pinged?.Invoke(tagged);\n"
+                + "        }",
+                StringComparison.Ordinal);
+            int enableLine = FindLineNumber(editedSource, "int tagged = value + 7;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractDelegationRaise.cs");
+            HotReloadShimMethodLookup raiseEntry = FindShimLookupEntry(nameof(HotReloadE2EFixture.RaisePing));
+            Assert.That(raiseEntry.IsDelegation, Is.True);
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int received = 0;
+            fixture.Pinged += v => received = v;
+            fixture.RaisePing(5);
+            Assert.That(received, Is.EqualTo(5 + 7));
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "__uloopInstance"),
+                Is.False,
+                FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "this"),
+                Is.True,
+                FormatCaptured(status));
+        }
+
+        /// <summary>
+        /// What: a body whose lambda alone reaches a private member is hot-reloaded as a
+        /// transplant, and enable on it hits with synthetic "this" and no __uloopInstance.
+        /// </summary>
+        [Test]
+        public async Task Enable_OnHotReloadedClosureScopedTransplantBody_HitsWithoutUloopInstanceParameter()
+        {
+            string editedSource = BuildEditedLambdaPrivate();
             int enableLine = FindLineNumber(editedSource, "return pred(threshold) ? 7 : 0;");
             Assert.That(enableLine, Is.GreaterThan(0));
 
-            await HotReloadFromEditedSourceAsync(editedSource, "ContractDelegationLambda.cs");
-            HotReloadShimFileLookup lookup =
-                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
-            Assert.That(lookup, Is.Not.Null);
-            HotReloadShimMethodLookup lambdaEntry = lookup.Methods.FirstOrDefault(
-                m => m.OriginalMethod != null
-                     && m.OriginalMethod.Name == nameof(HotReloadE2EFixture.LambdaPrivate));
-            Assert.That(lambdaEntry, Is.Not.Null);
-            Assert.That(lambdaEntry.IsDelegation, Is.True);
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractTransplantLambda.cs");
+            HotReloadShimMethodLookup lambdaEntry = FindShimLookupEntry(nameof(HotReloadE2EFixture.LambdaPrivate));
+            Assert.That(lambdaEntry.IsDelegation, Is.False);
 
             PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
             {
@@ -203,6 +252,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 status.CapturedVariables.Any(v => v.Name == "this"),
                 Is.True,
                 FormatCaptured(status));
+        }
+
+        private static HotReloadShimMethodLookup FindShimLookupEntry(string methodName)
+        {
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(FixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            HotReloadShimMethodLookup entry = lookup.Methods.FirstOrDefault(
+                m => m.OriginalMethod != null && m.OriginalMethod.Name == methodName);
+            Assert.That(entry, Is.Not.Null, "No shim lookup entry for " + methodName);
+            return entry;
         }
 
         /// <summary>
@@ -553,7 +613,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ReApply_AfterEnable_FollowsNewGenerationAndHits()
         {
-            string firstEdit = BuildEditedLambdaPrivateDelegation();
+            string firstEdit = BuildEditedLambdaPrivate();
             int enableLine = FindLineNumber(firstEdit, "return pred(threshold) ? 7 : 0;");
             Assert.That(enableLine, Is.GreaterThan(0));
             await HotReloadFromEditedSourceAsync(firstEdit, "ContractDelegationFollowGen1.cs");
@@ -1013,7 +1073,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return edited;
         }
 
-        private static string BuildEditedLambdaPrivateDelegation()
+        private static string BuildEditedLambdaPrivate()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
             string edited = onDisk.Replace(

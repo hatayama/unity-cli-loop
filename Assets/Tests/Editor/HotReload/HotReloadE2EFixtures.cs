@@ -305,6 +305,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _lambdaCount += value;
         }
 
+        // Raising an event outside its declaring type needs event accessors, so an edit of this
+        // body stays a whole-body delegation with no closure involved.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public void RaisePing(int value)
         {
             Pinged?.Invoke(value);
@@ -322,6 +325,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Unsubscribe()
         {
             Pinged -= OnPing;
+        }
+
+        // Closure-form variants: edited copies add an anonymous method or a lambda inside a local
+        // function beside the private method group.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void SubscribeWithAnonymousMethod()
+        {
+            Pinged += OnPing;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void SubscribeWithNestedClosure()
+        {
+            Pinged += OnPing;
         }
 
         // v2 e2e (5): async body that names an internal type — must stay Skipped (condition c).

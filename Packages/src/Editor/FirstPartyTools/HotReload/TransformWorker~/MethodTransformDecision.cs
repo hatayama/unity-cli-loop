@@ -23,6 +23,10 @@ internal sealed class MethodTransformDecision
 
     public bool UsesDelegation { get; private set; }
 
+    // A transplanted body whose closures alone reach private members: only accesses inside those
+    // closures go through accessors, since the closures JIT normally while the body skips checks.
+    public bool ClosureScopedAccessors { get; private set; }
+
     public static MethodTransformDecision Skip(WorkerReason reason)
     {
         return new MethodTransformDecision { SkipReason = reason };
@@ -31,6 +35,15 @@ internal sealed class MethodTransformDecision
     public static MethodTransformDecision Transplant()
     {
         return new MethodTransformDecision { PatchKind = PatchKinds.Transplant };
+    }
+
+    public static MethodTransformDecision TransplantWithClosureAccessors()
+    {
+        return new MethodTransformDecision
+        {
+            PatchKind = PatchKinds.Transplant,
+            ClosureScopedAccessors = true
+        };
     }
 
     public static MethodTransformDecision Delegation()

@@ -69,7 +69,7 @@ internal static class ShimMethodEmitter
         SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
         foreach (QueuedShimMethod queued in typeState.QueuedMethods)
         {
-            AccessorPlan rewritePlan = queued.Decision.UsesDelegation
+            AccessorPlan rewritePlan = queued.Decision.UsesDelegation || queued.Decision.ClosureScopedAccessors
                 ? queued.ShimType.AccessorPlan
                 : null;
             MethodDeclarationSyntax rewrittenMethod = RewriteMethodBody(
@@ -78,6 +78,7 @@ internal static class ShimMethodEmitter
                 typeState.TypeSymbol,
                 semanticModel,
                 rewritePlan,
+                queued.Decision.ClosureScopedAccessors,
                 addedMethodCatalog,
                 addedFieldCatalog,
                 addedPropertyCatalog);
@@ -128,6 +129,7 @@ internal static class ShimMethodEmitter
         INamedTypeSymbol targetType,
         SemanticModel semanticModel,
         AccessorPlan accessorPlan,
+        bool accessorsOnlyInClosures,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog)
@@ -140,7 +142,10 @@ internal static class ShimMethodEmitter
             accessorPlan,
             addedMethodCatalog,
             addedFieldCatalog,
-            addedPropertyCatalog);
+            addedPropertyCatalog,
+            accessorsOnlyInClosures
+                ? (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody
+                : null);
         MethodDeclarationSyntax rewritten = (MethodDeclarationSyntax)rewriter.Visit(methodDeclaration);
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }

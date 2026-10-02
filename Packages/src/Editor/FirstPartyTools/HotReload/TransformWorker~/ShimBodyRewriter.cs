@@ -30,14 +30,18 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     internal readonly AddedFieldShimRewrite AddedFields;
     internal readonly AddedPropertyShimRewrite AddedProperties;
     internal readonly HarmonyAccessorShimRewrite HarmonyAccessors;
+    private readonly ClosureAccessorScope _closureScope;
 
+    // closureScopeBody is the method body whose closures alone take accessor rewrites (a
+    // transplanted body); null rewrites every inaccessible access the plan covers.
     public ShimBodyRewriter(
         SemanticModel semanticModel,
         INamedTypeSymbol targetType,
         AccessorPlan accessorPlan,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
-        AddedPropertyCatalog addedPropertyCatalog = null)
+        AddedPropertyCatalog addedPropertyCatalog = null,
+        SyntaxNode closureScopeBody = null)
     {
         _semanticModel = semanticModel;
         _targetType = targetType;
@@ -48,6 +52,19 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         AddedFields = new AddedFieldShimRewrite(this);
         AddedProperties = new AddedPropertyShimRewrite(this);
         HarmonyAccessors = new HarmonyAccessorShimRewrite(this);
+        _closureScope = closureScopeBody == null ? null : ClosureAccessorScope.Of(closureScopeBody);
+    }
+
+    // Why per node: a transplanted body reaches private members directly, and only code inside
+    // its closures JIT-compiles with visibility checks, so only that code takes accessors.
+    internal bool AppliesAccessorRewrite(SyntaxNode node)
+    {
+        if (_accessorPlan == null)
+        {
+            return false;
+        }
+
+        return _closureScope == null || _closureScope.Contains(node);
     }
 
     public override SyntaxNode VisitThisExpression(ThisExpressionSyntax node)
@@ -155,7 +172,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return RewriteAddedMethodInvocation(node, isStaticCall, binding);
         }
 
-        if (_accessorPlan == null)
+        if (!AppliesAccessorRewrite(node))
         {
             return base.VisitInvocationExpression(node);
         }
@@ -310,7 +327,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return addedPropertyWrite;
         }
 
-        if (_accessorPlan == null)
+        if (!AppliesAccessorRewrite(node))
         {
             return base.VisitAssignmentExpression(node);
         }
@@ -411,7 +428,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             }
         }
 
-        if (_accessorPlan == null)
+        if (!AppliesAccessorRewrite(node))
         {
             return base.VisitMemberAccessExpression(node);
         }

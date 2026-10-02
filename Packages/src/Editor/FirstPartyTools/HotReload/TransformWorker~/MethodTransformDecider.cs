@@ -74,6 +74,18 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Transplant();
         }
 
+        // Why only ordinary methods: the getter paths pass no declaration and keep the whole-body
+        // rewrite, and an added method is decided again over its whole body afterwards.
+        if (closureInaccessible && !asyncIteratorInaccessible && !eventAccessorsRequired && methodDeclaration != null)
+        {
+            return DecideClosureScopedTransform(
+                semanticModel,
+                methodSymbol,
+                typeSymbol,
+                bodyNode,
+                addedMemberAccess);
+        }
+
         // Condition (a): only the private-access skip reasons are eligible for accessor rewrite.
         HotReloadWorkerReasonCode? rescuableSkipCode =
             BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
@@ -84,6 +96,7 @@ internal static class MethodTransformDecider
                 typeSymbol,
                 bodyNode,
                 addedMemberAccess,
+                null,
                 out AccessorPlan feasibilityPlan,
                 out WorkerReason accessorRejectReason))
         {
@@ -101,6 +114,40 @@ internal static class MethodTransformDecider
         }
 
         return MethodTransformDecision.Delegation();
+    }
+
+    // Only the closures JIT normally, so a transplanted body keeps its own private accesses and
+    // rewrites just the ones inside them; a method group outside stays the delegate compiled
+    // code subscribes and removes.
+    private static MethodTransformDecision DecideClosureScopedTransform(
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol,
+        SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess)
+    {
+        if (!AccessorEligibility.TryBuildPlan(
+                semanticModel,
+                methodSymbol,
+                typeSymbol,
+                bodyNode,
+                addedMemberAccess,
+                FindClosureBodies(bodyNode),
+                out AccessorPlan closurePlan,
+                out WorkerReason accessorRejectReason))
+        {
+            return MethodTransformDecision.Skip(
+                WorkerReason.Composite(
+                    HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
+                    accessorRejectReason));
+        }
+
+        if (closurePlan.Entries.Count == 0)
+        {
+            return MethodTransformDecision.Transplant();
+        }
+
+        return MethodTransformDecision.TransplantWithClosureAccessors();
     }
 
     // Why an async or iterator body drops the '+=' advice: its whole state machine is rewritten,
@@ -363,6 +410,7 @@ internal static class MethodTransformDecider
                 typeSymbol,
                 methodBodyNode,
                 addedMemberAccess,
+                null,
                 out AccessorPlan feasibilityPlan,
                 out WorkerReason accessorRejectReason))
         {

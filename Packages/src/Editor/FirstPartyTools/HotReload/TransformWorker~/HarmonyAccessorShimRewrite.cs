@@ -45,7 +45,7 @@ internal sealed class HarmonyAccessorShimRewrite
         // never rewrite to an accessor read (Func<> call results are not assignable).
         bool suppressAccessorRead = NameofRules.IsInsideNameofArgument(node)
             || AssignmentTargetRules.AssignmentTargetedBy(node) != null;
-        if (_rewriter._accessorPlan == null || suppressAccessorRead)
+        if (!_rewriter.AppliesAccessorRewrite(node) || suppressAccessorRead)
         {
             return null;
         }

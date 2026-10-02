@@ -1335,7 +1335,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a private instance call through a cast receiver inside a lambda is
-        /// accessor-rewritten (Delegation); the cast is not treated as a ?. spine.
+        /// accessor-rewritten; the cast is not treated as a ?. spine.
         /// </summary>
         [Test]
         public async Task Rewrite_CastReceiverPrivateCallInLambda_EmitsMethodAccessor()
@@ -1355,7 +1355,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
             Assert.That(caller, Is.Not.Null, "Cast-receiver PrivateCall in a lambda must not skip.");
-            Assert.That(caller.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+            Assert.That(caller.patchKind, Is.EqualTo("transplant"));
             Assert.That(result.Output.hasAccessorDelegates, Is.True);
             string callerSlice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
             Assert.That(
@@ -1400,7 +1400,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a private call in a conditional-access argument list inside a lambda is
-        /// accessor-rewritten (Delegation), not left verbatim.
+        /// accessor-rewritten, not left verbatim.
         /// </summary>
         [Test]
         public async Task Rewrite_LambdaConditionalAccessArgumentPrivateStaticSeven_EmitsMethodAccessor()
@@ -1420,7 +1420,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
             Assert.That(caller, Is.Not.Null, "Lambda ?. argument caller must not skip.");
-            Assert.That(caller.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+            Assert.That(caller.patchKind, Is.EqualTo("transplant"));
             Assert.That(result.Output.hasAccessorDelegates, Is.True);
             string callerSlice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
             Assert.That(
@@ -1432,6 +1432,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 callerSlice,
                 Does.Not.Contain("ExistingFail(PrivateStaticSeven())"),
                 "PrivateStaticSeven must not remain a verbatim call in the shim.\n" + callerSlice);
+        }
+
+        /// <summary>
+        /// What: a lambda reaching a member of an internal host type is still refused for the
+        /// host's visibility, because that check looks at the host, not at where the access sits.
+        /// </summary>
+        [Test]
+        public async Task Skip_PrivateLambdaInInternalHost_KeepsTheContainingTypeReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            const string compiledBuild = "        public string Build()\n        {\n            return \"ok\";\n        }";
+            Assert.That(onDisk, Does.Contain(compiledBuild), "Precondition: Build body must exist.");
+            string edited = onDisk.Replace(
+                compiledBuild,
+                "        public string Build()\n        {\n"
+                + "            System.Func<string> read = () => Build();\n"
+                + "            return read == null ? \"none\" : \"ok\";\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ClosureScopedInternalHost.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertClosureSkipDetail(
+                result,
+                ".Build(",
+                HotReloadWorkerReasonCode.AccessorContainingTypeNotVisible);
+        }
+
+        /// <summary>
+        /// What: a non-public type named outside the lambda still refuses the method, because the
+        /// type-usage check keeps looking at the whole body.
+        /// </summary>
+        [Test]
+        public async Task Skip_InternalTypeOutsidePrivateLambda_KeepsTheBodyTypeReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAliasShadowFixture shadow = null;\n"
+                + "            System.Func<int> read = () => _privateSeed;\n"
+                + "            return read() + (shadow == null ? 0 : 1);\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ClosureScopedInternalType.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertClosureSkipDetail(
+                result,
+                "." + nameof(HotReloadAddedMemberHost.ExistingCaller) + "(",
+                HotReloadWorkerReasonCode.AccessorBodyTypeNotVisible);
+        }
+
+        private static void AssertClosureSkipDetail(
+            TransformWorkerClientResult result,
+            string methodNameFragment,
+            HotReloadWorkerReasonCode expectedDetail)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method == null || !skipped.method.Contains(methodNameFragment))
+                {
+                    continue;
+                }
+
+                string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+                Assert.That(
+                    skipped.reason.code,
+                    Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess),
+                    reason);
+                Assert.That(skipped.reason.detail, Is.Not.Null, reason);
+                Assert.That(skipped.reason.detail.code, Is.EqualTo(expectedDetail), reason);
+                return;
+            }
+
+            Assert.Fail(
+                "Expected skip for '" + methodNameFragment + "'. Skipped=" + FormatSkipped(result.Output.skipped));
         }
 
         /// <summary>
