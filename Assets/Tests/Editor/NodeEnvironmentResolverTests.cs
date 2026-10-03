@@ -282,12 +282,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies that empty directory-service output yields no shell.
+        /// Verifies that missing directory-service output yields no shell instead of failing.
         /// </summary>
         [Test]
-        public void ExtractDirectoryServiceUserShell_WhenOutputIsEmpty_ReturnsNull()
+        public void ExtractDirectoryServiceUserShell_WhenOutputIsNull_ReturnsNull()
         {
-            string result = NodeEnvironmentResolver.ExtractDirectoryServiceUserShell(string.Empty);
+            string result = NodeEnvironmentResolver.ExtractDirectoryServiceUserShell(null);
 
             Assert.That(result, Is.Null);
         }

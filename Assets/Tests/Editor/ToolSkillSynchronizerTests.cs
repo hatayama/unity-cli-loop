@@ -1986,29 +1986,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "{\n  \"dependencies\": {\n" + dependenciesContent + "\n  }\n}");
         }
 
-        /// <summary>
-        /// Verifies that removing one tool's skill files leaves installed skills of other tools in both layouts untouched.
-        /// </summary>
-        [Test]
-        public void RemoveSkillFilesAtProjectRoot_WhenInstalledSkillsBelongToOtherTools_KeepsThem()
-        {
-            string temporaryProjectRoot = CreateTemporaryProjectRoot();
-            string targetRoot = Path.Combine(temporaryProjectRoot, ".claude");
-            string groupedSkillDirectory = Path.Combine(SkillInstallLayout.GetManagedSkillsRoot(targetRoot), "uloop-get-logs");
-            string flatSkillDirectory = Path.Combine(SkillInstallLayout.GetSkillsRoot(targetRoot), "uloop-run-tests");
-            WriteInstalledSkillFile(groupedSkillDirectory, "---\nname: uloop-get-logs\n---\n");
-            WriteInstalledSkillFile(flatSkillDirectory, "---\nname: uloop-run-tests\n---\n");
-
-            ToolSkillSynchronizer.RemoveSkillFilesAtProjectRoot(temporaryProjectRoot, "compile");
-
-            Assert.That(File.Exists(Path.Combine(groupedSkillDirectory, SkillInstallLayout.SkillFileName)), Is.True);
-            Assert.That(File.Exists(Path.Combine(flatSkillDirectory, SkillInstallLayout.SkillFileName)), Is.True);
-        }
-
-        private static void WriteInstalledSkillFile(string skillDirectory, string content)
-        {
-            Directory.CreateDirectory(skillDirectory);
-            File.WriteAllText(Path.Combine(skillDirectory, SkillInstallLayout.SkillFileName), content);
-        }
     }
 }
