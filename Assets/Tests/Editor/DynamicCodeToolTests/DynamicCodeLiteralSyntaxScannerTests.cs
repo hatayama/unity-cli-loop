@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void TryCopyInterpolatedStringLiteral_WithLiteralsAndCommentsInsideHoles_CopiesTheWholeLiteral()
         {
             AssertInterpolatedLiteralCopied(
-                "$\"{new { A = 1 }.A} {$\"{\"}\"}\"} {@\"}\"} {\"\\\"}\"} {'}'} {x /* } */} {y // }\n}\"");
+                "$\"{new[] { 1 }.Length + \"x\".Length} {$\"{\"}\"}\"} {@\"}\"} {\"\\\"}\"} {'}'} {x /* } */} {y // }\n}\"");
         }
 
         /// <summary>

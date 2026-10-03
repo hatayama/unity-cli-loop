@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void AdvanceOneToken_WithLiteralsAndBracesInsideHoles_SkipsTheWholeLiteral()
         {
-            string source = "$\"{new { A = \"}\" }.A} {@\"}\"} {\"\"\"}\"\"\"} {'}'}\"" + Tail;
+            string source = "$\"{new[] { \"}\" }.Length + \"x\".Length} {@\"}\"} {\"\"\"}\"\"\"} {'}'}\"" + Tail;
 
             Assert.That(SourceTokenScanner.AdvanceOneToken(source, 0), Is.EqualTo(source.Length - Tail.Length));
         }
