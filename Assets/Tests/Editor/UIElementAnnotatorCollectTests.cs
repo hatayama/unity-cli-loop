@@ -135,16 +135,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CollectInteractiveElements_WithACameraCanvas_ProjectsThroughItsCamera()
         {
             Assume.That(EventSystem.current, Is.Null);
-            Camera camera = Track(new GameObject(Prefix + "Camera")).AddComponent<Camera>();
+            GameObject cameraObject = Track(new GameObject(Prefix + "Camera"));
+            // The canvas stays at the origin unless a frame lays it out, so a camera behind the origin sees it
+            // either way.
+            cameraObject.transform.position = new Vector3(0f, 0f, -10f);
+            Camera camera = cameraObject.AddComponent<Camera>();
             Transform canvas = CreateCanvas("CameraSpace", RenderMode.ScreenSpaceCamera, true, camera);
             canvas.GetComponent<Canvas>().sortingOrder = 7;
-            CreateUiChild<Button>(canvas, "Button");
+            Button button = CreateUiChild<Button>(canvas, "Button");
+            (Vector2 expectedMin, Vector2 expectedMax, Vector2 worldMin) = ProjectCorners(camera, button.GetComponent<RectTransform>());
 
             List<UIElementInfo> matches = CollectByPath(Prefix + "CameraSpace/Button");
 
+            Assert.That(float.IsFinite(expectedMin.x) && float.IsFinite(expectedMax.y), Is.True);
+            Assert.That(expectedMin, Is.Not.EqualTo(worldMin));
             Assert.That(matches.Count, Is.EqualTo(1));
             Assert.That(matches[0].SortingOrder, Is.EqualTo(7));
-            Assert.That(matches[0].SimX, Is.EqualTo((matches[0].BoundsMinX + matches[0].BoundsMaxX) / 2f).Within(0.01f));
+            Assert.That(matches[0].BoundsMinX, Is.EqualTo(expectedMin.x).Within(0.01f));
+            Assert.That(matches[0].BoundsMinY, Is.EqualTo(expectedMin.y).Within(0.01f));
+            Assert.That(matches[0].BoundsMaxX, Is.EqualTo(expectedMax.x).Within(0.01f));
+            Assert.That(matches[0].BoundsMaxY, Is.EqualTo(expectedMax.y).Within(0.01f));
+        }
+
+        private static (Vector2 Min, Vector2 Max, Vector2 WorldMin) ProjectCorners(Camera camera, RectTransform rectTransform)
+        {
+            Vector3[] worldCorners = new Vector3[4];
+            rectTransform.GetWorldCorners(worldCorners);
+            Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
+            Vector2 max = new Vector2(float.MinValue, float.MinValue);
+            Vector2 worldMin = new Vector2(float.MaxValue, float.MaxValue);
+            foreach (Vector3 corner in worldCorners)
+            {
+                Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, corner);
+                min = Vector2.Min(min, screenPoint);
+                max = Vector2.Max(max, screenPoint);
+                worldMin = Vector2.Min(worldMin, corner);
+            }
+
+            return (min, max, worldMin);
         }
 
         /// <summary>
