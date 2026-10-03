@@ -186,6 +186,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase("3.0.0-beta.6", "3.0.0-beta.7", false)]
         [TestCase("3.0.0-beta.7", "4.0.0", false)]
         [TestCase("not-a-version", "3.0.0-beta.7", false)]
+        [TestCase("2.1.1", "not-a-version", false)]
+        [TestCase("2.1.1", " ", false)]
         public void ShouldAutoScanThirdPartyToolMigration_ReturnsExpectedValue(
             string lastSeenVersion,
             string currentVersion,

@@ -183,6 +183,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a manual refresh without a CLI replaces a checking state with a scanned, empty missing state
+        /// without scanning skill folders.
+        /// </summary>
+        [Test]
+        public void HandleRefreshSkillsState_WithoutACli_ReportsAScannedMissingState()
+        {
+            _cliDetector.IsCliInstalledValue = false;
+            _presenter.MarkSelectedTargetInstallStateChecking();
+
+            _presenter.HandleRefreshSkillsState();
+
+            UnityCliLoopSettingsSkillsSnapshot snapshot = _presenter.GetSnapshot();
+            Assert.That(snapshot.SelectedTargetInstallState, Is.EqualTo(SkillInstallState.Missing));
+            Assert.That(snapshot.HasSkillTargetScanResult, Is.True);
+            Assert.That(_skillPort.FastScanGroupFlags, Is.Empty);
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// Verifies a layout change re-applies the flat layout and refreshes the selected target's install state
         /// from the scan.
         /// </summary>
