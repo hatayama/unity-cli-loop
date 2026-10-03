@@ -14,6 +14,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class ThirdPartyToolMigrationTimingCleanupRulesTests
     {
         /// <summary>
+        /// Verifies two unused declarations in a row are both removed, including the attribute line of the second one.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenSecondDeclarationHasAttribute_RemovesBothDeclarations()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming first;\n    [NonSerialized]\n    PlayerLoopTiming second;\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo("class Runner\n{\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Verifies removing an unused declaration keeps the blank line and indentation of the member that follows it.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenMemberFollows_KeepsItsIndentation()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming timing;\n\n    void Run() { }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo("class Runner\n{\n\n    void Run() { }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies an attribute that shares its line with other code is removed together with the unused declaration it annotates.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenAttributeSharesLineWithCode_RemovesAttribute()
+        {
+            string source =
+                "class Runner\n{\n    int count; [NonSerialized]\n    PlayerLoopTiming timing;\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo("class Runner\n{\n    int count;\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// Verifies a PlayerLoopTiming declaration inside a block comment is left untouched.
         /// </summary>
         [Test]
