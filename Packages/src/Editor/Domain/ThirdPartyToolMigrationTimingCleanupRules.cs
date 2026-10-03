@@ -102,9 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     continue;
                 }
 
-                int removalStartIndex = ReadLegacyPlayerLoopTimingDeclarationRemovalStart(
+                (int removalStartIndex, int removalEndIndex) = ReadLegacyPlayerLoopTimingDeclarationRemovalRange(
                     source,
-                    match.Index,
+                    match,
                     codeTextMask);
                 if (removalStartIndex < sourceCopyIndex)
                 {
@@ -112,7 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 }
 
                 string declarationName = match.Groups["name"].Value;
-                int removalLength = match.Index + match.Length - removalStartIndex;
+                int removalLength = removalEndIndex - removalStartIndex;
                 string sourceWithoutDeclaration = source.Remove(removalStartIndex, removalLength);
                 if (ContainsIdentifierInCode(sourceWithoutDeclaration, declarationName))
                 {
@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 }
 
                 builder.Append(source, sourceCopyIndex, removalStartIndex - sourceCopyIndex);
-                sourceCopyIndex = match.Index + match.Length;
+                sourceCopyIndex = removalEndIndex;
                 replacementCount++;
             }
 
@@ -131,6 +131,72 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             return (builder.ToString(), replacementCount);
+        }
+
+        /// <summary>
+        /// Returns the source range that removing a timing declaration must cover, including its attributes.
+        /// </summary>
+        public static (int StartIndex, int EndIndex) ReadLegacyPlayerLoopTimingDeclarationRemovalRange(
+            string source,
+            Match declarationMatch,
+            CodeTextMask codeTextMask)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(declarationMatch != null && declarationMatch.Success, "declarationMatch must be a successful match");
+
+            int removalStartIndex = ReadLegacyPlayerLoopTimingDeclarationRemovalStart(
+                source,
+                declarationMatch.Index,
+                codeTextMask);
+            int removalEndIndex = declarationMatch.Index + declarationMatch.Length;
+            int inlineAttributeStartIndex = ReadInlineAttributeRemovalStart(source, removalStartIndex, codeTextMask);
+            if (inlineAttributeStartIndex == removalStartIndex)
+            {
+                return (removalStartIndex, removalEndIndex);
+            }
+
+            // The attributes share a line with code that stays, so that line keeps its own line break
+            // and the declaration's line break is kept in its place.
+            return (inlineAttributeStartIndex, removalEndIndex - CountTrailingLineBreakLength(source, removalEndIndex));
+        }
+
+        /// <summary>
+        /// Moves the removal start back over attributes that follow other code on the same line, together with
+        /// the whitespace before them; returns the start unchanged when no such attribute precedes it.
+        /// </summary>
+        public static int ReadInlineAttributeRemovalStart(
+            string source,
+            int removalStartIndex,
+            CodeTextMask codeTextMask)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(removalStartIndex >= 0, "removalStartIndex must not be negative");
+
+            int inlineStartIndex = removalStartIndex;
+            int scanIndex = SkipWhitespaceBackward(source, removalStartIndex - 1);
+            while (scanIndex >= 0 && source[scanIndex] == ']' && codeTextMask.IsCodeAt(scanIndex))
+            {
+                int openingBracketIndex = FindOpeningAttributeBracket(source, scanIndex, codeTextMask);
+                if (openingBracketIndex < 0 || HasOnlyWhitespaceBeforeIndexOnLine(source, openingBracketIndex))
+                {
+                    return inlineStartIndex;
+                }
+
+                scanIndex = SkipWhitespaceBackward(source, openingBracketIndex - 1);
+                inlineStartIndex = scanIndex + 1;
+            }
+
+            return inlineStartIndex;
+        }
+
+        private static int CountTrailingLineBreakLength(string source, int endIndex)
+        {
+            if (endIndex >= 2 && source[endIndex - 2] == '\r' && source[endIndex - 1] == '\n')
+            {
+                return 2;
+            }
+
+            return endIndex >= 1 && source[endIndex - 1] == '\n' ? 1 : 0;
         }
 
         public static int ReadLegacyPlayerLoopTimingDeclarationRemovalStart(

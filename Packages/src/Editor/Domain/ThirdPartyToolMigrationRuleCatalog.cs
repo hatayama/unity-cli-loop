@@ -313,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
         public static readonly Regex LegacyPlayerLoopTimingDeclarationRegex =
             new(
-                $@"(?m)^[ \t]*(?:(?:private|protected|internal|static|readonly)\s+)*{LegacyPlayerLoopTimingTypeName}\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*[^;]+)?;\s*(?:\r?\n)?",
+                $@"(?m)^[ \t]*(?:(?:private|protected|internal|static|readonly)\s+)*{LegacyPlayerLoopTimingTypeName}\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*[^;]+)?;[ \t]*(?:\r?\n)?",
                 RegexOptions.Compiled);
 
         public static readonly Regex NamespaceDeclarationRegex =
