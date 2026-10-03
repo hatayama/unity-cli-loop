@@ -142,5 +142,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("class MyResponse : UnityCliLoopToolResponse\n{\n    public int Value { get; set; }\n}\n"));
             Assert.That(replacementCount, Is.EqualTo(1));
         }
+
+        /// <summary>
+        /// Verifies an ordinary comment that starts with four slashes is kept when the property above it is removed.
+        /// </summary>
+        [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenPrecededByAFourSlashComment_KeepsTheComment()
+        {
+            const string source =
+                "class MyResponse : UnityCliLoopToolResponse\n{\n    //// old note\n    public bool Success { get; set; }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo("class MyResponse : UnityCliLoopToolResponse\n{\n    //// old note\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a comment after the property on the same line keeps its indentation when the property is removed.
+        /// </summary>
+        [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenACommentFollowsOnTheSameLine_KeepsItsIndentation()
+        {
+            const string source =
+                "class MyResponse : UnityCliLoopToolResponse\n{\n    public bool Success { get; set; } // required\n    public int Value { get; set; }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+
+            Assert.That(
+                content,
+                Is.EqualTo("class MyResponse : UnityCliLoopToolResponse\n{\n    // required\n    public int Value { get; set; }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
     }
 }
