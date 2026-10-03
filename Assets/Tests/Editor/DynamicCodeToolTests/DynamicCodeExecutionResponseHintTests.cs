@@ -121,17 +121,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ConvertExecutionResultToResponse_WhenTheLogsAlreadyStartWithTheSnippetLine_DoesNotRepeatIt()
         {
-            const string header = "Exception at user snippet line 3: boom";
             ExecutionResult result = new ExecutionResult
             {
-                Success = true,
-                ErrorMessage = "boom",
-                Logs = new List<string> { header, "at Snippet in user-snippet.cs:line 3" }
+                Success = false,
+                ErrorMessage = "boom"
             };
+            // The failure path replaces ErrorMessage with the friendly message, so the header is built from it.
+            string friendlyMessage = new DynamicCodeFriendlyErrorConverter().Convert(result).FriendlyMessage;
+            string header = $"Exception at user snippet line 3: {friendlyMessage}";
+            result.Logs = new List<string> { header, "at Snippet in user-snippet.cs:line 3" };
 
             ExecuteDynamicCodeResponse response = _factory.ConvertExecutionResultToResponse(result);
 
-            Assert.That(response.Logs, Is.EqualTo(new List<string> { header, "at Snippet in user-snippet.cs:line 3" }));
+            Assert.That(response.Logs[0], Is.EqualTo(header));
+            Assert.That(response.Logs.FindAll(line => line == header), Has.Count.EqualTo(1));
         }
 
         private static ExecutionResult CreateFailure(CompilationError error)

@@ -90,25 +90,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies an interpolated string skips escaped quotes and doubled braces in its text.
+        /// Verifies an interpolated string skips escaped quotes and an unpaired doubled brace in its text.
         /// </summary>
         [Test]
         public void AdvanceOneToken_WithEscapesAndDoubledBracesInAnInterpolatedString_SkipsTheWholeLiteral()
         {
-            string source = "$\"a \\\" {{b}} {value} c\"" + Tail;
+            string source = "$\"a \\\" {{ b {value} c\"" + Tail;
 
             Assert.That(SourceTokenScanner.AdvanceOneToken(source, 0), Is.EqualTo(source.Length - Tail.Length));
         }
 
         /// <summary>
-        /// Verifies interpolation holes skip nested braces and the quotes of verbatim, raw, and char literals.
+        /// Verifies an interpolation hole skips nested braces and the quotes of the literals inside it.
         /// </summary>
-        [Test]
-        public void AdvanceOneToken_WithLiteralsAndBracesInsideHoles_SkipsTheWholeLiteral()
+        [TestCase("$\"{new[] { \"}\" }.Length + \"x\".Length}\"", TestName = "AdvanceOneToken_WithNestedBracesAndAStringInsideAHole_SkipsTheWholeLiteral")]
+        [TestCase("$\"{@\"\\\"}\"", TestName = "AdvanceOneToken_WithAVerbatimStringInsideAHole_SkipsTheWholeLiteral")]
+        [TestCase("$\"{\"\"\"a\"b\"\"\"}\"", TestName = "AdvanceOneToken_WithARawStringInsideAHole_SkipsTheWholeLiteral")]
+        [TestCase("$\"{'\"'}\"", TestName = "AdvanceOneToken_WithACharLiteralInsideAHole_SkipsTheWholeLiteral")]
+        public void AdvanceOneToken_WithALiteralInsideAHole_SkipsTheWholeLiteral(string literal)
         {
-            string source = "$\"{new[] { \"}\" }.Length + \"x\".Length} {@\"}\"} {\"\"\"}\"\"\"} {'}'}\"" + Tail;
+            string source = literal + Tail;
 
-            Assert.That(SourceTokenScanner.AdvanceOneToken(source, 0), Is.EqualTo(source.Length - Tail.Length));
+            Assert.That(SourceTokenScanner.AdvanceOneToken(source, 0), Is.EqualTo(literal.Length));
         }
 
         /// <summary>

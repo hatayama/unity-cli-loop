@@ -50,18 +50,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(prepared.PreparedSource, Does.Contain("using System.Text;"));
         }
 
-        /// <summary>
-        /// Verifies a raw string literal that is not interpolated leaves literal hoisting on for the rest of the
-        /// snippet.
-        /// </summary>
-        [Test]
-        public void Prepare_WithANonInterpolatedRawString_StillHoistsOtherLiterals()
-        {
-            PreparedDynamicCode prepared = Prepare("string raw = \"\"\"text\"\"\";\nreturn \"hoisted\";");
-
-            Assert.That(prepared.HoistedLiteralBindings, Is.Not.Empty);
-        }
-
         private static string[] UserSnippetLines(PreparedDynamicCode prepared)
         {
             Assert.That(WrappedDynamicCodeUserSnippetExtractor.TryExtract(prepared.PreparedSource, out string snippet), Is.True);

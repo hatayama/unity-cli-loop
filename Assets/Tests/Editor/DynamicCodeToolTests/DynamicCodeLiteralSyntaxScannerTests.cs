@@ -15,12 +15,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         private const string Tail = " tail";
 
         /// <summary>
-        /// Verifies a verbatim interpolated string opened with $@ keeps doubled quotes and doubled braces inside it.
+        /// Verifies a verbatim interpolated string opened with $@ keeps doubled quotes and an unpaired doubled brace
+        /// inside it.
         /// </summary>
         [Test]
         public void TryCopyInterpolatedStringLiteral_WithDollarAtPrefix_CopiesTheWholeLiteral()
         {
-            AssertInterpolatedLiteralCopied("$@\"a \"\"q\"\" {{x}} {value}\"");
+            AssertInterpolatedLiteralCopied("$@\"a \"\"q\"\" {{ x {value}\"");
         }
 
         /// <summary>
@@ -50,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void TryCopyInterpolatedStringLiteral_WithLiteralsAndCommentsInsideHoles_CopiesTheWholeLiteral()
         {
             AssertInterpolatedLiteralCopied(
-                "$\"{new[] { 1 }.Length + \"x\".Length} {$\"{\"}\"}\"} {@\"}\"} {\"\\\"}\"} {'}'} {x /* \"} */} {y // }\n}\"");
+                "$\"{new[] { 1 }.Length + \"x\".Length} {$\"{\"}\"}\"} {@\"}\"} {\"\\\"}\"} {'}'} {x /* \"} */} {y // \"\n}\"");
         }
 
         /// <summary>
