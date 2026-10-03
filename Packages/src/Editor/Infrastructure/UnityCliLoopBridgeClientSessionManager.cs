@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Handles communication with the client using Content-Length framing.
         /// </summary>
-        private async Task HandleClientAsync(BridgeClientConnection client, CancellationToken cancellationToken)
+        internal async Task HandleClientAsync(BridgeClientConnection client, CancellationToken cancellationToken)
         {
             string clientKey = client.Endpoint;
 
@@ -309,7 +309,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         /// <param name="ex">The exception to evaluate</param>
         /// <returns>True if the exception represents a normal disconnection, false otherwise</returns>
-        private static bool IsNormalDisconnectionException(Exception ex)
+        internal static bool IsNormalDisconnectionException(Exception ex)
         {
             switch (ex)
             {
