@@ -186,20 +186,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return closeBraceIndex < 0 ? (false, -1, -1) : (true, openBraceIndex, closeBraceIndex);
         }
 
-        // The property is taken from its line start when only indentation precedes it, so removing its line
-        // break does not leave that indentation in front of the next line.
+        // The property is taken from its line start when only indentation precedes it and nothing follows it on
+        // that line, so removing its line break does not leave that indentation in front of the next line. Code or a
+        // comment after it on the same line keeps the indentation instead.
         private static (int StartIndex, int EndIndex) ReadSuccessPropertyRemovalRange(
             string source,
             Match propertyMatch,
             CodeTextMask codeTextMask)
         {
-            int declarationStartIndex = HasOnlyWhitespaceBeforeIndexOnLine(source, propertyMatch.Index)
+            int propertyEndIndex = propertyMatch.Index + propertyMatch.Length;
+            bool endsItsLine = propertyEndIndex == source.Length || source[propertyEndIndex - 1] == '\n';
+            int declarationStartIndex = endsItsLine && HasOnlyWhitespaceBeforeIndexOnLine(source, propertyMatch.Index)
                 ? GetLineStartIndex(source, propertyMatch.Index)
                 : propertyMatch.Index;
             (int removalStartIndex, int removalEndIndex) = ReadDeclarationRemovalRange(
                 source,
                 declarationStartIndex,
-                propertyMatch.Index + propertyMatch.Length,
+                propertyEndIndex,
                 codeTextMask);
             return (ExtendRemovalStartOverDocComments(source, removalStartIndex), removalEndIndex);
         }
@@ -218,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 string previousLine = source.Substring(
                     previousLineStartIndex,
                     lineTerminatorIndex - previousLineStartIndex + 1);
-                if (!previousLine.TrimStart().StartsWith("///", StringComparison.Ordinal))
+                if (!IsDocCommentLine(previousLine))
                 {
                     return index;
                 }
@@ -227,6 +230,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             return index;
+        }
+
+        // Exactly three slashes start a doc comment; four or more start an ordinary comment.
+        private static bool IsDocCommentLine(string line)
+        {
+            string trimmedLine = line.TrimStart();
+            return trimmedLine.StartsWith("///", StringComparison.Ordinal)
+                && !trimmedLine.StartsWith("////", StringComparison.Ordinal);
         }
     }
 }
