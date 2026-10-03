@@ -153,22 +153,25 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 declarationMatch.Index,
                 codeTextMask);
             int removalEndIndex = declarationMatch.Index + declarationMatch.Length;
-            int inlineAttributeStartIndex = ReadInlineAttributeRemovalStart(source, removalStartIndex, codeTextMask);
-            if (inlineAttributeStartIndex == removalStartIndex)
+            (int attributeStartIndex, bool sharesLineWithCode) =
+                ReadInlineAttributeRemovalStart(source, removalStartIndex, codeTextMask);
+            if (!sharesLineWithCode)
             {
-                return (removalStartIndex, removalEndIndex);
+                return (attributeStartIndex, removalEndIndex);
             }
 
             // The attributes share a line with code that stays, so that line keeps its own line break
             // and the declaration's line break is kept in its place.
-            return (inlineAttributeStartIndex, removalEndIndex - CountTrailingLineBreakLength(source, removalEndIndex));
+            return (attributeStartIndex, removalEndIndex - CountTrailingLineBreakLength(source, removalEndIndex));
         }
 
         /// <summary>
-        /// Moves the removal start back over attributes that follow other code on the same line, together with
-        /// the whitespace before them; returns the start unchanged when no such attribute precedes it.
+        /// Moves the removal start back over attributes left before it, together with the whitespace before them.
+        /// Attributes that follow other code on the same line are taken up to the end of that code; a line that
+        /// holds only attributes is taken whole, along with any attribute-only lines above it. The flag tells
+        /// whether the final start follows code that stays on its line.
         /// </summary>
-        public static int ReadInlineAttributeRemovalStart(
+        public static (int StartIndex, bool SharesLineWithCode) ReadInlineAttributeRemovalStart(
             string source,
             int removalStartIndex,
             CodeTextMask codeTextMask)
@@ -176,21 +179,35 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(removalStartIndex >= 0, "removalStartIndex must not be negative");
 
-            int inlineStartIndex = removalStartIndex;
-            int scanIndex = SkipWhitespaceBackward(source, removalStartIndex - 1);
+            int startIndex = removalStartIndex;
+            bool sharesLineWithCode = false;
+            int scanIndex = SkipWhitespaceBackward(source, startIndex - 1);
             while (scanIndex >= 0 && source[scanIndex] == ']' && codeTextMask.IsCodeAt(scanIndex))
             {
                 int openingBracketIndex = FindOpeningAttributeBracket(source, scanIndex, codeTextMask);
-                if (openingBracketIndex < 0 || HasOnlyWhitespaceBeforeIndexOnLine(source, openingBracketIndex))
+                if (openingBracketIndex < 0)
                 {
-                    return inlineStartIndex;
+                    break;
                 }
 
-                scanIndex = SkipWhitespaceBackward(source, openingBracketIndex - 1);
-                inlineStartIndex = scanIndex + 1;
+                if (HasOnlyWhitespaceBeforeIndexOnLine(source, openingBracketIndex))
+                {
+                    startIndex = ReadLegacyPlayerLoopTimingDeclarationRemovalStart(
+                        source,
+                        GetLineStartIndex(source, openingBracketIndex),
+                        codeTextMask);
+                    sharesLineWithCode = false;
+                }
+                else
+                {
+                    startIndex = SkipWhitespaceBackward(source, openingBracketIndex - 1) + 1;
+                    sharesLineWithCode = true;
+                }
+
+                scanIndex = SkipWhitespaceBackward(source, startIndex - 1);
             }
 
-            return inlineStartIndex;
+            return (startIndex, sharesLineWithCode);
         }
 
         // The previous removal already covers the inline attributes' line up to this declaration's attributes, so
