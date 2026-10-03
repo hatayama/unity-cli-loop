@@ -40,6 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // from Unity, so taking them as arguments lets tests drive the per-assembly loop in a temporary root.
         internal static void CaptureAssemblies(string projectRoot, IEnumerable<UnityCompilationAssembly> assemblies)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(assemblies != null, "assemblies must not be null.");
+
             string snapshotRoot = Path.Combine(projectRoot, HotReloadConstants.SourceSnapshotRelativeDirectory);
             Directory.CreateDirectory(snapshotRoot);
 

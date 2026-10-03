@@ -118,6 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             IEnumerable<UnityCompilationAssembly> assemblies)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(assemblies != null, "assemblies must not be null.");
+
             List<HotReloadSnapshotAssembly> snapshotAssemblies = new List<HotReloadSnapshotAssembly>();
             foreach (UnityCompilationAssembly assembly in assemblies)
             {
