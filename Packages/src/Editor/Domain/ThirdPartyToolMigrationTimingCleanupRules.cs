@@ -108,7 +108,11 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     codeTextMask);
                 if (removalStartIndex < sourceCopyIndex)
                 {
-                    continue;
+                    (removalStartIndex, removalEndIndex) = ReadRemovalRangeAfterPreviousRemoval(
+                        source,
+                        builder,
+                        sourceCopyIndex,
+                        match);
                 }
 
                 string declarationName = match.Groups["name"].Value;
@@ -187,6 +191,37 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             return inlineStartIndex;
+        }
+
+        // The previous removal already covers the inline attributes' line up to this declaration's attributes, so
+        // only the rest is removed here. The declaration's line break stays only when code kept in the output
+        // still shares that line; otherwise the line would be left empty.
+        private static (int StartIndex, int EndIndex) ReadRemovalRangeAfterPreviousRemoval(
+            string source,
+            StringBuilder builder,
+            int sourceCopyIndex,
+            Match declarationMatch)
+        {
+            int removalEndIndex = declarationMatch.Index + declarationMatch.Length;
+            if (!HasCodeOnLastOutputLine(builder))
+            {
+                return (sourceCopyIndex, removalEndIndex);
+            }
+
+            return (sourceCopyIndex, removalEndIndex - CountTrailingLineBreakLength(source, removalEndIndex));
+        }
+
+        private static bool HasCodeOnLastOutputLine(StringBuilder builder)
+        {
+            for (int index = builder.Length - 1; index >= 0 && builder[index] != '\n'; index--)
+            {
+                if (!char.IsWhiteSpace(builder[index]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static int CountTrailingLineBreakLength(string source, int endIndex)
