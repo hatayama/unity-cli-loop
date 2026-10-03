@@ -20,8 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void TryCapture_WhenEditorIsCompiling_ReturnsNotReadyReasonWithoutEvidence()
         {
-            FixedEditorStateSnapshotCapture capture = new FixedEditorStateSnapshotCapture(
-                new HotReloadEditorStateSnapshot(true, false, false));
+            HotReloadStubEditorStateSnapshotCapture capture = new HotReloadStubEditorStateSnapshotCapture(
+                () => new HotReloadEditorStateSnapshot(true, false, false));
 
             string failure = HotReloadNewSourceMembershipValidator.TryCapture(
                 capture,
@@ -44,8 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void TryCapture_WhenSourceDirectoryIsMissing_ReturnsBoundaryFailureWithoutEvidence()
         {
-            FixedEditorStateSnapshotCapture capture = new FixedEditorStateSnapshotCapture(
-                new HotReloadEditorStateSnapshot(false, false, false));
+            HotReloadStubEditorStateSnapshotCapture capture = new HotReloadStubEditorStateSnapshotCapture(
+                () => new HotReloadEditorStateSnapshot(false, false, false));
 
             string failure = HotReloadNewSourceMembershipValidator.TryCapture(
                 capture,
@@ -66,24 +66,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string CreateMissingProjectRoot()
         {
             return Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
-        }
-
-        /// <summary>
-        /// Returns one fixed Editor state so a test decides what the admission path sees.
-        /// </summary>
-        private sealed class FixedEditorStateSnapshotCapture : IHotReloadEditorStateSnapshotCapture
-        {
-            private readonly HotReloadEditorStateSnapshot snapshot;
-
-            public FixedEditorStateSnapshotCapture(HotReloadEditorStateSnapshot snapshot)
-            {
-                this.snapshot = snapshot;
-            }
-
-            public HotReloadEditorStateSnapshot CaptureCurrent()
-            {
-                return snapshot;
-            }
         }
     }
 }
