@@ -6008,5 +6008,70 @@ public sealed class ScreenshotResponse : UnityCliLoopToolResponse
             }
         }
 
+        private string _missingProjectRoot;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _missingProjectRoot = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (Directory.Exists(_missingProjectRoot))
+            {
+                Directory.Delete(_missingProjectRoot, true);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that target detection fails fast when the project root does not exist.
+        /// </summary>
+        [Test]
+        public void HasMigrationTargetsAsync_WhenProjectRootDoesNotExist_ThrowsDirectoryNotFound()
+        {
+            ThirdPartyToolMigrationFileService service = new ThirdPartyToolMigrationFileService();
+
+            Task<bool> task = service.HasMigrationTargetsAsync(_missingProjectRoot, CancellationToken.None);
+
+            Assert.That(task.IsCompleted, Is.True);
+            Assert.Throws<DirectoryNotFoundException>(() => task.GetAwaiter().GetResult());
+        }
+
+        /// <summary>
+        /// Verifies that a synchronous preview fails fast when the project root does not exist.
+        /// </summary>
+        [Test]
+        public void PreviewMigration_WhenProjectRootDoesNotExist_ThrowsDirectoryNotFound()
+        {
+            ThirdPartyToolMigrationFileService service = new ThirdPartyToolMigrationFileService();
+
+            Assert.Throws<DirectoryNotFoundException>(() => service.PreviewMigration(_missingProjectRoot));
+        }
+
+        /// <summary>
+        /// Verifies that an async preview fails fast when the project root does not exist.
+        /// </summary>
+        [Test]
+        public void PreviewMigrationAsync_WhenProjectRootDoesNotExist_ThrowsDirectoryNotFound()
+        {
+            ThirdPartyToolMigrationFileService service = new ThirdPartyToolMigrationFileService();
+
+            Task<ThirdPartyToolMigrationPreview> task = service.PreviewMigrationAsync(
+                _missingProjectRoot,
+                new NoOpMigrationProgress(),
+                CancellationToken.None);
+
+            Assert.That(task.IsCompleted, Is.True);
+            Assert.Throws<DirectoryNotFoundException>(() => task.GetAwaiter().GetResult());
+        }
+
+        private sealed class NoOpMigrationProgress : IProgress<ThirdPartyToolMigrationProgress>
+        {
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+            }
+        }
     }
 }

@@ -173,5 +173,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Content, Is.EqualTo(source));
             Assert.That(Encoding.UTF8.GetBytes(result.Content), Is.EqualTo(Encoding.UTF8.GetBytes(source)));
         }
+
+        /// <summary>
+        /// Verifies that a nested references property is ignored so only the top-level references array is replaced.
+        /// </summary>
+        [Test]
+        public void ReplaceReferencesArray_WhenNestedObjectHasReferencesProperty_ReplacesOnlyTopLevelArray()
+        {
+            string source =
+                "{\"versionDefines\": [{\"references\": [\"Nested\"]}], \"references\": [\"Old\"]}";
+
+            ThirdPartyToolMigrationAsmdefTextEditor.AsmdefReferencesEditResult result =
+                ThirdPartyToolMigrationAsmdefTextEditor.ReplaceReferencesArray(source, new[] { "New" });
+
+            Assert.That(result.Replaced, Is.True);
+            Assert.That(
+                result.Content,
+                Is.EqualTo("{\"versionDefines\": [{\"references\": [\"Nested\"]}], \"references\": [\"New\"]}"));
+        }
+
+        /// <summary>
+        /// Verifies that a references array containing a nested array is replaced as one whole array.
+        /// </summary>
+        [Test]
+        public void ReplaceReferencesArray_WhenReferencesArrayContainsNestedArray_ReplacesWholeArray()
+        {
+            string source = "{\"references\": [[\"Inner\"], \"Old\"], \"autoReferenced\": true}";
+
+            ThirdPartyToolMigrationAsmdefTextEditor.AsmdefReferencesEditResult result =
+                ThirdPartyToolMigrationAsmdefTextEditor.ReplaceReferencesArray(source, new[] { "New" });
+
+            Assert.That(result.Replaced, Is.True);
+            Assert.That(result.Content, Is.EqualTo("{\"references\": [\"New\"], \"autoReferenced\": true}"));
+        }
+
+        /// <summary>
+        /// Verifies that source ending inside an unterminated string is reported as not replaced.
+        /// </summary>
+        [Test]
+        public void ReplaceReferencesArray_WhenPropertyNameIsUnterminated_ReturnsNotReplaced()
+        {
+            string source = "{\"name\": \"VendorTools.Editor\", \"refer";
+
+            ThirdPartyToolMigrationAsmdefTextEditor.AsmdefReferencesEditResult result =
+                ThirdPartyToolMigrationAsmdefTextEditor.ReplaceReferencesArray(source, new[] { "New" });
+
+            Assert.That(result.Replaced, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that a multi-line array whose property shares a line with other text uses no base indent.
+        /// </summary>
+        [Test]
+        public void ReplaceReferencesArray_WhenPropertyDoesNotStartItsLine_UsesDefaultElementIndentOnly()
+        {
+            string source = "  {\"name\": \"VendorTools.Editor\", \"references\": [\n      \"Old\"\n  ]}\n";
+
+            ThirdPartyToolMigrationAsmdefTextEditor.AsmdefReferencesEditResult result =
+                ThirdPartyToolMigrationAsmdefTextEditor.ReplaceReferencesArray(source, new[] { "New" });
+
+            Assert.That(result.Replaced, Is.True);
+            Assert.That(
+                result.Content,
+                Is.EqualTo("  {\"name\": \"VendorTools.Editor\", \"references\": [\n    \"New\"\n]}\n"));
+        }
     }
 }
