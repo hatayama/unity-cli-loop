@@ -47,6 +47,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// True when AwaitIfNeeded would await the value instead of returning it unchanged.
+        /// </summary>
+        public static bool IsAwaitable(object value)
+        {
+            if (value == null)
+            {
+                return false;
+            }
+
+            Type valueType = value.GetType();
+            return typeof(Task).IsAssignableFrom(valueType)
+                || IsValueTask(valueType)
+                || IsGenericValueTask(valueType)
+                || valueType.GetMethod("GetAwaiter", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null) != null;
+        }
+
         private static async Task<object> AwaitTaskResultIfNeededAsync(
             object value,
             Type valueType,
