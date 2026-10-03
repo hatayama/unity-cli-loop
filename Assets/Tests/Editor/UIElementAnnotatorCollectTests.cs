@@ -107,6 +107,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies selectables that cannot be interacted with are left out instead of being picked up again as
+        /// pointer event handlers, whatever their kind.
+        /// </summary>
+        [Test]
+        public void CollectInteractiveElements_WithNonInteractableSelectables_LeavesThemOut()
+        {
+            Assume.That(EventSystem.current, Is.Null);
+            Transform canvas = CreateCanvas("NonInteractable", RenderMode.ScreenSpaceOverlay, true, null);
+            CreateUiChild<Button>(canvas, "Button").interactable = false;
+            CreateUiChild<Slider>(canvas, "Slider").interactable = false;
+            CreateUiChild<InputField>(canvas, "InputField").interactable = false;
+
+            Dictionary<string, string> typesByPath = CollectTypesByPath();
+
+            string root = Prefix + "NonInteractable/";
+            Assert.That(typesByPath.ContainsKey(root + "Button"), Is.False);
+            Assert.That(typesByPath.ContainsKey(root + "Slider"), Is.False);
+            Assert.That(typesByPath.ContainsKey(root + "InputField"), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a selectable made non-interactable by a parent CanvasGroup is left out.
+        /// </summary>
+        [Test]
+        public void CollectInteractiveElements_UnderANonInteractableCanvasGroup_LeavesTheSelectableOut()
+        {
+            Assume.That(EventSystem.current, Is.Null);
+            Transform canvas = CreateCanvas("Grouped", RenderMode.ScreenSpaceOverlay, true, null);
+            CanvasGroup group = CreateUiChild<CanvasGroup>(canvas, "Group");
+            group.interactable = false;
+            Button button = CreateUiChild<Button>(group.transform, "Button");
+            Assume.That(button.IsInteractable(), Is.False);
+
+            Dictionary<string, string> typesByPath = CollectTypesByPath();
+
+            Assert.That(typesByPath.ContainsKey(Prefix + "Grouped/Group/Button"), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a separate handler script on the same object as a non-interactable button is still collected,
+        /// as that handler.
+        /// </summary>
+        [Test]
+        public void CollectInteractiveElements_WithAHandlerBesideANonInteractableButton_CollectsTheHandler()
+        {
+            Assume.That(EventSystem.current, Is.Null);
+            Transform canvas = CreateCanvas("Beside", RenderMode.ScreenSpaceOverlay, true, null);
+            GameObject shared = CreateUiChild<Button>(canvas, "Shared").gameObject;
+            shared.GetComponent<Button>().interactable = false;
+            shared.AddComponent<UIElementAnnotatorTestDropHandler>();
+
+            List<UIElementInfo> matches = CollectByPath(Prefix + "Beside/Shared");
+
+            Assert.That(matches.Count, Is.EqualTo(1));
+            Assert.That(matches[0].Type, Is.EqualTo("DropTarget"));
+        }
+
+        /// <summary>
         /// Verifies disabled handlers, objects without a RectTransform, and objects under a canvas without a
         /// GraphicRaycaster are left out.
         /// </summary>
