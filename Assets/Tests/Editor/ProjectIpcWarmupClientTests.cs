@@ -92,6 +92,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a JSON-RPC error given as a plain string is reported as the warmup error with that text.
+        /// </summary>
+        [Test]
+        public void ValidateJsonRpcSuccessResponse_WhenErrorIsString_ThrowsWithErrorText()
+        {
+            ProjectIpcWarmupClient client = new();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => client.ValidateJsonRpcSuccessResponse(
+                    "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":\"protocol mismatch\"}"));
+
+            Assert.That(exception.Message, Is.EqualTo("Project IPC warmup returned JSON-RPC error: protocol mismatch"));
+        }
+
+        /// <summary>
         /// Verifies a JSON-RPC error without a message is reported using the serialized error object.
         /// </summary>
         [Test]
