@@ -406,5 +406,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.AreEqual(1, messages.Length);
             Assert.AreEqual(largeJsonContent, messages[0]);
         }
+
+        /// <summary>
+        /// Verifies a disposed reassembler reports its state as unusable instead of valid.
+        /// </summary>
+        [Test]
+        public void ValidateState_AfterDispose_ReturnsFalse()
+        {
+            MessageReassembler reassembler = new MessageReassembler(new DynamicBufferManager());
+            reassembler.Dispose();
+
+            bool isValid = reassembler.ValidateState();
+
+            Assert.That(isValid, Is.False);
+        }
     }
 }

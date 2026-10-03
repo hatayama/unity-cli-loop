@@ -273,5 +273,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.IsTrue(completeResult);
             Assert.AreEqual(jsonContent, extractedJson);
         }
+
+        /// <summary>
+        /// Verifies IsCompleteFrame reports incomplete for invalid arguments even when the length arithmetic alone would pass.
+        /// </summary>
+        [TestCase(false, 10, 2, 2)]
+        [TestCase(true, 0, 0, 0)]
+        [TestCase(true, 10, -5, 2)]
+        [TestCase(true, 10, 2, -1)]
+        public void IsCompleteFrame_WhenArgumentsAreInvalid_ReturnsFalse(
+            bool hasBuffer,
+            int length,
+            int contentLength,
+            int headerLength)
+        {
+            FrameParser frameParser = new FrameParser();
+            byte[] buffer = hasBuffer ? new byte[16] : null;
+
+            bool isComplete = frameParser.IsCompleteFrame(buffer, length, contentLength, headerLength);
+
+            Assert.That(isComplete, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a Content-Length line without a value is skipped so a later valid Content-Length line is used.
+        /// </summary>
+        [Test]
+        public void TryParseFrame_WhenFirstContentLengthLineHasNoValue_UsesLaterContentLengthLine()
+        {
+            FrameParser frameParser = new FrameParser();
+            byte[] buffer = Encoding.UTF8.GetBytes("Content-Length:\r\nContent-Length: 5\r\n\r\n{\"a\"}");
+
+            bool parsed = frameParser.TryParseFrame(buffer, buffer.Length, out int contentLength, out int headerLength);
+
+            Assert.That(parsed, Is.True);
+            Assert.That(contentLength, Is.EqualTo(5));
+            Assert.That(headerLength, Is.EqualTo(38));
+        }
+
+        /// <summary>
+        /// Verifies a complete header block without any Content-Length line is rejected.
+        /// </summary>
+        [Test]
+        public void TryParseFrame_WhenHeaderHasNoContentLengthLine_ReturnsFalse()
+        {
+            FrameParser frameParser = new FrameParser();
+            byte[] buffer = Encoding.UTF8.GetBytes("Content-Type: application/json\r\n\r\n{}");
+
+            bool parsed = frameParser.TryParseFrame(buffer, buffer.Length, out int contentLength, out int headerLength);
+
+            Assert.That(parsed, Is.False);
+            Assert.That(contentLength, Is.EqualTo(-1));
+            Assert.That(headerLength, Is.EqualTo(-1));
+        }
     }
 }
