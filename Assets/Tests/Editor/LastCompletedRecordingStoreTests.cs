@@ -9,16 +9,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class LastCompletedRecordingStoreTests
     {
+        private LastCompletedRecording _previousRecording;
+
         [SetUp]
         public void SetUp()
         {
-            LastCompletedRecordingStore.Clear();
+            _previousRecording = LastCompletedRecordingTestState.TakeAndClear();
         }
 
         [TearDown]
         public void TearDown()
         {
-            LastCompletedRecordingStore.Clear();
+            LastCompletedRecordingTestState.Restore(_previousRecording);
         }
 
         /// <summary>

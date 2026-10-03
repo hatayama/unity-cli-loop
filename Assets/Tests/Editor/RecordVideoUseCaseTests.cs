@@ -11,16 +11,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class RecordVideoUseCaseTests
     {
+        private LastCompletedRecording _previousRecording;
+
         [SetUp]
         public void SetUp()
         {
-            LastCompletedRecordingStore.Clear();
+            // Stop and start act on a real recording, so the tests do not run while one is in progress. This comes
+            // before setting the store aside because TearDown does not run when SetUp fails an assumption.
+            Assume.That(RecordVideoService.IsRecording, Is.False);
+            _previousRecording = LastCompletedRecordingTestState.TakeAndClear();
         }
 
         [TearDown]
         public void TearDown()
         {
-            LastCompletedRecordingStore.Clear();
+            LastCompletedRecordingTestState.Restore(_previousRecording);
         }
 
         /// <summary>

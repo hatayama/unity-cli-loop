@@ -11,20 +11,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// <summary>
     /// Verifies how stop and status report the last completed recording when nothing is recording, and that a
     /// window start with invalid parameters is rejected before any window lookup. The last-recording store is
-    /// cleared before and after each test.
+    /// set aside before each test and put back afterwards, and the tests are inconclusive while a recording runs.
     /// </summary>
     public sealed class RecordVideoUseCaseLastRecordingTests
     {
+        private LastCompletedRecording _previousRecording;
+
         [SetUp]
         public void SetUp()
         {
-            LastCompletedRecordingStore.Clear();
+            // Stop and start act on a real recording, so the tests do not run while one is in progress. This comes
+            // before setting the store aside because TearDown does not run when SetUp fails an assumption.
+            Assume.That(RecordVideoService.IsRecording, Is.False);
+            _previousRecording = LastCompletedRecordingTestState.TakeAndClear();
         }
 
         [TearDown]
         public void TearDown()
         {
-            LastCompletedRecordingStore.Clear();
+            LastCompletedRecordingTestState.Restore(_previousRecording);
         }
 
         /// <summary>
