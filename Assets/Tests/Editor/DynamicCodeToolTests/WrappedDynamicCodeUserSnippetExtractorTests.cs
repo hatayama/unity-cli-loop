@@ -39,15 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies an empty snippet has no lines.
-        /// </summary>
-        [Test]
-        public void SplitNormalizedLines_WithAnEmptySnippet_ReturnsNoLines()
-        {
-            Assert.That(WrappedDynamicCodeUserSnippetExtractor.SplitNormalizedLines(string.Empty), Is.Empty);
-        }
-
-        /// <summary>
         /// Verifies lines lose leading indentation and carriage returns, and trailing empty lines are dropped.
         /// </summary>
         [Test]

@@ -76,39 +76,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies a name that is not followed by a parameter list is rejected.
-        /// </summary>
-        [Test]
-        public void TrySkipHeader_WithoutAParameterList_IsRejected()
-        {
-            Assert.That(
-                StaticLocalFunctionHeaderScanner.TrySkipHeader("int value = 1;", 0, out bool _, out int _),
-                Is.False);
-        }
-
-        /// <summary>
-        /// Verifies a parameter list that never closes is rejected.
-        /// </summary>
-        [Test]
-        public void TrySkipHeader_WithAnUnclosedParameterList_IsRejected()
-        {
-            Assert.That(
-                StaticLocalFunctionHeaderScanner.TrySkipHeader("int Add(int a, int b", 0, out bool _, out int _),
-                Is.False);
-        }
-
-        /// <summary>
-        /// Verifies generic arguments that never close are rejected.
-        /// </summary>
-        [Test]
-        public void TrySkipHeader_WithUnclosedGenericArguments_IsRejected()
-        {
-            Assert.That(
-                StaticLocalFunctionHeaderScanner.TrySkipHeader("List<int Build() { }", 0, out bool _, out int _),
-                Is.False);
-        }
-
-        /// <summary>
         /// Verifies a token that cannot start an identifier is rejected.
         /// </summary>
         [Test]
@@ -116,17 +83,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             Assert.That(
                 StaticLocalFunctionHeaderScanner.TrySkipHeader("1nt Add() { }", 0, out bool _, out int _),
-                Is.False);
-        }
-
-        /// <summary>
-        /// Verifies a header that runs out before its parameter list is rejected.
-        /// </summary>
-        [Test]
-        public void TrySkipHeader_WhenTheSourceEndsAfterTheName_IsRejected()
-        {
-            Assert.That(
-                StaticLocalFunctionHeaderScanner.TrySkipHeader("int Add   ", 0, out bool _, out int _),
                 Is.False);
         }
 

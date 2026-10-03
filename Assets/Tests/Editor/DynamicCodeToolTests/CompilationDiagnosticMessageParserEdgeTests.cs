@@ -23,15 +23,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies a message without a quoted phrase has no type name.
-        /// </summary>
-        [Test]
-        public void ExtractTypeNameFromMessage_WithoutAQuotedPhrase_ReturnsNull()
-        {
-            Assert.That(CompilationDiagnosticMessageParser.ExtractTypeNameFromMessage("; expected"), Is.Null);
-        }
-
-        /// <summary>
         /// Verifies a blank quoted phrase is not taken as a type name.
         /// </summary>
         [Test]

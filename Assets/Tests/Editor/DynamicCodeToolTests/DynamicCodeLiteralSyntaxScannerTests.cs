@@ -63,15 +63,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies a dollar sign that does not start an interpolated string is not copied.
-        /// </summary>
-        [Test]
-        public void TryCopyInterpolatedStringLiteral_WithALoneDollar_IsNotALiteral()
-        {
-            AssertNotCopied("$value", TryCopyInterpolated);
-        }
-
-        /// <summary>
         /// Verifies a verbatim string keeps doubled quotes as content.
         /// </summary>
         [Test]

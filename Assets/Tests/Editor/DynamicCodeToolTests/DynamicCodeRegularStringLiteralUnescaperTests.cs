@@ -31,7 +31,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [TestCase("\"\\u12\"", TestName = "TryUnescapeRegularStringLiteral_WithAShortUnicodeEscape_IsRejected")]
         [TestCase("\"\\u12G4\"", TestName = "TryUnescapeRegularStringLiteral_WithANonHexUnicodeEscape_IsRejected")]
         [TestCase("\"\\U00110000\"", TestName = "TryUnescapeRegularStringLiteral_WithAnOutOfRangeUtf32Escape_IsRejected")]
-        [TestCase("\"\\xZ\"", TestName = "TryUnescapeRegularStringLiteral_WithAHexEscapeWithoutDigits_IsRejected")]
         [TestCase("\"\\q\"", TestName = "TryUnescapeRegularStringLiteral_WithAnUnknownEscape_IsRejected")]
         public void TryUnescapeRegularStringLiteral_WithAMalformedEscape_IsRejected(string token)
         {

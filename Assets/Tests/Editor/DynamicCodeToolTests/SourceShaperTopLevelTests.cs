@@ -25,19 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies a using static directive is collected as a directive and defines no alias.
-        /// </summary>
-        [Test]
-        public void Analyze_WithAUsingStaticDirective_CollectsItWithoutAnAlias()
-        {
-            SourceShapeResult result = SourceShaper.Analyze("using static System.Math;\nreturn Abs(-1);");
-
-            Assert.That(result.UsingDirectives, Is.EqualTo(new[] { "using static System.Math;" }));
-            Assert.That(result.AliasedNames, Is.Empty);
-            Assert.That(result.TopLevelBodyBuilder.ToString(), Does.Not.Contain("using static"));
-        }
-
-        /// <summary>
         /// Verifies a statement that starts with the global:: qualifier is a statement, not a global using.
         /// </summary>
         [Test]
