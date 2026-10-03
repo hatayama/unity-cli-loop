@@ -49,11 +49,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            bool isMaterializedCollection = rawValue is ICollection || rawValue is IDictionary;
+            bool isMaterializedCollection = IsMaterializedCollection(rawValue);
 
             // Why: deferred IEnumerable/LINQ must not execute user code during preview; only
-            // materialized ICollection/IDictionary snapshots and plain objects without a custom
-            // ToString (below) are safe to walk.
+            // materialized collections and plain objects without a custom ToString (below) are
+            // safe to walk.
             if (!isMaterializedCollection && rawValue is IEnumerable)
             {
                 return false;
@@ -79,6 +79,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Debug.LogException(exception);
                 return false;
             }
+        }
+
+        // Why HashSet by exact type: it is the only BCL collection in Unity's Mono that implements
+        // ICollection<T> without the non-generic ICollection. Widening to ICollection<T> or
+        // IReadOnlyCollection<T> would also walk user-defined collections, whose enumerators can
+        // run arbitrary user code, and an exact match keeps a subclass's reimplemented
+        // enumerator out for the same reason.
+        private static bool IsMaterializedCollection(object value)
+        {
+            return value is ICollection
+                || value is IDictionary
+                || (value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(HashSet<>));
         }
 
         private static void HandleSerializationError(object sender, ErrorEventArgs args)
@@ -342,7 +354,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return BuildMultidimensionalArrayToken(multidimensionalArray, remainingDepth, maxElementCount, visited, ref truncated);
             }
 
-            if (enumerable is ICollection)
+            if (IsMaterializedCollection(enumerable))
             {
                 return BuildArrayToken(enumerable, remainingDepth, maxElementCount, visited, ref truncated);
             }
