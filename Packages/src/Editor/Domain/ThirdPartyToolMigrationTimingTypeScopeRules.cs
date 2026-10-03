@@ -86,7 +86,29 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(memberIndex >= 0, "memberIndex must not be negative");
 
-            List<string> containingTypeNames = new();
+            List<Match> containingTypeDeclarations = ReadContainingTypeDeclarations(source, codeTextMask, memberIndex);
+            if (containingTypeDeclarations.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return QualifyNestedTypeName(
+                string.Join(".", containingTypeDeclarations.Select(match => match.Groups["name"].Value)),
+                ReadNamespaceName(source, codeTextMask, memberIndex));
+        }
+
+        /// <summary>
+        /// Returns the type declarations whose bodies contain the member, from the outermost to the innermost.
+        /// </summary>
+        public static List<Match> ReadContainingTypeDeclarations(
+            string source,
+            CodeTextMask codeTextMask,
+            int memberIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(memberIndex >= 0, "memberIndex must not be negative");
+
+            List<Match> containingTypeDeclarations = new();
             MatchCollection matches = TypeDeclarationNameRegex.Matches(source);
             foreach (Match match in matches)
             {
@@ -112,17 +134,124 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     continue;
                 }
 
-                containingTypeNames.Add(match.Groups["name"].Value);
+                containingTypeDeclarations.Add(match);
             }
 
-            if (containingTypeNames.Count == 0)
+            return containingTypeDeclarations;
+        }
+
+        /// <summary>
+        /// Returns the base class that the innermost class containing the member names first in its base list,
+        /// or an empty string when that class has no base class this source can name.
+        /// </summary>
+        public static string ReadContainingClassBaseTypeName(
+            string source,
+            CodeTextMask codeTextMask,
+            int memberIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(memberIndex >= 0, "memberIndex must not be negative");
+
+            List<Match> containingTypeDeclarations = ReadContainingTypeDeclarations(source, codeTextMask, memberIndex);
+            if (containingTypeDeclarations.Count == 0)
             {
                 return string.Empty;
             }
 
-            return QualifyNestedTypeName(
-                string.Join(".", containingTypeNames),
-                ReadNamespaceName(source, codeTextMask, memberIndex));
+            // Only classes have a base class; structs and interfaces list interfaces after the colon.
+            Match innermostDeclaration = containingTypeDeclarations[containingTypeDeclarations.Count - 1];
+            if (!IsClassDeclarationKeyword(innermostDeclaration.Value))
+            {
+                return string.Empty;
+            }
+
+            int headerStartIndex = innermostDeclaration.Index + innermostDeclaration.Length;
+            int openBraceIndex = FindTypeBodyOpenBraceIndex(source, codeTextMask, headerStartIndex);
+            string firstBaseTypeName = ReadFirstBaseListTypeName(
+                source.Substring(headerStartIndex, openBraceIndex - headerStartIndex));
+            if (firstBaseTypeName.Length == 0 || IsInterfaceDeclaredInCode(source, codeTextMask, firstBaseTypeName))
+            {
+                return string.Empty;
+            }
+
+            return firstBaseTypeName;
+        }
+
+        private static bool IsClassDeclarationKeyword(string declaration)
+        {
+            if (declaration.StartsWith("class", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return declaration.StartsWith("record", StringComparison.Ordinal) &&
+                !Regex.IsMatch(declaration, @"^record\s+struct\b");
+        }
+
+        /// <summary>
+        /// Returns the first entry of the base list in a type declaration header, without constructor arguments,
+        /// or an empty string when the header has no base list.
+        /// </summary>
+        public static string ReadFirstBaseListTypeName(string declarationHeader)
+        {
+            Debug.Assert(declarationHeader != null, "declarationHeader must not be null");
+
+            int colonIndex = FindTopLevelCharacterIndex(declarationHeader, 0, ':');
+            if (colonIndex < 0 || Regex.IsMatch(declarationHeader.Substring(0, colonIndex), @"\bwhere\b"))
+            {
+                return string.Empty;
+            }
+
+            int entryEndIndex = FindTopLevelCharacterIndex(declarationHeader, colonIndex + 1, ',');
+            string entry = entryEndIndex < 0
+                ? declarationHeader.Substring(colonIndex + 1)
+                : declarationHeader.Substring(colonIndex + 1, entryEndIndex - colonIndex - 1);
+            int argumentsStartIndex = FindTopLevelCharacterIndex(entry, 0, '(');
+            if (argumentsStartIndex >= 0)
+            {
+                entry = entry.Substring(0, argumentsStartIndex);
+            }
+
+            return Regex.Replace(entry, @"\s+where\b[\s\S]*$", string.Empty).Trim();
+        }
+
+        private static int FindTopLevelCharacterIndex(string text, int startIndex, char target)
+        {
+            int depth = 0;
+            for (int index = startIndex; index < text.Length; index++)
+            {
+                char character = text[index];
+                if (depth == 0 && character == target)
+                {
+                    return index;
+                }
+
+                if (character == '<' || character == '(')
+                {
+                    depth++;
+                }
+                else if (character == '>' || character == ')')
+                {
+                    depth--;
+                }
+            }
+
+            return -1;
+        }
+
+        private static bool IsInterfaceDeclaredInCode(string source, CodeTextMask codeTextMask, string typeName)
+        {
+            string unqualifiedTypeName = GetUnqualifiedTypeName(NormalizeTypeNameForComparison(typeName));
+            foreach (Match match in InterfaceDeclarationNameRegex.Matches(source))
+            {
+                if (codeTextMask.IsCodeAt(match.Index) &&
+                    string.Equals(match.Groups["name"].Value, unqualifiedTypeName, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public static string QualifyNestedTypeName(string nestedTypeName, string namespaceName)
