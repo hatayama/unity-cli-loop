@@ -245,15 +245,16 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 return false;
             }
 
-            string comparableBaseTypeName = NormalizeTypeNameForComparison(baseTypeName);
-            if (IsExactTypeNameReference(comparableBaseTypeName, removedSignature.DeclaringTypeName))
+            // The name is passed as written: QualifyRelativeTypeName must still see a global:: prefix to leave the
+            // name unqualified, and IsExactTypeNameReference normalizes it for comparison.
+            if (IsExactTypeNameReference(baseTypeName, removedSignature.DeclaringTypeName))
             {
                 return true;
             }
 
             return IsExactTypeNameReference(
                 QualifyRelativeTypeName(
-                    comparableBaseTypeName,
+                    baseTypeName,
                     ReadNamespaceName(source, codeTextMask, methodNameIndex)),
                 removedSignature.DeclaringTypeName);
         }
