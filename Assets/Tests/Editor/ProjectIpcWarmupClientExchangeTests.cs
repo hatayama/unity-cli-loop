@@ -143,7 +143,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// A connected stream that hands out its scripted bytes, then reports the end of the stream, and records what
-        /// is written to it. Reads and writes complete synchronously so no thread pool work is started.
+        /// is written to it. Reading before anything was written fails, like a server that never answers an unsent
+        /// request. Reads and writes complete synchronously so no thread pool work is started.
         /// </summary>
         private sealed class ScriptedDuplexStream : Stream
         {
@@ -173,6 +174,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public override int Read(byte[] buffer, int offset, int count)
             {
+                // A real server answers only after it has received the request, so reading first would wait forever.
+                if (_written.Length == 0)
+                {
+                    throw new InvalidOperationException("The response was read before the request was written.");
+                }
+
                 int available = Math.Min(count, _incoming.Length - _readPosition);
                 Buffer.BlockCopy(_incoming, _readPosition, buffer, offset, available);
                 _readPosition += available;
