@@ -148,11 +148,34 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(declarationMatch != null && declarationMatch.Success, "declarationMatch must be a successful match");
 
-            int removalStartIndex = ReadLegacyPlayerLoopTimingDeclarationRemovalStart(
+            return ReadDeclarationRemovalRange(
                 source,
                 declarationMatch.Index,
+                declarationMatch.Index + declarationMatch.Length,
                 codeTextMask);
-            int removalEndIndex = declarationMatch.Index + declarationMatch.Length;
+        }
+
+        /// <summary>
+        /// Returns the source range that removing a member declaration must cover, including its attributes.
+        /// The declaration range must start at its line start or at the declaration itself, and end after
+        /// at most one line break.
+        /// </summary>
+        public static (int StartIndex, int EndIndex) ReadDeclarationRemovalRange(
+            string source,
+            int declarationStartIndex,
+            int declarationEndIndex,
+            CodeTextMask codeTextMask)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                declarationStartIndex >= 0 && declarationStartIndex <= declarationEndIndex,
+                "declaration range must be ordered");
+
+            int removalStartIndex = ReadLegacyPlayerLoopTimingDeclarationRemovalStart(
+                source,
+                declarationStartIndex,
+                codeTextMask);
+            int removalEndIndex = declarationEndIndex;
             (int attributeStartIndex, bool sharesLineWithCode) =
                 ReadInlineAttributeRemovalStart(source, removalStartIndex, codeTextMask);
             if (!sharesLineWithCode)
