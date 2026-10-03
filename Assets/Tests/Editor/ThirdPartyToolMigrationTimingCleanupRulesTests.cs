@@ -237,5 +237,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result[1].Name, Is.EqualTo("timing"));
             Assert.That(result[1].HasDefaultValue, Is.True);
         }
+
+        /// <summary>
+        /// Verifies a statement that declares two timings is kept when only the first one is unused, so the second
+        /// one still compiles.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenSecondDeclaratorIsUsed_KeepsTheStatement()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming first = PlayerLoopTiming.Update, second = PlayerLoopTiming.FixedUpdate;\n    void Run() { Use(second); }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a statement whose second declarator has no initializer is kept when that declarator is used.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenUsedSecondDeclaratorHasNoInitializer_KeepsTheStatement()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming first = PlayerLoopTiming.Update, second;\n    void Run() { Use(second); }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
     }
 }
