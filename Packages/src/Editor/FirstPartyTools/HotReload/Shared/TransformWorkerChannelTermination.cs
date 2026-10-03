@@ -30,8 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // True when the process has left or is leaving on its own; false when it has to be killed.
-        // Why the handlers cover only the quit: a kill failure of a live process must reach the
-        // caller, and a handler around the kill as well would drop it.
+        // Why the handlers cover only the quit: the kill raises the same exception types with another
+        // meaning (a live process refusing the kill, not an exit), so a handler shared with the kill
+        // would misread its failure as a quit outcome.
         private static bool TryQuit(ITransformWorkerChannel channel)
         {
             try
