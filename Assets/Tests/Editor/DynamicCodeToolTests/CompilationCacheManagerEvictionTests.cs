@@ -63,7 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies a cache hit copies errors and ambiguity candidates instead of sharing the cached lists.
+        /// Verifies errors and ambiguity candidates are copied both when stored and on each hit, so neither the
+        /// caller's result nor an earlier hit can change what a later hit returns.
         /// </summary>
         [Test]
         public void CheckCache_CopiesErrorsAndAmbiguityCandidates()
@@ -80,15 +81,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 { "Random", new List<string> { "UnityEngine", "System" } }
             };
             manager.CacheResultIfSuccessful(original, request);
-
-            CompilationResult cached = manager.CheckCache(request);
             original.Errors[0].Message = "changed";
             original.AmbiguousTypeCandidates["Random"].Add("Other");
 
-            Assert.That(cached.Errors[0].Message, Is.EqualTo("note"));
-            Assert.That(cached.Errors[0].Line, Is.EqualTo(2));
-            Assert.That(cached.Errors[0].ErrorCode, Is.EqualTo("CS0168"));
-            Assert.That(cached.AmbiguousTypeCandidates["Random"], Is.EqualTo(new List<string> { "UnityEngine", "System" }));
+            CompilationResult firstHit = manager.CheckCache(request);
+            firstHit.Errors[0].Message = "edited";
+            firstHit.AmbiguousTypeCandidates["Random"].Add("Edited");
+            CompilationResult secondHit = manager.CheckCache(request);
+
+            Assert.That(secondHit.Errors[0].Message, Is.EqualTo("note"));
+            Assert.That(secondHit.Errors[0].Line, Is.EqualTo(2));
+            Assert.That(secondHit.Errors[0].ErrorCode, Is.EqualTo("CS0168"));
+            Assert.That(secondHit.AmbiguousTypeCandidates["Random"], Is.EqualTo(new List<string> { "UnityEngine", "System" }));
         }
 
         /// <summary>
