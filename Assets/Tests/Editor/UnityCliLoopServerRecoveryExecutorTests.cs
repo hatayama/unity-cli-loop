@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// and reconnecting flags, logs an error, and throws.
         /// </summary>
         [Test]
-        public void StartRecoveryIfNeededAsync_WhenBindNeverSucceeds_ClearsSessionFlagsAndThrows()
+        public async Task StartRecoveryIfNeededAsync_WhenBindNeverSucceeds_ClearsSessionFlagsAndThrows()
         {
             SequencedServerInstanceFactory factory = new SequencedServerInstanceFactory(failuresBeforeSuccess: int.MaxValue);
             _sessionFlagsRepository.SetIsServerRunning(true);
@@ -78,9 +78,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerRecoveryExecutor executor = CreateExecutor(factory);
             LogAssert.Expect(LogType.Error, new Regex("could not be bound within 5000ms"));
 
-            InvalidOperationException exception = Assert.ThrowsAsync<InvalidOperationException>(
-                async () => await executor.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None));
+            // Why await instead of Assert.ThrowsAsync: ThrowsAsync blocks the main thread until the task ends, so a
+            // real timer whose continuation needs that thread would deadlock the Editor instead of failing the test.
+            InvalidOperationException exception = null;
+            try
+            {
+                await executor.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None);
+            }
+            catch (InvalidOperationException ex)
+            {
+                exception = ex;
+            }
 
+            Assert.That(exception, Is.Not.Null);
             Assert.That(exception.Message, Does.Contain("could not be bound within 5000ms"));
             Assert.That(_waitedDelays.Count, Is.EqualTo(20));
             Assert.That(_waitedDelays, Is.All.EqualTo(250));
