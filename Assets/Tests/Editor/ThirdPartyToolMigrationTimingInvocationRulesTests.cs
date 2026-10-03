@@ -273,6 +273,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a colon inside a comment in the class header is not read as the start of the base list.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenHeaderCommentContainsColon_ReadsRealBaseList()
+        {
+            string source =
+                "class Derived /* : Other */ : Runner\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"));
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
         /// Verifies a non-token argument for a remaining CancellationToken parameter makes the caller incompatible.
         /// </summary>
         [Test]
