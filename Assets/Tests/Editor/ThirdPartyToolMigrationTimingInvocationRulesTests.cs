@@ -292,6 +292,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a global-qualified base name is not resolved relative to the enclosing namespace.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenGlobalQualifiedBaseIsOutsideEnclosingNamespace_ReturnsFalse()
+        {
+            string source =
+                "namespace App\n{\n    class Derived : global::Lib.Runner\n    {\n        void Call() { base.Run(1, PlayerLoopTiming.Update); }\n    }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("App.Lib.Runner"));
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a base naming a type in the global namespace does not match a same-named type in the enclosing namespace.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenGlobalQualifiedBaseNamesGlobalType_ReturnsFalseForNamespacedType()
+        {
+            string source =
+                "namespace Game\n{\n    class Runner : global::Runner\n    {\n        void Call() { base.Run(1, PlayerLoopTiming.Update); }\n    }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Game.Runner"));
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a global-qualified base name matches the declaring type it names.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenGlobalQualifiedBaseNamesDeclaringType_ReturnsTrue()
+        {
+            string source =
+                "class Derived : global::Lib.Runner\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Lib.Runner"));
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
         /// Verifies a non-token argument for a remaining CancellationToken parameter makes the caller incompatible.
         /// </summary>
         [Test]
