@@ -53,6 +53,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(replacementCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a call nested in the arguments of another call to the same method is rewritten as well as the outer call.
+        /// </summary>
+        [Test]
+        public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenCallIsNestedInSameMethodCall_RewritesBothCalls()
+        {
+            string source =
+                "class Runner\n{\n    void Call()\n    {\n" +
+                "        Run(Run(1, PlayerLoopTiming.Update), PlayerLoopTiming.Update);\n    }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCallerRules.RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
+                    source,
+                    new[] { CreateValueAndTimingSignature() },
+                    Array.Empty<string>());
+
+            Assert.That(
+                content,
+                Is.EqualTo("class Runner\n{\n    void Call()\n    {\n        Run(Run(1));\n    }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(2));
+        }
+
         private static RemovedLegacyPlayerLoopTimingSignature CreateValueAndTimingSignature()
         {
             return new RemovedLegacyPlayerLoopTimingSignature(
