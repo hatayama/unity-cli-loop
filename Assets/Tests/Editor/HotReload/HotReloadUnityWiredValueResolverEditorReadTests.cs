@@ -1,3 +1,5 @@
+using System;
+
 using NUnit.Framework;
 
 using UnityEditor;
@@ -16,8 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ExistingAssetPath =
             "Assets/Tests/Editor/HotReload/UnityCLILoop.Tests.Editor.HotReload.asmdef";
 
-        // A GUID no asset uses, so the asset database maps it to no path.
-        private const string UnknownGuid = "f0e1d2c3b4a5968778695a4b3c2d1e0f";
+        // A GUID no asset uses, so the asset database maps it to no path. Why generated: a fixed
+        // made-up GUID collided with an asset of a package that newer Editors bundle.
+        private static readonly string UnknownGuid = Guid.NewGuid().ToString("N");
 
         private const string MissingSceneHostIdentity =
             "scene:UloopNoSuchScene|path:Host[0]|component:UnityEngine.Transform|index:0";
@@ -71,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void TryResolve_WhenAssetIdentityHasNoLocalId_FailsNamingTheIdentity()
         {
-            const string identity = "asset:" + UnknownGuid;
+            string identity = "asset:" + UnknownGuid;
             HotReloadWiredValueDescriptor descriptor = HotReloadWiredValueDescriptor.Asset(identity, "UnityEngine.Object");
 
             bool resolved = _resolver.TryResolve(descriptor, out object value, out string failureReason);
@@ -89,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void TryResolve_WhenAssetGuidIsUnknown_FailsNamingTheIdentity()
         {
-            const string identity = "asset:" + UnknownGuid + "|local:1";
+            string identity = "asset:" + UnknownGuid + "|local:1";
             Assert.That(
                 AssetDatabase.GUIDToAssetPath(UnknownGuid),
                 Is.Null.Or.Empty,
