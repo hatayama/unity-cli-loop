@@ -582,5 +582,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return _inner.ClearExpiredCompileResult(utcNow, lifetime);
             }
         }
+
+        /// <summary>
+        /// Verifies a null request faults the returned task with ArgumentNullException naming the request parameter.
+        /// </summary>
+        [Test]
+        public void CompileAsync_WhenRequestIsNull_FaultsWithArgumentNullException()
+        {
+            UntouchedCompileSessionStore store = new();
+            UnityCliLoopCompileSessionLifecycleService lifecycleService = new(store, store, store);
+            CompileUseCase useCase = new(lifecycleService, store, store);
+
+            Task<CompileResponse> task = useCase.CompileAsync(null, CancellationToken.None);
+
+            Assert.That(task.IsCompleted, Is.True);
+            ArgumentNullException exception =
+                Assert.Throws<ArgumentNullException>(() => task.GetAwaiter().GetResult());
+            Assert.That(exception.ParamName, Is.EqualTo("request"));
+        }
+
+        /// <summary>
+        /// Session store that fails the test if the use case touches any session state.
+        /// </summary>
+        private sealed class UntouchedCompileSessionStore :
+            ISessionFlagsRepository,
+            ICompileResultSessionRepository,
+            IPendingCompileSessionRepository
+        {
+            private static InvalidOperationException Touched()
+            {
+                return new InvalidOperationException("session state must not be touched");
+            }
+
+            public bool GetIsServerRunning() => throw Touched();
+            public bool GetIsServerManuallyStopped() => throw Touched();
+            public bool GetIsAfterCompile() => throw Touched();
+            public bool GetIsDomainReloadInProgress() => throw Touched();
+            public bool GetShowReconnectingUI() => throw Touched();
+            public void SetIsAfterCompile(bool isAfterCompile) => throw Touched();
+            public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress) => throw Touched();
+            public void SetIsReconnecting(bool isReconnecting) => throw Touched();
+            public void SetShowReconnectingUI(bool showReconnectingUI) => throw Touched();
+            public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI) => throw Touched();
+            public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration) => throw Touched();
+            public bool ConsumeShouldAutoScanThirdPartyToolMigration() => throw Touched();
+            public void MarkServerStarted() => throw Touched();
+            public void MarkServerManuallyStopped() => throw Touched();
+            public void ClearServerSession() => throw Touched();
+            public void ClearAfterCompileFlag() => throw Touched();
+            public void ClearReconnectingFlags() => throw Touched();
+            public void ClearPostCompileReconnectingUI() => throw Touched();
+            public void ClearDomainReloadFlag() => throw Touched();
+            public void ClearDomainReloadRecoveryFlags() => throw Touched();
+
+            public void StoreCompileResult(
+                string requestId,
+                bool forceRecompile,
+                string resultJson,
+                DateTime completedAtUtc) => throw Touched();
+            public UnityCliLoopStoredCompileResult GetCompileResult(string requestId) => throw Touched();
+            public UnityCliLoopStoredCompileResult GetStoredCompileResult() => throw Touched();
+            public UnityCliLoopStoredCompileResult[] GetStoredCompileResults() => throw Touched();
+            public void ClearCompileResult() => throw Touched();
+            public bool ClearExpiredCompileResult(DateTime utcNow, TimeSpan lifetime) => throw Touched();
+
+            public void StorePendingCompileRequest(
+                string requestId,
+                bool forceRecompile,
+                DateTime expiresAtUtc,
+                bool reloadObserved) => throw Touched();
+            public UnityCliLoopPendingCompileRequest[] GetPendingCompileRequests() => throw Touched();
+            public bool MarkPendingCompileRequestReloadObserved() => throw Touched();
+            public UnityCliLoopPendingCompileRequest GetPendingCompileRequestForRequestId(string requestId) => throw Touched();
+            public void ClearPendingCompileRequest() => throw Touched();
+            public bool ClearPendingCompileRequestIfMatches(string requestId) => throw Touched();
+            public bool ClearExpiredPendingCompileRequest(DateTime utcNow) => throw Touched();
+        }
     }
 }

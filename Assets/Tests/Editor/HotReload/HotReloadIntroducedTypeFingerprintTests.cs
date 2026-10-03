@@ -565,5 +565,280 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return new HotReloadIntroducedTypeMemberFingerprint(key, declarationHash, bodyHash);
         }
+
+        /// <summary>
+        /// Verifies that a defines hash that is not canonical is refused and named as the bad argument.
+        /// </summary>
+        [Test]
+        public void Constructor_MalformedDefinesHash_ThrowsNamingDefinesHash()
+        {
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeFingerprint(
+                HeaderHash,
+                "not-a-hash",
+                OrderHash,
+                new List<HotReloadIntroducedTypeMemberFingerprint>()));
+
+            Assert.That(exception.ParamName, Is.EqualTo("definesHash"));
+        }
+
+        /// <summary>
+        /// Verifies that a member order hash that is not canonical is refused and named as the bad argument.
+        /// </summary>
+        [Test]
+        public void Constructor_MalformedMemberOrderHash_ThrowsNamingMemberOrderHash()
+        {
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeFingerprint(
+                HeaderHash,
+                DefinesHash,
+                "not-a-hash",
+                new List<HotReloadIntroducedTypeMemberFingerprint>()));
+
+            Assert.That(exception.ParamName, Is.EqualTo("memberOrderHash"));
+        }
+
+        /// <summary>
+        /// Verifies that a null member list is refused with an ArgumentException naming members.
+        /// </summary>
+        [Test]
+        public void Constructor_NullMembers_ThrowsNamingMembers()
+        {
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeFingerprint(
+                HeaderHash,
+                DefinesHash,
+                OrderHash,
+                null));
+
+            Assert.That(exception.ParamName, Is.EqualTo("members"));
+        }
+
+        /// <summary>
+        /// Verifies that WithStubbedBodies refuses a null key collection with an ArgumentException naming memberKeys.
+        /// </summary>
+        [Test]
+        public void WithStubbedBodies_NullMemberKeys_ThrowsNamingMemberKeys()
+        {
+            HotReloadIntroducedTypeFingerprint source = CreateFingerprint(
+                CreateMember(MethodKey, DeclarationHash, BodyHash));
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => source.WithStubbedBodies(null));
+
+            Assert.That(exception.ParamName, Is.EqualTo("memberKeys"));
+        }
+
+        /// <summary>
+        /// Verifies that Compare refuses a null left fingerprint with an ArgumentException naming left.
+        /// </summary>
+        [Test]
+        public void Compare_NullLeft_ThrowsNamingLeft()
+        {
+            HotReloadIntroducedTypeFingerprint right = CreateFingerprint();
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => HotReloadIntroducedTypeFingerprint.Compare(null, right));
+
+            Assert.That(exception.ParamName, Is.EqualTo("left"));
+        }
+
+        /// <summary>
+        /// Verifies that Compare refuses a null right fingerprint with an ArgumentException naming right.
+        /// </summary>
+        [Test]
+        public void Compare_NullRight_ThrowsNamingRight()
+        {
+            HotReloadIntroducedTypeFingerprint left = CreateFingerprint();
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => HotReloadIntroducedTypeFingerprint.Compare(left, null));
+
+            Assert.That(exception.ParamName, Is.EqualTo("right"));
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses text whose header line carries the wrong prefix.
+        /// </summary>
+        [Test]
+        public void TryParse_HeaderLineWithWrongPrefix_ReturnsFalse()
+        {
+            string text = "v1\nx:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:0\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out HotReloadIntroducedTypeFingerprint value), Is.False);
+            Assert.That(value, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses text whose defines hash is not canonical.
+        /// </summary>
+        [Test]
+        public void TryParse_DefinesLineWithNonCanonicalHash_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash.ToUpperInvariant().Replace('2', 'A')
+                + "\no:" + OrderHash + "\nn:0\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses text whose member order line is missing its prefix.
+        /// </summary>
+        [Test]
+        public void TryParse_OrderLineWithWrongPrefix_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\nx:" + OrderHash + "\nn:0\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses text whose member count line does not start with "n:".
+        /// </summary>
+        [Test]
+        public void TryParse_CountLineWithWrongPrefix_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nc:0\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a negative member count, which the canonical form never writes.
+        /// </summary>
+        [Test]
+        public void TryParse_NegativeMemberCount_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:-1\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member count too large for an int instead of throwing.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberCountBeyondIntRange_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:99999999999\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses text that carries more member lines than its count declares.
+        /// </summary>
+        [Test]
+        public void TryParse_MoreMemberLinesThanDeclared_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:1\n"
+                + MemberLine("a", DeclarationHash, BodyHash) + "\n"
+                + MemberLine("b", DeclarationHash, BodyHash) + "\n";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses text that does not end with the final newline.
+        /// </summary>
+        [Test]
+        public void TryParse_TrailingTextAfterLastLine_ReturnsFalse()
+        {
+            string text = "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:0\ntrailing";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(text, out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line that does not start with "m:".
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithWrongPrefix_ReturnsFalse()
+        {
+            string line = "x" + MemberLine(MethodKey, DeclarationHash, BodyHash).Substring(1);
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText(line), out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line with no separator after its key length.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithoutKeyLengthSeparator_ReturnsFalse()
+        {
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText("m:abc"), out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line that declares an empty key.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithZeroKeyLength_ReturnsFalse()
+        {
+            string line = "m:0::" + DeclarationHash + ":" + BodyHash;
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText(line), out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line whose key is not followed by a separator.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithoutSeparatorAfterKey_ReturnsFalse()
+        {
+            string line = "m:1:kX" + DeclarationHash + ":" + BodyHash;
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText(line), out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line that ends right after its declaration hash.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineEndingAfterDeclarationHash_ReturnsFalse()
+        {
+            string line = "m:1:k:" + DeclarationHash;
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText(line), out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line whose declaration hash is not followed by a separator.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithoutSeparatorAfterDeclarationHash_ReturnsFalse()
+        {
+            string line = "m:1:k:" + DeclarationHash + "X" + BodyHash;
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText(line), out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line whose declaration hash is not lowercase hex.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithNonCanonicalDeclarationHash_ReturnsFalse()
+        {
+            string line = "m:1:k:" + new string('A', 64) + ":" + BodyHash;
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText(line), out _), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that TryParse refuses a member line whose body hash is present but not canonical.
+        /// </summary>
+        [Test]
+        public void TryParse_MemberLineWithNonCanonicalBodyHash_ReturnsFalse()
+        {
+            string line = "m:1:k:" + DeclarationHash + ":ABC";
+
+            Assert.That(HotReloadIntroducedTypeFingerprint.TryParse(SingleMemberText(line), out _), Is.False);
+        }
+
+        private static string SingleMemberText(string memberLine)
+        {
+            return "v1\nh:" + HeaderHash + "\nd:" + DefinesHash + "\no:" + OrderHash + "\nn:1\n" + memberLine + "\n";
+        }
+
+        private static string MemberLine(string key, string declarationHash, string bodyHash)
+        {
+            return "m:" + key.Length + ":" + key + ":" + declarationHash + ":" + bodyHash;
+        }
     }
 }

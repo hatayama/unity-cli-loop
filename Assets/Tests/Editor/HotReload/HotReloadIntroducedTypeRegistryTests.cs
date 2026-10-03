@@ -968,5 +968,166 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 fingerprint,
                 "public class OtherIntroduced { }");
         }
+
+        /// <summary>
+        /// Verifies that an empty descriptor request finds no active artifact even when one is active.
+        /// </summary>
+        [Test]
+        public void TryFindActive_WhenRequestIsEmpty_ReturnsFalseWithoutArtifact()
+        {
+            HotReloadIntroducedTypeRegistry registry = CreateRegistryWithActiveArtifact();
+
+            bool found = registry.TryFindActive(
+                new List<HotReloadIntroducedTypeDescriptor>(),
+                out HotReloadIntroducedTypeArtifact artifact);
+
+            Assert.That(found, Is.False);
+            Assert.That(artifact, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that a null descriptor lookup returns false without throwing.
+        /// </summary>
+        [Test]
+        public void TryFindActiveDescriptor_WhenDescriptorIsNull_ReturnsFalseWithoutArtifact()
+        {
+            HotReloadIntroducedTypeRegistry registry = CreateRegistryWithActiveArtifact();
+
+            bool found = registry.TryFindActiveDescriptor(null, out HotReloadIntroducedTypeArtifact artifact);
+
+            Assert.That(found, Is.False);
+            Assert.That(artifact, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that a descriptor sharing the active type identity but with a changed declaration is not reused.
+        /// </summary>
+        [Test]
+        public void TryFindActiveDescriptor_WhenIdentityMatchesButDefinitionChanged_ReturnsFalseWithoutArtifact()
+        {
+            HotReloadIntroducedTypeRegistry registry = CreateRegistryWithActiveArtifact();
+            HotReloadIntroducedTypeDescriptor changed = CreateDescriptorWithFingerprint("changed-fingerprint");
+
+            bool found = registry.TryFindActiveDescriptor(changed, out HotReloadIntroducedTypeArtifact artifact);
+
+            Assert.That(found, Is.False);
+            Assert.That(artifact, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that registering a null artifact as prepared is rejected.
+        /// </summary>
+        [Test]
+        public void RegisterPrepared_WhenArtifactIsNull_ThrowsArgumentNullException()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.RegisterPrepared(null));
+            Assert.That(registry.PreparedCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that activating a null artifact is rejected.
+        /// </summary>
+        [Test]
+        public void Activate_WhenArtifactIsNull_ThrowsArgumentNullException()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+
+            Assert.Throws<ArgumentNullException>(() => registry.Activate(null));
+            Assert.That(registry.ActiveCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a null original assembly name owns no active introduced type.
+        /// </summary>
+        [Test]
+        public void HasActiveTypesForOriginalAssembly_WhenNameIsNull_ReturnsFalse()
+        {
+            HotReloadIntroducedTypeRegistry registry = CreateRegistryWithActiveArtifact();
+
+            Assert.That(registry.HasActiveTypesForOriginalAssembly(null), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that an assembly other than the one the active types came from owns no active introduced type.
+        /// </summary>
+        [Test]
+        public void HasActiveTypesForOriginalAssembly_WhenOnlyOtherAssemblyIsActive_ReturnsFalse()
+        {
+            HotReloadIntroducedTypeRegistry registry = CreateRegistryWithActiveArtifact();
+
+            Assert.That(registry.HasActiveTypesForOriginalAssembly("UnrelatedAssembly"), Is.False);
+            Assert.That(registry.HasActiveTypesForOriginalAssembly("RegistryAdditionsAssembly"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that a target without a generation (null MVID) collects no active artifact.
+        /// </summary>
+        [Test]
+        public void CollectActiveArtifactsForTarget_WhenMvidIsNull_ReturnsEmpty()
+        {
+            HotReloadIntroducedTypeRegistry registry = CreateRegistryWithActiveArtifact();
+
+            Assert.That(registry.CollectActiveArtifactsForTarget("RegistryAdditionsAssembly", null), Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies that activating an artifact carrying the same type identity twice is rejected before any publication.
+        /// </summary>
+        [Test]
+        public void Activate_WhenArtifactRepeatsADescriptorIdentity_ThrowsAndKeepsItPrepared()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                ProductionAssembly(),
+                "Library/Introduced/Duplicate.dll",
+                "Library/Introduced/Duplicate.pdb",
+                new List<HotReloadIntroducedTypeDescriptor>
+                {
+                    CreateDescriptorWithFingerprint("first"),
+                    CreateDescriptorWithFingerprint("second")
+                });
+            registry.RegisterPrepared(artifact);
+
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => registry.Activate(artifact));
+
+            Assert.That(
+                exception.Message,
+                Is.EqualTo("An introduced-type artifact cannot contain duplicate descriptors."));
+            Assert.That(registry.ActiveCount, Is.EqualTo(0));
+            Assert.That(registry.ActiveTypeCount, Is.EqualTo(0));
+            Assert.That(registry.PreparedCount, Is.EqualTo(1));
+        }
+
+        private static HotReloadIntroducedTypeRegistry CreateRegistryWithActiveArtifact()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                ProductionAssembly(),
+                "Library/Introduced/Active.dll",
+                "Library/Introduced/Active.pdb",
+                new List<HotReloadIntroducedTypeDescriptor> { CreateDescriptorWithFingerprint("active") });
+            registry.RegisterPrepared(artifact);
+            registry.Activate(artifact);
+            return registry;
+        }
+
+        private static HotReloadIntroducedTypeDescriptor CreateDescriptorWithFingerprint(string fingerprint)
+        {
+            return new HotReloadIntroducedTypeDescriptor(
+                "RegistryAdditionsAssembly",
+                "registry-additions-mvid",
+                "Example.RegistryAdditionsIntroduced",
+                "Assets/Example/RegistryAdditionsIntroduced.cs",
+                fingerprint,
+                "public class RegistryAdditionsIntroduced { }");
+        }
+
+        private static Assembly ProductionAssembly()
+        {
+            return typeof(HotReloadIntroducedTypeRegistry).Assembly;
+        }
     }
 }

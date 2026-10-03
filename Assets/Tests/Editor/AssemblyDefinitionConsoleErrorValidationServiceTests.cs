@@ -242,5 +242,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.HasErrors, Is.False);
             Assert.That(result.Message, Is.Null);
         }
+
+        /// <summary>
+        /// Verifies an error that names an asmdef outside Assets/ or Packages/ is not reported, even when the importer check would accept it.
+        /// </summary>
+        [Test]
+        public void FindErrors_WhenErrorNamesNoAssetsOrPackagesPath_ReturnsNoIssues()
+        {
+            int importCheckCount = 0;
+            AssemblyDefinitionConsoleErrorValidationService service = new(
+                (assetPath, message) =>
+                {
+                    importCheckCount++;
+                    return true;
+                });
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(
+                    UnityCliLoopLogType.Error,
+                    "Assembly has duplicate references: Unity.InputSystem (Library/Sample.asmdef)",
+                    "at Library/Other.asmref")
+            };
+
+            AssemblyDefinitionConsoleErrorResult result = service.FindErrors(entries);
+
+            Assert.That(result.HasErrors, Is.False);
+            Assert.That(result.Errors, Is.Empty);
+            Assert.That(importCheckCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies the same Console error repeated for the same asset is reported once.
+        /// </summary>
+        [Test]
+        public void FindErrors_WhenSameErrorAppearsTwiceForSameAsset_ReturnsOneIssue()
+        {
+            const string message = "Assembly has duplicate references: Unity.InputSystem (Assets/Editor/Sample.asmdef)";
+            AssemblyDefinitionConsoleErrorValidationService service = new(
+                (assetPath, consoleText) => true);
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(UnityCliLoopLogType.Error, message, ""),
+                new(UnityCliLoopLogType.Error, message, "")
+            };
+
+            AssemblyDefinitionConsoleErrorResult result = service.FindErrors(entries);
+
+            Assert.That(result.Errors, Has.Length.EqualTo(1));
+            Assert.That(result.Errors[0].File, Is.EqualTo("Assets/Editor/Sample.asmdef"));
+            Assert.That(result.Errors[0].Message, Is.EqualTo(message));
+        }
     }
 }
