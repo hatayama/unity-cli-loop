@@ -208,9 +208,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
                 
                 _headerParsed = true;
+                return true;
             }
-            
-            return parseResult;
+
+            // More data cannot fix a header that is already complete, so waiting would only stall the session.
+            if (frameParser.ContainsCompleteHeader(_assemblyBuffer, _currentDataLength))
+            {
+                throw new InvalidOperationException("Message header has no valid Content-Length. Message framing is corrupted.");
+            }
+
+            return false;
         }
         
         /// <summary>

@@ -63,6 +63,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
         
         /// <summary>
+        /// Checks whether the buffer already holds the whole header, including the blank line that ends it.
+        /// </summary>
+        public bool ContainsCompleteHeader(byte[] buffer, int length)
+        {
+            if (buffer == null || length <= 0)
+            {
+                return false;
+            }
+
+            return FindByteSequence(buffer, length, Encoding.UTF8.GetBytes(HEADER_SEPARATOR)) >= 0;
+        }
+
+        /// <summary>
         /// Checks if a complete frame is available in the buffer.
         /// </summary>
         /// <param name="buffer">The buffer containing the data</param>
