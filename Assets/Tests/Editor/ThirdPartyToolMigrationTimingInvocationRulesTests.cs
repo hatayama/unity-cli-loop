@@ -158,6 +158,121 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a base-qualified call inside the declaring type targets that type's base class, not the removed signature.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenBaseCallInsideDeclaringTypeWithOtherBase_ReturnsFalse()
+        {
+            string source =
+                "class Runner : MonoBehaviour\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"));
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a base-qualified call inside a type without a base list does not target the removed signature of that type.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenBaseCallInsideTypeWithoutBaseList_ReturnsFalse()
+        {
+            string source =
+                "class Runner\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"));
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a base-qualified call inside a type derived from the declaring type targets the removed signature.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenBaseCallInsideDerivedType_ReturnsTrue()
+        {
+            string source =
+                "class Derived : Runner\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"));
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a base-qualified call targets the removed signature when the base class is a constructed generic of the declaring type.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenBaseCallInsideTypeDerivedFromGenericBase_ReturnsTrue()
+        {
+            string source =
+                "class Derived : Runner<int>, IDisposable\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"));
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a base type name is resolved against the enclosing namespace like other target expressions.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenBaseCallInsideDerivedTypeInNamespace_ReturnsTrue()
+        {
+            string source =
+                "namespace Game\n{\n    class Derived : Runner\n    {\n        void Call() { base.Run(1, PlayerLoopTiming.Update); }\n    }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Game.Runner"));
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a base-qualified call does not target an interface's removed signature when the base list names only that interface.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenBaseListNamesOnlyInterface_ReturnsFalse()
+        {
+            string source =
+                "interface IRunner\n{\n    void Run(int value, PlayerLoopTiming timing);\n}\n\n" +
+                "class Derived : IRunner\n{\n    void Call() { base.Run(1, PlayerLoopTiming.Update); }\n}\n";
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(source);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                source,
+                codeTextMask,
+                source.LastIndexOf("Run(", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("IRunner"));
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
         /// Verifies a non-token argument for a remaining CancellationToken parameter makes the caller incompatible.
         /// </summary>
         [Test]
