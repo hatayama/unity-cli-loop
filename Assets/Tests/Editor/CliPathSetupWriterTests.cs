@@ -382,6 +382,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(appendedContent, Has.Count.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a later exported line with spaces around '=' does not count as a PATH setup that shadows the canonical line.
+        /// </summary>
+        [Test]
+        public void Apply_WhenCanonicalLineIsFollowedBySpacedExportNonAssignment_DoesNotAppend()
+        {
+            CliPathSetupPlan plan = CreateZshPlan();
+            List<string> appendedContent = new List<string>();
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                plan,
+                path => true,
+                path => "export PATH=\"$HOME/.local/bin:$PATH\"\nexport PATH = \"/opt/other/bin:$PATH\"\n",
+                path => new DirectoryInfo(path),
+                (path, content) => appendedContent.Add(content));
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.AlreadyConfigured));
+            Assert.That(appendedContent, Has.Count.EqualTo(0));
+        }
+
         private static CliPathSetupPlan CreateZshPlan()
         {
             return new CliPathSetupPlan(
