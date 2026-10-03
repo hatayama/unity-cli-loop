@@ -168,13 +168,25 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             int headerStartIndex = innermostDeclaration.Index + innermostDeclaration.Length;
             int openBraceIndex = FindTypeBodyOpenBraceIndex(source, codeTextMask, headerStartIndex);
             string firstBaseTypeName = ReadFirstBaseListTypeName(
-                source.Substring(headerStartIndex, openBraceIndex - headerStartIndex));
+                ReadCodeOnlyText(source, codeTextMask, headerStartIndex, openBraceIndex));
             if (firstBaseTypeName.Length == 0 || IsInterfaceDeclaredInCode(source, codeTextMask, firstBaseTypeName))
             {
                 return string.Empty;
             }
 
             return firstBaseTypeName;
+        }
+
+        // Comments and strings are blanked out so a colon or comma inside them is not read as a delimiter.
+        private static string ReadCodeOnlyText(string source, CodeTextMask codeTextMask, int startIndex, int endIndex)
+        {
+            StringBuilder builder = new(endIndex - startIndex);
+            for (int index = startIndex; index < endIndex; index++)
+            {
+                builder.Append(codeTextMask.IsCodeAt(index) ? source[index] : ' ');
+            }
+
+            return builder.ToString();
         }
 
         private static bool IsClassDeclarationKeyword(string declaration)
