@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.3](https://github.com/hatayama/unity-cli-loop/compare/v3.11.2...v3.11.3) (2026-10-03)
+
+
+### Bug Fixes
+
+* Fourteen fixes for execute-dynamic-code, tool migration, pause point values, screenshot annotations, PATH setup, IPC, and hot reload cleanup ([#3125](https://github.com/hatayama/unity-cli-loop/issues/3125)) ([f38c1b7](https://github.com/hatayama/unity-cli-loop/commit/f38c1b7e46fa3809ca3a01619562e83344d57475))
+
 ## [3.11.2](https://github.com/hatayama/unity-cli-loop/compare/v3.11.1...v3.11.2) (2026-10-02)
 
 
