@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly Func<IUnityCliLoopServerInstance> _getBridgeServer;
         private readonly Action<IUnityCliLoopServerInstance> _setBridgeServer;
+        private readonly Func<int, CancellationToken, Task> _waitBeforeBindRetryAsync;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
 
         internal UnityCliLoopServerRecoveryExecutor(
@@ -30,7 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ISessionFlagsRepository sessionFlagsRepository,
             UnityCliLoopToolRegistrarService toolRegistrarService,
             Func<IUnityCliLoopServerInstance> getBridgeServer,
-            Action<IUnityCliLoopServerInstance> setBridgeServer)
+            Action<IUnityCliLoopServerInstance> setBridgeServer,
+            Func<int, CancellationToken, Task> waitBeforeBindRetryAsync = null)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(readinessService != null, "readinessService must not be null");
@@ -47,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _toolRegistrarService = toolRegistrarService;
             _getBridgeServer = getBridgeServer;
             _setBridgeServer = setBridgeServer;
+            _waitBeforeBindRetryAsync = waitBeforeBindRetryAsync ?? TimerDelay.Wait;
         }
 
         /// <summary>
@@ -201,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     }
 
                     int delay = stepMs <= 0 ? remainingMs : Math.Min(stepMs, remainingMs);
-                    await TimerDelay.Wait(delay, ct);
+                    await _waitBeforeBindRetryAsync(delay, ct);
                     remainingMs -= delay;
                 }
             }
