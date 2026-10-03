@@ -29,7 +29,7 @@ CLI-only flag, accepted instead of a schema parameter:
 
 ## Code Rules
 
-Write direct statements from your own Unity API knowledge — no class/namespace/method wrappers. Return is optional.
+Write direct statements from your own Unity API knowledge — no class/namespace/method wrappers. Return is optional. `await` works, and a returned `Task` is awaited: its value becomes `Result`, its exception a failure.
 
 ```csharp
 using UnityEngine;
@@ -37,7 +37,7 @@ float x = Mathf.PI;
 return x;
 ```
 
-Prefer terminal commands for file operations; keep snippets focused on Unity Editor state existing uloop tools cannot inspect or change.
+Prefer terminal commands for file operations.
 
 A type an active hot reload introduced is nameable here; write its full name. Members hot reload *added* to a type are not; see the hot-reload skill's `added-field-wiring.md`.
 
