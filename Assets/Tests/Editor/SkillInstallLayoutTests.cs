@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -516,6 +517,84 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class FakeToolResponse : UnityCliLoopToolResponse
         {
+        }
+
+        /// <summary>
+        /// Verifies that installed skills are enumerated from the grouped layout first, then from managed flat-layout directories, skipping manual skills.
+        /// </summary>
+        [Test]
+        public void EnumerateInstalledSkillDirectories_WhenGroupedAndFlatSkillsExist_ReturnsManagedDirectoriesOnly()
+        {
+            string temporaryTargetRoot = CreateTemporaryProjectRoot();
+            string skillsRoot = SkillInstallLayout.GetSkillsRoot(temporaryTargetRoot);
+            Directory.CreateDirectory(Path.Combine(SkillInstallLayout.GetManagedSkillsRoot(temporaryTargetRoot), "uloop-compile"));
+            Directory.CreateDirectory(Path.Combine(skillsRoot, "uloop-get-logs"));
+            Directory.CreateDirectory(Path.Combine(skillsRoot, "manual-skill"));
+
+            string[] skillDirectories = SkillInstallLayout.EnumerateInstalledSkillDirectories(temporaryTargetRoot)
+                .Select(path => Path.GetRelativePath(temporaryTargetRoot, path).Replace('\\', '/'))
+                .ToArray();
+
+            Assert.That(
+                skillDirectories,
+                Is.EqualTo(new[] { "skills/unity-cli-loop/uloop-compile", "skills/uloop-get-logs" }));
+        }
+
+        /// <summary>
+        /// Verifies that a target without a skills directory has no installed skill directories.
+        /// </summary>
+        [Test]
+        public void EnumerateInstalledSkillDirectories_WhenSkillsDirectoryIsMissing_ReturnsEmpty()
+        {
+            string temporaryTargetRoot = CreateTemporaryProjectRoot();
+            string[] skillDirectories = SkillInstallLayout.EnumerateInstalledSkillDirectories(temporaryTargetRoot).ToArray();
+
+            Assert.That(skillDirectories, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies that an installed skill with the same file count but a different markdown file name is reported as outdated.
+        /// </summary>
+        [Test]
+        public void GetInstalledStateForSkillSource_WhenInstalledFileNamesDiffer_ReturnsOutdated()
+        {
+            string temporaryTargetRoot = CreateTemporaryProjectRoot();
+            byte[] skillContent = Encoding.UTF8.GetBytes("---\nname: uloop-compile\n---\n");
+            byte[] guideContent = Encoding.UTF8.GetBytes("guide\n");
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-compile",
+                "compile",
+                new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                {
+                    ["SKILL.md"] = skillContent,
+                    ["guide.md"] = guideContent
+                });
+            string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
+                temporaryTargetRoot,
+                "uloop-compile",
+                groupSkillsUnderUnityCliLoop: false);
+            Directory.CreateDirectory(installedSkillDirectory);
+            File.WriteAllBytes(Path.Combine(installedSkillDirectory, "SKILL.md"), skillContent);
+            File.WriteAllBytes(Path.Combine(installedSkillDirectory, "other.md"), guideContent);
+
+            SkillInstallState state = SkillInstallLayout.GetInstalledStateForSkillSource(
+                temporaryTargetRoot,
+                skill,
+                groupSkillsUnderUnityCliLoop: false);
+
+            Assert.That(state, Is.EqualTo(SkillInstallState.Outdated));
+        }
+
+        /// <summary>
+        /// Verifies that empty names and the current or parent directory names are not accepted as skill path components.
+        /// </summary>
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase(".")]
+        [TestCase("..")]
+        public void IsSafeSkillPathComponent_WhenNameIsEmptyOrDotSegment_ReturnsFalse(string skillName)
+        {
+            Assert.That(SkillInstallLayout.IsSafeSkillPathComponent(skillName), Is.False);
         }
     }
 }
