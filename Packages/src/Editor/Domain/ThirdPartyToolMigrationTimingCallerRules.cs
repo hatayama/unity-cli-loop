@@ -143,71 +143,92 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 RegexOptions.Compiled);
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
             MatchCollection matches = invocationRegex.Matches(source);
-            StringBuilder builder = new(source.Length);
-            int sourceCopyIndex = 0;
+            string content = source;
             int replacementCount = 0;
-            foreach (Match match in matches)
+            // Walking the matches from the end rewrites a nested call before the call that encloses it, so the
+            // outer call reads its arguments after the inner one was migrated. Every rewrite happens after the
+            // index of the matches still to visit, so their indexes stay valid.
+            for (int matchIndex = matches.Count - 1; matchIndex >= 0; matchIndex--)
             {
-                if (match.Index < sourceCopyIndex || !codeTextMask.IsCodeAt(match.Index))
+                Match match = matches[matchIndex];
+                if (!codeTextMask.IsCodeAt(match.Index))
                 {
                     continue;
                 }
 
-                int openParenthesisIndex = FindInvocationOpenParenthesisIndex(
-                    source,
+                (bool rewritten, string rewrittenContent) = TryRewriteLegacyPlayerLoopTimingCaller(
+                    content,
                     codeTextMask,
-                    match.Index + match.Length);
-                if (openParenthesisIndex < 0)
+                    match,
+                    removedSignature,
+                    legacyNamespaceAliases);
+                if (!rewritten)
                 {
                     continue;
                 }
 
-                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
-                    source,
-                    codeTextMask,
-                    openParenthesisIndex);
-                if (closingParenthesisIndex < 0)
-                {
-                    continue;
-                }
-
-                string argumentsSource = source.Substring(
-                    openParenthesisIndex + 1,
-                    closingParenthesisIndex - openParenthesisIndex - 1);
-                string[] arguments = SplitAttributeArguments(argumentsSource);
-                if (!ShouldMigrateLegacyPlayerLoopTimingCaller(
-                        source,
-                        codeTextMask,
-                        match.Index,
-                        arguments,
-                        removedSignature))
-                {
-                    continue;
-                }
-
-                (string[] migratedArguments, bool changed) =
-                    RemoveLegacyPlayerLoopTimingCallerArguments(
-                        arguments,
-                        removedSignature.RemovedParameters,
-                        legacyNamespaceAliases);
-                if (!changed)
-                {
-                    continue;
-                }
-
-                builder.Append(source, sourceCopyIndex, openParenthesisIndex + 1 - sourceCopyIndex);
-                builder.Append(string.Join(", ", migratedArguments));
-                sourceCopyIndex = closingParenthesisIndex;
+                content = rewrittenContent;
+                codeTextMask = CodeTextMask.Create(content);
                 replacementCount++;
             }
 
-            if (replacementCount == 0)
+            return (content, replacementCount);
+        }
+
+        private static (bool Rewritten, string Content) TryRewriteLegacyPlayerLoopTimingCaller(
+            string source,
+            CodeTextMask codeTextMask,
+            Match match,
+            RemovedLegacyPlayerLoopTimingSignature removedSignature,
+            string[] legacyNamespaceAliases)
+        {
+            int openParenthesisIndex = FindInvocationOpenParenthesisIndex(
+                source,
+                codeTextMask,
+                match.Index + match.Length);
+            if (openParenthesisIndex < 0)
             {
-                return (source, 0);
+                return (false, source);
             }
 
-            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
-            return (builder.ToString(), replacementCount);
+            int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                source,
+                codeTextMask,
+                openParenthesisIndex);
+            if (closingParenthesisIndex < 0)
+            {
+                return (false, source);
+            }
+
+            string argumentsSource = source.Substring(
+                openParenthesisIndex + 1,
+                closingParenthesisIndex - openParenthesisIndex - 1);
+            string[] arguments = SplitAttributeArguments(argumentsSource);
+            if (!ShouldMigrateLegacyPlayerLoopTimingCaller(
+                    source,
+                    codeTextMask,
+                    match.Index,
+                    arguments,
+                    removedSignature))
+            {
+                return (false, source);
+            }
+
+            (string[] migratedArguments, bool changed) =
+                RemoveLegacyPlayerLoopTimingCallerArguments(
+                    arguments,
+                    removedSignature.RemovedParameters,
+                    legacyNamespaceAliases);
+            if (!changed)
+            {
+                return (false, source);
+            }
+
+            StringBuilder builder = new(source.Length);
+            builder.Append(source, 0, openParenthesisIndex + 1);
+            builder.Append(string.Join(", ", migratedArguments));
+            builder.Append(source, closingParenthesisIndex, source.Length - closingParenthesisIndex);
+            return (true, builder.ToString());
         }
 
     }
