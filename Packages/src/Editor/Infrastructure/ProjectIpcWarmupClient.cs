@@ -203,7 +203,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             JToken errorToken = response["error"];
             if (errorToken != null && errorToken.Type != JTokenType.Null)
             {
-                string errorMessage = errorToken["message"]?.ToString();
+                // Only an error object has a message member; indexing any other token type throws.
+                string errorMessage = errorToken is JObject errorObject
+                    ? errorObject["message"]?.ToString()
+                    : null;
                 if (string.IsNullOrWhiteSpace(errorMessage))
                 {
                     errorMessage = errorToken.ToString();
