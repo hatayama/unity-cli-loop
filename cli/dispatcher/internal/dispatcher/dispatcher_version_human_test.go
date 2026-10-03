@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
@@ -164,5 +166,31 @@ func TestIsTerminalWriterRejectsNonFileWriter(t *testing.T) {
 	// Verifies the default terminal probe treats an in-memory writer as non-interactive.
 	if isTerminalWriter(&bytes.Buffer{}) {
 		t.Fatal("a bytes.Buffer must not be reported as a terminal")
+	}
+}
+
+func TestDispatcherStdoutIsTerminalTreatsMissingProbeAndFilesAsNonTerminal(t *testing.T) {
+	// Verifies deps without a terminal probe, and a regular file as stdout, both count as non-terminal.
+	if dispatcherStdoutIsTerminal(io.Discard, dispatcherRunDeps{}) {
+		t.Fatal("deps without a probe must not count as a terminal")
+	}
+	file, err := os.Create(filepath.Join(t.TempDir(), "stdout.txt"))
+	if err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+	if isTerminalWriter(file) {
+		t.Fatal("a regular file must not count as a terminal")
+	}
+}
+
+func TestDispatcherV2VersionContextSentenceWithoutResolvedVersion(t *testing.T) {
+	// Verifies a V2 project whose package version is ambiguous points the user at the error from other commands.
+	sentence := dispatcherV2VersionContextSentence(dispatcherV2Project{IsV2: true, PackageVersionCandidates: []string{"2.1.0", "2.2.0"}})
+
+	want := "This Unity project uses the uloop V2 package, but its package version could not be resolved; " +
+		"see the error from any other uloop command here."
+	if sentence != want {
+		t.Fatalf("unexpected sentence: %s", sentence)
 	}
 }

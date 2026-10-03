@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -727,5 +728,209 @@ func assertMergePackageReleasePRStateReadCount(t *testing.T, stub *mergePackageR
 	}
 	if count != expected {
 		t.Fatalf("expected %d pull request state reads, got %d: %v", expected, count, stub.commandLog)
+	}
+}
+
+// mergePackageReleasePROverride replaces the stubbed answer for every command line it matches,
+// so a test can fail one gh call while the rest of the pass answers normally.
+type mergePackageReleasePROverride struct {
+	matches func(commandLine string) bool
+	output  string
+	err     error
+}
+
+// runMergePackageReleasePRWithOverride runs one command against polls with the override applied and,
+// when sleepErr is set, a sleep that fails instead of advancing the clock.
+func runMergePackageReleasePRWithOverride(
+	t *testing.T,
+	polls []mergePackageReleasePRPoll,
+	extraArgs []string,
+	override mergePackageReleasePROverride,
+	sleepErr error,
+) (int, string, string, *mergePackageReleasePRStub) {
+	t.Helper()
+	stub := &mergePackageReleasePRStub{polls: polls}
+	now := time.Date(2026, 9, 8, 1, 0, 0, 0, time.UTC)
+	deps := mergePackageReleasePRDeps{
+		now: func() time.Time { return now },
+		sleep: func(ctx context.Context, duration time.Duration) error {
+			if sleepErr != nil {
+				return sleepErr
+			}
+			now = now.Add(duration)
+			return ctx.Err()
+		},
+		runOutput: func(ctx context.Context, name string, args ...string) (string, error) {
+			commandLine := strings.Join(append([]string{name}, args...), " ")
+			if override.matches != nil && override.matches(commandLine) {
+				stub.commandLog = append(stub.commandLog, commandLine)
+				return override.output, override.err
+			}
+			return stub.runOutput(ctx, name, args...)
+		},
+	}
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	args := append([]string{
+		"--repo", "owner/repository",
+		"--base-branch", "main",
+		"--timeout-minutes", "45",
+		"--interval-seconds", "30",
+	}, extraArgs...)
+	exitCode := RunMergePackageReleasePRWithDeps(context.Background(), &stdout, &stderr, args, deps)
+	return exitCode, stdout.String(), stderr.String(), stub
+}
+
+// greenDraftPackageReleasePRPoll is a draft pull request whose head pins dispatcher-v3.4.0 and has passed every required workflow.
+func greenDraftPackageReleasePRPoll() mergePackageReleasePRPoll {
+	return mergePackageReleasePRPoll{
+		prListJSON:      packageReleasePRListJSON("package123", true),
+		pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+		runs:            packageReleasePRRunsAt("package123"),
+		manifestByRef:   map[string]string{"main": `{"cli/dispatcher":"3.4.0"}`},
+	}
+}
+
+func mergePackageReleasePRCommandHasPrefix(prefix string) func(string) bool {
+	return func(commandLine string) bool { return strings.HasPrefix(commandLine, prefix) }
+}
+
+func mergePackageReleasePRCommandContains(fragment string) func(string) bool {
+	return func(commandLine string) bool { return strings.Contains(commandLine, fragment) }
+}
+
+func base64Of(value string) string {
+	return base64.StdEncoding.EncodeToString([]byte(value))
+}
+
+// Verifies every failing or malformed gh read before the merge fails the command with that read's own error and never merges.
+func TestMergePackageReleasePRFailsOnEachUnusableRead(t *testing.T) {
+	pinPath := "contents/" + unityPackageCliPinFile
+	cases := []struct {
+		name     string
+		args     []string
+		override mergePackageReleasePROverride
+		wantErr  string
+	}{
+		{"release PR list", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("autorelease: pending"), err: errors.New("release PR list failed")}, "release PR list failed"},
+		{"release PR list JSON", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("autorelease: pending"), output: "{"}, "failed to parse release PR list"},
+		{"release PR without head", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("autorelease: pending"), output: `[{"number":2002,"headRefName":"` + packageReleasePRHeadBranch + `","headRefOid":""}]`}, "release PR #2002 has no head SHA"},
+		{"dispatcher PR list", []string{"--require-no-open-dispatcher-pr"}, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("--components--dispatcher"), err: errors.New("dispatcher PR list failed")}, "dispatcher PR list failed"},
+		{"dispatcher PR list JSON", []string{"--require-no-open-dispatcher-pr"}, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("--components--dispatcher"), output: "{"}, "failed to parse dispatcher release PR list"},
+		{"pin read", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), err: errors.New("pin read failed")}, "pin read failed"},
+		{"pin encoding", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), output: "not base64!"}, "failed to decode " + unityPackageCliPinFile + " at package123"},
+		{"pin JSON", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), output: base64Of("{")}, "failed to parse " + unityPackageCliPinFile + " at package123"},
+		{"pin without tag", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), output: base64Of(`{}`)}, unityPackageCliPinFile + " at package123 has no dispatcherReleaseTag"},
+		{"workflow runs", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandHasPrefix("gh run list "), err: errors.New("workflow runs failed")}, "workflow runs failed"},
+		{"workflow runs JSON", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandHasPrefix("gh run list "), output: "{"}, "failed to parse " + packageReleasePRWorkflows()[0] + " workflow runs"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			args := append([]string{"--dispatcher-tag", "dispatcher-v3.4.0"}, testCase.args...)
+
+			exitCode, _, stderr, stub := runMergePackageReleasePRWithOverride(
+				t, []mergePackageReleasePRPoll{greenDraftPackageReleasePRPoll()}, args, testCase.override, nil)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d", exitCode)
+			}
+			assertReleasePRCheckLogContains(t, stderr, testCase.wantErr)
+			assertMergePackageReleasePRNeverMerged(t, stub)
+		})
+	}
+}
+
+// Verifies an unreadable, unparsable, or padded release manifest fails the tag resolution with its own error when no tag is given.
+func TestMergePackageReleasePRFailsOnUnusableManifest(t *testing.T) {
+	manifestPath := "contents/" + releasePleaseManifestRelativePath
+	cases := []struct {
+		name     string
+		override mergePackageReleasePROverride
+		wantErr  string
+	}{
+		{"manifest read", mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(manifestPath), err: errors.New("manifest read failed")}, "manifest read failed"},
+		{"manifest JSON", mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(manifestPath), output: base64Of("{")}, "failed to parse " + releasePleaseManifestRelativePath + " at main"},
+		{"padded version", mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(manifestPath), output: base64Of(`{"cli/dispatcher":" 3.4.0"}`)}, `releases "cli/dispatcher" as " 3.4.0", which is not a bare version`},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			exitCode, _, stderr, stub := runMergePackageReleasePRWithOverride(
+				t, []mergePackageReleasePRPoll{greenDraftPackageReleasePRPoll()}, nil, testCase.override, nil)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d", exitCode)
+			}
+			assertReleasePRCheckLogContains(t, stderr, testCase.wantErr)
+			assertMergePackageReleasePRNeverMerged(t, stub)
+		})
+	}
+}
+
+// Verifies a timeout without a named tag describes the manifest it waited on rather than an empty tag.
+func TestMergePackageReleasePRTimeoutWithoutTagNamesTheManifest(t *testing.T) {
+	stalePoll := greenDraftPackageReleasePRPoll()
+	stalePoll.pinnedTagsByRef = packageReleasePRPinAt("package123", "dispatcher-v3.3.1")
+
+	exitCode, _, stderr, stub := runMergePackageReleasePRWithOverride(t, []mergePackageReleasePRPoll{stalePoll}, nil, mergePackageReleasePROverride{}, nil)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "to record the dispatcher release the main manifest publishes timed out")
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies an interrupted wait between passes fails with the sleep error instead of polling again.
+func TestMergePackageReleasePRFailsWhenTheWaitIsInterrupted(t *testing.T) {
+	stalePoll := greenDraftPackageReleasePRPoll()
+	stalePoll.pinnedTagsByRef = packageReleasePRPinAt("package123", "dispatcher-v3.3.1")
+
+	exitCode, _, stderr, stub := runMergePackageReleasePRWithOverride(
+		t, []mergePackageReleasePRPoll{stalePoll}, []string{"--dispatcher-tag", "dispatcher-v3.4.0"}, mergePackageReleasePROverride{}, errors.New("wait interrupted"))
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "wait interrupted")
+	assertMergePackageReleasePRListCount(t, stub, 1)
+}
+
+// Verifies unknown flags, a missing repository, an empty base branch, non-positive timings, and an empty workflow list are each rejected by their own message.
+func TestParseMergePackageReleasePRFlagsRejectsInvalidInput(t *testing.T) {
+	cases := []struct {
+		name      string
+		args      []string
+		workflows string
+		wantErr   string
+	}{
+		{"unknown flag", []string{"--unknown"}, "", "flag provided but not defined"},
+		{"missing repo", []string{"--base-branch", "main"}, "", "--repo is required"},
+		{"empty base branch", []string{"--repo", "owner/repository", "--base-branch", ""}, "", "--base-branch must not be empty"},
+		{"zero timeout", []string{"--repo", "owner/repository", "--timeout-minutes", "0"}, "", "--timeout-minutes and --interval-seconds must be positive"},
+		{"zero interval", []string{"--repo", "owner/repository", "--interval-seconds", "0"}, "", "--timeout-minutes and --interval-seconds must be positive"},
+		{"empty workflow list", []string{"--repo", "owner/repository"}, " , ", "RELEASE_PR_CHECK_WORKFLOWS must list at least one workflow"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("RELEASE_PR_CHECK_WORKFLOWS", testCase.workflows)
+
+			_, err := parseMergePackageReleasePRFlags(testCase.args)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+// Verifies the exported command reports a flag error before it runs any command.
+func TestRunMergePackageReleasePRReportsUnknownFlag(t *testing.T) {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunMergePackageReleasePR(context.Background(), &stdout, &stderr, []string{"--unknown"})
+
+	if exitCode != 1 || !strings.Contains(stderr.String(), "flag provided but not defined") {
+		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
 	}
 }

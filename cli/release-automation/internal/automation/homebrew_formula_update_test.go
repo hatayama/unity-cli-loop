@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -403,4 +404,151 @@ func containsFlagValue(args []string, name string, value string) bool {
 		}
 	}
 	return false
+}
+
+// TestParseHomebrewFormulaUpdateFlagsRejectsIncompleteFlags verifies unknown flags and each missing required flag are rejected by their own message.
+func TestParseHomebrewFormulaUpdateFlagsRejectsIncompleteFlags(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{"unknown flag", []string{"--unknown"}, "flag provided but not defined"},
+		{"missing repo", []string{"--tag", "dispatcher-v3.0.0", "--tap-repo", "owner/tap"}, "--repo is required"},
+		{"missing tag", []string{"--repo", "owner/repo", "--tap-repo", "owner/tap"}, "--tag is required"},
+		{"missing tap repo", []string{"--repo", "owner/repo", "--tag", "dispatcher-v3.0.0"}, "--tap-repo is required"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := parseHomebrewFormulaUpdateFlags(testCase.args)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestRunUpdateHomebrewFormulaReportsUnknownFlag verifies the exported command reports a flag error before building any deps.
+func TestRunUpdateHomebrewFormulaReportsUnknownFlag(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunUpdateHomebrewFormula(context.Background(), &stdout, &stderr, []string{"--unknown"})
+
+	if code != 1 || !strings.Contains(stderr.String(), "update-homebrew-formula: flag provided but not defined") {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+}
+
+// TestParseHomebrewFormulaUpdateFlagsReturnsCompleteConfig verifies complete flags are carried into the config unchanged.
+func TestParseHomebrewFormulaUpdateFlagsReturnsCompleteConfig(t *testing.T) {
+	config, err := parseHomebrewFormulaUpdateFlags([]string{
+		"--repo", "owner/repo", "--tag", "dispatcher-v3.0.0", "--tap-repo", "owner/tap",
+	})
+	if err != nil {
+		t.Fatalf("parseHomebrewFormulaUpdateFlags failed: %v", err)
+	}
+	want := homebrewFormulaUpdateConfig{repository: "owner/repo", tag: "dispatcher-v3.0.0", tapRepo: "owner/tap"}
+	if config != want {
+		t.Fatalf("config = %+v, want %+v", config, want)
+	}
+}
+
+// homebrewFailingRunner serves the checksum downloads and tap reads, failing
+// the first command whose arguments contain failOn.
+func homebrewFailingRunner(failOn string, tapContents string) func(context.Context, []string, string, ...string) (string, error) {
+	return func(_ context.Context, _ []string, name string, args ...string) (string, error) {
+		joined := strings.Join(args, " ")
+		if failOn != "" && strings.Contains(joined, failOn) {
+			return "", errors.New(name + " " + failOn + " failed")
+		}
+		if output, handled, err := homebrewFormulaSHADownloadOutput(joined); handled {
+			return output, err
+		}
+		if strings.Contains(joined, "-X PUT") {
+			return `{}`, nil
+		}
+		return tapContents, nil
+	}
+}
+
+// TestUpdateHomebrewFormulaReportsEachFailingStep verifies every failing step exits 1 with its error and stops before the tap write.
+func TestUpdateHomebrewFormulaReportsEachFailingStep(t *testing.T) {
+	cases := []struct {
+		name        string
+		tag         string
+		failOn      string
+		tapContents string
+		wantErr     string
+	}{
+		{"invalid tag", "v3.0.0", "", "", `must start with dispatcher-v`},
+		{"arm64 checksum", "dispatcher-v3.0.0", homebrewDarwinArm64AssetName + ".sha256", "", "gh " + homebrewDarwinArm64AssetName + ".sha256 failed"},
+		{"amd64 checksum", "dispatcher-v3.0.0", homebrewDarwinAmd64AssetName + ".sha256", "", "gh " + homebrewDarwinAmd64AssetName + ".sha256 failed"},
+		{"tap read", "dispatcher-v3.0.0", "?ref=", "", "?ref= failed"},
+		{"tap contents JSON", "dispatcher-v3.0.0", "", "{", "failed to parse tap formula contents"},
+		{"tap contents base64", "dispatcher-v3.0.0", "", `{"sha":"s","content":"!!!"}`, "failed to decode tap formula contents"},
+		{"tap write", "dispatcher-v3.0.0", "-X PUT", `{"sha":"s","content":""}`, "-X PUT failed"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv(homebrewTapTokenEnvName, "tap-token")
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			code := runUpdateHomebrewFormulaWithDeps(
+				context.Background(),
+				&stdout,
+				&stderr,
+				homebrewFormulaUpdateConfig{repository: "owner/repo", tag: testCase.tag, tapRepo: "owner/tap"},
+				homebrewFormulaUpdateDeps{runOutput: homebrewFailingRunner(testCase.failOn, testCase.tapContents)},
+			)
+
+			if code != 1 {
+				t.Fatalf("exit code = %d, want 1 (stdout=%s)", code, stdout.String())
+			}
+			if !strings.Contains(stderr.String(), testCase.wantErr) {
+				t.Fatalf("stderr = %q, want it to contain %q", stderr.String(), testCase.wantErr)
+			}
+			if strings.Contains(stdout.String(), "Updated Homebrew formula") {
+				t.Fatalf("unexpected success log: %s", stdout.String())
+			}
+		})
+	}
+}
+
+// TestIsHexStringRejectsNonHexCharacters verifies mixed-case hex passes and any other character fails.
+func TestIsHexStringRejectsNonHexCharacters(t *testing.T) {
+	if !isHexString("09afAF") {
+		t.Fatal("expected mixed-case hex to pass")
+	}
+	if isHexString("09afAG") {
+		t.Fatal("expected a non-hex character to fail")
+	}
+}
+
+// TestRunHomebrewFormulaUpdateCommandOutputCapturesOutputAndFailures verifies the child sees both the parent environment and the extra variables, stdout is returned on success, and the command line is reported on failure.
+func TestRunHomebrewFormulaUpdateCommandOutputCapturesOutputAndFailures(t *testing.T) {
+	// git reads GIT_CONFIG_KEY_0 / GIT_CONFIG_VALUE_0 only when GIT_CONFIG_COUNT is set, so the value is
+	// printed only if the parent's two variables and the extra GIT_CONFIG_COUNT all reach the child.
+	// The parent may already carry GIT_CONFIG_COUNT (some shells and CI runners inject git config this way),
+	// so it is removed first; otherwise the extra variable would not be what makes git read the pair.
+	t.Setenv("GIT_CONFIG_COUNT", "")
+	if err := os.Unsetenv("GIT_CONFIG_COUNT"); err != nil {
+		t.Fatalf("unset GIT_CONFIG_COUNT: %v", err)
+	}
+	t.Setenv("GIT_CONFIG_KEY_0", "test.key")
+	t.Setenv("GIT_CONFIG_VALUE_0", "from-parent")
+	output, err := runHomebrewFormulaUpdateCommandOutput(context.Background(), []string{"GIT_CONFIG_COUNT=1"}, "git", "config", "--get", "test.key")
+	if err != nil {
+		t.Fatalf("git config --get failed: %v", err)
+	}
+	if strings.TrimSpace(output) != "from-parent" {
+		t.Fatalf("output = %q", output)
+	}
+
+	_, err = runHomebrewFormulaUpdateCommandOutput(context.Background(), nil, "git", "--no-such-option")
+	if err == nil || !strings.Contains(err.Error(), "git --no-such-option failed") {
+		t.Fatalf("expected a failure naming the command, got %v", err)
+	}
 }

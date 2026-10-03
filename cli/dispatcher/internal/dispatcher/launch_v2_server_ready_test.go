@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -379,5 +380,45 @@ func TestWaitForV2ServerReadyFollowsCustomPortChange(t *testing.T) {
 	}
 	if !sawOldPort || !sawNewPort {
 		t.Fatalf("expected dials of old %d and new %d, dialed %v", oldPort, newPort, dialedPorts)
+	}
+}
+
+func TestWaitForV2ServerReadyReturnsCallerCancellation(t *testing.T) {
+	// Verifies the caller's cancellation is returned instead of the readiness timeout error.
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := waitForV2ServerReady(canceled, t.TempDir(), "", func(int) error {
+		t.Fatal("no dial may happen without server settings")
+		return nil
+	}, time.Millisecond, time.Second)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected the caller's cancellation, got %v", err)
+	}
+}
+
+func TestV2ServerReadyTimeoutErrorNamesProject(t *testing.T) {
+	// Verifies the readiness timeout message names the project it waited on.
+	err := v2ServerReadyTimeoutError{projectRoot: "<PROJECT_ROOT>", timeout: time.Second}
+
+	if err.Error() != "timed out waiting for V2 uloop server readiness in <PROJECT_ROOT>" {
+		t.Fatalf("unexpected message: %s", err.Error())
+	}
+}
+
+func TestReadPreviousV2ServerSessionIDLogsUnreadableSettings(t *testing.T) {
+	// Verifies corrupt V2 settings yield an empty session id and leave a warning in the CLI log.
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	// The temp file is the last fallback read, so it must be corrupt too for the read error to surface.
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, v2UserSettingsDirectoryName, v2ServerSettingsFileName), "{")
+	writeDispatcherTestFile(t, filepath.Join(projectRoot, v2UserSettingsDirectoryName, v2ServerSettingsTmpFileName), "{")
+
+	if sessionID := readPreviousV2ServerSessionID(projectRoot); sessionID != "" {
+		t.Fatalf("expected an empty session id, got %q", sessionID)
+	}
+	if log := readOnlyCliVibeLog(t, projectRoot); !strings.Contains(log, "cli_launch_v2_previous_session_read_failed") {
+		t.Fatalf("missing warning in CLI log: %s", log)
 	}
 }

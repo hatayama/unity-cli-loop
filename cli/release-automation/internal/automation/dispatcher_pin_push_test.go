@@ -255,3 +255,178 @@ func assertNoDispatcherPinPushCommand(t *testing.T, recorder *dispatcherPinPushC
 		}
 	}
 }
+
+func TestParseDispatcherPinPushFlagsRejectsInvalidInput(t *testing.T) {
+	// Verifies unknown flags and tags that are not dispatcher release tags are refused by flag parsing itself.
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{"unknown flag", []string{"--unknown"}, "flag provided but not defined"},
+		{"not a dispatcher tag", []string{"--tag", "v3.0.1", "--base-branch", "main"}, `release tag "v3.0.1" must start with dispatcher-v`},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := parseDispatcherPinPushFlags(testCase.args)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+// failingDispatcherPinPushRunner fails the first git invocation whose
+// arguments contain failOn, and reports a changed pin for git status.
+type failingDispatcherPinPushRunner struct {
+	failOn   string
+	commands []string
+}
+
+func (runner *failingDispatcherPinPushRunner) run(_ context.Context, name string, args ...string) (string, error) {
+	runner.commands = append(runner.commands, name+" "+strings.Join(args, " "))
+	if containsDispatcherPinPushArg(args, runner.failOn) {
+		return "", errors.New(runner.failOn + " failed")
+	}
+	if containsDispatcherPinPushArg(args, "status") {
+		return " M Packages/src/project-runner-pin.json\n", nil
+	}
+	return "", nil
+}
+
+func TestRunPushDispatcherPinStopsAtTheFirstFailingGitStep(t *testing.T) {
+	// Verifies each failing git step aborts the command with its error and no later step runs.
+	cases := []struct {
+		failOn     string
+		neverAfter string
+	}{
+		{"fetch", "checkout"},
+		{"checkout", "status"},
+		{"status", "add"},
+		{"add", "commit"},
+		{"commit", "push"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.failOn, func(t *testing.T) {
+			repositoryRoot := setupDispatcherPinPushRepository(t, dispatcherPinPushContent("dispatcher-v3.0.0"))
+			runner := &failingDispatcherPinPushRunner{failOn: testCase.failOn}
+			deps := dispatcherPinPushTestDeps(repositoryRoot, &dispatcherPinPushCommandRecorder{}, dispatcherPinPushContent(dispatcherPinPushStableTag))
+			deps.runOutput = runner.run
+
+			stdout := bytes.Buffer{}
+			stderr := bytes.Buffer{}
+			exitCode := runPushDispatcherPinWithDeps(context.Background(), &stdout, &stderr, dispatcherPinPushTestConfig(), deps)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d", exitCode)
+			}
+			if !strings.Contains(stderr.String(), testCase.failOn+" failed") {
+				t.Fatalf("expected the %s failure in stderr, got %q", testCase.failOn, stderr.String())
+			}
+			for _, command := range runner.commands {
+				if strings.Contains(command, " "+testCase.neverAfter) {
+					t.Fatalf("expected no %s after a failed %s, got %v", testCase.neverAfter, testCase.failOn, runner.commands)
+				}
+			}
+		})
+	}
+}
+
+func TestRunPushDispatcherPinFailsBeforeGitWhenRepositoryRootIsUnknown(t *testing.T) {
+	// Verifies a repository root lookup failure stops the command before any git command runs.
+	recorder := &dispatcherPinPushCommandRecorder{}
+	deps := dispatcherPinPushTestDeps("", recorder, "")
+	deps.repositoryRoot = func(context.Context) (string, error) { return "", errors.New("not a repository") }
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := runPushDispatcherPinWithDeps(context.Background(), &stdout, &stderr, dispatcherPinPushTestConfig(), deps)
+
+	if exitCode != 1 || !strings.Contains(stderr.String(), "not a repository") {
+		t.Fatalf("expected the repository root failure, got exit %d and %q", exitCode, stderr.String())
+	}
+	if len(recorder.commands) != 0 {
+		t.Fatalf("expected no git commands, got %v", recorder.commands)
+	}
+}
+
+func TestStampAndVerifyDispatcherPinReportsStampAndFileFailures(t *testing.T) {
+	// Verifies stamp failures, a removed stamped pin, and an unwritable mirror each stop before subject verification.
+	cases := []struct {
+		name    string
+		prepare func(t *testing.T, repositoryRoot string, deps *dispatcherPinPushDeps)
+		wantErr string
+	}{
+		{"stamp", func(_ *testing.T, _ string, deps *dispatcherPinPushDeps) {
+			deps.stampPin = func(context.Context, string, string) error { return errors.New("stamp failed") }
+		}, "stamp failed"},
+		{"stamped pin removed", func(_ *testing.T, _ string, deps *dispatcherPinPushDeps) {
+			deps.stampPin = func(_ context.Context, pinPath string, _ string) error { return os.Remove(pinPath) }
+		}, "read stamped pin"},
+		{"mirror unwritable", func(t *testing.T, repositoryRoot string, _ *dispatcherPinPushDeps) {
+			projectPinPath := filepath.Join(repositoryRoot, filepath.FromSlash(unityProjectCliPinFile))
+			if err := os.Remove(projectPinPath); err != nil {
+				t.Fatalf("remove project pin: %v", err)
+			}
+			if err := os.Mkdir(projectPinPath, 0o755); err != nil {
+				t.Fatalf("replace project pin with a directory: %v", err)
+			}
+		}, "mirror stamped pin"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			repositoryRoot := setupDispatcherPinPushRepository(t, dispatcherPinPushContent("dispatcher-v3.0.0"))
+			verified := false
+			deps := dispatcherPinPushTestDeps(repositoryRoot, &dispatcherPinPushCommandRecorder{}, dispatcherPinPushContent(dispatcherPinPushStableTag))
+			deps.verifySubjects = func(context.Context, []byte) error {
+				verified = true
+				return nil
+			}
+			testCase.prepare(t, repositoryRoot, &deps)
+
+			err := stampAndVerifyDispatcherPin(context.Background(), repositoryRoot, dispatcherPinPushStableTag, deps)
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+			if verified {
+				t.Fatal("expected subject verification to be skipped")
+			}
+		})
+	}
+}
+
+func TestDispatcherPinPushRepositoryRootResolvesTheCheckout(t *testing.T) {
+	// Verifies the repository root comes from git and contains this module's directory.
+	root, err := dispatcherPinPushRepositoryRoot(context.Background())
+	if err != nil {
+		t.Fatalf("dispatcherPinPushRepositoryRoot failed: %v", err)
+	}
+	info, statErr := os.Stat(filepath.Join(root, "cli", "release-automation", "go.mod"))
+	if statErr != nil || info.IsDir() {
+		t.Fatalf("expected %s to contain cli/release-automation/go.mod, stat error %v", root, statErr)
+	}
+}
+
+func TestParseDispatcherPinPushFlagsAcceptsStableTag(t *testing.T) {
+	// Verifies a stable dispatcher tag and base branch are returned unchanged in the config.
+	config, err := parseDispatcherPinPushFlags([]string{"--tag", dispatcherPinPushStableTag, "--base-branch", "main"})
+	if err != nil {
+		t.Fatalf("parseDispatcherPinPushFlags failed: %v", err)
+	}
+	if config.tag != dispatcherPinPushStableTag || config.baseBranch != "main" {
+		t.Fatalf("config = %+v", config)
+	}
+}
+
+func TestDispatcherPinPushRepositoryRootReportsGitFailure(t *testing.T) {
+	// Verifies a git binary that cannot run is reported as a repository root failure.
+	t.Setenv("PATH", t.TempDir())
+
+	_, err := dispatcherPinPushRepositoryRoot(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "resolve repository root") {
+		t.Fatalf("expected a repository root error, got %v", err)
+	}
+}

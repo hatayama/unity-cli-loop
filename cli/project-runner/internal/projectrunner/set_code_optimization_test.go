@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -123,4 +124,41 @@ func assertSetCodeOptimizationBridgeSelection(
 	if stdout.String() != expectedOutput {
 		t.Fatalf("stdout mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expectedOutput)
 	}
+}
+
+// Verifies a bridge command that fails is reported on stderr with exit 1 and nothing on stdout.
+func TestRunSetCodeOptimizationCommandReportsSendFailure(t *testing.T) {
+	var sentCommand string
+	dependencies := setCodeOptimizationCommandDependencies{
+		send: func(_ context.Context, _ unityipc.Connection, bridgeCommand string) (json.RawMessage, error) {
+			sentCommand = bridgeCommand
+			return nil, io.ErrUnexpectedEOF
+		},
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runSetCodeOptimizationCommandWithDependencies(
+		context.Background(), unityipc.Connection{ProjectRoot: t.TempDir()}, []string{"debug"}, &stdout, &stderr, dependencies)
+
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q", code, stdout.String())
+	}
+	if sentCommand != setCodeOptimizationDebugCommandName {
+		t.Fatalf("sent %q, want %q", sentCommand, setCodeOptimizationDebugCommandName)
+	}
+	if !strings.Contains(stderr.String(), "unexpected EOF") {
+		t.Fatalf("stderr must report the send failure:\n%s", stderr.String())
+	}
+}
+
+// Verifies the default sender sends the named bridge command and returns Unity's result as is.
+func TestSendSetCodeOptimizationBridgeCommandReturnsUnityResult(t *testing.T) {
+	server := startFakeUnityResultServer(t, t.TempDir(), setCodeOptimizationDebugStartupCommandName, `{"Success":true,"Message":"startup"}`)
+
+	result, err := sendSetCodeOptimizationBridgeCommand(context.Background(), server.connection, setCodeOptimizationDebugStartupCommandName)
+
+	if err != nil || string(result) != `{"Success":true,"Message":"startup"}` {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	server.receivedRequest(t)
 }

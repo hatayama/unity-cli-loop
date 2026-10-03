@@ -20,3 +20,15 @@ func TestDispatcherContractDoesNotDeclareCliReleaseFields(t *testing.T) {
 	clitest.RequireContractFieldMissing(t, fields, "dispatcherContractVersion")
 	clitest.RequireContractFieldMissing(t, fields, "schemaVersion")
 }
+
+func TestRequireStringPanicsOnEmptyField(t *testing.T) {
+	// Verifies an empty contract field stops loading with a panic that names the field.
+	defer func() {
+		recovered := recover()
+		if recovered != "contract field dispatcherVersion must not be empty" {
+			t.Fatalf("recovered = %#v", recovered)
+		}
+	}()
+
+	requireString("", "dispatcherVersion")
+}

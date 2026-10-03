@@ -288,3 +288,46 @@ func TestIntJSONFormatsThreeDigitValues(t *testing.T) {
 func intJSON(value int) string {
 	return strconv.Itoa(value)
 }
+
+// Verifies the file entry point validates what it reads: a valid report on disk passes with the same drift warnings as the in-memory check.
+func TestValidateCodeQLSARIFFileValidatesTheFileContent(t *testing.T) {
+	data := validCodeQLSARIF(`"CodeQL"`, true, 55, 70)
+	path := filepath.Join(t.TempDir(), "codeql.sarif")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write SARIF: %v", err)
+	}
+
+	result, err := ValidateCodeQLSARIFFile(path)
+	if err != nil {
+		t.Fatalf("ValidateCodeQLSARIFFile failed: %v", err)
+	}
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "below the 2026-07-15 PoC baseline") {
+		t.Fatalf("warnings = %v", result.Warnings)
+	}
+}
+
+// Verifies malformed JSON, a run count other than one, an unreadable quality diagnostic, overflowing quality figures, and too few lines of code each fail with their own error.
+func TestValidateCodeQLSARIFRejectsMalformedReports(t *testing.T) {
+	valid := string(validCodeQLSARIF(`"CodeQL"`, true, 55, 70))
+	cases := []struct {
+		name    string
+		data    string
+		wantErr string
+	}{
+		{"invalid JSON", "{", "invalid SARIF JSON"},
+		{"no runs", `{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}`, "expected exactly one SARIF run, got 0"},
+		{"unsupported quality format", strings.Replace(valid, "Percentage of calls with call target: 55 %", "Calls resolved: 55", 1), "CodeQL database quality diagnostic has an unsupported format"},
+		{"call target overflow", strings.Replace(valid, "call target: 55 %", "call target: 99999999999999999999 %", 1), "parse CodeQL call target quality"},
+		{"known type overflow", strings.Replace(valid, "known type: 70 %", "known type: 99999999999999999999 %", 1), "parse CodeQL known type quality"},
+		{"lines of code below floor", strings.Replace(valid, `"value":75000`, `"value":10`, 1), "CodeQL extracted lines of code 10 is below the approved floor"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := ValidateCodeQLSARIF([]byte(testCase.data))
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}

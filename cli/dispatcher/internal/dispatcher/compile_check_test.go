@@ -3,9 +3,12 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/compilecheck"
 )
 
@@ -373,5 +376,116 @@ func TestBuildCompileCheckResponseSaysWhyBlockedAssembliesWereNotCompiled(t *tes
 		" 2 assemblies were not compiled because an assembly they reference has errors."
 	if response.Message != want {
 		t.Fatalf("unexpected summary, got %q", response.Message)
+	}
+}
+
+// bogusCompileCheckEditorVersion names an Editor no machine has installed, so
+// editor resolution always fails before any compiler could run.
+const bogusCompileCheckEditorVersion = "0.0.0f0-uloop-test"
+
+func TestTryHandleCompileCheckRequestReportsInvalidOptions(t *testing.T) {
+	// Verifies an invalid compile-check option exits with code 1 before any project lookup.
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleCompileCheckRequest(context.Background(), []string{clicore.CompileCheckCommandName, "--bogus"}, t.TempDir(), "", &stdout, &stderr)
+
+	if !handled || code != 1 || stdout.Len() != 0 {
+		t.Fatalf("result mismatch: handled=%t code=%d stdout=%s", handled, code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Unknown compile-check option: --bogus") {
+		t.Fatalf("missing option error: %s", stderr.String())
+	}
+}
+
+func TestParseCompileCheckOptionsRequiresOptionValues(t *testing.T) {
+	// Verifies each value-taking option reports its own missing value.
+	for _, flag := range []string{compileCheckEditorFlag, compileCheckMaxDepthFlag, compileCheckJobsFlag} {
+		_, err := parseCompileCheckOptions([]string{flag}, "")
+		if err == nil || !strings.Contains(err.Error(), flag+" requires a value") {
+			t.Fatalf("%s: expected a missing value error, got %v", flag, err)
+		}
+	}
+}
+
+func TestRunCompileCheckReportsResolutionFailures(t *testing.T) {
+	// Verifies project, ProjectVersion.txt, and Editor resolution failures each stop the run with code 1 and their own message.
+	cases := []struct {
+		name        string
+		setup       func(t *testing.T) (string, compileCheckOptions)
+		wantMessage string
+	}{
+		{
+			name: "project not found",
+			setup: func(t *testing.T) (string, compileCheckOptions) {
+				return t.TempDir(), compileCheckOptions{maxDepth: 0}
+			},
+			wantMessage: "unity project not found",
+		},
+		{
+			name: "project version missing",
+			setup: func(t *testing.T) (string, compileCheckOptions) {
+				return createDispatcherUnityProject(t), compileCheckOptions{}
+			},
+			wantMessage: "ProjectVersion.txt",
+		},
+		{
+			name: "editor version from ProjectVersion.txt not installed",
+			setup: func(t *testing.T) (string, compileCheckOptions) {
+				projectRoot := createDispatcherUnityProject(t)
+				writeDispatcherTestFile(t, filepath.Join(projectRoot, projectVersionFilePath), "m_EditorVersion: "+bogusCompileCheckEditorVersion+"\n")
+				return projectRoot, compileCheckOptions{}
+			},
+			wantMessage: "unity " + bogusCompileCheckEditorVersion + " executable not found",
+		},
+		{
+			name: "explicit editor version not installed",
+			setup: func(t *testing.T) (string, compileCheckOptions) {
+				return createDispatcherUnityProject(t), compileCheckOptions{editorVersion: bogusCompileCheckEditorVersion}
+			},
+			wantMessage: "unity " + bogusCompileCheckEditorVersion + " executable not found",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			isolateCompileCheckEditorLookup(t)
+			startPath, options := testCase.setup(t)
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			code := runCompileCheck(context.Background(), options, startPath, &stdout, &stderr)
+
+			if code != 1 || stdout.Len() != 0 {
+				t.Fatalf("result mismatch: code=%d stdout=%s", code, stdout.String())
+			}
+			if !strings.Contains(stderr.String(), testCase.wantMessage) {
+				t.Fatalf("expected %q: %s", testCase.wantMessage, stderr.String())
+			}
+		})
+	}
+}
+
+// isolateCompileCheckEditorLookup keeps Editor lookups away from the real home directory:
+// on Linux the candidates live under HOME, so the test points HOME at an empty directory.
+func isolateCompileCheckEditorLookup(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "linux" {
+		t.Setenv("HOME", t.TempDir())
+	}
+}
+
+func TestTryHandleCompileCheckRequestRunsWithParsedOptions(t *testing.T) {
+	// Verifies parsed options reach the run: the explicit editor version is the one resolution reports missing.
+	isolateCompileCheckEditorLookup(t)
+	// No ProjectVersion.txt, so dropping the parsed version would fail on the missing file instead.
+	projectRoot := createDispatcherUnityProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	args := []string{clicore.CompileCheckCommandName, compileCheckEditorFlag, bogusCompileCheckEditorVersion}
+	handled, code := tryHandleCompileCheckRequest(context.Background(), args, projectRoot, "", &stdout, &stderr)
+
+	if !handled || code != 1 || !strings.Contains(stderr.String(), "unity "+bogusCompileCheckEditorVersion+" executable not found") {
+		t.Fatalf("unexpected result: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
 }

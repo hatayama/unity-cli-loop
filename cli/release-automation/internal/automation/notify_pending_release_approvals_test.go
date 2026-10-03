@@ -268,3 +268,128 @@ func assertNotifyPendingReleaseApprovalsDoesNotContain(t *testing.T, actual stri
 		t.Fatalf("expected %q not to contain %q", actual, unexpected)
 	}
 }
+
+// notifyPendingApprovalsStub answers each gh command with a canned response
+// and fails the first command line starting with failOn.
+type notifyPendingApprovalsStub struct {
+	runList   string
+	pending   string
+	issueList string
+	failOn    string
+	commands  []string
+}
+
+func (stub *notifyPendingApprovalsStub) run(_ context.Context, name string, args ...string) (string, error) {
+	commandLine := strings.Join(append([]string{name}, args...), " ")
+	stub.commands = append(stub.commands, commandLine)
+	if stub.failOn != "" && strings.HasPrefix(commandLine, stub.failOn) {
+		return "", fmt.Errorf("%s failed", stub.failOn)
+	}
+	switch {
+	case strings.HasPrefix(commandLine, "gh run list"):
+		return stub.runList, nil
+	case strings.HasPrefix(commandLine, "gh api repos/owner/repository/actions/runs/"):
+		return stub.pending, nil
+	case strings.HasPrefix(commandLine, "gh issue list"):
+		return stub.issueList, nil
+	}
+	return "", nil
+}
+
+func newNotifyPendingApprovalsStub() *notifyPendingApprovalsStub {
+	return &notifyPendingApprovalsStub{
+		runList:   `[{"databaseId":7,"workflowName":"publish","headBranch":"main","url":"https://example.invalid/runs/7"}]`,
+		pending:   `[{"environment":{"name":"release"}},{"environment":{"name":"homebrew"}}]`,
+		issueList: `[]`,
+	}
+}
+
+func runNotifyPendingApprovalsStub(stub *notifyPendingApprovalsStub) (int, string, string) {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := runNotifyPendingReleaseApprovalsWithDeps(context.Background(), &stdout, &stderr, "owner/repository", notifyPendingReleaseApprovalsDeps{runOutput: stub.run})
+	return exitCode, stdout.String(), stderr.String()
+}
+
+// Verifies the exported command refuses to run without a repository instead of querying an unknown one.
+func TestRunNotifyPendingReleaseApprovalsRequiresRepository(t *testing.T) {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunNotifyPendingReleaseApprovals(context.Background(), &stdout, &stderr, "")
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertNotifyPendingReleaseApprovalsContains(t, stderr.String(), "GITHUB_REPOSITORY is required")
+}
+
+// Verifies every failing gh call and unparsable gh response aborts with exit code 1 and its error.
+func TestRunNotifyPendingReleaseApprovalsFailsOnEachUnusableStep(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*notifyPendingApprovalsStub)
+		wantErr string
+	}{
+		{"run list JSON", func(stub *notifyPendingApprovalsStub) { stub.runList = "{" }, "failed to parse waiting workflow runs"},
+		{"pending deployments", func(stub *notifyPendingApprovalsStub) { stub.failOn = "gh api" }, "failed to resolve pending deployment environment for run 7: gh api failed"},
+		{"pending deployments JSON", func(stub *notifyPendingApprovalsStub) { stub.pending = "{" }, "failed to parse pending deployments"},
+		{"label", func(stub *notifyPendingApprovalsStub) { stub.failOn = "gh label create" }, "gh label create failed"},
+		{"issue list", func(stub *notifyPendingApprovalsStub) { stub.failOn = "gh issue list" }, "gh issue list failed"},
+		{"issue list JSON", func(stub *notifyPendingApprovalsStub) { stub.issueList = "{" }, "failed to parse open issue list"},
+		{"issue create", func(stub *notifyPendingApprovalsStub) { stub.failOn = "gh issue create" }, "gh issue create failed"},
+		{"issue edit", func(stub *notifyPendingApprovalsStub) {
+			stub.issueList = `[{"number":42,"title":"Release approval pending","body":"stale"}]`
+			stub.failOn = "gh issue edit"
+		}, "gh issue edit failed"},
+		{"issue close", func(stub *notifyPendingApprovalsStub) {
+			stub.runList = `[]`
+			stub.issueList = `[{"number":42,"title":"Release approval pending","body":"stale"}]`
+			stub.failOn = "gh issue close"
+		}, "gh issue close failed"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stub := newNotifyPendingApprovalsStub()
+			testCase.mutate(stub)
+
+			exitCode, _, stderr := runNotifyPendingApprovalsStub(stub)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d", exitCode)
+			}
+			assertNotifyPendingReleaseApprovalsContains(t, stderr, testCase.wantErr)
+		})
+	}
+}
+
+// Verifies a changed run set edits the matching tracking issue, ignoring other labeled issues, and lists every pending environment.
+func TestRunNotifyPendingReleaseApprovalsUpdatesTheTrackingIssue(t *testing.T) {
+	stub := newNotifyPendingApprovalsStub()
+	stub.issueList = `[{"number":5,"title":"Something else","body":"x"},{"number":42,"title":"Release approval pending","body":"stale"}]`
+
+	exitCode, stdout, stderr := runNotifyPendingApprovalsStub(stub)
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertNotifyPendingReleaseApprovalsContains(t, stdout, "Updated pending approval issue #42.")
+	commandLogText := strings.Join(stub.commands, "\n")
+	assertNotifyPendingReleaseApprovalsContains(t, commandLogText, "gh issue edit 42 --repo owner/repository --body")
+	assertNotifyPendingReleaseApprovalsContains(t, commandLogText, "Environment: release, homebrew")
+}
+
+// Verifies the command runner returns stdout on success and names the command on failure.
+func TestRunNotifyPendingReleaseApprovalsCommandOutputCapturesOutputAndFailures(t *testing.T) {
+	output, err := runNotifyPendingReleaseApprovalsCommandOutput(context.Background(), "git", "--version")
+	if err != nil {
+		t.Fatalf("git --version failed: %v", err)
+	}
+	assertNotifyPendingReleaseApprovalsContains(t, output, "git version")
+
+	_, err = runNotifyPendingReleaseApprovalsCommandOutput(context.Background(), "git", "--no-such-option")
+	if err == nil {
+		t.Fatal("expected an unknown git option to fail")
+	}
+	assertNotifyPendingReleaseApprovalsContains(t, err.Error(), "git --no-such-option failed")
+}

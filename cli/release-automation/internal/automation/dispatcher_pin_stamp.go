@@ -41,9 +41,11 @@ func StampDispatcherPin(ctx context.Context, pinPath string, releaseTag string) 
 
 func defaultDispatcherPinStampDeps() dispatcherPinStampDeps {
 	return dispatcherPinStampDeps{
-		fetchReleaseAssets: fetchDispatcherReleaseAssets,
-		fetchBundle:        attestation.FetchBundle,
-		fetchTagCommitSHA:  attestation.FetchTagCommitSHA,
+		fetchReleaseAssets: func(ctx context.Context, releaseTag string) ([]dispatcherReleaseAsset, error) {
+			return fetchDispatcherReleaseAssets(ctx, dispatcherPinStampAPIBaseURL, releaseTag)
+		},
+		fetchBundle:       attestation.FetchBundle,
+		fetchTagCommitSHA: attestation.FetchTagCommitSHA,
 		verifySubjects: func(bundleData []byte, commitSHA string) (map[string]string, error) {
 			trustedMaterial, err := attestation.LoadEmbeddedTrustedMaterial()
 			if err != nil {
@@ -197,10 +199,12 @@ func writeDispatcherPinStamp(pinPath string, releaseTag string, manifest string)
 	return nil
 }
 
-func fetchDispatcherReleaseAssets(ctx context.Context, releaseTag string) ([]dispatcherReleaseAsset, error) {
+// fetchDispatcherReleaseAssets takes the API base URL from the caller so tests
+// can point it at a local server instead of GitHub.
+func fetchDispatcherReleaseAssets(ctx context.Context, apiBaseURL string, releaseTag string) ([]dispatcherReleaseAsset, error) {
 	requestURL := fmt.Sprintf(
 		"%s/repos/%s/releases/tags/%s",
-		dispatcherPinStampAPIBaseURL,
+		apiBaseURL,
 		attestation.ReleaseRepository,
 		releaseTag)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)

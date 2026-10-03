@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -224,5 +227,178 @@ func TestParseDispatcherPinFreshnessFlagsPrefersTheExplicitRepository(t *testing
 	}
 	if config.repository != "flag/repository" {
 		t.Fatalf("expected the flag repository, got %q", config.repository)
+	}
+}
+
+func TestRunDispatcherPinFreshnessCheckRejectsUnknownFlags(t *testing.T) {
+	// Verifies an unknown flag fails the command with exit code 1 and a command-prefixed error.
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := RunDispatcherPinFreshnessCheck(context.Background(), &stdout, &stderr, []string{"--unknown"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), dispatcherPinFreshnessCommandName+": flag provided but not defined") {
+		t.Fatalf("expected an unknown flag error, got %q", stderr.String())
+	}
+}
+
+func TestParseDispatcherPinFreshnessFlagsPointsAtThePackagePin(t *testing.T) {
+	// Verifies the pin path is the package pin two directories above the module, where the command runs.
+	config, err := parseDispatcherPinFreshnessFlags([]string{"--repo", "owner/repository"})
+	if err != nil {
+		t.Fatalf("expected flag parsing to succeed, got %v", err)
+	}
+	want := filepath.Join("..", "..", "Packages", "src", "project-runner-pin.json")
+	if config.pinPath != want {
+		t.Fatalf("pinPath = %q, want %q", config.pinPath, want)
+	}
+}
+
+func TestResolveDispatcherPinFreshnessRepositoryUsesWorkflowRepository(t *testing.T) {
+	// Verifies GITHUB_REPOSITORY is used when no --repo flag is given.
+	t.Setenv("GITHUB_REPOSITORY", "environment/repository")
+
+	if repository := resolveDispatcherPinFreshnessRepository(""); repository != "environment/repository" {
+		t.Fatalf("expected the workflow repository, got %q", repository)
+	}
+}
+
+func TestRunDispatcherPinFreshnessCheckFailsWhenPinIsInvalidJSON(t *testing.T) {
+	// Verifies a malformed pin fails the guard instead of comparing against an empty tag.
+	result := runDispatcherPinFreshnessCase(t, "{not json", nil, nil)
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	}
+	if !strings.Contains(result.stderr, "is invalid JSON") {
+		t.Fatalf("expected an invalid JSON error, got %q", result.stderr)
+	}
+}
+
+func TestNewestStableDispatcherReleaseKeepsHighestVersionRegardlessOfOrder(t *testing.T) {
+	// Verifies an older release listed after a newer one does not replace the newest stable release.
+	releases := []dispatcherRelease{
+		stableDispatcherRelease("dispatcher-v3.2.0"),
+		stableDispatcherRelease("dispatcher-v3.1.0"),
+	}
+
+	tag, version := newestStableDispatcherRelease(releases)
+
+	if tag != "dispatcher-v3.2.0" || version != "3.2.0" {
+		t.Fatalf("expected dispatcher-v3.2.0 / 3.2.0, got %q / %q", tag, version)
+	}
+}
+
+// fullDispatcherReleasePage renders a release listing page holding exactly the page size.
+func fullDispatcherReleasePage() string {
+	entries := make([]string, dispatcherPinFreshnessPageSize)
+	for index := range entries {
+		entries[index] = fmt.Sprintf(`{"tag_name":"v1.0.%d"}`, index)
+	}
+	return "[" + strings.Join(entries, ",") + "]"
+}
+
+func TestFetchDispatcherReleasesFollowsPagesUntilAShortPage(t *testing.T) {
+	// Verifies full pages are followed to the next page and the listing ends at the first short page.
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "test-token")
+	requestedPages := []string{}
+	requestedPaths := []string{}
+	requestedPageSizes := []string{}
+	authorization := ""
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestedPages = append(requestedPages, request.URL.Query().Get("page"))
+		requestedPaths = append(requestedPaths, request.URL.Path)
+		requestedPageSizes = append(requestedPageSizes, request.URL.Query().Get("per_page"))
+		authorization = request.Header.Get("Authorization")
+		if request.URL.Query().Get("page") == "1" {
+			_, _ = writer.Write([]byte(fullDispatcherReleasePage()))
+			return
+		}
+		_, _ = writer.Write([]byte(`[{"tag_name":"dispatcher-v3.0.0","prerelease":true}]`))
+	}))
+	defer server.Close()
+
+	releases, err := fetchDispatcherReleases(context.Background(), server.URL, "owner/repository")
+	if err != nil {
+		t.Fatalf("fetchDispatcherReleases failed: %v", err)
+	}
+	if len(releases) != dispatcherPinFreshnessPageSize+1 {
+		t.Fatalf("expected %d releases, got %d", dispatcherPinFreshnessPageSize+1, len(releases))
+	}
+	last := releases[len(releases)-1]
+	if last.TagName != "dispatcher-v3.0.0" || !last.Prerelease {
+		t.Fatalf("last release = %+v", last)
+	}
+	if strings.Join(requestedPages, ",") != "1,2" {
+		t.Fatalf("requested pages = %v", requestedPages)
+	}
+	wantPageSize := fmt.Sprint(dispatcherPinFreshnessPageSize)
+	for index := range requestedPaths {
+		if requestedPaths[index] != "/repos/owner/repository/releases" || requestedPageSizes[index] != wantPageSize {
+			t.Fatalf("request %d path = %q, per_page = %q", index, requestedPaths[index], requestedPageSizes[index])
+		}
+	}
+	if authorization != "Bearer test-token" {
+		t.Fatalf("authorization = %q", authorization)
+	}
+}
+
+func TestFetchDispatcherReleasesFailsWhenListingNeverEnds(t *testing.T) {
+	// Verifies a listing that keeps returning full pages fails instead of reporting a release from a truncated listing.
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(fullDispatcherReleasePage()))
+	}))
+	defer server.Close()
+
+	releases, err := fetchDispatcherReleases(context.Background(), server.URL, "owner/repository")
+
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("exceeded %d pages", dispatcherPinFreshnessMaxPages)) {
+		t.Fatalf("expected a page limit error, got %d releases and error %v", len(releases), err)
+	}
+}
+
+func TestFetchDispatcherReleasesReportsUnusablePages(t *testing.T) {
+	// Verifies an error status and an undecodable page fail the listing.
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{"server error", http.StatusInternalServerError, `[]`, "GitHub release list API returned 500"},
+		{"invalid body", http.StatusOK, "{", "decode GitHub release list"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.WriteHeader(testCase.status)
+				_, _ = writer.Write([]byte(testCase.body))
+			}))
+			defer server.Close()
+
+			_, err := fetchDispatcherReleases(context.Background(), server.URL, "owner/repository")
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestFetchDispatcherReleasesReportsRequestFailures(t *testing.T) {
+	// Verifies an unbuildable request URL and an unreachable server both fail the listing.
+	if _, err := fetchDispatcherReleases(context.Background(), "http://bad host", "owner/repository"); err == nil || !strings.Contains(err.Error(), "build GitHub release list request") {
+		t.Fatalf("expected a request build error, got %v", err)
+	}
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	closedURL := server.URL
+	server.Close()
+	if _, err := fetchDispatcherReleases(context.Background(), closedURL, "owner/repository"); err == nil {
+		t.Fatal("expected an unreachable server to fail")
 	}
 }

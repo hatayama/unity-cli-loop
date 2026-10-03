@@ -13,6 +13,20 @@ if ! command -v golangci-lint >/dev/null 2>&1; then
   exit 1
 fi
 
+# GO_COVERAGE_DIR, when set, collects one coverage profile per module as
+# <module>.out for cli/release-automation/cmd/coverage-report. It must be
+# absolute (POSIX or a Windows drive path) because each module's tests run
+# from that module's directory.
+if [ -n "${GO_COVERAGE_DIR:-}" ]; then
+  case "$GO_COVERAGE_DIR" in
+    /* | [A-Za-z]:[\\/]*) mkdir -p "$GO_COVERAGE_DIR" ;;
+    *)
+      echo "GO_COVERAGE_DIR must be an absolute path: $GO_COVERAGE_DIR" >&2
+      exit 1
+      ;;
+  esac
+fi
+
 run_module_checks() {
   module_dir="$1"
 
@@ -21,7 +35,11 @@ run_module_checks() {
     golangci-lint fmt --config "$ROOT_DIR/cli/.golangci.yml" --diff
     go vet ./...
     golangci-lint run --config "$ROOT_DIR/cli/.golangci.yml" ./...
-    go test ./...
+    if [ -n "${GO_COVERAGE_DIR:-}" ]; then
+      go test -coverprofile="$GO_COVERAGE_DIR/$(basename "$module_dir").out" ./...
+    else
+      go test ./...
+    fi
   )
 }
 

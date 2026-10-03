@@ -284,35 +284,45 @@ func TestContractFileAtRefWithLegacyFallback_WhenAllPathsAbsentAtExistingRef_Ret
 }
 
 // Verifies that when execution reaches the legacy loop and the first legacy
-// probe fails as an execution error (its git process is killed by a context
-// timeout while the primary show and probe plus rev-parse have already
+// probe fails as an execution error (its git process is killed by context
+// cancellation after the primary show and probe plus rev-parse have
 // completed), the returned error names the failing legacy path AND still
 // carries the original primary show error text so operators keep both signals.
 func TestContractFileAtRefWithLegacyFallback_WhenLegacyChainProbeFails_PreservesOriginalShowError(t *testing.T) {
 	workDir, binDir := setupMockGitBin(t)
+	probeStartedMarker := filepath.Join(workDir, "legacy-probe-started")
 
-	// Only the first legacy probe blocks; every other invocation (primary
-	// show/probe, rev-parse verify) returns immediately so the control flow
-	// deterministically reaches the legacy loop before the timeout fires.
+	// Only the first legacy probe blocks, and it announces itself first. The
+	// context is cancelled on that announcement rather than on a timer, so
+	// slow process start-up for the earlier git calls cannot end the run before
+	// the legacy loop is reached.
 	writeExistenceMockGit(t, binDir, mockGitExistenceFixture{
 		refResolves: true,
 		paths: map[string]mockGitPathBehavior{
 			"generation/primary.json": {exists: false, showOK: false, showStderr: "fatal: primary missing"},
-			"generation/first.json":   {probeSleeps: true},
+			"generation/first.json":   {probeSleeps: true, probeStartedMarkerPath: probeStartedMarker},
 			"generation/second.json":  {exists: false, showOK: false, showStderr: "fatal: second missing"},
 		},
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	resultErrors := make(chan error, 1)
+	go func() {
+		_, err := contractFileAtRefWithLegacyFallback(
+			ctx,
+			workDir,
+			"some-ref",
+			"generation/primary.json",
+			"generation/first.json",
+			"generation/second.json")
+		resultErrors <- err
+	}()
 
-	_, err := contractFileAtRefWithLegacyFallback(
-		ctx,
-		workDir,
-		"some-ref",
-		"generation/primary.json",
-		"generation/first.json",
-		"generation/second.json")
+	waitForFile(t, probeStartedMarker, resultErrors)
+	cancel()
+	err := <-resultErrors
+
 	if err == nil {
 		t.Fatal("expected an error when the mid-chain probe is killed")
 	}
@@ -325,8 +335,30 @@ func TestContractFileAtRefWithLegacyFallback_WhenLegacyChainProbeFails_Preserves
 	if !strings.Contains(err.Error(), "some-ref:generation/primary.json") {
 		t.Fatalf("expected the primary path to appear in the preserved show error, got: %v", err)
 	}
-	if !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected the context error to be wrapped, got: %v", err)
+	}
+}
+
+// waitForFile blocks until path exists. It fails the test if the call under
+// test returns first (the awaited step was never reached) or if the generous
+// bound passes, so a broken mock cannot hang the suite.
+func waitForFile(t *testing.T, path string, earlyResult <-chan error) {
+	t.Helper()
+	deadline := time.After(30 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		select {
+		case err := <-earlyResult:
+			t.Fatalf("returned before %s was created: %v", filepath.Base(path), err)
+		case <-deadline:
+			t.Fatalf("timed out waiting for %s", filepath.Base(path))
+		case <-ticker.C:
+		}
 	}
 }
 

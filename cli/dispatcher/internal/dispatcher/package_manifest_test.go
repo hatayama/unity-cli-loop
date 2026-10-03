@@ -378,3 +378,102 @@ func parseOrderedJSONObject(t *testing.T, content []byte) orderedJSONObject {
 	}
 	return object
 }
+
+func TestMergePackageManifestRejectsMalformedSections(t *testing.T) {
+	// Verifies each malformed section is reported with the path of the offending value instead of being overwritten.
+	registryEntry := `{"url":"` + openUPMRegistryURL + `"`
+	cases := []struct {
+		name       string
+		manifest   string
+		wantPrefix string
+	}{
+		{name: "dependencies not an object", manifest: `{"dependencies":[]}`, wantPrefix: "dependencies: "},
+		{name: "dependency not a string", manifest: `{"dependencies":{"` + dispatcherUnityPackageName + `":1}}`, wantPrefix: "dependency " + dispatcherUnityPackageName + ": "},
+		{name: "registries not an array", manifest: `{"dependencies":{},"scopedRegistries":{}}`, wantPrefix: "scopedRegistries: "},
+		{name: "registry entry not an object", manifest: `{"dependencies":{},"scopedRegistries":[1]}`, wantPrefix: "scopedRegistries[0]: "},
+		{name: "registry url not a string", manifest: `{"dependencies":{},"scopedRegistries":[{"name":"x"},{"url":1}]}`, wantPrefix: "scopedRegistries[1].url: "},
+		{name: "registry scopes not strings", manifest: `{"dependencies":{},"scopedRegistries":[` + registryEntry + `,"scopes":[1]}]}`, wantPrefix: "scopes: "},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, err := mergePackageManifest([]byte(testCase.manifest), "1.2.3")
+
+			if err == nil || !strings.HasPrefix(err.Error(), testCase.wantPrefix) || result.Changed {
+				t.Fatalf("expected an error starting with %q, got result=%+v err=%v", testCase.wantPrefix, result, err)
+			}
+		})
+	}
+}
+
+func TestMergePackageManifestAddsMissingDependenciesSection(t *testing.T) {
+	// Verifies a manifest without dependencies gains a dependencies object holding only the package.
+	result, err := mergePackageManifest([]byte("{}\n"), "1.2.3")
+
+	if err != nil || !result.DependencyAdded || !result.Changed {
+		t.Fatalf("unexpected result: %+v err=%v", result, err)
+	}
+	var manifest struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	if err := json.Unmarshal(result.Content, &manifest); err != nil {
+		t.Fatalf("emitted manifest is not JSON: %v\n%s", err, result.Content)
+	}
+	if len(manifest.Dependencies) != 1 || manifest.Dependencies[dispatcherUnityPackageName] != "1.2.3" {
+		t.Fatalf("unexpected dependencies: %v", manifest.Dependencies)
+	}
+	assertManifestHasOpenUPMRegistry(t, result.Content)
+}
+
+func TestMergePackageManifestInsertsDependencyInAlphabeticalOrder(t *testing.T) {
+	// Verifies the package is inserted before the first dependency that sorts after it, not appended.
+	input := []byte(`{
+  "dependencies": {
+    "com.unity.modules.ai": "1.0.0",
+    "org.example.tool": "2.0.0"
+  }
+}
+`)
+
+	result, err := mergePackageManifest(input, "1.2.3")
+	if err != nil {
+		t.Fatalf("mergePackageManifest failed: %v", err)
+	}
+	content := string(result.Content)
+	packageIndex := strings.Index(content, dispatcherUnityPackageName)
+	if packageIndex < strings.Index(content, "com.unity.modules.ai") || packageIndex > strings.Index(content, "org.example.tool") {
+		t.Fatalf("package is not between its neighbors:\n%s", content)
+	}
+}
+
+func TestMergePackageManifestAddsScopesToOpenUPMRegistryWithoutScopes(t *testing.T) {
+	// Verifies an OpenUPM registry entry that has no scopes key gains the package scope while keeping its other keys.
+	input := []byte(`{
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "custom",
+      "url": "` + openUPMRegistryURL + `"
+    }
+  ]
+}
+`)
+
+	result, err := mergePackageManifest(input, "1.2.3")
+
+	if err != nil || !result.ScopeAdded || result.RegistryAdded {
+		t.Fatalf("unexpected result: %+v err=%v", result, err)
+	}
+	var manifest struct {
+		ScopedRegistries []struct {
+			Name   string   `json:"name"`
+			Scopes []string `json:"scopes"`
+		} `json:"scopedRegistries"`
+	}
+	if err := json.Unmarshal(result.Content, &manifest); err != nil {
+		t.Fatalf("emitted manifest is not JSON: %v\n%s", err, result.Content)
+	}
+	if len(manifest.ScopedRegistries) != 1 || manifest.ScopedRegistries[0].Name != "custom" ||
+		len(manifest.ScopedRegistries[0].Scopes) != 1 || manifest.ScopedRegistries[0].Scopes[0] != dispatcherUnityPackageName {
+		t.Fatalf("unexpected registries: %+v", manifest.ScopedRegistries)
+	}
+}

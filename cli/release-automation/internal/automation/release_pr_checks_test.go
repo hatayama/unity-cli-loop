@@ -942,3 +942,172 @@ func TestReleasePRChecksLeaveNonPackageComponentBodyUnchanged(t *testing.T) {
 	assertReleasePRCheckLogDoesNotContain(t, commandLogText, "gh pr view 2001")
 	assertReleasePRCheckLogDoesNotContain(t, commandLogText, "gh pr edit 2001")
 }
+
+const (
+	releasePRCheckCombinedPRList   = `[{"number":2000,"headRefName":"release-please--branches--main","headRefOid":"dispatcher123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2000"}]`
+	releasePRCheckDispatcherPRList = `[{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"}]`
+)
+
+// releasePRCheckFailureStub answers like runMultiReleasePRCheck's stub, but fails the first command
+// line starting with failOn and can return a different listing for the second gh pr list call.
+type releasePRCheckFailureStub struct {
+	prList       string
+	secondPRList string
+	failOn       string
+	viewBody     string
+	// failReady fails only the final gh pr ready call, which has no --undo flag.
+	failReady   bool
+	prListCalls int
+}
+
+func (stub *releasePRCheckFailureStub) run(_ context.Context, name string, args ...string) (string, error) {
+	commandLine := strings.Join(append([]string{name}, args...), " ")
+	if stub.failOn != "" && strings.HasPrefix(commandLine, stub.failOn) {
+		return "", fmt.Errorf("%s failed", stub.failOn)
+	}
+	if stub.failReady && strings.HasPrefix(commandLine, "gh pr ready ") && !strings.HasSuffix(commandLine, "--undo") {
+		return "", fmt.Errorf("gh pr ready failed")
+	}
+	switch {
+	case strings.HasPrefix(commandLine, "gh pr list "):
+		stub.prListCalls++
+		if stub.prListCalls > 1 && stub.secondPRList != "" {
+			return stub.secondPRList, nil
+		}
+		return stub.prList, nil
+	case strings.HasPrefix(commandLine, "gh pr view "):
+		return stub.viewBody, nil
+	case strings.HasPrefix(commandLine, "gh run list "):
+		runID := multiReleasePRCheckRunID(commandLine)
+		return `[{"databaseId":` + runID + `,"headSha":"` + multiReleasePRCheckHeadSHA(commandLine) +
+			`","createdAt":"2026-09-08T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/` + runID + `"}]`, nil
+	}
+	return "", nil
+}
+
+func runReleasePRCheckFailureStub(t *testing.T, stub *releasePRCheckFailureStub) (int, string, string) {
+	t.Helper()
+	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
+	t.Setenv("TARGET_BRANCH", "main")
+	t.Setenv("RELEASE_PR_CHECK_WORKFLOWS", "")
+	t.Setenv("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", "1")
+	t.Setenv("RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS", "")
+	t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "1")
+	if stub.viewBody == "" {
+		stub.viewBody = `{"body":"<details><summary>3.6.0</summary>\n</details>\n"}`
+	}
+	deps := releasePRCheckDeps{
+		now:       func() time.Time { return time.Date(2026, 9, 8, 1, 0, 0, 0, time.UTC) },
+		sleep:     func(ctx context.Context, _ time.Duration) error { return ctx.Err() },
+		runOutput: stub.run,
+	}
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := runReleasePleasePRChecksWithDeps(context.Background(), &stdout, &stderr, deps)
+	return exitCode, stdout.String(), stderr.String()
+}
+
+// Verifies each failing gh step, an unparsable PR body, and a PR that disappears before ready fail the release PR instead of marking it ready.
+func TestReleasePRChecksFailOnEachFailingStep(t *testing.T) {
+	cases := []struct {
+		name    string
+		stub    releasePRCheckFailureStub
+		wantErr string
+	}{
+		{"body view", releasePRCheckFailureStub{prList: releasePRCheckCombinedPRList, failOn: "gh pr view"}, "gh pr view failed"},
+		{"body JSON", releasePRCheckFailureStub{prList: releasePRCheckCombinedPRList, viewBody: "{"}, "failed to parse release PR body"},
+		{"body edit", releasePRCheckFailureStub{prList: releasePRCheckCombinedPRList, failOn: "gh pr edit"}, "gh pr edit failed"},
+		{"mark draft", releasePRCheckFailureStub{prList: releasePRCheckDispatcherPRList, failOn: "gh pr ready 2001 --repo owner/repository --undo"}, "--undo failed"},
+		{"workflow dispatch", releasePRCheckFailureStub{prList: releasePRCheckDispatcherPRList, failOn: "gh workflow run"}, "gh workflow run failed"},
+		{"pull request gone", releasePRCheckFailureStub{prList: releasePRCheckDispatcherPRList, secondPRList: `[]`}, "release PR #2001 is no longer pending before marking ready"},
+		{"pull request relookup", releasePRCheckFailureStub{prList: releasePRCheckDispatcherPRList, secondPRList: "{"}, "failed to parse release PR list"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stub := testCase.stub
+
+			exitCode, stdout, stderr := runReleasePRCheckFailureStub(t, &stub)
+
+			if exitCode != 1 {
+				t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout)
+			}
+			assertReleasePRCheckLogContains(t, stderr, testCase.wantErr)
+			assertReleasePRCheckLogDoesNotContain(t, stdout, "as ready after checks passed")
+		})
+	}
+}
+
+// Verifies a failing gh pr ready after green checks fails the release PR with the gh error.
+func TestReleasePRChecksFailWhenMarkingReadyFails(t *testing.T) {
+	stub := releasePRCheckFailureStub{prList: releasePRCheckDispatcherPRList, failReady: true}
+
+	exitCode, stdout, stderr := runReleasePRCheckFailureStub(t, &stub)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", exitCode, stdout)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "gh pr ready failed")
+}
+
+// Verifies a missing repository or target branch and a non-positive or non-numeric interval each fail the configuration.
+func TestReleasePRCheckConfigFromEnvironmentRejectsInvalidValues(t *testing.T) {
+	cases := []struct {
+		name        string
+		environment map[string]string
+		wantErr     string
+	}{
+		{"missing repository", map[string]string{"GITHUB_REPOSITORY": ""}, "GITHUB_REPOSITORY is required"},
+		{"missing target branch", map[string]string{"TARGET_BRANCH": ""}, "TARGET_BRANCH is required"},
+		{"zero lookup attempts", map[string]string{"RELEASE_PR_CHECK_LOOKUP_ATTEMPTS": "0"}, "RELEASE_PR_CHECK_LOOKUP_ATTEMPTS must be a positive integer"},
+		{"non-numeric lookup interval", map[string]string{"RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS": "soon"}, "RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS must be a positive integer"},
+		{"negative watch interval", map[string]string{"RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS": "-1"}, "RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS must be a positive integer"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("GITHUB_REPOSITORY", "owner/repository")
+			t.Setenv("TARGET_BRANCH", "main")
+			t.Setenv("RELEASE_PR_CHECK_WORKFLOWS", "")
+			t.Setenv("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", "")
+			t.Setenv("RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS", "")
+			t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "")
+			for key, value := range testCase.environment {
+				t.Setenv(key, value)
+			}
+
+			_, err := releasePRCheckConfigFromEnvironment()
+
+			if err == nil || !strings.Contains(err.Error(), testCase.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", testCase.wantErr, err)
+			}
+		})
+	}
+}
+
+// Verifies the production sleep returns after its duration and returns the context error when cancelled first.
+func TestReleasePRCheckSleepHonorsDurationAndCancellation(t *testing.T) {
+	if err := releasePRCheckSleep(context.Background(), time.Nanosecond); err != nil {
+		t.Fatalf("expected a completed sleep, got %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := releasePRCheckSleep(ctx, time.Hour); err != context.Canceled {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+// Verifies an unusable temporary directory fails the body clarification instead of editing the PR with an empty body.
+func TestReleasePRChecksFailWhenBodyFileCannotBeCreated(t *testing.T) {
+	missingDirectory := filepath.Join(t.TempDir(), "missing")
+	t.Setenv("TMPDIR", missingDirectory)
+	t.Setenv("TMP", missingDirectory)
+	t.Setenv("TEMP", missingDirectory)
+	stub := releasePRCheckFailureStub{prList: releasePRCheckCombinedPRList}
+
+	exitCode, _, stderr := runReleasePRCheckFailureStub(t, &stub)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "failed to create pull request body file")
+}

@@ -392,3 +392,332 @@ func assertProjectConnection(t *testing.T, connection unityipc.Connection, proje
 		t.Fatalf("endpoint mismatch: %#v", connection.Endpoint)
 	}
 }
+
+func TestResolveConnection_WhenExplicitPathIsUnityProject_ShouldUseThatProject(t *testing.T) {
+	// Verifies the public entry point resolves an explicit project path instead of searching from the start path.
+	startPath := createGitBoundedDir(t)
+	projectRoot := filepath.Join(t.TempDir(), "Game")
+	createUnityProject(t, projectRoot)
+
+	connection, err := ResolveConnection(startPath, projectRoot)
+	if err != nil {
+		t.Fatalf("ResolveConnection failed: %v", err)
+	}
+	assertProjectConnection(t, connection, projectRoot)
+}
+
+func TestResolveConnection_WhenExplicitPathIsNotUnityProject_ShouldReturnNotUnityProjectError(t *testing.T) {
+	// Verifies an explicit non-Unity path is rejected with a typed error naming the absolute path.
+	notProjectRoot := t.TempDir()
+
+	_, err := ResolveConnection(notProjectRoot, notProjectRoot)
+
+	var notUnityErr clierrors.NotUnityProjectError
+	if !stderrors.As(err, &notUnityErr) {
+		t.Fatalf("expected NotUnityProjectError, got %T: %v", err, err)
+	}
+	if notUnityErr.ProjectRoot != notProjectRoot {
+		t.Fatalf("project root mismatch: %s", notUnityErr.ProjectRoot)
+	}
+}
+
+func TestResolveConnection_WhenNoProjectEnclosesStartPath_ShouldReturnProjectNotFoundError(t *testing.T) {
+	// Verifies implicit resolution fails with ProjectNotFoundError when no Unity project is found before the git root.
+	startPath := filepath.Join(createGitBoundedDir(t), "sub")
+	mkdirAll(t, startPath)
+
+	_, err := ResolveConnection(startPath, "")
+
+	assertProjectNotFound(t, err)
+}
+
+func TestFindProjectRoot_WhenStartedInsideProject_ShouldReturnEnclosingProject(t *testing.T) {
+	// Verifies the upward search returns the nearest enclosing Unity project root.
+	projectRoot := filepath.Join(createGitBoundedDir(t), "Game")
+	createUnityProject(t, projectRoot)
+	startPath := filepath.Join(projectRoot, "Assets", "Scripts")
+	mkdirAll(t, startPath)
+
+	resolved, err := FindProjectRoot(startPath)
+	if err != nil {
+		t.Fatalf("FindProjectRoot failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("project root mismatch: %s", resolved)
+	}
+}
+
+func TestFindProjectRoot_WhenGitRootIsReachedFirst_ShouldStopSearching(t *testing.T) {
+	// Verifies the upward search stops at a .git boundary even when a Unity project exists above it.
+	outerProject := t.TempDir()
+	createUnityProject(t, outerProject)
+	repositoryRoot := filepath.Join(outerProject, "repo")
+	mkdirAll(t, filepath.Join(repositoryRoot, ".git"))
+	startPath := filepath.Join(repositoryRoot, "src")
+	mkdirAll(t, startPath)
+
+	_, err := FindProjectRoot(startPath)
+
+	assertProjectNotFound(t, err)
+}
+
+func TestFindProjectRoot_WhenFilesystemRootIsReached_ShouldReturnProjectNotFoundError(t *testing.T) {
+	// Verifies the upward search terminates at the filesystem root instead of looping forever.
+	root := filesystemRootWithoutProject(t)
+
+	_, err := FindProjectRoot(root)
+
+	assertProjectNotFound(t, err)
+}
+
+func TestFindUnityProjectRoot_WhenStartedInsideProject_ShouldReturnEnclosingProject(t *testing.T) {
+	// Verifies parent-only resolution finds the enclosing Unity project from a nested directory.
+	projectRoot := filepath.Join(createGitBoundedDir(t), "Game")
+	createUnityProject(t, projectRoot)
+	startPath := filepath.Join(projectRoot, "Packages")
+	mkdirAll(t, startPath)
+
+	resolved, err := FindUnityProjectRoot(startPath)
+	if err != nil {
+		t.Fatalf("FindUnityProjectRoot failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("project root mismatch: %s", resolved)
+	}
+}
+
+func TestFindUnityProjectRoot_WhenOnlyChildProjectExists_ShouldNotSearchChildren(t *testing.T) {
+	// Verifies parent-only resolution ignores Unity projects below the start path and stops at the git root.
+	startPath := createGitBoundedDir(t)
+	createUnityProject(t, filepath.Join(startPath, "Game"))
+
+	_, err := FindUnityProjectRoot(startPath)
+
+	assertProjectNotFound(t, err)
+}
+
+func TestFindUnityProjectRoot_WhenFilesystemRootIsReached_ShouldReturnProjectNotFoundError(t *testing.T) {
+	// Verifies parent-only resolution terminates at the filesystem root.
+	root := filesystemRootWithoutProject(t)
+
+	_, err := FindUnityProjectRoot(root)
+
+	assertProjectNotFound(t, err)
+}
+
+func TestFindUnityProjectRootWithin_WhenStartIsProject_ShouldReturnStartPath(t *testing.T) {
+	// Verifies the start directory wins over nested Unity-shaped children when it is itself a project.
+	projectRoot := t.TempDir()
+	createUnityProject(t, projectRoot)
+	createUnityProject(t, filepath.Join(projectRoot, "nested", "Game"))
+
+	resolved, err := FindUnityProjectRootWithin(projectRoot, 3)
+	if err != nil {
+		t.Fatalf("FindUnityProjectRootWithin failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("project root mismatch: %s", resolved)
+	}
+}
+
+func TestFindUnityProjectRootWithin_WhenNoChildProject_ShouldFallBackToParents(t *testing.T) {
+	// Verifies the child search falls back to the enclosing project when no child project exists.
+	projectRoot := filepath.Join(createGitBoundedDir(t), "Game")
+	createUnityProject(t, projectRoot)
+	startPath := filepath.Join(projectRoot, "Assets", "Scripts")
+	mkdirAll(t, startPath)
+
+	resolved, err := FindUnityProjectRootWithin(startPath, 3)
+	if err != nil {
+		t.Fatalf("FindUnityProjectRootWithin failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("project root mismatch: %s", resolved)
+	}
+}
+
+func TestFindUnityProjectRootWithin_WhenChildDirectoryIsUnreadable_ShouldSkipIt(t *testing.T) {
+	// Verifies an unreadable child directory is skipped and the remaining readable child project is still found.
+	workspaceRoot := createGitBoundedDir(t)
+	projectRoot := filepath.Join(workspaceRoot, "readable", "Game")
+	createUnityProject(t, projectRoot)
+	// Named to be scanned before "readable", so stopping the scan at an unreadable child would fail.
+	unreadableDir := filepath.Join(workspaceRoot, "a-unreadable")
+	mkdirAll(t, unreadableDir)
+	if err := os.Chmod(unreadableDir, 0o000); err != nil {
+		t.Fatalf("failed to make directory unreadable: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(unreadableDir, 0o755)
+	})
+	// Root, and Windows where Chmod only toggles the read-only attribute, can still read the directory.
+	if _, err := os.ReadDir(unreadableDir); err == nil {
+		t.Skip("the directory is still readable, so the unreadable branch is not reached")
+	}
+
+	resolved, err := FindUnityProjectRootWithin(workspaceRoot, 3)
+	if err != nil {
+		t.Fatalf("FindUnityProjectRootWithin failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("project root mismatch: %s", resolved)
+	}
+}
+
+func TestFindUnityProjectRootPreferringParents_WhenNoProjectAnywhere_ShouldReturnParentError(t *testing.T) {
+	// Verifies the parents-first search reports ProjectNotFoundError when neither ancestors nor children are projects.
+	startPath := createGitBoundedDir(t)
+	mkdirAll(t, filepath.Join(startPath, "docs"))
+
+	_, err := FindUnityProjectRootPreferringParents(startPath, 3)
+
+	assertProjectNotFound(t, err)
+}
+
+func TestResolveExplicitProjectRoot_WhenPathIsUnityProject_ShouldReturnAbsolutePath(t *testing.T) {
+	// Verifies a valid explicit project path resolves to its absolute form.
+	projectRoot := t.TempDir()
+	createUnityProject(t, projectRoot)
+
+	resolved, err := ResolveExplicitProjectRoot(projectRoot)
+	if err != nil {
+		t.Fatalf("ResolveExplicitProjectRoot failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("project root mismatch: %s", resolved)
+	}
+}
+
+func TestResolveExplicitProjectRoot_WhenPathIsNotUnityProject_ShouldReturnNotUnityProjectError(t *testing.T) {
+	// Verifies an explicit directory without Assets and ProjectSettings is rejected with a typed error.
+	notProjectRoot := t.TempDir()
+	mkdirAll(t, filepath.Join(notProjectRoot, "Assets"))
+
+	_, err := ResolveExplicitProjectRoot(notProjectRoot)
+
+	var notUnityErr clierrors.NotUnityProjectError
+	if !stderrors.As(err, &notUnityErr) {
+		t.Fatalf("expected NotUnityProjectError, got %T: %v", err, err)
+	}
+	if notUnityErr.ProjectRoot != notProjectRoot {
+		t.Fatalf("project root mismatch: %s", notUnityErr.ProjectRoot)
+	}
+}
+
+func TestWindowsPosixProjectPathCandidate_ShouldConvertOnlyDriveShapedPaths(t *testing.T) {
+	// Verifies Git Bash and WSL drive paths convert to Win32 paths while other shapes are rejected.
+	cases := []struct {
+		input     string
+		expected  string
+		converted bool
+	}{
+		{input: "", expected: "", converted: false},
+		{input: "relative/Game", expected: "", converted: false},
+		{input: "/c", expected: `C:\`, converted: true},
+		{input: "/c/x", expected: `C:\x`, converted: true},
+		{input: "/C/x/y", expected: `C:\x\y`, converted: true},
+		{input: `/c\x`, expected: `C:\x`, converted: true},
+		{input: "/mnt/d", expected: `D:\`, converted: true},
+		{input: "/mnt/d/x", expected: `D:\x`, converted: true},
+		{input: "/MNT/d/x", expected: `D:\x`, converted: true},
+		{input: "/mnt/dx", expected: "", converted: false},
+		{input: "/mnt/1/x", expected: "", converted: false},
+		{input: "/1/x", expected: "", converted: false},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.input, func(t *testing.T) {
+			candidate, converted := windowsPosixProjectPathCandidate(testCase.input)
+			if converted != testCase.converted || candidate != testCase.expected {
+				t.Fatalf("got (%q, %v), want (%q, %v)", candidate, converted, testCase.expected, testCase.converted)
+			}
+		})
+	}
+}
+
+func TestWindowsDrivePath_ShouldUppercaseDriveAndUseBackslashes(t *testing.T) {
+	// Verifies drive letters are uppercased and forward slashes in the rest become backslashes.
+	cases := []struct {
+		driveLetter byte
+		rest        string
+		expected    string
+	}{
+		{driveLetter: 'e', rest: "", expected: `E:\`},
+		{driveLetter: 'E', rest: "a/b", expected: `E:\a\b`},
+	}
+
+	for _, testCase := range cases {
+		actual := windowsDrivePath(testCase.driveLetter, testCase.rest)
+		if actual != testCase.expected {
+			t.Fatalf("windowsDrivePath(%q, %q) = %q, want %q", testCase.driveLetter, testCase.rest, actual, testCase.expected)
+		}
+	}
+}
+
+func TestToUpperASCIILetter_ShouldUppercaseOnlyLowercaseLetters(t *testing.T) {
+	// Verifies lowercase letters are uppercased while uppercase letters and digits are returned unchanged.
+	cases := map[byte]byte{'a': 'A', 'z': 'Z', 'A': 'A', '1': '1'}
+
+	for input, expected := range cases {
+		if actual := toUpperASCIILetter(input); actual != expected {
+			t.Fatalf("toUpperASCIILetter(%q) = %q, want %q", input, actual, expected)
+		}
+	}
+}
+
+func TestTrimTrailingSeparators_ShouldKeepRootAndRemoveTrailingSeparators(t *testing.T) {
+	// Verifies the POSIX root survives trimming while other paths lose only their trailing separators.
+	cases := map[string]string{
+		"/":          "/",
+		"///":        "/",
+		"":           "",
+		"a/":         "a",
+		"abc":        "abc",
+		"/tmp/Game/": "/tmp/Game",
+	}
+
+	for input, expected := range cases {
+		if actual := trimTrailingSeparators(input); actual != expected {
+			t.Fatalf("trimTrailingSeparators(%q) = %q, want %q", input, actual, expected)
+		}
+	}
+}
+
+// createGitBoundedDir returns a temp directory containing .git so upward searches stop there.
+func createGitBoundedDir(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	mkdirAll(t, filepath.Join(dir, ".git"))
+	return dir
+}
+
+func mkdirAll(t *testing.T, path string) {
+	t.Helper()
+
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("failed to create %s: %v", path, err)
+	}
+}
+
+// filesystemRootWithoutProject returns the filesystem root of the temp directory, skipping when
+// that root itself would end the search early (a Unity project or .git at the root).
+func filesystemRootWithoutProject(t *testing.T) string {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	root := filepath.VolumeName(tempDir) + string(filepath.Separator)
+	if IsUnityProject(root) || exists(filepath.Join(root, ".git")) {
+		t.Skip("filesystem root is a Unity project or git repository")
+	}
+	return root
+}
+
+func assertProjectNotFound(t *testing.T, err error) {
+	t.Helper()
+
+	var projectNotFoundErr clierrors.ProjectNotFoundError
+	if !stderrors.As(err, &projectNotFoundErr) {
+		t.Fatalf("expected ProjectNotFoundError, got %T: %v", err, err)
+	}
+}

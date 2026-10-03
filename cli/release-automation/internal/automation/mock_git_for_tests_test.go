@@ -32,6 +32,10 @@ type mockGitPathBehavior struct {
 	// caller with a short context timeout can force a probe execution failure
 	// mid-chain. Other paths on the same fixture stay deterministic.
 	probeSleeps bool
+	// probeStartedMarkerPath, when set with probeSleeps, is created just before
+	// the probe blocks, so a test can cancel once execution has provably reached
+	// this probe instead of racing a wall-clock timeout against the calls before it.
+	probeStartedMarkerPath string
 }
 
 // mockGitExistenceFixture drives the shared existence-probe mock git script.
@@ -103,6 +107,11 @@ func buildExistenceMockGitScript(fixture mockGitExistenceFixture) string {
 			// A long sleep lets a caller with a short context timeout kill
 			// this specific probe, exercising the mid-chain wrap branch
 			// without affecting other paths on the same fixture.
+			if behavior.probeStartedMarkerPath != "" {
+				catFileCases.WriteString("      : > ")
+				catFileCases.WriteString(shellSingleQuote(behavior.probeStartedMarkerPath))
+				catFileCases.WriteString("\n")
+			}
 			catFileCases.WriteString("      sleep 10\n")
 			catFileCases.WriteString("      exit 0\n")
 		} else if behavior.exists {

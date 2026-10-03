@@ -70,8 +70,13 @@ func (s *slocScanner) scanCode(stopOnUnmatchedBrace bool) {
 		if s.tryComment() {
 			continue
 		}
-		if stopOnUnmatchedBrace && s.handleInterpolationBrace(current, &braceDepth) {
-			return
+		// A brace inside a hole is consumed whole and the scan continues, so the character after it is read
+		// like any other instead of being taken as plain code.
+		if stopOnUnmatchedBrace && isBrace(current) {
+			if s.consumeInterpolationBrace(current, &braceDepth) {
+				return
+			}
+			continue
 		}
 		if s.tryString() {
 			continue
@@ -81,10 +86,9 @@ func (s *slocScanner) scanCode(stopOnUnmatchedBrace bool) {
 	}
 }
 
-func (s *slocScanner) handleInterpolationBrace(current rune, braceDepth *int) bool {
-	if current != '{' && current != '}' {
-		return false
-	}
+// consumeInterpolationBrace consumes a brace inside an interpolation hole and reports whether it is the
+// unmatched closing brace that ends the hole.
+func (s *slocScanner) consumeInterpolationBrace(current rune, braceDepth *int) bool {
 	s.markCode()
 	s.nextRune()
 	if current == '{' {
@@ -276,26 +280,20 @@ func (s *slocScanner) scanCSharpInterpolatedString(verbatim bool) {
 			s.consumeEscapedRune()
 			continue
 		}
-		if s.consumeInterpolatedQuote(current, verbatim) {
+		// A doubled quote in a verbatim string is an escaped quote; it is consumed whole and the scan
+		// continues, so the character after it is read as string content rather than skipped.
+		if verbatim && current == '"' && s.peekRuneAt(1) == '"' {
+			s.markCode()
+			s.skipRunes(2)
+			continue
+		}
+		if current == '"' {
+			s.markCode()
+			s.nextRune()
 			return
 		}
 		s.consumeStringRune(current)
 	}
-}
-
-func (s *slocScanner) consumeInterpolatedQuote(current rune, verbatim bool) bool {
-	if current != '"' {
-		return false
-	}
-	if verbatim && s.peekRuneAt(1) == '"' {
-		s.markCode()
-		s.nextRune()
-		s.nextRune()
-		return false
-	}
-	s.markCode()
-	s.nextRune()
-	return true
 }
 
 func (s *slocScanner) consumeInterpolationHole() {
@@ -403,6 +401,10 @@ func (s *slocScanner) hasPrefix(prefix string) bool {
 		offset += width
 	}
 	return true
+}
+
+func isBrace(value rune) bool {
+	return value == '{' || value == '}'
 }
 
 func isNewline(value rune) bool {

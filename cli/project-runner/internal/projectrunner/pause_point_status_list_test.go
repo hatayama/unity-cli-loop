@@ -3,6 +3,8 @@ package projectrunner
 import (
 	"bytes"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -168,5 +170,24 @@ func TestRunPausePointStatusCommandWithoutTargetWritesListResponse(t *testing.T)
 		"}\n"
 	if stdout.String() != want {
 		t.Fatalf("stdout = %s, want %s", stdout.String(), want)
+	}
+}
+
+// Verifies a failed list query exits 1 with the error on stderr and nothing on stdout.
+func TestRunPausePointStatusListCommandReportsQueryFailure(t *testing.T) {
+	original := queryPausePointStatusList
+	t.Cleanup(func() { queryPausePointStatusList = original })
+	queryPausePointStatusList = func(context.Context, unityipc.Connection) (pausePointStatusListResponse, error) {
+		return pausePointStatusListResponse{}, errors.New("list query failed")
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runPausePointStatusListCommand(context.Background(), unityipc.Connection{ProjectRoot: t.TempDir()}, &stdout, &stderr)
+
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "list query failed") {
+		t.Fatalf("stderr must carry the query error:\n%s", stderr.String())
 	}
 }
