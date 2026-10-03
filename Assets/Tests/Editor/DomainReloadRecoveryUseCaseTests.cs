@@ -227,35 +227,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ISessionFlagsRepository sessionFlagsRepository)
         {
             return new SessionRecoveryService(
-                new NoOpDomainReloadDetectionService(),
+                new RecordingDomainReloadDetectionService(),
                 sessionFlagsRepository);
-        }
-
-        /// <summary>
-        /// Test support type used by pure SessionRecoveryService tests.
-        /// </summary>
-        private sealed class NoOpDomainReloadDetectionService : IDomainReloadDetectionService
-        {
-            public void RegisterForEditorStartup()
-            {
-            }
-
-            public void StartDomainReload(string correlationId, bool serverIsRunning)
-            {
-            }
-
-            public void CompleteDomainReload(string correlationId)
-            {
-            }
-
-            public void RollbackDomainReloadStart(string correlationId)
-            {
-            }
-
-            public bool ShouldShowReconnectingUI()
-            {
-                return false;
-            }
         }
 
         /// <summary>
@@ -429,6 +402,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstance : IUnityCliLoopServerInstance
         {
+            private readonly Exception _stopFailure;
+
+            public TestServerInstance(Exception stopFailure = null)
+            {
+                _stopFailure = stopFailure;
+            }
+
             public bool IsRunning { get; private set; }
 
             public int StopCallCount { get; private set; }
@@ -445,6 +425,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void StopServer()
             {
                 StopCallCount++;
+                if (_stopFailure != null)
+                {
+                    throw _stopFailure;
+                }
+
                 IsRunning = false;
             }
 
@@ -462,10 +447,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ExecuteBeforeDomainReload_WhenServerStopThrows_RollsBackStartAndThrowsWrappedError()
         {
             RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
-            PresetSessionFlagsRepository sessionFlagsRepository = new PresetSessionFlagsRepository();
-            DomainReloadRecoveryUseCase useCase = CreateRecordingUseCase(detectionService, sessionFlagsRepository);
+            InMemorySessionFlagsRepository sessionFlagsRepository = new InMemorySessionFlagsRepository();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(detectionService, sessionFlagsRepository);
             InvalidOperationException stopFailure = new InvalidOperationException("stop failed");
-            ThrowingStopServerInstance server = new ThrowingStopServerInstance(stopFailure);
+            TestServerInstance server = new TestServerInstance(stopFailure);
+            server.StartServer();
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
                 () => useCase.ExecuteBeforeDomainReload(server));
@@ -487,8 +473,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ExecuteAfterDomainReloadAsync_WhenRestorationFails_ReturnsFailureWithRestorationError()
         {
             RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
-            DomainReloadRecoveryUseCase useCase = CreateRecordingUseCase(detectionService, new PresetSessionFlagsRepository());
-            ScriptedRecoveryCoordinator recoveryCoordinator = new ScriptedRecoveryCoordinator(false);
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(detectionService, new InMemorySessionFlagsRepository());
+            TestRecoveryCoordinator recoveryCoordinator = new TestRecoveryCoordinator(recoverServer: false);
 
             ServiceResult<string> result =
                 GetCompletedResult(useCase.ExecuteAfterDomainReloadAsync(recoveryCoordinator, CancellationToken.None));
@@ -507,8 +493,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ExecuteAfterDomainReloadAsync_WhenServerIsRestored_ReturnsCompletionCorrelationId()
         {
             RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
-            DomainReloadRecoveryUseCase useCase = CreateRecordingUseCase(detectionService, new PresetSessionFlagsRepository());
-            ScriptedRecoveryCoordinator recoveryCoordinator = new ScriptedRecoveryCoordinator(true);
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(detectionService, new InMemorySessionFlagsRepository());
+            TestRecoveryCoordinator recoveryCoordinator = new TestRecoveryCoordinator(recoverServer: true);
 
             ServiceResult<string> result =
                 GetCompletedResult(useCase.ExecuteAfterDomainReloadAsync(recoveryCoordinator, CancellationToken.None));
@@ -516,14 +502,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Success, Is.True);
             Assert.That(result.Data, Does.StartWith("unity_"));
             Assert.That(detectionService.Calls, Is.EqualTo(new[] { "Complete|" + result.Data }));
-        }
-
-        private static DomainReloadRecoveryUseCase CreateRecordingUseCase(
-            RecordingDomainReloadDetectionService detectionService,
-            PresetSessionFlagsRepository sessionFlagsRepository)
-        {
-            SessionRecoveryService sessionRecoveryService = new SessionRecoveryService(detectionService, sessionFlagsRepository);
-            return new DomainReloadRecoveryUseCase(sessionRecoveryService, detectionService, sessionFlagsRepository);
         }
 
         private static T GetCompletedResult<T>(Task<T> task)
@@ -563,92 +541,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 return false;
             }
-        }
-
-        /// <summary>
-        /// Test support type whose StopServer throws the configured exception.
-        /// </summary>
-        private sealed class ThrowingStopServerInstance : IUnityCliLoopServerInstance
-        {
-            private readonly Exception _stopFailure;
-
-            public ThrowingStopServerInstance(Exception stopFailure)
-            {
-                _stopFailure = stopFailure;
-            }
-
-            public bool IsRunning => true;
-
-            public string Endpoint => "test";
-
-            public void StartServer()
-            {
-            }
-
-            public void StopServer()
-            {
-                throw _stopFailure;
-            }
-
-            public void Dispose()
-            {
-            }
-        }
-
-        /// <summary>
-        /// Test support type whose recovery either produces a running server or leaves none.
-        /// </summary>
-        private sealed class ScriptedRecoveryCoordinator : IUnityCliLoopServerRecoveryCoordinator
-        {
-            private readonly bool _recoverServer;
-            private IUnityCliLoopServerInstance _currentServer;
-
-            public ScriptedRecoveryCoordinator(bool recoverServer)
-            {
-                _recoverServer = recoverServer;
-            }
-
-            public int StartRecoveryCallCount { get; private set; }
-
-            public IUnityCliLoopServerInstance CurrentServer => _currentServer;
-
-            public Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
-            {
-                StartRecoveryCallCount++;
-                if (_recoverServer)
-                {
-                    _currentServer = new ThrowingStopServerInstance(new InvalidOperationException("not stopped in this test"));
-                }
-
-                return Task.CompletedTask;
-            }
-        }
-
-        /// <summary>
-        /// Test support type with every session flag cleared and mutations ignored.
-        /// </summary>
-        private sealed class PresetSessionFlagsRepository : ISessionFlagsRepository
-        {
-            public bool GetIsServerRunning() => false;
-            public bool GetIsServerManuallyStopped() => false;
-            public bool GetIsAfterCompile() => false;
-            public bool GetIsDomainReloadInProgress() => false;
-            public bool GetShowReconnectingUI() => false;
-            public void SetIsAfterCompile(bool isAfterCompile) { }
-            public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress) { }
-            public void SetIsReconnecting(bool isReconnecting) { }
-            public void SetShowReconnectingUI(bool showReconnectingUI) { }
-            public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI) { }
-            public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration) { }
-            public bool ConsumeShouldAutoScanThirdPartyToolMigration() => false;
-            public void MarkServerStarted() { }
-            public void MarkServerManuallyStopped() { }
-            public void ClearServerSession() { }
-            public void ClearAfterCompileFlag() { }
-            public void ClearReconnectingFlags() { }
-            public void ClearPostCompileReconnectingUI() { }
-            public void ClearDomainReloadFlag() { }
-            public void ClearDomainReloadRecoveryFlags() { }
         }
     }
 }

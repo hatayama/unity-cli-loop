@@ -248,7 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void AddToolsChangedHandler_WhenToolSettingChanges_InvokesHandler()
         {
-            ToolSettingsUseCase useCase = CreateUseCase(new RecordingToolSettingsPort());
+            ToolSettingsUseCase useCase = CreateUseCase();
             int invocationCount = 0;
 
             useCase.AddToolsChangedHandler(() => invocationCount++);
@@ -263,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void RemoveToolsChangedHandler_WhenToolSettingChanges_DoesNotInvokeHandler()
         {
-            ToolSettingsUseCase useCase = CreateUseCase(new RecordingToolSettingsPort());
+            ToolSettingsUseCase useCase = CreateUseCase();
             int invocationCount = 0;
             Action handler = () => invocationCount++;
             useCase.AddToolsChangedHandler(handler);
@@ -280,7 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void TryGetToolCatalog_WhenRegistryNotWarmedUp_ReturnsFalseAndEmptyCatalog()
         {
-            ToolSettingsUseCase useCase = CreateUseCase(new RecordingToolSettingsPort());
+            ToolSettingsUseCase useCase = CreateUseCase();
 
             bool isAvailable = useCase.TryGetToolCatalog(out ToolSettingsUseCase.ToolCatalogItem[] allTools);
 
@@ -289,72 +289,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(allTools, Is.Empty);
         }
 
-        private static ToolSettingsUseCase CreateUseCase(RecordingToolSettingsPort toolSettingsPort)
+        private static ToolSettingsUseCase CreateUseCase()
         {
-            UnityCliLoopToolRegistrarService toolRegistrarService = new UnityCliLoopToolRegistrarService(
+            IToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
+            UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new IdleEditorRuntimeStatePort()),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 () => Array.Empty<IUnityCliLoopTool>());
             return new ToolSettingsUseCase(
                 toolSettingsPort,
                 toolRegistrarService,
-                new EmptyToolSkillDescriptionProvider());
-        }
-
-        /// <summary>
-        /// Test support type that stores tool enabled flags in memory.
-        /// </summary>
-        private sealed class RecordingToolSettingsPort : IToolSettingsPort
-        {
-            private readonly HashSet<string> _disabledTools = new HashSet<string>();
-
-            public bool IsToolEnabled(string toolName)
-            {
-                return !_disabledTools.Contains(toolName);
-            }
-
-            public void SetToolEnabled(string toolName, bool enabled)
-            {
-                if (enabled)
-                {
-                    _disabledTools.Remove(toolName);
-                    return;
-                }
-
-                _disabledTools.Add(toolName);
-            }
-
-            public string[] GetDisabledTools()
-            {
-                return new List<string>(_disabledTools).ToArray();
-            }
-
-            public void InvalidateCache()
-            {
-            }
-        }
-
-        /// <summary>
-        /// Test support type that reports no skill descriptions.
-        /// </summary>
-        private sealed class EmptyToolSkillDescriptionProvider : IToolSkillDescriptionProvider
-        {
-            public IReadOnlyDictionary<string, string> GetSkillDescriptionsByToolName()
-            {
-                return new Dictionary<string, string>();
-            }
-        }
-
-        /// <summary>
-        /// Test support type that reports an idle editor.
-        /// </summary>
-        private sealed class IdleEditorRuntimeStatePort : IEditorRuntimeStatePort
-        {
-            public bool IsCompiling => false;
-            public bool IsUpdating => false;
-            public bool IsPlaying => false;
-            public bool IsPaused => false;
+                new StaticToolSkillDescriptionProvider(new Dictionary<string, string>()));
         }
     }
 }

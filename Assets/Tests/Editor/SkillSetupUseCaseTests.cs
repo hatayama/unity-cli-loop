@@ -116,14 +116,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             RecordingSkillSetupPort port = new RecordingSkillSetupPort();
             SkillSetupUseCase useCase = new SkillSetupUseCase(port);
-            List<SkillSetupTargetInfo> targets = CreateTargets();
+            List<SkillSetupTargetInfo> installTargets = CreateTargets();
+            List<SkillSetupTargetInfo> removeTargets = CreateTargets();
 
-            Task installTask = useCase.InstallV3MigrationSkillFilesAsync(ProjectRoot, targets, true, CancellationToken.None);
-            Task removeTask = useCase.RemoveV3MigrationSkillFilesAsync(ProjectRoot, targets, false, CancellationToken.None);
+            Task installTask = useCase.InstallV3MigrationSkillFilesAsync(ProjectRoot, installTargets, true, CancellationToken.None);
+            Task removeTask = useCase.RemoveV3MigrationSkillFilesAsync(ProjectRoot, removeTargets, false, CancellationToken.None);
 
             Assert.That(installTask, Is.SameAs(port.InstallV3Task));
             Assert.That(removeTask, Is.SameAs(port.RemoveV3Task));
-            Assert.That(port.LastTargets, Is.SameAs(targets));
+            Assert.That(port.InstallV3Targets, Is.SameAs(installTargets));
+            Assert.That(port.RemoveV3Targets, Is.SameAs(removeTargets));
             Assert.That(port.Calls, Is.EqualTo(new[]
             {
                 "InstallV3|<PROJECT_ROOT>|True",
@@ -147,6 +149,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public List<string> Calls { get; } = new List<string>();
             public List<CancellationToken> Tokens { get; } = new List<CancellationToken>();
             public List<SkillSetupTargetInfo> LastTargets { get; private set; }
+
+            public List<SkillSetupTargetInfo> InstallV3Targets { get; private set; }
+
+            public List<SkillSetupTargetInfo> RemoveV3Targets { get; private set; }
             public string InstalledToolName { get; set; }
             public SkillInstallState V3MigrationState { get; set; }
             public List<SkillSetupTargetInfo> FullDetectionTargets { get; } = new List<SkillSetupTargetInfo>();
@@ -219,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken ct)
             {
                 Calls.Add("InstallV3|" + projectRoot + "|" + groupSkillsUnderUnityCliLoop);
-                LastTargets = targets;
+                InstallV3Targets = targets;
                 return InstallV3Task;
             }
 
@@ -230,7 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken ct)
             {
                 Calls.Add("RemoveV3|" + projectRoot + "|" + groupSkillsUnderUnityCliLoop);
-                LastTargets = targets;
+                RemoveV3Targets = targets;
                 return RemoveV3Task;
             }
         }

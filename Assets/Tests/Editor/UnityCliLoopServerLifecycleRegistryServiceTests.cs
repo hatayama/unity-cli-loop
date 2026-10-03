@@ -172,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ServerLoopExited_WhenHandlerRemovedAfterRegisterSource_UnwiresHandlerFromSource()
         {
             UnityCliLoopServerLifecycleRegistryService registry = new UnityCliLoopServerLifecycleRegistryService();
-            RaisableLifecycleSource source = new RaisableLifecycleSource();
+            FakeLifecycleSource source = new FakeLifecycleSource();
             registry.RegisterSource(source);
             int invocationCount = 0;
             Action handler = () => invocationCount++;
@@ -192,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ServerLoopExited_WhenHandlerRemovedBeforeRegisterSource_IsNotWiredOntoLaterSource()
         {
             UnityCliLoopServerLifecycleRegistryService registry = new UnityCliLoopServerLifecycleRegistryService();
-            RaisableLifecycleSource source = new RaisableLifecycleSource();
+            FakeLifecycleSource source = new FakeLifecycleSource();
             int invocationCount = 0;
             Action handler = () => invocationCount++;
             registry.ServerLoopExited += handler;
@@ -203,21 +203,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(invocationCount, Is.Zero);
             Assert.That(source.HasServerLoopExitedSubscribers, Is.False);
-        }
-
-        /// <summary>
-        /// Test support type that lets tests raise ServerLoopExited and observe its subscribers.
-        /// </summary>
-        private sealed class RaisableLifecycleSource : IUnityCliLoopServerLifecycleSource
-        {
-            public event Action ServerLoopExited;
-
-            public bool HasServerLoopExitedSubscribers => ServerLoopExited != null;
-
-            public void RaiseServerLoopExited()
-            {
-                ServerLoopExited?.Invoke();
-            }
         }
     }
 }
