@@ -132,6 +132,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.Throws<InvalidOperationException>(() => reassembler.ValidateState());
         }
 
+        /// <summary>
+        /// Verifies Clear discards a held framing error so the next valid frame is extracted normally.
+        /// </summary>
+        [Test]
+        public void Clear_AfterHeldFramingError_ExtractsNextValidFrame()
+        {
+            string jsonContent = "{\"jsonrpc\":\"2.0\",\"id\":1}";
+            byte[] corrupted = Encoding.UTF8.GetBytes($"Content-Length: {jsonContent.Length}\r\n\r\n{jsonContent}Content-Length: abc\r\n\r\n{{}}");
+            reassembler.AddData(corrupted, corrupted.Length);
+            reassembler.ExtractCompleteMessages();
+
+            reassembler.Clear();
+            byte[] valid = Encoding.UTF8.GetBytes($"Content-Length: {jsonContent.Length}\r\n\r\n{jsonContent}");
+            reassembler.AddData(valid, valid.Length);
+
+            Assert.That(reassembler.ExtractCompleteMessages(), Is.EqualTo(new[] { jsonContent }));
+        }
+
         [Test]
         public void ExtractCompleteMessages_CompleteMessage_ReturnsMessage()
         {
