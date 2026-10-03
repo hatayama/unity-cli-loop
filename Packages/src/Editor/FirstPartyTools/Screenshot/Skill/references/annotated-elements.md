@@ -27,6 +27,7 @@ The annotator lists elements that share the same EventSystem raycast path as `si
 - Elements under a Canvas that has no enabled `GraphicRaycaster` are not clickable through EventSystem, so they are not listed.
 - Elements on a World Space or Camera Space Canvas whose camera cannot be resolved from `worldCamera`, the root canvas, or `Camera.main` have no screen coordinates, so they are not listed.
 - Elements whose center and four interior quarter probe points are all covered by another raycast hit are not listed.
+- Selectables that are not interactable (`interactable = false`, or a parent `CanvasGroup` with `interactable = false`) ignore clicks and drags, so they are not listed. A separate pointer handler script on the same GameObject is still listed as that handler.
 
 ### PhysicsCollider Entries Per Closed Region
 
