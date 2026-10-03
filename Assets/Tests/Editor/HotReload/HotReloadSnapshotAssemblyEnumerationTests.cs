@@ -140,6 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string dllPath = PlantCompiledAssembly("Fixture");
             string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
             PlantCompiledAssembly("NoSources");
+            File.Delete(Path.ChangeExtension(PlantCompiledAssembly("NoPdb"), ".pdb"));
 
             List<HotReloadSnapshotAssembly> result = HotReloadChangedFileAggregator.CollectSnapshotAssemblies(
                 _projectRoot,
@@ -147,6 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     CreateAssemblyWithSources("NoSources", Array.Empty<string>()),
                     CreateAssembly("NotCompiled"),
+                    CreateAssembly("NoPdb"),
                     CreateAssembly("Fixture")
                 });
 
