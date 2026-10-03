@@ -141,6 +141,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                // Every Selectable implements IPointerDownHandler, so one that CollectSelectables left out for not
+                // being interactable would otherwise come back here as a clickable element that ignores clicks.
+                if (behaviour is Selectable)
+                {
+                    continue;
+                }
+
                 string? type = ClassifyEventHandler(behaviour);
                 if (type == null)
                 {
