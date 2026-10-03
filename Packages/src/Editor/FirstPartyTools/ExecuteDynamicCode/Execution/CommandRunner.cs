@@ -333,22 +333,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         cancellationToken);
                     object invoked = executeAsyncMethod.Invoke(instance, callArgs);
 
-                    object awaitedResult = await AwaitableHelper.AwaitIfNeeded(invoked, cancellationToken).ConfigureAwait(false);
-                    // Why repeat: the wrapper is itself async, so a snippet that returns a task hands back that
-                    // task as its value; awaiting it here gives the snippet's value, fault, or cancellation the
-                    // same path as a task the snippet awaited itself.
-                    while (AwaitableHelper.IsAwaitable(awaitedResult))
-                    {
-                        object nextResult = await AwaitableHelper.AwaitIfNeeded(awaitedResult, cancellationToken).ConfigureAwait(false);
-                        if (ReferenceEquals(nextResult, awaitedResult))
-                        {
-                            // An awaitable whose result is itself would otherwise loop forever.
-                            break;
-                        }
-
-                        awaitedResult = nextResult;
-                    }
-
+                    // Why the returned-awaitable walk: the wrapper is itself async, so a snippet that returns a
+                    // task hands back that task as its value; awaiting it too gives the snippet's value, fault, or
+                    // cancellation the same path as a task the snippet awaited itself.
+                    object awaitedResult = await AwaitableHelper.AwaitReturnedAwaitablesAsync(invoked, cancellationToken)
+                        .ConfigureAwait(false);
                     string resultString = awaitedResult?.ToString() ?? "";
 
                     return CapturePartialResults(CreateSuccessResult(resultString));

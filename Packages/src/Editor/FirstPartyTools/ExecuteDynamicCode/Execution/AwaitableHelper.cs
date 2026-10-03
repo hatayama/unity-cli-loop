@@ -14,6 +14,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string VoidTaskResultTypeName = "System.Threading.Tasks.VoidTaskResult";
 
+        // Why a cap: a finished awaitable resolves synchronously, so one that keeps producing another awaitable
+        // (or a struct one that returns itself, which boxes to a new reference each time) would spin on the main
+        // thread forever without yielding. Real task types never nest this deep.
+        internal const int MaxReturnedAwaitableDepth = 8;
+
         public static async Task<object> AwaitIfNeeded(object value, CancellationToken cancellationToken)
         {
             if (value == null)
@@ -45,6 +50,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Awaitable pattern fallback (e.g., UniTask/UniTask<T> or custom awaitables)
             return await AwaitCustomAwaitableIfNeededAsync(value, valueType, cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Awaits the value, then keeps awaiting while the result is itself awaitable, up to
+        /// MaxReturnedAwaitableDepth levels; the value reached at the cap is returned as is.
+        /// </summary>
+        public static async Task<object> AwaitReturnedAwaitablesAsync(object value, CancellationToken cancellationToken)
+        {
+            object current = value;
+            for (int depth = 0; depth < MaxReturnedAwaitableDepth && IsAwaitable(current); depth++)
+            {
+                object next = await AwaitIfNeeded(current, cancellationToken).ConfigureAwait(false);
+                if (ReferenceEquals(next, current))
+                {
+                    // An awaitable whose result is itself would otherwise use up the cap for nothing.
+                    return current;
+                }
+
+                current = next;
+            }
+
+            return current;
         }
 
         /// <summary>
