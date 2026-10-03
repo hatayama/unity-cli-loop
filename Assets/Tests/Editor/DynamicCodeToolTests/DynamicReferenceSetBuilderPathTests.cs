@@ -72,12 +72,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies the Editor contents path is still searched when it is the same as the scripting root.
+        /// Verifies the contents path's Resources/Scripting folder is searched after a scripting root that does not
+        /// hold the reference, even when the scripting root is the contents path itself.
         /// </summary>
         [Test]
-        public void ResolvePreferredBaseReferencePath_WhenTheScriptingRootIsTheContentsPath_FindsTheReference()
+        public void ResolvePreferredBaseReferencePath_WhenOnlyResourcesScriptingHoldsTheReference_FindsItThere()
         {
-            string expectedPath = CreateFile("Managed", "UnityEngine", "UnityEngine.CoreModule.dll");
+            string expectedPath = CreateFile("Resources", "Scripting", "Managed", "UnityEngine", "UnityEngine.CoreModule.dll");
 
             string resolvedPath = DynamicReferenceSetBuilder.ResolvePreferredBaseReferencePath(
                 _tempDir, _tempDir, "UnityEngine.CoreModule");

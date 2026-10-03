@@ -114,12 +114,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a nested collection that is not an ICollection is shown by its ToString instead of being walked.
+        /// Verifies a nested sequence that is not materialized is shown by its ToString instead of being enumerated.
         /// </summary>
         [Test]
-        public void TrySerialize_WithAHashSetInsideAList_ShowsTheHashSetByItsTypeName()
+        public void TrySerialize_WithALazySequenceInsideAList_ShowsItsToStringWithoutEnumerating()
         {
-            HashSet<int> nested = new HashSet<int> { 1 };
+            int enumeratedCount = 0;
+            IEnumerable<int> nested = CountEnumeration(() => enumeratedCount++);
             bool truncated = false;
 
             bool serialized = SourcePausePointCollectionPreviewSerializer.TrySerialize(
@@ -127,6 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(serialized, Is.True);
             Assert.That(preview, Is.EqualTo("[\"" + nested + "\"]"));
+            Assert.That(enumeratedCount, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -177,6 +179,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class ThrowingToString
         {
             public override string ToString() => throw new InvalidOperationException("preview boom");
+        }
+
+        private static IEnumerable<int> CountEnumeration(Action onEnumerated)
+        {
+            onEnumerated();
+            yield return 1;
         }
     }
 }

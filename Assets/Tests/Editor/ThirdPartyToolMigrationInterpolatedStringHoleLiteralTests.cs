@@ -12,10 +12,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         /// <summary>
         /// Verifies a raw interpolated string in a hole is skipped as one literal, including single braces that are
-        /// text under two dollar signs and a nested brace pair inside its own hole.
+        /// text under two dollar signs, a nested brace pair and a raw string inside its own hole, and that a literal
+        /// in a hole which never closes is stepped over one character at a time until the hole closes.
         /// </summary>
         [TestCase("$\"{$$\"\"\"{x}\"\"\"}\"", TestName = "FindRegularInterpolatedStringEndIndex_WithSingleBracesInATwoDollarRawString_ReturnsFinalQuoteIndex")]
         [TestCase("$\"{$$\"\"\"{{new { }}}\"\"\"}\"", TestName = "FindRegularInterpolatedStringEndIndex_WithNestedBracesInARawStringHole_ReturnsFinalQuoteIndex")]
+        [TestCase("$\"{$$\"\"\"{ {{\"\"\"}\"\"\"}}\"\"\"}\"", TestName = "FindRegularInterpolatedStringEndIndex_WithARawStringInsideARawStringHole_ReturnsFinalQuoteIndex")]
+        [TestCase("$\"{'t}\"", TestName = "FindRegularInterpolatedStringEndIndex_WithAnUnterminatedCharLiteralBeforeTheHoleCloses_ReturnsFinalQuoteIndex")]
+        [TestCase("$\"{\"\"\"text}\"", TestName = "FindRegularInterpolatedStringEndIndex_WithAnUnterminatedRawStringBeforeTheHoleCloses_ReturnsFinalQuoteIndex")]
+        [TestCase("$\"{$$\"\"\"text}\"", TestName = "FindRegularInterpolatedStringEndIndex_WithAnUnterminatedRawInterpolatedStringBeforeTheHoleCloses_ReturnsFinalQuoteIndex")]
         public void FindRegularInterpolatedStringEndIndex_WithARawStringInAHole_ReturnsFinalQuoteIndex(string source)
         {
             int endIndex = ThirdPartyToolMigrationInterpolatedStringRules.FindRegularInterpolatedStringEndIndex(source, 0);

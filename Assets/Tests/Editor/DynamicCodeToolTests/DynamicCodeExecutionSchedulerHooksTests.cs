@@ -56,8 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Task busy = hooks.InvokeAfterBusySemaphoreProbeFailedAsync();
             hooks.InvokeLogWarning("ignored");
 
-            Assert.That(published.IsCompleted, Is.True);
-            Assert.That(busy.IsCompleted, Is.True);
+            Assert.That(published.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            Assert.That(busy.Status, Is.EqualTo(TaskStatus.RanToCompletion));
         }
     }
 }
