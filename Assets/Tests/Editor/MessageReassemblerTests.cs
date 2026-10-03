@@ -79,6 +79,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.Throws<ArgumentException>(() => reassembler.AddData(data, 15));
         }
         
+        /// <summary>
+        /// Verifies a complete header whose Content-Length is not a number is rejected instead of waiting for more data.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenContentLengthIsNotNumeric_ThrowsInvalidOperationException()
+        {
+            byte[] data = Encoding.UTF8.GetBytes("Content-Length: abc\r\n\r\n{}");
+            reassembler.AddData(data, data.Length);
+
+            Assert.Throws<InvalidOperationException>(() => reassembler.ExtractCompleteMessages());
+        }
+
+        /// <summary>
+        /// Verifies a complete header whose Content-Length exceeds the maximum message size is rejected instead of waiting for more data.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenContentLengthExceedsMaximum_ThrowsInvalidOperationException()
+        {
+            byte[] data = Encoding.UTF8.GetBytes("Content-Length: " + (BufferConfig.MAX_MESSAGE_SIZE + 1) + "\r\n\r\n{}");
+            reassembler.AddData(data, data.Length);
+
+            Assert.Throws<InvalidOperationException>(() => reassembler.ExtractCompleteMessages());
+        }
+
+        /// <summary>
+        /// Verifies a complete header without a Content-Length line is rejected instead of waiting for more data.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenCompleteHeaderHasNoContentLength_ThrowsInvalidOperationException()
+        {
+            byte[] data = Encoding.UTF8.GetBytes("Content-Type: application/json\r\n\r\n{}");
+            reassembler.AddData(data, data.Length);
+
+            Assert.Throws<InvalidOperationException>(() => reassembler.ExtractCompleteMessages());
+        }
+
         [Test]
         public void ExtractCompleteMessages_CompleteMessage_ReturnsMessage()
         {
