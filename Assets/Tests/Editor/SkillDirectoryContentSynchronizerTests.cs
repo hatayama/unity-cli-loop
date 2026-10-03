@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string skillDirectory = Path.Combine(_temporaryRoot, "uloop-compile");
             WriteTextFile(Path.Combine(skillDirectory, "SKILL.md"), "original skill");
             WriteTextFile(Path.Combine(skillDirectory, "notes.md"), "original notes");
-            Dictionary<string, byte[]> skillFiles = CreateSkillFilesThatFailAfterWritingSkillFile();
+            SortedDictionary<string, byte[]> skillFiles = CreateSkillFilesThatFailAfterWritingSkillFile();
 
             Assert.That(
                 () => SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(skillDirectory, skillFiles, CancellationToken.None),
@@ -118,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void SyncInstalledSkillDirectory_WhenWriteFailsInNewDirectory_RemovesPartialDirectory()
         {
             string skillDirectory = Path.Combine(_temporaryRoot, "uloop-compile");
-            Dictionary<string, byte[]> skillFiles = CreateSkillFilesThatFailAfterWritingSkillFile();
+            SortedDictionary<string, byte[]> skillFiles = CreateSkillFilesThatFailAfterWritingSkillFile();
 
             Assert.That(
                 () => SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(skillDirectory, skillFiles, CancellationToken.None),
@@ -130,9 +130,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         // SKILL.md is written first, then the nested path needs SKILL.md to be a directory,
         // so directory creation fails after the directory has already been modified.
-        private static Dictionary<string, byte[]> CreateSkillFilesThatFailAfterWritingSkillFile()
+        // A sorted ordinal dictionary pins that write order: "SKILL.md" is a prefix of
+        // "SKILL.md/child.md", whereas Dictionary enumeration order is not guaranteed.
+        private static SortedDictionary<string, byte[]> CreateSkillFilesThatFailAfterWritingSkillFile()
         {
-            return new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            return new SortedDictionary<string, byte[]>(StringComparer.Ordinal)
             {
                 ["SKILL.md"] = Encoding.UTF8.GetBytes("replacement skill"),
                 ["SKILL.md/child.md"] = Encoding.UTF8.GetBytes("child")

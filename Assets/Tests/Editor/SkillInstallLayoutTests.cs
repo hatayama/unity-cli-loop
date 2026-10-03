@@ -532,12 +532,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Directory.CreateDirectory(Path.Combine(skillsRoot, "manual-skill"));
 
             string[] skillDirectories = SkillInstallLayout.EnumerateInstalledSkillDirectories(temporaryTargetRoot)
-                .Select(path => Path.GetRelativePath(temporaryTargetRoot, path).Replace('\\', '/'))
+                .Select(path => Path.GetRelativePath(temporaryTargetRoot, path))
                 .ToArray();
 
             Assert.That(
                 skillDirectories,
-                Is.EqualTo(new[] { "skills/unity-cli-loop/uloop-compile", "skills/uloop-get-logs" }));
+                Is.EqualTo(new[]
+                {
+                    Path.Combine("skills", "unity-cli-loop", "uloop-compile"),
+                    Path.Combine("skills", "uloop-get-logs")
+                }));
         }
 
         /// <summary>

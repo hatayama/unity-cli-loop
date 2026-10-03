@@ -123,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool expected)
         {
             string content = "---\nname: " + skillName + "\n---\n";
-            string skillDirectory = Path.Combine("<PROJECT_ROOT>", ".claude", "skills", directoryName);
+            string skillDirectory = Path.Combine("project-root", ".claude", "skills", directoryName);
 
             bool matches = SkillSourceFrontmatterReader.SkillContentMatchesTool(content, skillDirectory, "compile");
 
@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase("compile", false)]
         public void SkillContentMatchesTool_WhenFrontmatterIsMissing_UsesDirectoryName(string directoryName, bool expected)
         {
-            string skillDirectory = Path.Combine("<PROJECT_ROOT>", ".claude", "skills", directoryName);
+            string skillDirectory = Path.Combine("project-root", ".claude", "skills", directoryName);
 
             bool matches = SkillSourceFrontmatterReader.SkillContentMatchesTool("plain text", skillDirectory, "compile");
 

@@ -274,30 +274,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(usage.ToolContractsReferenceAssemblyDirectories, Is.Empty);
         }
 
-        private const string TargetScanProjectRoot = "/<PROJECT_ROOT>";
-        private const string TargetScanAssemblyDirectory = "/<PROJECT_ROOT>/Assets/VendorTools";
-        private const string TargetScanSourceFilePath = "/<PROJECT_ROOT>/Assets/VendorTools/Foo.cs";
-
         /// <summary>
         /// Verifies that unrelated source text is not recorded by the target scan.
         /// </summary>
         [Test]
         public void RecordTargetScanInitialSourceFacts_WhenSourceHasNoMigrationCandidateText_ReturnsFalseAndRecordsNothing()
         {
-            ThirdPartyToolMigrationAssemblyUsageScanState scanState = CreateTargetScanState();
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState = CreateScanState();
 
-            bool recorded = scanState.RecordTargetScanInitialSourceFacts("public class Foo { }", TargetScanSourceFilePath);
+            bool recorded = scanState.RecordTargetScanInitialSourceFacts("public class Foo { }", SourceFilePath);
 
             Assert.That(recorded, Is.False);
             Assert.That(scanState.AssemblyDeclaredTypeNamesByDirectory, Is.Empty);
-        }
-
-        private static ThirdPartyToolMigrationAssemblyUsageScanState CreateTargetScanState()
-        {
-            return new ThirdPartyToolMigrationAssemblyUsageScanState(
-                TargetScanProjectRoot,
-                new List<string> { TargetScanAssemblyDirectory },
-                new List<AssemblyReferenceDirectory>());
         }
     }
 }

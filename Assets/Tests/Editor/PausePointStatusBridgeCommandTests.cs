@@ -19,5 +19,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(PausePointStatusBridgeCommand.IsListRequest(new JArray("marker-id")), Is.True);
             Assert.That(PausePointStatusBridgeCommand.IsListRequest(null), Is.True);
         }
+
+        /// <summary>
+        /// Verifies an object that names a marker id is a single-marker status request, not a list request.
+        /// </summary>
+        [Test]
+        public void IsListRequest_WhenObjectHasNonEmptyId_ReturnsFalse()
+        {
+            JObject paramsObject = new JObject { ["id"] = "marker-id" };
+
+            Assert.That(PausePointStatusBridgeCommand.IsListRequest(paramsObject), Is.False);
+        }
     }
 }

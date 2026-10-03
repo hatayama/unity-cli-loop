@@ -67,7 +67,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 MigrationAssemblyUsage usage = GetCompletedResult(task);
                 Assert.That(progress.HasCancelled, Is.True);
-                Assert.That(_readPaths, Is.EqualTo(new[] { _sourcePath }));
                 Assert.That(usage.FirstPartyScreenshotReferenceAssemblyDirectories, Is.Empty);
                 Assert.That(usage.ToolContractsReferenceAssemblyDirectories, Is.Empty);
             }

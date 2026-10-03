@@ -36,8 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return new UnityCliLoopToolRegistrarService(
                 new EmptyInternalToolNameProvider(),
-                new AllToolsEnabledSettingsPort(),
-                new UnityCliLoopToolExecutionService(new IdleEditorRuntimeStatePort()),
+                new AlwaysEnabledToolSettingsPort(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 () => Array.Empty<IUnityCliLoopTool>());
         }
 
@@ -63,35 +63,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 return false;
             }
-        }
-
-        private sealed class AllToolsEnabledSettingsPort : IToolSettingsPort
-        {
-            public bool IsToolEnabled(string toolName)
-            {
-                return true;
-            }
-
-            public void SetToolEnabled(string toolName, bool enabled)
-            {
-            }
-
-            public string[] GetDisabledTools()
-            {
-                return Array.Empty<string>();
-            }
-
-            public void InvalidateCache()
-            {
-            }
-        }
-
-        private sealed class IdleEditorRuntimeStatePort : IEditorRuntimeStatePort
-        {
-            public bool IsCompiling => false;
-            public bool IsUpdating => false;
-            public bool IsPlaying => false;
-            public bool IsPaused => false;
         }
     }
 }
