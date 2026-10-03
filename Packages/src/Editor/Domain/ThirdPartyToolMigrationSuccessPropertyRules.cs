@@ -28,8 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             RegexOptions.Compiled);
 
         // Matches only the auto-property shape; a getter with logic (e.g. "{ get { ... } }") never matches.
+        // The match ends after at most one line break so the next line's indentation stays with that line.
         private static readonly Regex SuccessAutoPropertyRegex = new(
-            @"public\s+bool\s+Success\s*\{\s*get;\s*(?:set;\s*)?\}\s*(?:=\s*[^;]+;)?\s*(?:\r?\n)?",
+            @"public\s+bool\s+Success\s*\{\s*get;\s*(?:set;\s*)?\}(?:\s*=\s*[^;]+;)?[ \t]*(?:\r?\n)?",
             RegexOptions.Compiled);
 
         // Matches both a block-bodied property start ("{ ... }") and an expression-bodied one ("=> ...;");
@@ -122,16 +123,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     continue;
                 }
 
-                int removalStartIndex = ExtendRemovalStartOverDocComments(
+                (int removalStartIndex, int removalEndIndex) = ReadSuccessPropertyRemovalRange(
                     source,
-                    ReadLegacyPlayerLoopTimingDeclarationRemovalStart(source, propertyMatch.Index, codeTextMask));
+                    propertyMatch,
+                    codeTextMask);
                 if (removalStartIndex < sourceCopyIndex)
                 {
                     continue;
                 }
 
                 builder.Append(source, sourceCopyIndex, removalStartIndex - sourceCopyIndex);
-                sourceCopyIndex = propertyMatch.Index + propertyMatch.Length;
+                sourceCopyIndex = removalEndIndex;
                 replacementCount++;
             }
 
@@ -182,6 +184,24 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             int openBraceIndex = classMatch.Index + classMatch.Length - 1;
             int closeBraceIndex = FindBlockClosingBraceIndex(source, codeTextMask, openBraceIndex);
             return closeBraceIndex < 0 ? (false, -1, -1) : (true, openBraceIndex, closeBraceIndex);
+        }
+
+        // The property is taken from its line start when only indentation precedes it, so removing its line
+        // break does not leave that indentation in front of the next line.
+        private static (int StartIndex, int EndIndex) ReadSuccessPropertyRemovalRange(
+            string source,
+            Match propertyMatch,
+            CodeTextMask codeTextMask)
+        {
+            int declarationStartIndex = HasOnlyWhitespaceBeforeIndexOnLine(source, propertyMatch.Index)
+                ? GetLineStartIndex(source, propertyMatch.Index)
+                : propertyMatch.Index;
+            (int removalStartIndex, int removalEndIndex) = ReadDeclarationRemovalRange(
+                source,
+                declarationStartIndex,
+                propertyMatch.Index + propertyMatch.Length,
+                codeTextMask);
+            return (ExtendRemovalStartOverDocComments(source, removalStartIndex), removalEndIndex);
         }
 
         // Extends a removal start index over immediately preceding "///" XML doc comment lines,
