@@ -1,25 +1,30 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Text.RegularExpressions;
 
 using NUnit.Framework;
+
+using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Ending one worker channel: a failed kill of a live process surfaces whichever way the quit
-    /// failed, a kill that lost the race to the exit is ignored, and the channel is always disposed.
+    /// Ending one worker channel: a failed kill of a live process is logged as an error without
+    /// throwing whichever way the quit failed, a kill that lost the race to the exit is ignored, and
+    /// the channel is always disposed.
     /// </summary>
     [TestFixture]
     public sealed class TransformWorkerChannelTerminationTests
     {
         /// <summary>
-        /// Verifies a live process that refuses the kill after declining to quit is reported, and the channel is still disposed.
+        /// Verifies a live process that refuses the kill after declining to quit is logged as an error, not thrown, and the channel is still disposed.
         /// </summary>
         [Test]
-        public void Terminate_WhenQuitDeclinedAndKillOfLiveProcessFails_ThrowsAndDisposes()
+        public void Terminate_WhenQuitDeclinedAndKillOfLiveProcessFails_LogsErrorAndDisposes()
         {
             FakeChannel channel = new FakeChannel
             {
@@ -27,19 +32,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 KillException = new InvalidOperationException("kill refused"),
                 Exited = false,
             };
+            ExpectKillFailureError("kill refused");
 
-            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-                () => new TransformWorkerChannelTermination().Terminate(channel));
+            Assert.DoesNotThrow(() => new TransformWorkerChannelTermination().Terminate(channel));
 
-            Assert.That(thrown.Message, Is.EqualTo("kill refused"));
             Assert.That(channel.DisposeCount, Is.EqualTo(1));
         }
 
         /// <summary>
-        /// Verifies a live process that refuses the kill after the pipe broke is reported, and the channel is still disposed.
+        /// Verifies a live process that refuses the kill after the pipe broke is logged as an error, not thrown, and the channel is still disposed.
         /// </summary>
         [Test]
-        public void Terminate_WhenPipeBrokenAndKillOfLiveProcessFails_ThrowsAndDisposes()
+        public void Terminate_WhenPipeBrokenAndKillOfLiveProcessFails_LogsErrorAndDisposes()
         {
             FakeChannel channel = new FakeChannel
             {
@@ -47,26 +51,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 KillException = new InvalidOperationException("kill refused"),
                 Exited = false,
             };
+            ExpectKillFailureError("kill refused");
 
-            Assert.Throws<InvalidOperationException>(() => new TransformWorkerChannelTermination().Terminate(channel));
+            Assert.DoesNotThrow(() => new TransformWorkerChannelTermination().Terminate(channel));
 
             Assert.That(channel.DisposeCount, Is.EqualTo(1));
         }
 
         /// <summary>
-        /// Verifies an OS-reported kill failure of a live process is reported, and the channel is still disposed.
+        /// Verifies an OS-reported kill failure of a live process is logged as an error, not thrown, and the channel is still disposed.
         /// </summary>
         [Test]
-        public void Terminate_WhenQuitDeclinedAndOsRefusesKillOfLiveProcess_ThrowsAndDisposes()
+        public void Terminate_WhenQuitDeclinedAndOsRefusesKillOfLiveProcess_LogsErrorAndDisposes()
         {
+            Win32Exception refusal = new Win32Exception(5);
             FakeChannel channel = new FakeChannel
             {
                 QuitResult = false,
-                KillException = new Win32Exception(5),
+                KillException = refusal,
                 Exited = false,
             };
+            ExpectKillFailureError(refusal.Message);
 
-            Assert.Throws<Win32Exception>(() => new TransformWorkerChannelTermination().Terminate(channel));
+            Assert.DoesNotThrow(() => new TransformWorkerChannelTermination().Terminate(channel));
 
             Assert.That(channel.DisposeCount, Is.EqualTo(1));
         }
@@ -121,6 +128,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(channel.DisposeCount, Is.EqualTo(1));
         }
 
+        // The error must name the worker's process id and carry the kill failure's message.
+        private static void ExpectKillFailureError(string exceptionMessage)
+        {
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(".*process " + FakeChannel.ProcessId + "\\b.*" + Regex.Escape(exceptionMessage)));
+        }
+
         /// <summary>
         /// Channel whose quit, kill and liveness answers are set by the test.
         /// </summary>
@@ -133,7 +148,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             public int KillCount { get; private set; }
             public int DisposeCount { get; private set; }
 
-            public int Id => 1;
+            public const int ProcessId = 4242;
+
+            public int Id => ProcessId;
             public bool HasExited => Exited;
             public TextWriter RequestWriter => TextWriter.Null;
             public TextReader ResponseReader => TextReader.Null;
