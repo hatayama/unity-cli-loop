@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a single-toggle update reaches the bound row's toggle, and stops reaching it once the row is unbound.
+        /// Verifies a single-toggle update no longer reaches a tool row's toggle once the row is unbound.
         /// </summary>
         [Test]
         public void UpdateSingleToggle_AfterTheRowIsUnbound_NoLongerChangesItsToggle()
@@ -54,13 +54,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             listView.bindItem(row, 1);
             Toggle toggle = row.Q<Toggle>("tool-list-row-toggle");
 
-            section.UpdateSingleToggle("compile", false);
-            bool valueWhileBound = toggle.value;
+            // The update must come right after the unbind: an earlier update refreshes the list view, which binds
+            // its own row for the tool and takes the toggle over from this one.
             listView.unbindItem(row, 1);
-            section.UpdateSingleToggle("compile", true);
+            section.UpdateSingleToggle("compile", false);
 
-            Assert.That(valueWhileBound, Is.False);
-            Assert.That(toggle.value, Is.False);
+            Assert.That(toggle.value, Is.True);
             Assert.That(row.userData, Is.Null);
         }
 
