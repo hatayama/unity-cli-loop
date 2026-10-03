@@ -152,10 +152,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     || IsFishPathSetCommand(line);
             }
 
+            // POSIX shells parse NAME=value as an assignment only without spaces around '=';
+            // "PATH = ..." runs a command named PATH and leaves PATH unchanged.
             return line.StartsWith("PATH=", StringComparison.Ordinal)
-                || line.StartsWith("PATH =", StringComparison.Ordinal)
-                || line.StartsWith("export PATH=", StringComparison.Ordinal)
-                || line.StartsWith("export PATH =", StringComparison.Ordinal);
+                || line.StartsWith("export PATH=", StringComparison.Ordinal);
         }
 
         private static bool ContainsPrependingReference(
@@ -220,7 +220,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return -1;
             }
 
-            return SkipPathEntryDecorators(line, assignmentIndex + 1);
+            // A space right after '=' ends the word, so PATH is assigned an empty value and has no first entry.
+            int valueStartIndex = assignmentIndex + 1;
+            if (valueStartIndex < line.Length && char.IsWhiteSpace(line[valueStartIndex]))
+            {
+                return -1;
+            }
+
+            return SkipPathEntryDecorators(line, valueStartIndex);
         }
 
         private static int IndexOfFishSetFirstPathEntryStart(string line)
