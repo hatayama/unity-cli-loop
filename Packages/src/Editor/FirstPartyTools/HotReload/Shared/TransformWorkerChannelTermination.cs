@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 
+using UnityCliLoopDebug = UnityEngine.Debug;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -16,19 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             try
             {
-                if (!channel.TryQuitGracefully(GracefulQuitWaitMilliseconds))
+                if (!TryQuit(channel))
                 {
                     KillQuietly(channel);
                 }
-            }
-            catch (IOException)
-            {
-                // The pipe is already gone; the process is exiting or exited.
-                KillQuietly(channel);
-            }
-            catch (InvalidOperationException)
-            {
-                // The process exited between the liveness check and the write.
             }
             finally
             {
@@ -36,31 +29,60 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // Why swallow: the process can exit between the liveness check and the kill, and a race
-        // the host lost still leaves it with the outcome it asked for - a dead worker.
-        private void KillQuietly(ITransformWorkerChannel channel)
+        // True when the process has left or is leaving on its own; false when it has to be killed.
+        // Why the handlers cover only the quit: the kill raises the same exception types with another
+        // meaning (a live process refusing the kill, not an exit), so a handler shared with the kill
+        // would misread its failure as a quit outcome.
+        private static bool TryQuit(ITransformWorkerChannel channel)
+        {
+            try
+            {
+                return channel.TryQuitGracefully(GracefulQuitWaitMilliseconds);
+            }
+            catch (IOException)
+            {
+                // The pipe is already gone; the process is exiting or exited.
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                // The process exited between the liveness check and the write.
+                return true;
+            }
+        }
+
+        // Why log instead of throw: Shutdown runs inside beforeAssemblyReload and quitting, which
+        // Unity raises without a per-handler guard, so an exception here would skip every cleanup
+        // registered after it. The host has already detached the channel, so a later request starts
+        // a fresh worker either way.
+        private static void KillQuietly(ITransformWorkerChannel channel)
         {
             try
             {
                 channel.Kill(KillWaitMilliseconds);
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
-                // The race was lost to the exit itself, which is the outcome the host wanted.
-                // A live process that still refused the kill is a real problem.
-                if (!channel.HasExited)
-                {
-                    throw;
-                }
+                ReportKillFailureOfLiveProcess(channel, ex);
             }
-            catch (System.ComponentModel.Win32Exception)
+            catch (System.ComponentModel.Win32Exception ex)
             {
-                // Same race, reported by the OS instead of the runtime.
-                if (!channel.HasExited)
-                {
-                    throw;
-                }
+                ReportKillFailureOfLiveProcess(channel, ex);
             }
+        }
+
+        // A kill that lost the race to the exit itself is the outcome the host wanted. A live
+        // process that still refused the kill is a real problem, so it is reported as an error.
+        private static void ReportKillFailureOfLiveProcess(ITransformWorkerChannel channel, Exception killFailure)
+        {
+            if (channel.HasExited)
+            {
+                return;
+            }
+
+            UnityCliLoopDebug.LogError(
+                "Transform worker process " + channel.Id + " is still running after a failed kill: "
+                + killFailure.Message);
         }
     }
 }
