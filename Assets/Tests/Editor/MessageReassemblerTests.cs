@@ -115,6 +115,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.Throws<InvalidOperationException>(() => reassembler.ExtractCompleteMessages());
         }
 
+        /// <summary>
+        /// Verifies a valid frame that arrives before a corrupt header in the same chunk is still returned, and the framing error surfaces from ValidateState afterwards.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenValidFramePrecedesInvalidHeader_ReturnsValidFrameThenFailsValidation()
+        {
+            string jsonContent = "{\"jsonrpc\":\"2.0\",\"id\":1}";
+            string frames = $"Content-Length: {jsonContent.Length}\r\n\r\n{jsonContent}Content-Length: abc\r\n\r\n{{}}";
+            byte[] data = Encoding.UTF8.GetBytes(frames);
+            reassembler.AddData(data, data.Length);
+
+            string[] messages = reassembler.ExtractCompleteMessages();
+
+            Assert.That(messages, Is.EqualTo(new[] { jsonContent }));
+            Assert.Throws<InvalidOperationException>(() => reassembler.ValidateState());
+        }
+
         [Test]
         public void ExtractCompleteMessages_CompleteMessage_ReturnsMessage()
         {
