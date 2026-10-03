@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -32,10 +33,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void CaptureAfterDomainReload()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            CaptureAssemblies(projectRoot, CompilationPipeline.GetAssemblies());
+        }
+
+        // Why separate from CaptureAfterDomainReload: the project root and the compilation assemblies come
+        // from Unity, so taking them as arguments lets tests drive the per-assembly loop in a temporary root.
+        internal static void CaptureAssemblies(string projectRoot, IEnumerable<UnityCompilationAssembly> assemblies)
+        {
             string snapshotRoot = Path.Combine(projectRoot, HotReloadConstants.SourceSnapshotRelativeDirectory);
             Directory.CreateDirectory(snapshotRoot);
 
-            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
+            foreach (UnityCompilationAssembly assembly in assemblies)
             {
                 try
                 {
@@ -62,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                    ex is BadImageFormatException;
         }
 
-        private static void CaptureAssemblyIfNeeded(
+        internal static void CaptureAssemblyIfNeeded(
             string projectRoot,
             string snapshotRoot,
             UnityCompilationAssembly assembly)

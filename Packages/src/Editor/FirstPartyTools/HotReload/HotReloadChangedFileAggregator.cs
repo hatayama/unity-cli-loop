@@ -62,7 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static HotReloadChangedFileAggregationResult Detect()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            List<HotReloadSnapshotAssembly> snapshotAssemblies = CollectSnapshotAssemblies(projectRoot);
+            List<HotReloadSnapshotAssembly> snapshotAssemblies = CollectSnapshotAssemblies(
+                projectRoot,
+                CompilationPipeline.GetAssemblies());
             return DetectFromSnapshotDirectories(projectRoot, snapshotAssemblies);
         }
 
@@ -110,10 +112,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 scanLimitWarnings);
         }
 
-        private static List<HotReloadSnapshotAssembly> CollectSnapshotAssemblies(string projectRoot)
+        // Why the assemblies are an argument: Detect gets them from CompilationPipeline, which tests cannot
+        // plant, so tests pass compilation assemblies of their own.
+        internal static List<HotReloadSnapshotAssembly> CollectSnapshotAssemblies(
+            string projectRoot,
+            IEnumerable<UnityCompilationAssembly> assemblies)
         {
             List<HotReloadSnapshotAssembly> snapshotAssemblies = new List<HotReloadSnapshotAssembly>();
-            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
+            foreach (UnityCompilationAssembly assembly in assemblies)
             {
                 string[] sourceFiles = assembly.sourceFiles;
                 if (sourceFiles == null || sourceFiles.Length == 0)
