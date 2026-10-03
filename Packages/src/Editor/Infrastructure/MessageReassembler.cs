@@ -280,6 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             
             _currentDataLength = 0;
+            _pendingFramingError = null;
             ResetParsingState();
         }
         
