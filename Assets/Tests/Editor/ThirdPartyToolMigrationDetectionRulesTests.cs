@@ -79,5 +79,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(ThirdPartyToolMigrationDetectionRules.ContainsLegacyApiToken(message), Is.False);
         }
+
+        /// <summary>
+        /// Verifies that an asmdef referencing the legacy editor assembly is detected.
+        /// </summary>
+        [Test]
+        public void ContainsLegacyAsmdefNameReference_WhenReferencesIncludeLegacyAssembly_ReturnsTrue()
+        {
+            bool detected = ThirdPartyToolMigrationDetectionRules.ContainsLegacyAsmdefNameReference(
+                "{ \"name\": \"VendorTools.Editor\", \"references\": [ \"Unity.Other\", \"uLoopMCP.Runtime\" ] }");
+
+            Assert.That(detected, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that legacy name text outside a references array is not treated as a legacy reference.
+        /// </summary>
+        [Test]
+        public void ContainsLegacyAsmdefNameReference_WhenReferencesArrayIsMissing_ReturnsFalse()
+        {
+            bool detected = ThirdPartyToolMigrationDetectionRules.ContainsLegacyAsmdefNameReference(
+                "{ \"name\": \"uLoopMCP.Editor\" }");
+
+            Assert.That(detected, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that references which only contain the legacy name as a substring are not treated as legacy.
+        /// </summary>
+        [Test]
+        public void ContainsLegacyAsmdefNameReference_WhenReferencesOnlyContainSimilarNames_ReturnsFalse()
+        {
+            bool detected = ThirdPartyToolMigrationDetectionRules.ContainsLegacyAsmdefNameReference(
+                "{ \"name\": \"VendorTools.Editor\", \"references\": [ \"uLoopMCP.Editor.Extensions\" ] }");
+
+            Assert.That(detected, Is.False);
+        }
     }
 }

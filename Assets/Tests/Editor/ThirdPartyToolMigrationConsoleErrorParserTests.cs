@@ -140,5 +140,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(entries.Count, Is.EqualTo(1));
             Assert.That(entries[0].FilePath, Is.EqualTo("/Users/dev/Project/Assets/Editor/Foo.cs"));
         }
+
+        private const string AdditionsProjectRoot = "/<PROJECT_ROOT>";
+
+        /// <summary>
+        /// Verifies that an absolute Unix path in a diagnostic is kept as-is instead of being joined to the project root.
+        /// </summary>
+        [Test]
+        public void Parse_WithAbsoluteUnixPath_KeepsPathWithoutProjectRoot()
+        {
+            List<string> rawMessages = new List<string>
+            {
+                "/<OTHER_ROOT>/Assets/Editor/Foo.cs(7,3): error CS0246: The type or namespace name 'Bar' could not be found"
+            };
+
+            List<CompileErrorLogEntry> entries = ThirdPartyToolMigrationConsoleErrorParser.Parse(
+                rawMessages,
+                AdditionsProjectRoot);
+
+            Assert.That(entries.Count, Is.EqualTo(1));
+            Assert.That(entries[0].FilePath, Is.EqualTo("/<OTHER_ROOT>/Assets/Editor/Foo.cs"));
+            Assert.That(entries[0].LineNumber, Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// Verifies that null and empty console messages are skipped while a valid diagnostic is still parsed.
+        /// </summary>
+        [Test]
+        public void Parse_WithNullAndEmptyMessages_SkipsThem()
+        {
+            List<string> rawMessages = new List<string>
+            {
+                null,
+                string.Empty,
+                "Assets/Editor/Foo.cs(2,1): error CS0103: The name 'Baz' does not exist"
+            };
+
+            List<CompileErrorLogEntry> entries = ThirdPartyToolMigrationConsoleErrorParser.Parse(
+                rawMessages,
+                AdditionsProjectRoot);
+
+            Assert.That(entries.Count, Is.EqualTo(1));
+            Assert.That(entries[0].FilePath, Is.EqualTo("/<PROJECT_ROOT>/Assets/Editor/Foo.cs"));
+        }
     }
 }

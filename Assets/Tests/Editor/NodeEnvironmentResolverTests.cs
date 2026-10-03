@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -278,6 +279,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 path => false);
 
             Assert.AreEqual("/bin/sh", result);
+        }
+
+        /// <summary>
+        /// Verifies that missing directory-service output yields no shell instead of failing.
+        /// </summary>
+        [Test]
+        public void ExtractDirectoryServiceUserShell_WhenOutputIsNull_ReturnsNull()
+        {
+            string result = NodeEnvironmentResolver.ExtractDirectoryServiceUserShell(null);
+
+            Assert.That(result, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that lines before the UserShell attribute are skipped until the shell line is found.
+        /// </summary>
+        [Test]
+        public void ExtractDirectoryServiceUserShell_WhenOtherAttributesPrecedeShell_ReturnsShellPath()
+        {
+            string output = "RecordName: <USER_NAME>\nUniqueID: 501\nUserShell: /bin/zsh\n";
+
+            string result = NodeEnvironmentResolver.ExtractDirectoryServiceUserShell(output);
+
+            Assert.That(result, Is.EqualTo("/bin/zsh"));
+        }
+
+        /// <summary>
+        /// Verifies that output without a UserShell attribute yields no shell.
+        /// </summary>
+        [Test]
+        public void ExtractDirectoryServiceUserShell_WhenNoUserShellLineExists_ReturnsNull()
+        {
+            string output = "No such key: UserShell\nRecordName: <USER_NAME>\n";
+
+            string result = NodeEnvironmentResolver.ExtractDirectoryServiceUserShell(output);
+
+            Assert.That(result, Is.Null);
         }
     }
 }

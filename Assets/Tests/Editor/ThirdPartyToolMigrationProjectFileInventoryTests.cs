@@ -116,5 +116,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _reports.Add(value);
             }
         }
+
+        private string _projectRoot;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _projectRoot = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_projectRoot);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (Directory.Exists(_projectRoot))
+            {
+                Directory.Delete(_projectRoot, true);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that the Packages folder directly under the project root is excluded from migration scans.
+        /// </summary>
+        [Test]
+        public void ShouldExcludeDirectory_WhenDirectoryIsProjectRootPackages_ReturnsTrue()
+        {
+            string packagesDirectory = Path.Combine(_projectRoot, "Packages");
+            Directory.CreateDirectory(packagesDirectory);
+
+            bool excluded = ProjectFileInventory.ShouldExcludeDirectory(_projectRoot, packagesDirectory);
+
+            Assert.That(excluded, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that the async inventory walk skips files under a Unity-ignored trailing-tilde folder.
+        /// </summary>
+        [Test]
+        public void CreateAsync_WhenAssetsContainsExcludedDirectory_SkipsItsFiles()
+        {
+            string excludedFile = Path.Combine(_projectRoot, "Assets", "Samples~", "SampleTool.cs");
+            string includedFile = Path.Combine(_projectRoot, "Assets", "VendorTools", "VendorTool.cs");
+            WriteFile(excludedFile);
+            WriteFile(includedFile);
+
+            Task<ProjectFileInventory> task = ProjectFileInventory.CreateAsync(
+                _projectRoot,
+                new NoOpInventoryProgress(),
+                CancellationToken.None);
+
+            Assert.That(task.IsCompleted, Is.True);
+            ProjectFileInventory inventory = task.GetAwaiter().GetResult();
+            Assert.That(inventory.CSharpFilePaths, Is.EqualTo(new[] { includedFile }));
+        }
+
+        private static void WriteFile(string filePath)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+            File.WriteAllText(filePath, "public sealed class PlaceholderTool {}");
+        }
+
+        private sealed class NoOpInventoryProgress : IProgress<ThirdPartyToolMigrationProgress>
+        {
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+            }
+        }
     }
 }

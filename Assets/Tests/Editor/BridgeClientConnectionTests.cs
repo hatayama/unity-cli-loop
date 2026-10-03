@@ -22,5 +22,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(isConnected, Is.False);
         }
+
+        /// <summary>
+        /// Verifies disposing the connection disposes the underlying client stream.
+        /// </summary>
+        [Test]
+        public void Dispose_WhenCalled_DisposesClientStream()
+        {
+            MemoryStream stream = new MemoryStream();
+            BridgeClientConnection connection = new("test-endpoint", stream, () => true);
+
+            connection.Dispose();
+
+            Assert.That(stream.CanWrite, Is.False);
+            Assert.Throws<ObjectDisposedException>(() => stream.WriteByte(1));
+        }
     }
 }

@@ -129,5 +129,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(actualBytes, Is.EqualTo(sourceBytes));
         }
+
+        /// <summary>
+        /// Verifies that a lone carriage return in UTF-16 text becomes a single line feed.
+        /// </summary>
+        [Test]
+        public void NormalizeSkillFileContent_WhenUtf16TextHasLoneCarriageReturn_ReturnsLineFeed()
+        {
+            byte[] sourceBytes = Encoding.Unicode.GetPreamble()
+                .Concat(Encoding.Unicode.GetBytes("line1\rline2"))
+                .ToArray();
+            byte[] expectedBytes = Encoding.Unicode.GetPreamble()
+                .Concat(Encoding.Unicode.GetBytes("line1\nline2"))
+                .ToArray();
+
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
+
+            Assert.That(actualBytes, Is.EqualTo(expectedBytes));
+        }
+
+        /// <summary>
+        /// Verifies that a trailing odd byte after UTF-16 text is kept as is.
+        /// </summary>
+        [Test]
+        public void NormalizeSkillFileContent_WhenUtf16TextHasTrailingOddByte_KeepsIt()
+        {
+            byte[] sourceBytes = Encoding.Unicode.GetPreamble()
+                .Concat(Encoding.Unicode.GetBytes("line1\r\n"))
+                .Concat(new byte[] { 0x41 })
+                .ToArray();
+            byte[] expectedBytes = Encoding.Unicode.GetPreamble()
+                .Concat(Encoding.Unicode.GetBytes("line1\n"))
+                .Concat(new byte[] { 0x41 })
+                .ToArray();
+
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
+
+            Assert.That(actualBytes, Is.EqualTo(expectedBytes));
+        }
     }
 }

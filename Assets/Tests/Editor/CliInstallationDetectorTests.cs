@@ -1,3 +1,8 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.Application;
+using UnityEngine;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -302,5 +307,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.npm-global/bin/uloop"));
         }
 
+        /// <summary>
+        /// Verifies that a detector that has not refreshed yet does not report a completed check.
+        /// </summary>
+        [Test]
+        public void IsCheckCompleted_WhenNotRefreshed_ReturnsFalse()
+        {
+            CliInstallationDetector detector = new CliInstallationDetector(new UnreadablePinReader());
+
+            Assert.That(detector.IsCheckCompleted(), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that a detector that has not refreshed yet does not report an installed CLI.
+        /// </summary>
+        [Test]
+        public void IsCliInstalled_WhenNotRefreshed_ReturnsFalse()
+        {
+            CliInstallationDetector detector = new CliInstallationDetector(new UnreadablePinReader());
+
+            Assert.That(detector.IsCliInstalled(), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that on Windows the shell-visibility check succeeds immediately without reading the package pin.
+        /// </summary>
+        [Test]
+        public void IsCliVisibleFromShellAsync_OnWindowsEditor_ReturnsTrueWithoutReadingPin()
+        {
+            CliInstallationDetector detector = new CliInstallationDetector(new UnreadablePinReader());
+
+            Task<bool> task = detector.IsCliVisibleFromShellAsync(RuntimePlatform.WindowsEditor, CancellationToken.None);
+
+            Assert.That(task.IsCompleted, Is.True);
+            Assert.That(task.GetAwaiter().GetResult(), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that on POSIX an unreadable package pin fails closed on the caller thread before any shell probe starts.
+        /// </summary>
+        [Test]
+        public void IsCliVisibleFromShellAsync_OnPosixWithUnreadablePin_ThrowsBeforeProbing()
+        {
+            CliInstallationDetector detector = new CliInstallationDetector(new UnreadablePinReader());
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => detector.IsCliVisibleFromShellAsync(RuntimePlatform.OSXEditor, CancellationToken.None));
+
+            Assert.That(exception.Message, Is.EqualTo(UnreadablePinReader.ErrorMessage));
+        }
+
+        private sealed class UnreadablePinReader : ICliPinReader
+        {
+            public const string ErrorMessage = "pin is unreadable in this test";
+
+            public CliPinLoadResult LoadPackagePin()
+            {
+                throw new InvalidOperationException(ErrorMessage);
+            }
+
+            public DispatcherBootstrapPinLoadResult LoadDispatcherBootstrapPin()
+            {
+                throw new InvalidOperationException(ErrorMessage);
+            }
+
+            public string LoadMinimumDispatcherVersionOrThrow()
+            {
+                throw new InvalidOperationException(ErrorMessage);
+            }
+        }
     }
 }

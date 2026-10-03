@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security;
 
 using NUnit.Framework;
 
@@ -345,6 +346,148 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "/Users/ExampleUser/.config/fish/config.fish",
                 "fish_add_path --move \"$HOME/.local/bin\"",
                 "mkdir -p '/Users/ExampleUser/.config/fish' && printf '\\n%s\\n' 'fish_add_path --move \"$HOME/.local/bin\"' >> '/Users/ExampleUser/.config/fish/config.fish'");
+        }
+
+        /// <summary>
+        /// Verifies that a plan that cannot be applied automatically is reported as unsupported without touching the profile.
+        /// </summary>
+        [Test]
+        public void Apply_WhenPlanCannotApplyAutomatically_ReturnsUnsupportedWithoutFileAccess()
+        {
+            CliPathSetupPlan plan = new CliPathSetupPlan(
+                CliPathSetupShellKind.Unsupported,
+                "tcsh",
+                false,
+                "<HOME>/.local/bin",
+                "$HOME/.local/bin",
+                "",
+                "",
+                "");
+            int fileAccessCount = 0;
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                plan,
+                path => { fileAccessCount++; return true; },
+                path => { fileAccessCount++; return string.Empty; },
+                path => { fileAccessCount++; return new DirectoryInfo(path); },
+                (path, content) => fileAccessCount++);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Unsupported));
+            Assert.That(result.ErrorOutput, Is.EqualTo("This shell is not supported for automatic PATH setup."));
+            Assert.That(fileAccessCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a security-policy denial while reading the profile falls back to the failed result path.
+        /// </summary>
+        [Test]
+        public void Apply_WhenProfileAccessIsDeniedBySecurityPolicy_ReturnsFailedResult()
+        {
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                CreateZshPlan(),
+                path => throw new SecurityException("profile access denied by policy"),
+                path => string.Empty,
+                path => new DirectoryInfo(path),
+                (path, content) => { });
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Failed));
+            Assert.That(result.ErrorOutput, Is.EqualTo("profile access denied by policy"));
+        }
+
+        /// <summary>
+        /// Verifies that a non-canonical fish_add_path line that prepends the install directory counts as already configured.
+        /// </summary>
+        [Test]
+        public void Apply_WhenFishAddPathPrependsInstallDirectory_DoesNotAppend()
+        {
+            int appendCount = 0;
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                CreateFishPlan(),
+                path => true,
+                path => "fish_add_path \"$HOME/.local/bin\"\n",
+                path => new DirectoryInfo(path),
+                (path, content) => appendCount++);
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.AlreadyConfigured));
+            Assert.That(appendCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that fish_add_path in append mode does not count as setup because it puts the install directory last.
+        /// </summary>
+        [TestCase("fish_add_path --append \"$HOME/.local/bin\"")]
+        [TestCase("fish_add_path -a \"$HOME/.local/bin\"")]
+        public void Apply_WhenFishAddPathAppendsInstallDirectory_Appends(string profileLine)
+        {
+            int appendCount = 0;
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                CreateFishPlan(),
+                path => true,
+                path => profileLine + "\n",
+                path => new DirectoryInfo(path),
+                (path, content) => appendCount++);
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Applied));
+            Assert.That(appendCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies that fish commands that do not set PATH after a valid setup line do not hide that setup line.
+        /// </summary>
+        [TestCase("echo $HOME/.local/bin")]
+        [TestCase("set -U")]
+        public void Apply_WhenFishSetupIsFollowedByNonPathCommand_DoesNotAppend(string trailingLine)
+        {
+            int appendCount = 0;
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                CreateFishPlan(),
+                path => true,
+                path => "fish_add_path \"$HOME/.local/bin\"\n" + trailingLine + "\n",
+                path => new DirectoryInfo(path),
+                (path, content) => appendCount++);
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.AlreadyConfigured));
+            Assert.That(appendCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that applying to the real file system creates the missing profile directory and writes exactly the setup line (temp dir).
+        /// </summary>
+        [Test]
+        public void ApplyToFileSystem_WhenProfileIsMissing_CreatesProfileWithSetupLine()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+            string profilePath = Path.Combine(root, "config", ".zshrc");
+            CliPathSetupPlan plan = new CliPathSetupPlan(
+                CliPathSetupShellKind.Zsh,
+                "zsh",
+                true,
+                "<HOME>/.local/bin",
+                "$HOME/.local/bin",
+                profilePath,
+                "export PATH=\"$HOME/.local/bin:$PATH\"",
+                "echo setup");
+            try
+            {
+                CliPathSetupApplyResult result = CliPathSetupWriter.ApplyToFileSystem(plan);
+
+                Assert.That(result.Success, Is.True);
+                Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Applied));
+                Assert.That(File.Exists(profilePath), Is.True);
+                Assert.That(File.ReadAllText(profilePath), Is.EqualTo("export PATH=\"$HOME/.local/bin:$PATH\"\n"));
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, true);
+                }
+            }
         }
     }
 }

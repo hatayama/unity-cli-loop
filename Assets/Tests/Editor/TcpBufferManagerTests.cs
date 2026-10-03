@@ -368,5 +368,84 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.Greater(stats.ReuseRate, 50); // Should have good reuse rate
             Assert.LessOrEqual(stats.CurrentPoolSize, 10); // Should not exceed max pool size
         }
+
+        /// <summary>
+        /// Verifies a pooled buffer too small for a request is kept in the pool and reused by a later smaller request.
+        /// </summary>
+        [Test]
+        public void GetBuffer_WhenPooledBufferIsTooSmall_KeepsItPooledForLaterRequests()
+        {
+            byte[] smallBuffer = new byte[BufferConfig.MIN_BUFFER_SIZE];
+            bufferManager.ReturnBuffer(smallBuffer);
+
+            byte[] largerBuffer = bufferManager.GetBuffer(BufferConfig.MIN_BUFFER_SIZE * 2);
+            BufferManagerStats statsAfterMiss = bufferManager.GetStats();
+            byte[] reusedBuffer = bufferManager.GetBuffer(BufferConfig.MIN_BUFFER_SIZE);
+
+            Assert.That(largerBuffer, Is.Not.SameAs(smallBuffer));
+            Assert.That(largerBuffer.Length, Is.EqualTo(BufferConfig.INITIAL_BUFFER_SIZE));
+            Assert.That(statsAfterMiss.CurrentPoolSize, Is.EqualTo(1));
+            Assert.That(statsAfterMiss.TotalBuffersCreated, Is.EqualTo(1));
+            Assert.That(reusedBuffer, Is.SameAs(smallBuffer));
+        }
+
+        /// <summary>
+        /// Verifies buffers smaller than the minimum or larger than the maximum size are not pooled.
+        /// </summary>
+        [TestCase(BufferConfig.MIN_BUFFER_SIZE - 1)]
+        [TestCase(BufferConfig.MAX_BUFFER_SIZE + 1)]
+        public void ReturnBuffer_WhenBufferSizeIsOutsidePoolLimits_DoesNotPoolIt(int bufferSize)
+        {
+            bufferManager.ReturnBuffer(new byte[bufferSize]);
+
+            Assert.That(bufferManager.GetStats().CurrentPoolSize, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies the pool stops accepting buffers once it holds its maximum number of buffers.
+        /// </summary>
+        [Test]
+        public void ReturnBuffer_WhenPoolIsFull_DropsAdditionalBuffers()
+        {
+            int maxPoolSize = bufferManager.GetStats().MaxPoolSize;
+            for (int i = 0; i < maxPoolSize + 1; i++)
+            {
+                bufferManager.ReturnBuffer(new byte[BufferConfig.MIN_BUFFER_SIZE]);
+            }
+
+            Assert.That(bufferManager.GetStats().CurrentPoolSize, Is.EqualTo(maxPoolSize));
+        }
+
+        /// <summary>
+        /// Verifies resizing through a disposed manager is rejected even when no new buffer would be needed.
+        /// </summary>
+        [Test]
+        public void ResizeBuffer_AfterDispose_ThrowsObjectDisposedException()
+        {
+            byte[] buffer = new byte[BufferConfig.INITIAL_BUFFER_SIZE];
+            bufferManager.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(
+                () => bufferManager.ResizeBuffer(ref buffer, 0, BufferConfig.MIN_BUFFER_SIZE));
+        }
+
+        /// <summary>
+        /// Verifies resizing to a larger buffer copies the existing valid bytes to the start of the new buffer.
+        /// </summary>
+        [Test]
+        public void ResizeBuffer_WhenBufferHasData_CopiesExistingBytesIntoLargerBuffer()
+        {
+            byte[] buffer = new byte[BufferConfig.INITIAL_BUFFER_SIZE];
+            buffer[0] = 11;
+            buffer[1] = 22;
+            buffer[2] = 33;
+
+            bufferManager.ResizeBuffer(ref buffer, 3, BufferConfig.INITIAL_BUFFER_SIZE + 1);
+
+            Assert.That(buffer.Length, Is.EqualTo(BufferConfig.INITIAL_BUFFER_SIZE * 2));
+            Assert.That(buffer[0], Is.EqualTo(11));
+            Assert.That(buffer[1], Is.EqualTo(22));
+            Assert.That(buffer[2], Is.EqualTo(33));
+        }
     }
 }

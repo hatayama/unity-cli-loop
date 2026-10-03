@@ -59,5 +59,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "unity-cli-loop-tests",
                 Guid.NewGuid().ToString("N"));
         }
+
+        private string _tempDirectory;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _tempDirectory = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_tempDirectory);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (Directory.Exists(_tempDirectory))
+            {
+                Directory.Delete(_tempDirectory, true);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that writing over an existing target replaces a stale backup with the previous target content.
+        /// </summary>
+        [Test]
+        public void Write_WhenTargetAndStaleBackupExist_RotatesPreviousTargetIntoBackup()
+        {
+            string filePath = Path.Combine(_tempDirectory, "settings.json");
+            string backupFilePath = filePath + AtomicFileWriter.BackupFileSuffix;
+            File.WriteAllText(filePath, "previous");
+            File.WriteAllText(backupFilePath, "stale");
+
+            AtomicFileWriter.Write(filePath, "current");
+
+            Assert.That(File.ReadAllText(filePath), Is.EqualTo("current"));
+            Assert.That(File.ReadAllText(backupFilePath), Is.EqualTo("previous"));
+        }
+
+        /// <summary>
+        /// Verifies that an in-progress temp file left by an interrupted write is deleted.
+        /// </summary>
+        [Test]
+        public void CleanupInProgressTemp_WhenFileExists_DeletesIt()
+        {
+            string inProgressTempFilePath =
+                Path.Combine(_tempDirectory, "settings.json" + AtomicFileWriter.InProgressTempFileSuffix);
+            File.WriteAllText(inProgressTempFilePath, "partial");
+
+            AtomicFileWriter.CleanupInProgressTemp(inProgressTempFilePath);
+
+            Assert.That(File.Exists(inProgressTempFilePath), Is.False);
+        }
     }
 }
