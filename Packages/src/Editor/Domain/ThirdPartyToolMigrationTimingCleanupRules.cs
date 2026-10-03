@@ -102,6 +102,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     continue;
                 }
 
+                // The pattern reads everything up to the semicolon as one initializer, so a statement that may
+                // declare more than one variable is left as it is rather than removed with a declarator still in use.
+                if (match.Value.IndexOf(',') >= 0)
+                {
+                    continue;
+                }
+
                 (int removalStartIndex, int removalEndIndex) = ReadLegacyPlayerLoopTimingDeclarationRemovalRange(
                     source,
                     match,
