@@ -88,5 +88,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(content, Is.EqualTo("class MyResponse : UnityCliLoopToolResponse\n{\n}\n"));
             Assert.That(replacementCount, Is.EqualTo(1));
         }
+
+        /// <summary>
+        /// Verifies removing a Success property without attributes keeps the indentation of the member that follows it.
+        /// </summary>
+        [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenMemberFollows_KeepsItsIndentation()
+        {
+            const string source =
+                "class MyResponse : UnityCliLoopToolResponse\n{\n    public bool Success { get; set; }\n    public int Value { get; set; }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+
+            Assert.That(
+                content,
+                Is.EqualTo("class MyResponse : UnityCliLoopToolResponse\n{\n    public int Value { get; set; }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies an inline attribute is removed and the kept code keeps its CRLF line break when the source uses CRLF.
+        /// </summary>
+        [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenAttributeSharesLineWithCodeInCrlfSource_KeepsTheCrlfLineBreak()
+        {
+            const string source =
+                "class MyResponse : UnityCliLoopToolResponse\r\n{\r\n    int count; [SerializeField]\r\n    public bool Success { get; set; }\r\n    public int Value { get; set; }\r\n}\r\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+
+            Assert.That(
+                content,
+                Is.EqualTo("class MyResponse : UnityCliLoopToolResponse\r\n{\r\n    int count;\r\n    public int Value { get; set; }\r\n}\r\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a Success property's XML doc comment is removed with it even when the property has no attributes.
+        /// </summary>
+        [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenPropertyHasOnlyADocComment_RemovesTheDocComment()
+        {
+            const string source =
+                "class MyResponse : UnityCliLoopToolResponse\n{\n    /// <summary>Whether it worked.</summary>\n    public bool Success { get; set; }\n    public int Value { get; set; }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+
+            Assert.That(
+                content,
+                Is.EqualTo("class MyResponse : UnityCliLoopToolResponse\n{\n    public int Value { get; set; }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
     }
 }
