@@ -12,6 +12,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class AwaitableHelper
     {
+        private const string VoidTaskResultTypeName = "System.Threading.Tasks.VoidTaskResult";
+
         public static async Task<object> AwaitIfNeeded(object value, CancellationToken cancellationToken)
         {
             if (value == null)
@@ -58,6 +60,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static object TryReadGenericTaskResult(object value, Type valueType)
         {
             if (!valueType.IsGenericType || valueType.GetGenericTypeDefinition() != typeof(Task<>))
+            {
+                return null;
+            }
+
+            // Why: the runtime backs an async Task method with Task<VoidTaskResult>, whose Result is an
+            // internal placeholder rather than a value the snippet returned.
+            if (valueType.GetGenericArguments()[0].FullName == VoidTaskResultTypeName)
             {
                 return null;
             }

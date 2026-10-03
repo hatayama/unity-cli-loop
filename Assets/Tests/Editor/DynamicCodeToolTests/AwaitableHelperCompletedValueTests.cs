@@ -33,6 +33,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies a completed async Task method has no result to return, even though the runtime backs its
+        /// task with an internal generic Task subtype whose Result is a placeholder object.
+        /// </summary>
+        [Test]
+        public async Task AwaitIfNeeded_WithACompletedAsyncTaskMethod_ReturnsNull()
+        {
+            Assert.That(await AwaitableHelper.AwaitIfNeeded(CompleteWithoutResultAsync(), CancellationToken.None), Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies a completed async Task method that returns a value still yields that value.
+        /// </summary>
+        [Test]
+        public async Task AwaitIfNeeded_WithACompletedAsyncTaskMethodReturningAValue_ReturnsItsResult()
+        {
+            Assert.That(await AwaitableHelper.AwaitIfNeeded(CompleteWithResultAsync(), CancellationToken.None), Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// Verifies a non-generic ValueTask has no result to return.
         /// </summary>
         [Test]
@@ -153,6 +172,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.That(caught, Is.TypeOf<InvalidOperationException>());
             Assert.That(caught.Message, Is.EqualTo("user failure"));
+        }
+
+        // Why await a completed task: the method finishes synchronously, so nothing is left pending, while the
+        // compiler still builds the task through the async method builder.
+        private static async Task CompleteWithoutResultAsync()
+        {
+            await Task.CompletedTask;
+        }
+
+        private static async Task<int> CompleteWithResultAsync()
+        {
+            await Task.CompletedTask;
+            return 7;
         }
 
         private sealed class NullAwaiterAwaitable
