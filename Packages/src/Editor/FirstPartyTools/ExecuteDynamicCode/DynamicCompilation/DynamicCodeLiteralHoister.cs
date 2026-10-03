@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 declarationLines);
         }
 
-        // Copies syntax that must stay verbatim (strings with interpolation/verbatim, comments,
+        // Copies syntax that must stay verbatim (interpolated, verbatim, and raw strings, comments,
         // and static local-function headers). Why a helper: those scanners are one skip-list,
         // and leaving them inline kept Rewrite over CA1502.
         private static bool TryCopyProtectedSyntax(
@@ -68,6 +68,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             if (DynamicCodeLiteralSyntaxScanner.TryCopyVerbatimStringLiteral(source, rewrittenSource, ref index))
+            {
+                return true;
+            }
+
+            if (DynamicCodeLiteralSyntaxScanner.TryCopyRawStringLiteral(source, rewrittenSource, ref index))
             {
                 return true;
             }

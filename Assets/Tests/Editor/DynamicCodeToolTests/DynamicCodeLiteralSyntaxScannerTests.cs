@@ -125,6 +125,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             AssertNotCopied("'\\'", DynamicCodeLiteralSyntaxScanner.TryCopyCharLiteral);
         }
 
+        /// <summary>
+        /// Verifies an unterminated raw string literal is not copied.
+        /// </summary>
+        [Test]
+        public void TryCopyRawStringLiteral_WhenUnterminated_LeavesTheIndexAndOutputUntouched()
+        {
+            AssertNotCopied("\"\"\"never closed", DynamicCodeLiteralSyntaxScanner.TryCopyRawStringLiteral);
+        }
+
         private delegate bool CopyLiteral(string source, StringBuilder output, ref int index);
 
         private static bool TryCopyInterpolated(string source, StringBuilder output, ref int index)
