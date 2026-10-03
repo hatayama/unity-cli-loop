@@ -274,25 +274,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// Verifies cached detector state is returned unchanged by the service queries.
+        /// The two cases flip every boolean query, so each one is checked against both true and false.
         /// </summary>
-        [Test]
-        public void CachedDetectorQueries_WhenDetectorHasState_ReturnDetectorValues()
+        [TestCase(true, false, true)]
+        [TestCase(false, true, false)]
+        public void CachedDetectorQueries_WhenDetectorHasState_ReturnDetectorValues(
+            bool checkCompleted,
+            bool installed,
+            bool cachedIsDispatcher)
         {
             RecordingCliInstallationDetector detector = new RecordingCliInstallationDetector();
-            detector.CheckCompleted = true;
-            detector.Installed = true;
+            detector.CheckCompleted = checkCompleted;
+            detector.Installed = installed;
             detector.CachedVersion = "9.8.7";
-            detector.CachedIsDispatcher = true;
+            detector.CachedIsDispatcher = cachedIsDispatcher;
             detector.CachedExecutablePath = "<PROJECT_ROOT>/bin/uloop";
             CliSetupApplicationService service = CreateService(
                 detector,
                 new RecordingNativeCliInstaller(),
                 ScriptedPinReader.WithBootstrapPin("dispatcher-v1.0.0"));
 
-            Assert.That(service.IsCliCheckCompleted(), Is.True);
-            Assert.That(service.IsCliInstalled(), Is.True);
+            Assert.That(service.IsCliCheckCompleted(), Is.EqualTo(checkCompleted));
+            Assert.That(service.IsCliInstalled(), Is.EqualTo(installed));
             Assert.That(service.GetCachedCliVersion(), Is.EqualTo("9.8.7"));
-            Assert.That(service.GetCachedCliIsDispatcher(), Is.True);
+            Assert.That(service.GetCachedCliIsDispatcher(), Is.EqualTo(cachedIsDispatcher));
             Assert.That(service.GetCachedCliExecutablePath(), Is.EqualTo("<PROJECT_ROOT>/bin/uloop"));
         }
 
@@ -320,7 +325,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies shell visibility is answered by the detector for the requested platform.
+        /// Verifies shell visibility is answered by the detector for the requested platform and the caller's token.
         /// </summary>
         [Test]
         public void IsCliVisibleFromShellAsync_WhenDetectorReportsInvisible_ReturnsFalseForRequestedPlatform()
@@ -331,11 +336,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 detector,
                 new RecordingNativeCliInstaller(),
                 ScriptedPinReader.WithBootstrapPin("dispatcher-v1.0.0"));
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            try
+            {
+                Task<bool> visibleTask =
+                    service.IsCliVisibleFromShellAsync(RuntimePlatform.LinuxEditor, cancellationTokenSource.Token);
 
-            Task<bool> visibleTask = service.IsCliVisibleFromShellAsync(RuntimePlatform.LinuxEditor, CancellationToken.None);
-
-            Assert.That(GetCompletedResult(visibleTask), Is.False);
-            Assert.That(detector.VisibilityPlatforms, Is.EqualTo(new[] { RuntimePlatform.LinuxEditor }));
+                Assert.That(GetCompletedResult(visibleTask), Is.False);
+                Assert.That(detector.VisibilityPlatforms, Is.EqualTo(new[] { RuntimePlatform.LinuxEditor }));
+                Assert.That(detector.VisibilityTokens, Is.EqualTo(new[] { cancellationTokenSource.Token }));
+            }
+            finally
+            {
+                cancellationTokenSource.Dispose();
+            }
         }
 
         /// <summary>
@@ -432,7 +446,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies uninstall returns the installer result for the requested platform and invalidates the detector cache once.
+        /// Verifies uninstall returns the installer result for the requested platform and the caller's token,
+        /// and invalidates the detector cache once.
         /// </summary>
         [Test]
         public void UninstallGlobalCliAsync_WhenInstallerFails_ReturnsInstallerResultAndInvalidatesCache()
@@ -444,15 +459,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 detector,
                 installer,
                 ScriptedPinReader.WithBootstrapPin("dispatcher-v1.0.0"));
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            try
+            {
+                Task<CliInstallResult> uninstallTask =
+                    service.UninstallGlobalCliAsync(RuntimePlatform.LinuxEditor, cancellationTokenSource.Token);
+                CliInstallResult result = GetCompletedResult(uninstallTask);
 
-            Task<CliInstallResult> uninstallTask =
-                service.UninstallGlobalCliAsync(RuntimePlatform.LinuxEditor, CancellationToken.None);
-            CliInstallResult result = GetCompletedResult(uninstallTask);
-
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorOutput, Is.EqualTo("uninstall blocked"));
-            Assert.That(installer.UninstallPlatforms, Is.EqualTo(new[] { RuntimePlatform.LinuxEditor }));
-            Assert.That(detector.InvalidateCacheCount, Is.EqualTo(1));
+                Assert.That(result.Success, Is.False);
+                Assert.That(result.ErrorOutput, Is.EqualTo("uninstall blocked"));
+                Assert.That(installer.UninstallPlatforms, Is.EqualTo(new[] { RuntimePlatform.LinuxEditor }));
+                Assert.That(installer.UninstallTokens, Is.EqualTo(new[] { cancellationTokenSource.Token }));
+                Assert.That(detector.InvalidateCacheCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                cancellationTokenSource.Dispose();
+            }
         }
 
         /// <summary>
@@ -541,6 +564,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public List<CancellationToken> ForceRefreshTokens { get; } = new List<CancellationToken>();
             public Queue<bool> VisibilityResults { get; } = new Queue<bool>();
             public List<RuntimePlatform> VisibilityPlatforms { get; } = new List<RuntimePlatform>();
+            public List<CancellationToken> VisibilityTokens { get; } = new List<CancellationToken>();
             public int InvalidateCacheCount { get; private set; }
 
             public bool IsCliInstalled() => Installed;
@@ -564,6 +588,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task<bool> IsCliVisibleFromShellAsync(RuntimePlatform platform, CancellationToken ct)
             {
                 VisibilityPlatforms.Add(platform);
+                VisibilityTokens.Add(ct);
                 return Task.FromResult(VisibilityResults.Dequeue());
             }
 
@@ -585,6 +610,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public CliInstallResult UninstallResult { get; set; }
             public List<string> ResolvedKindPaths { get; } = new List<string>();
             public List<RuntimePlatform> UninstallPlatforms { get; } = new List<RuntimePlatform>();
+            public List<CancellationToken> UninstallTokens { get; } = new List<CancellationToken>();
             public int InstallCommandRequestCount { get; private set; }
 
             public bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform)
@@ -616,6 +642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
             {
                 UninstallPlatforms.Add(platform);
+                UninstallTokens.Add(ct);
                 return Task.FromResult(UninstallResult);
             }
 

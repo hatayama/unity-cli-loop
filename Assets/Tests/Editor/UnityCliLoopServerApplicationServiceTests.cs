@@ -14,16 +14,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class UnityCliLoopServerApplicationServiceTests
     {
         /// <summary>
-        /// Verifies the service reports the controller's running state and recovery task.
+        /// Verifies the service reports the controller's running state, both true and false, and its recovery task.
         /// </summary>
-        [Test]
-        public void StateProperties_WhenControllerIsRunning_ReturnControllerStateAndRecoveryTask()
+        [TestCase(true)]
+        [TestCase(false)]
+        public void StateProperties_WhenCalled_ReturnControllerStateAndRecoveryTask(bool isServerRunning)
         {
             RecordingServerController controller = new RecordingServerController();
-            controller.IsServerRunning = true;
+            controller.IsServerRunning = isServerRunning;
             UnityCliLoopServerApplicationService service = new UnityCliLoopServerApplicationService(controller);
 
-            Assert.That(service.IsServerRunning, Is.True);
+            Assert.That(service.IsServerRunning, Is.EqualTo(isServerRunning));
             Assert.That(service.RecoveryTask, Is.SameAs(controller.RecoveryTask));
         }
 

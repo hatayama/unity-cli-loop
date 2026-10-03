@@ -109,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies V3 migration skill install and removal return the port tasks with the given root, targets, and layout.
+        /// Verifies V3 migration skill install and removal return the port tasks with the given root, targets, layout, and token.
         /// </summary>
         [Test]
         public void V3MigrationSkillFiles_WhenInstalledAndRemoved_ReturnPortTasksWithForwardedArguments()
@@ -118,19 +118,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SkillSetupUseCase useCase = new SkillSetupUseCase(port);
             List<SkillSetupTargetInfo> installTargets = CreateTargets();
             List<SkillSetupTargetInfo> removeTargets = CreateTargets();
-
-            Task installTask = useCase.InstallV3MigrationSkillFilesAsync(ProjectRoot, installTargets, true, CancellationToken.None);
-            Task removeTask = useCase.RemoveV3MigrationSkillFilesAsync(ProjectRoot, removeTargets, false, CancellationToken.None);
-
-            Assert.That(installTask, Is.SameAs(port.InstallV3Task));
-            Assert.That(removeTask, Is.SameAs(port.RemoveV3Task));
-            Assert.That(port.InstallV3Targets, Is.SameAs(installTargets));
-            Assert.That(port.RemoveV3Targets, Is.SameAs(removeTargets));
-            Assert.That(port.Calls, Is.EqualTo(new[]
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            try
             {
-                "InstallV3|<PROJECT_ROOT>|True",
-                "RemoveV3|<PROJECT_ROOT>|False"
-            }));
+                Task installTask = useCase.InstallV3MigrationSkillFilesAsync(
+                    ProjectRoot, installTargets, true, cancellationTokenSource.Token);
+                Task removeTask = useCase.RemoveV3MigrationSkillFilesAsync(
+                    ProjectRoot, removeTargets, false, cancellationTokenSource.Token);
+
+                Assert.That(installTask, Is.SameAs(port.InstallV3Task));
+                Assert.That(removeTask, Is.SameAs(port.RemoveV3Task));
+                Assert.That(port.InstallV3Targets, Is.SameAs(installTargets));
+                Assert.That(port.RemoveV3Targets, Is.SameAs(removeTargets));
+                Assert.That(port.Tokens, Is.EqualTo(new[] { cancellationTokenSource.Token, cancellationTokenSource.Token }));
+                Assert.That(port.Calls, Is.EqualTo(new[]
+                {
+                    "InstallV3|<PROJECT_ROOT>|True",
+                    "RemoveV3|<PROJECT_ROOT>|False"
+                }));
+            }
+            finally
+            {
+                cancellationTokenSource.Dispose();
+            }
         }
 
         private static List<SkillSetupTargetInfo> CreateTargets()
@@ -226,6 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Calls.Add("InstallV3|" + projectRoot + "|" + groupSkillsUnderUnityCliLoop);
                 InstallV3Targets = targets;
+                Tokens.Add(ct);
                 return InstallV3Task;
             }
 
@@ -237,6 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Calls.Add("RemoveV3|" + projectRoot + "|" + groupSkillsUnderUnityCliLoop);
                 RemoveV3Targets = targets;
+                Tokens.Add(ct);
                 return RemoveV3Task;
             }
         }

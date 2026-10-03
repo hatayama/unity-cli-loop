@@ -53,21 +53,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies applying the migration returns the port task and hands the caller's progress reporter to the port.
+        /// Verifies applying the migration returns the port task and hands the caller's progress reporter and token to the port.
         /// </summary>
         [Test]
-        public void ApplyMigrationAsync_WhenCalled_ReturnsPortTaskWithCallerProgress()
+        public void ApplyMigrationAsync_WhenCalled_ReturnsPortTaskWithCallerProgressAndToken()
         {
             RecordingMigrationPort port = new RecordingMigrationPort();
             ThirdPartyToolMigrationUseCase useCase = new ThirdPartyToolMigrationUseCase(port);
             Progress<ThirdPartyToolMigrationProgress> progress = new Progress<ThirdPartyToolMigrationProgress>();
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            try
+            {
+                Task<ThirdPartyToolMigrationResult> applyTask =
+                    useCase.ApplyMigrationAsync(ProjectRoot, progress, cancellationTokenSource.Token);
 
-            Task<ThirdPartyToolMigrationResult> applyTask =
-                useCase.ApplyMigrationAsync(ProjectRoot, progress, CancellationToken.None);
-
-            Assert.That(applyTask, Is.SameAs(port.ApplyTask));
-            Assert.That(port.LastProgress, Is.SameAs(progress));
-            Assert.That(port.Calls, Is.EqualTo(new[] { "Apply|<PROJECT_ROOT>" }));
+                Assert.That(applyTask, Is.SameAs(port.ApplyTask));
+                Assert.That(port.LastProgress, Is.SameAs(progress));
+                Assert.That(port.LastToken, Is.EqualTo(cancellationTokenSource.Token));
+                Assert.That(port.Calls, Is.EqualTo(new[] { "Apply|<PROJECT_ROOT>" }));
+            }
+            finally
+            {
+                cancellationTokenSource.Dispose();
+            }
         }
 
         /// <summary>
@@ -121,6 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Calls.Add("Apply|" + projectRoot);
                 LastProgress = progress;
+                LastToken = ct;
                 return ApplyTask;
             }
         }
