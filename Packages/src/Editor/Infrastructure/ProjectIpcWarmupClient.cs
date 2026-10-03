@@ -38,10 +38,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 ct.ThrowIfCancellationRequested();
                 using Stream stream = await ConnectToEndpointAsync(endpoint, ct);
-                await WriteFrameAsync(stream, requestJson, ct);
-                string responseJson = await ReadResponseFrameAsync(stream, ct);
-                ValidateJsonRpcSuccessResponse(responseJson);
+                await ExchangeFrameAsync(stream, requestJson, ct);
             }, ct);
+        }
+
+        /// <summary>
+        /// Writes the request frame to an already connected stream and validates the JSON-RPC response frame.
+        /// </summary>
+        internal async Task ExchangeFrameAsync(Stream stream, string requestJson, CancellationToken ct)
+        {
+            await WriteFrameAsync(stream, requestJson, ct);
+            string responseJson = await ReadResponseFrameAsync(stream, ct);
+            ValidateJsonRpcSuccessResponse(responseJson);
         }
 
         private async Task<Stream> ConnectToEndpointAsync(BridgeTransportEndpoint endpoint, CancellationToken ct)
