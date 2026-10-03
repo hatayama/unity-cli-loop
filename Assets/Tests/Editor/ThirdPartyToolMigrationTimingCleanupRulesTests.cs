@@ -237,5 +237,86 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result[1].Name, Is.EqualTo("timing"));
             Assert.That(result[1].HasDefaultValue, Is.True);
         }
+
+        /// <summary>
+        /// Verifies a statement that declares two timings is kept when only the first one is unused, so a declaration
+        /// that is still used is not removed.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenSecondDeclaratorIsUsed_KeepsTheStatement()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming first = PlayerLoopTiming.Update, second = PlayerLoopTiming.FixedUpdate;\n    void Run() { Use(second); }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a statement whose second declarator has no initializer is kept when that declarator is used.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenUsedSecondDeclaratorHasNoInitializer_KeepsTheStatement()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming first = PlayerLoopTiming.Update, second;\n    void Run() { Use(second); }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a statement that declares two timings is removed whole when neither of them is used.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenNoDeclaratorIsUsed_RemovesTheStatement()
+        {
+            string source =
+                "class Runner\n{\n    private PlayerLoopTiming early = PlayerLoopTiming.EarlyUpdate, late = PlayerLoopTiming.PostLateUpdate;\n    void Run() { }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo("class Runner\n{\n    void Run() { }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies an unused declaration whose initializer contains commas inside parentheses is removed.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenAnUnusedInitializerHasCommas_RemovesTheStatement()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming timing = (PlayerLoopTiming)Mathf.Clamp(value, 0, 6);\n    void Run() { }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo("class Runner\n{\n    void Run() { }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a statement whose declarators cannot be read apart (a comma inside generic arguments) is kept.
+        /// </summary>
+        [Test]
+        public void RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode_WhenTheDeclaratorsCannotBeRead_KeepsTheStatement()
+        {
+            string source =
+                "class Runner\n{\n    PlayerLoopTiming timing = Pick<Alpha, Beta>();\n    void Run() { }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCleanupRules.RemoveUnusedLegacyPlayerLoopTimingDeclarationsInCode(source);
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
     }
 }

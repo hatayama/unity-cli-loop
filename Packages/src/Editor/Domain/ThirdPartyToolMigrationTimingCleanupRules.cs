@@ -50,6 +50,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 {
     public static class ThirdPartyToolMigrationTimingCleanupRules
     {
+        private static readonly Regex DeclaratorRegex = new(
+            @"^\s*(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:=.*)?$",
+            RegexOptions.Compiled | RegexOptions.Singleline);
+
         public static bool CanRemoveLegacyPlayerLoopTimingParameterFromMethod(
             string methodBody,
             string[] migratedCalleeMethodNames)
@@ -102,6 +106,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     continue;
                 }
 
+                // The pattern reads everything up to the semicolon as the first initializer, so every declarator in
+                // the statement is read; a statement that cannot be read apart is left as it is.
+                List<string> declaratorNames = ReadDeclaratorNames(source, match);
+                if (declaratorNames == null)
+                {
+                    continue;
+                }
+
                 (int removalStartIndex, int removalEndIndex) = ReadLegacyPlayerLoopTimingDeclarationRemovalRange(
                     source,
                     match,
@@ -115,10 +127,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                         match);
                 }
 
-                string declarationName = match.Groups["name"].Value;
                 int removalLength = removalEndIndex - removalStartIndex;
                 string sourceWithoutDeclaration = source.Remove(removalStartIndex, removalLength);
-                if (ContainsIdentifierInCode(sourceWithoutDeclaration, declarationName))
+                if (declaratorNames.Exists(name => ContainsIdentifierInCode(sourceWithoutDeclaration, name)))
                 {
                     continue;
                 }
@@ -135,6 +146,29 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             return (builder.ToString(), replacementCount);
+        }
+
+        // Returns the name of every declarator in a matched declaration statement, or null when one of them is not a
+        // plain "name" or "name = initializer" (for example a comma inside generic arguments splits an initializer).
+        private static List<string> ReadDeclaratorNames(string source, Match declarationMatch)
+        {
+            Group nameGroup = declarationMatch.Groups["name"];
+            int semicolonIndex = declarationMatch.Index + declarationMatch.Value.LastIndexOf(';');
+            string declaratorsSource = source.Substring(nameGroup.Index, semicolonIndex - nameGroup.Index);
+            string[] declarators = ThirdPartyToolMigrationArgumentRules.SplitAttributeArguments(declaratorsSource);
+            List<string> names = new(declarators.Length);
+            foreach (string declarator in declarators)
+            {
+                Match declaratorMatch = DeclaratorRegex.Match(declarator);
+                if (!declaratorMatch.Success)
+                {
+                    return null;
+                }
+
+                names.Add(declaratorMatch.Groups["name"].Value);
+            }
+
+            return names;
         }
 
         /// <summary>
