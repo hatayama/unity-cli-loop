@@ -322,6 +322,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.ErrorOutput, Does.Contain("profile path is not supported"));
         }
 
+        /// <summary>
+        /// Verifies a PATH line with spaces around '=' is not taken as existing setup, because POSIX shells do not parse it as an assignment.
+        /// </summary>
+        [Test]
+        public void Apply_WhenOnlyLineHasSpacesAroundAssignment_AppendsSetupLine()
+        {
+            CliPathSetupPlan plan = CreateZshPlan();
+            List<string> appendedContent = new List<string>();
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                plan,
+                path => true,
+                path => "PATH = \"$HOME/.local/bin:$PATH\"\n",
+                path => new DirectoryInfo(path),
+                (path, content) => appendedContent.Add(content));
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Applied));
+            Assert.That(appendedContent, Has.Count.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies an export line with a space after '=' is not taken as existing setup, because the shell assigns an empty PATH there.
+        /// </summary>
+        [Test]
+        public void Apply_WhenOnlyLineHasSpaceAfterAssignment_AppendsSetupLine()
+        {
+            CliPathSetupPlan plan = CreateZshPlan();
+            List<string> appendedContent = new List<string>();
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                plan,
+                path => true,
+                path => "export PATH= \"$HOME/.local/bin:$PATH\"\n",
+                path => new DirectoryInfo(path),
+                (path, content) => appendedContent.Add(content));
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Applied));
+            Assert.That(appendedContent, Has.Count.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a later line with spaces around '=' does not count as a PATH setup that shadows the canonical line.
+        /// </summary>
+        [Test]
+        public void Apply_WhenCanonicalLineIsFollowedBySpacedNonAssignment_DoesNotAppend()
+        {
+            CliPathSetupPlan plan = CreateZshPlan();
+            List<string> appendedContent = new List<string>();
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                plan,
+                path => true,
+                path => "export PATH=\"$HOME/.local/bin:$PATH\"\nPATH = \"/opt/other/bin:$PATH\"\n",
+                path => new DirectoryInfo(path),
+                (path, content) => appendedContent.Add(content));
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.AlreadyConfigured));
+            Assert.That(appendedContent, Has.Count.EqualTo(0));
+        }
+
         private static CliPathSetupPlan CreateZshPlan()
         {
             return new CliPathSetupPlan(
