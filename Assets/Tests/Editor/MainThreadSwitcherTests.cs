@@ -331,5 +331,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(continuation, Is.Not.Null);
             }
         }
+
+        /// <summary>
+        /// Verifies that editor-startup initialization initializes the registered dispatcher exactly once.
+        /// </summary>
+        [Test]
+        public void InitializeForEditorStartup_WhenDispatcherIsRegistered_InitializesItOnce()
+        {
+            InitializeCountingDispatcher dispatcher = new InitializeCountingDispatcher();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            try
+            {
+                MainThreadSwitcher.InitializeForEditorStartup();
+
+                Assert.That(dispatcher.InitializeCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        private sealed class InitializeCountingDispatcher : IMainThreadDispatcher
+        {
+            public int InitializeCount { get; private set; }
+
+            public bool IsMainThread => true;
+
+            public void Initialize()
+            {
+                InitializeCount++;
+            }
+
+            public void AddContinuation(Action continuation)
+            {
+                Assert.Fail("Initialization must not queue a continuation.");
+            }
+        }
     }
 }

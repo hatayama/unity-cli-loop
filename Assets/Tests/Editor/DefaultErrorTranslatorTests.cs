@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -142,6 +143,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UserFriendlyErrorDto dto = converter.ProcessException(null);
 
             Assert.AreEqual(ErrorSeverity.High, dto.Severity);
+        }
+
+        /// <summary>
+        /// Verifies a timeout exception is translated into a request-timeout message that keeps the original text as explanation.
+        /// </summary>
+        [Test]
+        public void TranslateFromException_WhenTimeout_ReturnsRequestTimeoutWithSolution()
+        {
+            DefaultErrorTranslator translator = new DefaultErrorTranslator();
+            TimeoutException exception = new TimeoutException("operation took too long");
+
+            TranslationOutput result = translator.TranslateFromException(exception);
+
+            Assert.That(result.FriendlyMessage, Is.EqualTo("Request timeout"));
+            Assert.That(result.Explanation, Is.EqualTo("operation took too long"));
+            Assert.That(
+                result.Solutions,
+                Is.EqualTo(new[] { "Increase timeout or optimize the operation to complete faster" }));
+        }
+
+        /// <summary>
+        /// Verifies a timeout exception is formatted with medium severity as a recoverable execution state.
+        /// </summary>
+        [Test]
+        public void Format_WhenTimeoutException_UsesMediumSeverity()
+        {
+            DefaultErrorFormatter formatter = new DefaultErrorFormatter();
+            TimeoutException exception = new TimeoutException("operation took too long");
+
+            UserFriendlyErrorDto dto = formatter.Format(new TranslationOutput(), exception.Message, exception);
+
+            Assert.That(dto.Severity, Is.EqualTo(ErrorSeverity.Medium));
+        }
+
+        /// <summary>
+        /// Verifies an unrecognized exception type is formatted with high severity.
+        /// </summary>
+        [Test]
+        public void Format_WhenUnknownExceptionType_UsesHighSeverity()
+        {
+            DefaultErrorFormatter formatter = new DefaultErrorFormatter();
+            InvalidOperationException exception = new InvalidOperationException("unexpected");
+
+            UserFriendlyErrorDto dto = formatter.Format(new TranslationOutput(), exception.Message, exception);
+
+            Assert.That(dto.Severity, Is.EqualTo(ErrorSeverity.High));
+        }
+
+        /// <summary>
+        /// Verifies a plain message without an exception or compiler markers is formatted with low severity.
+        /// </summary>
+        [Test]
+        public void Format_WhenPlainMessageWithoutException_UsesLowSeverity()
+        {
+            DefaultErrorFormatter formatter = new DefaultErrorFormatter();
+
+            UserFriendlyErrorDto dto = formatter.Format(new TranslationOutput(), "Value must be positive");
+
+            Assert.That(dto.Severity, Is.EqualTo(ErrorSeverity.Low));
         }
     }
 }

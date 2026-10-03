@@ -519,5 +519,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private sealed class StoreHost
         {
         }
+
+        /// <summary>
+        /// What: with no values installed, every instance read runs the initializer again because
+        /// there is nowhere to keep the value.
+        /// </summary>
+        [Test]
+        public void GetOrInit_WithNoValuesInstalled_RunsInitializerOnEveryRead()
+        {
+            HotReloadAddedFieldValues previous = HotReloadAddedFieldStore.Current;
+            HotReloadAddedFieldStore.Current = null;
+            try
+            {
+                StoreHost host = new StoreHost();
+                int calls = 0;
+
+                int first = HotReloadAddedFieldStore.GetOrInit(host, FieldKey(), () => ++calls);
+                int second = HotReloadAddedFieldStore.GetOrInit(host, FieldKey(), () => ++calls);
+
+                Assert.That(first, Is.EqualTo(1));
+                Assert.That(second, Is.EqualTo(2));
+            }
+            finally
+            {
+                HotReloadAddedFieldStore.Current = previous;
+            }
+        }
+
+        /// <summary>
+        /// What: with no values installed and no initializer, an instance read yields default(T).
+        /// </summary>
+        [Test]
+        public void GetOrInit_WithNoValuesInstalledAndNullInitializer_ReturnsDefault()
+        {
+            HotReloadAddedFieldValues previous = HotReloadAddedFieldStore.Current;
+            HotReloadAddedFieldStore.Current = null;
+            try
+            {
+                string value = HotReloadAddedFieldStore.GetOrInit<string>(new StoreHost(), FieldKey(), null);
+
+                Assert.That(value, Is.Null);
+            }
+            finally
+            {
+                HotReloadAddedFieldStore.Current = previous;
+            }
+        }
+
+        /// <summary>
+        /// What: with no values installed, every static read runs the initializer again and a null
+        /// initializer yields default(T).
+        /// </summary>
+        [Test]
+        public void GetOrInitStatic_WithNoValuesInstalled_RunsInitializerOnEveryRead()
+        {
+            HotReloadAddedFieldValues previous = HotReloadAddedFieldStore.Current;
+            HotReloadAddedFieldStore.Current = null;
+            try
+            {
+                int calls = 0;
+
+                int first = HotReloadAddedFieldStore.GetOrInitStatic(FieldKey(), () => ++calls);
+                int second = HotReloadAddedFieldStore.GetOrInitStatic(FieldKey(), () => ++calls);
+                int withoutInitializer = HotReloadAddedFieldStore.GetOrInitStatic<int>(FieldKey(), null);
+
+                Assert.That(first, Is.EqualTo(1));
+                Assert.That(second, Is.EqualTo(2));
+                Assert.That(withoutInitializer, Is.EqualTo(0));
+            }
+            finally
+            {
+                HotReloadAddedFieldStore.Current = previous;
+            }
+        }
+
+        /// <summary>
+        /// What: a restored null is reported for reference and Nullable fields, which can hold it,
+        /// and refused for a non-nullable value-type field, which cannot.
+        /// </summary>
+        [TestCase(typeof(string), true)]
+        [TestCase(typeof(int?), true)]
+        [TestCase(typeof(int), false)]
+        public void TryGet_RestoredNull_IsReportedOnlyWhenTheFieldTypeCanHoldNull(Type fieldType, bool expectedRead)
+        {
+            HotReloadAddedFieldValues values = new HotReloadAddedFieldValues { Restorer = new CountingRestorer(true, null) };
+
+            bool read = values.TryGet(new StoreHost(), FieldKey(), fieldType, out object stored);
+
+            Assert.That(read, Is.EqualTo(expectedRead));
+            Assert.That(stored, Is.Null);
+        }
     }
 }

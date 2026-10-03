@@ -699,5 +699,153 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private sealed class GenericWiringComponent<T> : MonoBehaviour
         {
         }
+
+        /// <summary>
+        /// What: a null declaring type is refused by the static setter, naming that argument.
+        /// </summary>
+        [Test]
+        public void SetStaticField_NullDeclaringType_IsRefused()
+        {
+            ArgumentNullException error = Assert.Throws<ArgumentNullException>(
+                () => HotReloadAddedFieldWiring.SetStaticField(null, FieldName, 1));
+
+            Assert.That(error.ParamName, Is.EqualTo("declaringType"));
+        }
+
+        /// <summary>
+        /// What: a null instance is refused by the instance reader, naming that argument.
+        /// </summary>
+        [Test]
+        public void TryReadInstanceField_NullInstance_IsRefused()
+        {
+            object stored = "untouched";
+
+            ArgumentNullException error = Assert.Throws<ArgumentNullException>(
+                () => HotReloadAddedFieldWiring.TryReadInstanceField(null, FieldName, out stored));
+
+            Assert.That(error.ParamName, Is.EqualTo("instance"));
+            Assert.That(stored, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a null declaring type is refused by the static reader, naming that argument.
+        /// </summary>
+        [Test]
+        public void TryReadStaticField_NullDeclaringType_IsRefused()
+        {
+            object stored = "untouched";
+
+            ArgumentNullException error = Assert.Throws<ArgumentNullException>(
+                () => HotReloadAddedFieldWiring.TryReadStaticField(null, FieldName, out stored));
+
+            Assert.That(error.ParamName, Is.EqualTo("declaringType"));
+            Assert.That(stored, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a missing field name is refused before any declaration is looked up.
+        /// </summary>
+        [TestCase(null)]
+        [TestCase("")]
+        public void SetStaticField_MissingFieldName_IsRefused(string fieldName)
+        {
+            _port.AddStaticField(typeof(WiringHost), FieldName, typeof(int));
+
+            ArgumentException error = Assert.Throws<ArgumentException>(
+                () => HotReloadAddedFieldWiring.SetStaticField(typeof(WiringHost), fieldName, 1));
+
+            Assert.That(error.ParamName, Is.EqualTo("fieldName"));
+        }
+
+        /// <summary>
+        /// What: when a type in the base chain reports no added-field list at all, the unknown-field
+        /// message still names the fields the other types in the chain added.
+        /// </summary>
+        [Test]
+        public void SetStaticField_UnknownFieldWhereABaseTypeReportsNoList_NamesTheOtherFields()
+        {
+            HotReloadAddedFieldCoordination.ActiveFields = new SingleTypeNamesPort(typeof(DerivedWiringHost).FullName, "Speed");
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetStaticField(typeof(DerivedWiringHost), "Missing", 1));
+
+            Assert.That(
+                error.Message,
+                Is.EqualTo("'Missing' is not an added field of " + typeof(DerivedWiringHost).FullName
+                    + ". Active added fields: Speed."));
+        }
+
+        /// <summary>
+        /// What: a declared type that does not resolve in this domain is refused, naming the type
+        /// the worker reported, rather than written unchecked.
+        /// </summary>
+        [Test]
+        public void SetStaticField_DeclaredTypeDoesNotResolve_IsRefused()
+        {
+            const string unresolvableTypeName = "Missing.Namespace.MissingType, MissingAssembly";
+            _port.AddDeclaration(
+                new HotReloadAddedFieldDeclaration(
+                    FakeAddedFieldPort.KeyOf(typeof(WiringHost), FieldName),
+                    typeof(WiringHost).FullName,
+                    FieldName,
+                    unresolvableTypeName,
+                    true));
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetStaticField(typeof(WiringHost), FieldName, 1));
+
+            Assert.That(error.Message, Does.Contain("does not resolve in this domain: " + unresolvableTypeName));
+        }
+
+        /// <summary>
+        /// What: with a declaration known but no added field values installed, the write is refused
+        /// rather than dropped where nothing would read it.
+        /// </summary>
+        [Test]
+        public void SetStaticField_WithNoValuesInstalled_IsRefused()
+        {
+            _port.AddStaticField(typeof(WiringHost), FieldName, typeof(int));
+            HotReloadAddedFieldStore.Current = null;
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => HotReloadAddedFieldWiring.SetStaticField(typeof(WiringHost), FieldName, 1));
+
+            Assert.That(error.Message, Does.StartWith("hot reload has no added field values installed"));
+        }
+
+        /// <summary>
+        /// A port that knows no declarations and reports added-field names for one type only,
+        /// returning no list at all for every other type.
+        /// </summary>
+        private sealed class SingleTypeNamesPort : IHotReloadAddedFieldPort
+        {
+            private readonly string _typeName;
+            private readonly string _fieldName;
+
+            internal SingleTypeNamesPort(string typeName, string fieldName)
+            {
+                _typeName = typeName;
+                _fieldName = fieldName;
+            }
+
+            public bool TryGetDeclaration(
+                string declaringTypeName,
+                string fieldName,
+                out HotReloadAddedFieldDeclaration declaration)
+            {
+                declaration = null;
+                return false;
+            }
+
+            public IReadOnlyList<string> GetAddedFieldNames(string declaringTypeName)
+            {
+                if (!string.Equals(declaringTypeName, _typeName, StringComparison.Ordinal))
+                {
+                    return null;
+                }
+
+                return new List<string> { _fieldName };
+            }
+        }
     }
 }

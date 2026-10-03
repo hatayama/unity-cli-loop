@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
@@ -239,6 +240,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void InvalidateCache()
             {
             }
+        }
+
+        /// <summary>
+        /// Verifies an added tools-changed handler is notified when a tool setting changes.
+        /// </summary>
+        [Test]
+        public void AddToolsChangedHandler_WhenToolSettingChanges_InvokesHandler()
+        {
+            ToolSettingsUseCase useCase = CreateUseCase();
+            int invocationCount = 0;
+
+            useCase.AddToolsChangedHandler(() => invocationCount++);
+            useCase.SetToolEnabled(UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT, false);
+
+            Assert.That(invocationCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a removed tools-changed handler is no longer notified when a tool setting changes.
+        /// </summary>
+        [Test]
+        public void RemoveToolsChangedHandler_WhenToolSettingChanges_DoesNotInvokeHandler()
+        {
+            ToolSettingsUseCase useCase = CreateUseCase();
+            int invocationCount = 0;
+            Action handler = () => invocationCount++;
+            useCase.AddToolsChangedHandler(handler);
+
+            useCase.RemoveToolsChangedHandler(handler);
+            useCase.SetToolEnabled(UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT, false);
+
+            Assert.That(invocationCount, Is.Zero);
+        }
+
+        /// <summary>
+        /// Verifies the catalog is reported unavailable and empty until the registry has been created.
+        /// </summary>
+        [Test]
+        public void TryGetToolCatalog_WhenRegistryNotWarmedUp_ReturnsFalseAndEmptyCatalog()
+        {
+            ToolSettingsUseCase useCase = CreateUseCase();
+
+            bool isAvailable = useCase.TryGetToolCatalog(out ToolSettingsUseCase.ToolCatalogItem[] allTools);
+
+            Assert.That(isAvailable, Is.False);
+            Assert.That(allTools, Is.Not.Null);
+            Assert.That(allTools, Is.Empty);
+        }
+
+        private static ToolSettingsUseCase CreateUseCase()
+        {
+            IToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
+            UnityCliLoopToolRegistrarService toolRegistrarService = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsPort,
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
+                () => Array.Empty<IUnityCliLoopTool>());
+            return new ToolSettingsUseCase(
+                toolSettingsPort,
+                toolRegistrarService,
+                new StaticToolSkillDescriptionProvider(new Dictionary<string, string>()));
         }
     }
 }
