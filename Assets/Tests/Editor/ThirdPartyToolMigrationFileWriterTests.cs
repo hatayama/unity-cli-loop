@@ -307,5 +307,112 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     filePath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
                     filePath.EndsWith(".bak", StringComparison.OrdinalIgnoreCase));
         }
+
+        private string _tempDirectory;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _tempDirectory = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_tempDirectory);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (Directory.Exists(_tempDirectory))
+            {
+                Directory.Delete(_tempDirectory, true);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a UTF-32 little-endian target is rewritten as UTF-32 little-endian with its BOM.
+        /// </summary>
+        [Test]
+        public void WriteBatch_WhenTargetIsUtf32LittleEndian_PreservesEncoding()
+        {
+            Encoding encoding = new UTF32Encoding(bigEndian: false, byteOrderMark: true);
+
+            byte[] bytes = WriteMigratedContentOverOriginal(encoding.GetPreamble().Concat(encoding.GetBytes("original")).ToArray());
+
+            Assert.That(bytes, Is.EqualTo(encoding.GetPreamble().Concat(encoding.GetBytes("migrated")).ToArray()));
+        }
+
+        /// <summary>
+        /// Verifies that a UTF-32 big-endian target is rewritten as UTF-32 big-endian with its BOM.
+        /// </summary>
+        [Test]
+        public void WriteBatch_WhenTargetIsUtf32BigEndian_PreservesEncoding()
+        {
+            Encoding encoding = new UTF32Encoding(bigEndian: true, byteOrderMark: true);
+
+            byte[] bytes = WriteMigratedContentOverOriginal(encoding.GetPreamble().Concat(encoding.GetBytes("original")).ToArray());
+
+            Assert.That(bytes, Is.EqualTo(encoding.GetPreamble().Concat(encoding.GetBytes("migrated")).ToArray()));
+        }
+
+        /// <summary>
+        /// Verifies that a UTF-16 big-endian target is rewritten as UTF-16 big-endian with its BOM.
+        /// </summary>
+        [Test]
+        public void WriteBatch_WhenTargetIsUtf16BigEndian_PreservesEncoding()
+        {
+            Encoding encoding = new UnicodeEncoding(bigEndian: true, byteOrderMark: true);
+
+            byte[] bytes = WriteMigratedContentOverOriginal(encoding.GetPreamble().Concat(encoding.GetBytes("original")).ToArray());
+
+            Assert.That(bytes, Is.EqualTo(encoding.GetPreamble().Concat(encoding.GetBytes("migrated")).ToArray()));
+        }
+
+        /// <summary>
+        /// Verifies that a target shorter than four bytes that is only a UTF-8 BOM still keeps the BOM.
+        /// </summary>
+        [Test]
+        public void WriteBatch_WhenTargetIsOnlyUtf8Bom_PreservesBom()
+        {
+            byte[] utf8Bom = { 0xEF, 0xBB, 0xBF };
+
+            byte[] bytes = WriteMigratedContentOverOriginal(utf8Bom);
+
+            Assert.That(bytes, Is.EqualTo(utf8Bom.Concat(Encoding.UTF8.GetBytes("migrated")).ToArray()));
+        }
+
+        /// <summary>
+        /// Verifies that an async batch whose prepare step fails throws and leaves targets and sidecars untouched.
+        /// </summary>
+        [Test]
+        public void WriteBatchAsync_WhenPrepareFails_LeavesTargetUntouchedAndRemovesSidecars()
+        {
+            string existingFile = Path.Combine(_tempDirectory, "Existing.cs");
+            File.WriteAllText(existingFile, "original");
+            string missingDirectoryFile = Path.Combine(_tempDirectory, "missing-directory", "Missing.cs");
+            List<MigrationFileChange> changes = new List<MigrationFileChange>
+            {
+                new MigrationFileChange(existingFile, "migrated"),
+                new MigrationFileChange(missingDirectoryFile, "never-written")
+            };
+
+            Task task = ThirdPartyToolMigrationFileWriter.WriteBatchAsync(changes);
+
+            Assert.That(task.IsCompleted, Is.True);
+            Assert.Throws<DirectoryNotFoundException>(() => task.GetAwaiter().GetResult());
+            Assert.That(File.ReadAllText(existingFile), Is.EqualTo("original"));
+            Assert.That(Directory.GetFiles(_tempDirectory), Is.EqualTo(new[] { existingFile }));
+        }
+
+        private byte[] WriteMigratedContentOverOriginal(byte[] originalBytes)
+        {
+            string filePath = Path.Combine(_tempDirectory, "EncodedFile.cs");
+            File.WriteAllBytes(filePath, originalBytes);
+
+            ThirdPartyToolMigrationFileWriter.WriteBatch(
+                new List<MigrationFileChange>
+                {
+                    new MigrationFileChange(filePath, "migrated")
+                });
+
+            return File.ReadAllBytes(filePath);
+        }
     }
 }

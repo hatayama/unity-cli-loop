@@ -1,4 +1,6 @@
 using NUnit.Framework;
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -225,35 +227,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ISessionFlagsRepository sessionFlagsRepository)
         {
             return new SessionRecoveryService(
-                new NoOpDomainReloadDetectionService(),
+                new RecordingDomainReloadDetectionService(),
                 sessionFlagsRepository);
-        }
-
-        /// <summary>
-        /// Test support type used by pure SessionRecoveryService tests.
-        /// </summary>
-        private sealed class NoOpDomainReloadDetectionService : IDomainReloadDetectionService
-        {
-            public void RegisterForEditorStartup()
-            {
-            }
-
-            public void StartDomainReload(string correlationId, bool serverIsRunning)
-            {
-            }
-
-            public void CompleteDomainReload(string correlationId)
-            {
-            }
-
-            public void RollbackDomainReloadStart(string correlationId)
-            {
-            }
-
-            public bool ShouldShowReconnectingUI()
-            {
-                return false;
-            }
         }
 
         /// <summary>
@@ -427,6 +402,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstance : IUnityCliLoopServerInstance
         {
+            private readonly Exception _stopFailure;
+
+            public TestServerInstance(Exception stopFailure = null)
+            {
+                _stopFailure = stopFailure;
+            }
+
             public bool IsRunning { get; private set; }
 
             public int StopCallCount { get; private set; }
@@ -443,6 +425,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void StopServer()
             {
                 StopCallCount++;
+                if (_stopFailure != null)
+                {
+                    throw _stopFailure;
+                }
+
                 IsRunning = false;
             }
 
@@ -450,6 +437,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 DisposeCallCount++;
                 IsRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Verifies a server stop failure rolls back the recorded reload start and surfaces a critical error wrapping the cause.
+        /// </summary>
+        [Test]
+        public void ExecuteBeforeDomainReload_WhenServerStopThrows_RollsBackStartAndThrowsWrappedError()
+        {
+            RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
+            InMemorySessionFlagsRepository sessionFlagsRepository = new InMemorySessionFlagsRepository();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(detectionService, sessionFlagsRepository);
+            InvalidOperationException stopFailure = new InvalidOperationException("stop failed");
+            TestServerInstance server = new TestServerInstance(stopFailure);
+            server.StartServer();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => useCase.ExecuteBeforeDomainReload(server));
+
+            Assert.That(
+                exception.Message,
+                Is.EqualTo("Failed to properly shutdown Unity CLI bridge before assembly reload."));
+            Assert.That(exception.InnerException, Is.SameAs(stopFailure));
+            Assert.That(detectionService.Calls.Count, Is.EqualTo(2));
+            Assert.That(detectionService.Calls[0], Does.StartWith("Start|True|"));
+            string startCorrelationId = detectionService.Calls[0].Substring("Start|True|".Length);
+            Assert.That(detectionService.Calls[1], Is.EqualTo("Rollback|" + startCorrelationId));
+        }
+
+        /// <summary>
+        /// Verifies post-reload recovery reports a failure carrying the restoration error when no server comes back.
+        /// </summary>
+        [Test]
+        public void ExecuteAfterDomainReloadAsync_WhenRestorationFails_ReturnsFailureWithRestorationError()
+        {
+            RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(detectionService, new InMemorySessionFlagsRepository());
+            TestRecoveryCoordinator recoveryCoordinator = new TestRecoveryCoordinator(recoverServer: false);
+
+            ServiceResult<string> result =
+                GetCompletedResult(useCase.ExecuteAfterDomainReloadAsync(recoveryCoordinator, CancellationToken.None));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Server restoration failed: Unity CLI Loop server recovery finished, but no running server instance is available."));
+            Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies successful post-reload recovery returns the correlation id that was used to complete the reload.
+        /// </summary>
+        [Test]
+        public void ExecuteAfterDomainReloadAsync_WhenServerIsRestored_ReturnsCompletionCorrelationId()
+        {
+            RecordingDomainReloadDetectionService detectionService = new RecordingDomainReloadDetectionService();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(detectionService, new InMemorySessionFlagsRepository());
+            TestRecoveryCoordinator recoveryCoordinator = new TestRecoveryCoordinator(recoverServer: true);
+
+            ServiceResult<string> result =
+                GetCompletedResult(useCase.ExecuteAfterDomainReloadAsync(recoveryCoordinator, CancellationToken.None));
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Data, Does.StartWith("unity_"));
+            Assert.That(detectionService.Calls, Is.EqualTo(new[] { "Complete|" + result.Data }));
+        }
+
+        private static T GetCompletedResult<T>(Task<T> task)
+        {
+            Assert.That(task.IsCompleted, Is.True, "Recovery must complete synchronously with completed fakes.");
+            return task.GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Test support type that records domain reload detection calls with their correlation ids.
+        /// </summary>
+        private sealed class RecordingDomainReloadDetectionService : IDomainReloadDetectionService
+        {
+            public List<string> Calls { get; } = new List<string>();
+
+            public void RegisterForEditorStartup()
+            {
+                Calls.Add("Register");
+            }
+
+            public void StartDomainReload(string correlationId, bool serverIsRunning)
+            {
+                Calls.Add("Start|" + serverIsRunning + "|" + correlationId);
+            }
+
+            public void CompleteDomainReload(string correlationId)
+            {
+                Calls.Add("Complete|" + correlationId);
+            }
+
+            public void RollbackDomainReloadStart(string correlationId)
+            {
+                Calls.Add("Rollback|" + correlationId);
+            }
+
+            public bool ShouldShowReconnectingUI()
+            {
+                return false;
             }
         }
     }

@@ -167,8 +167,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     StringComparison.Ordinal);
             }
 
-            if (string.Equals(targetExpression, "this", StringComparison.Ordinal) ||
-                string.Equals(targetExpression, "base", StringComparison.Ordinal))
+            if (string.Equals(targetExpression, "base", StringComparison.Ordinal))
+            {
+                return DoesBaseCallTargetRemovedSignature(source, codeTextMask, methodNameIndex, removedSignature);
+            }
+
+            if (string.Equals(targetExpression, "this", StringComparison.Ordinal))
             {
                 string containingTypeName = ReadContainingTypeName(source, codeTextMask, methodNameIndex);
                 return string.Equals(
@@ -224,6 +228,34 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 source,
                 targetExpression,
                 methodNameIndex,
+                removedSignature.DeclaringTypeName);
+        }
+
+        // A base call resolves against the base class of the containing class, not the containing class itself.
+        // When the source cannot name that base class, the call is left unchanged rather than guessed.
+        private static bool DoesBaseCallTargetRemovedSignature(
+            string source,
+            CodeTextMask codeTextMask,
+            int methodNameIndex,
+            RemovedLegacyPlayerLoopTimingSignature removedSignature)
+        {
+            string baseTypeName = ReadContainingClassBaseTypeName(source, codeTextMask, methodNameIndex);
+            if (baseTypeName.Length == 0)
+            {
+                return false;
+            }
+
+            // The name is passed as written: QualifyRelativeTypeName must still see a global:: prefix to leave the
+            // name unqualified, and IsExactTypeNameReference normalizes it for comparison.
+            if (IsExactTypeNameReference(baseTypeName, removedSignature.DeclaringTypeName))
+            {
+                return true;
+            }
+
+            return IsExactTypeNameReference(
+                QualifyRelativeTypeName(
+                    baseTypeName,
+                    ReadNamespaceName(source, codeTextMask, methodNameIndex)),
                 removedSignature.DeclaringTypeName);
         }
 

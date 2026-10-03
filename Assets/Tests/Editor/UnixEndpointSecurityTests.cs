@@ -375,5 +375,120 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 target[path] = metadata;
             }
         }
+
+        private const int PermissionDeniedErrorCode = 13;
+        private const int IoErrorCode = 5;
+
+        /// <summary>
+        /// Verifies a /tmp parent that is neither a directory nor a symlink is rejected before the endpoint is touched.
+        /// </summary>
+        [Test]
+        public void EnsureEndpointDirectory_WhenParentIsRegularFile_FailsWithParentKindMessage()
+        {
+            FakeUnixNativeFileSystem fileSystem = CreateSecureFileSystem();
+            fileSystem.SetMetadata(ParentPath, false, Metadata(UnixFileKind.RegularFile, 0, 0x3FF));
+
+            UnixEndpointSecurityResult result = new UnixEndpointSecurityPolicy(fileSystem)
+                .EnsureEndpointDirectory(EndpointDirectoryPath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("must be a directory or a symbolic link"));
+            Assert.That(fileSystem.CreatedModes, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies an endpoint directory whose metadata cannot be read is reported with the native errno.
+        /// </summary>
+        [Test]
+        public void EnsureEndpointDirectory_WhenEndpointMetadataReadFails_FailsWithInspectErrno()
+        {
+            FakeUnixNativeFileSystem fileSystem = CreateSecureFileSystem();
+            fileSystem.SetMetadata(EndpointDirectoryPath, false, UnixFileMetadata.Failure(IoErrorCode));
+
+            UnixEndpointSecurityResult result = new UnixEndpointSecurityPolicy(fileSystem)
+                .EnsureEndpointDirectory(EndpointDirectoryPath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Failed to inspect Unix endpoint directory " + EndpointDirectoryPath + ": errno 5"));
+            Assert.That(fileSystem.CreatedModes, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies a mkdir failure other than EEXIST is reported instead of continuing to validation.
+        /// </summary>
+        [Test]
+        public void EnsureEndpointDirectory_WhenCreateFailsWithOtherErrno_FailsWithCreateErrno()
+        {
+            FakeUnixNativeFileSystem fileSystem = CreateSecureFileSystem();
+            fileSystem.SetMetadata(EndpointDirectoryPath, false, UnixFileMetadata.Missing());
+            fileSystem.CreateResult = UnixNativeOperationResult.Failure(PermissionDeniedErrorCode);
+            fileSystem.MetadataAfterCreate = Metadata(UnixFileKind.Directory, EffectiveUserId, 0x1C0);
+
+            UnixEndpointSecurityResult result = new UnixEndpointSecurityPolicy(fileSystem)
+                .EnsureEndpointDirectory(EndpointDirectoryPath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Failed to create Unix endpoint directory " + EndpointDirectoryPath + ": errno 13"));
+        }
+
+        /// <summary>
+        /// Verifies a newly created endpoint directory that cannot be re-read is reported as a reinspection failure.
+        /// </summary>
+        [Test]
+        public void EnsureEndpointDirectory_WhenReinspectAfterCreateFails_FailsWithReinspectErrno()
+        {
+            FakeUnixNativeFileSystem fileSystem = CreateSecureFileSystem();
+            fileSystem.SetMetadata(EndpointDirectoryPath, false, UnixFileMetadata.Missing());
+            fileSystem.MetadataAfterCreate = UnixFileMetadata.Failure(IoErrorCode);
+
+            UnixEndpointSecurityResult result = new UnixEndpointSecurityPolicy(fileSystem)
+                .EnsureEndpointDirectory(EndpointDirectoryPath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Failed to reinspect Unix endpoint directory " + EndpointDirectoryPath + ": errno 5"));
+        }
+
+        /// <summary>
+        /// Verifies a stale socket whose metadata cannot be read is not treated as removable.
+        /// </summary>
+        [Test]
+        public void ValidateStaleSocket_WhenMetadataReadFails_FailsWithInspectErrno()
+        {
+            FakeUnixNativeFileSystem fileSystem = CreateSecureFileSystem();
+            fileSystem.SetMetadata(SocketPath, false, UnixFileMetadata.Failure(PermissionDeniedErrorCode));
+
+            UnixEndpointSecurityResult result = new UnixEndpointSecurityPolicy(fileSystem)
+                .ValidateStaleSocket(SocketPath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Failed to inspect Unix socket " + SocketPath + ": errno 13"));
+        }
+
+        /// <summary>
+        /// Verifies a bound socket owned by another user fails the post-chmod owner-only check.
+        /// </summary>
+        [Test]
+        public void RestrictSocket_WhenSocketOwnerIsAnotherUser_FailsWithRetainMessage()
+        {
+            FakeUnixNativeFileSystem fileSystem = CreateSecureFileSystem();
+            fileSystem.SetMetadata(SocketPath, false, Metadata(UnixFileKind.Socket, EffectiveUserId + 1, 0x1C0));
+
+            UnixEndpointSecurityResult result = new UnixEndpointSecurityPolicy(fileSystem)
+                .RestrictSocket(SocketPath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Unix socket " + SocketPath + " did not retain owner-only mode 0600"));
+            Assert.That(fileSystem.ChangedModes, Is.EqualTo(new[] { 0x180u }));
+        }
     }
 }

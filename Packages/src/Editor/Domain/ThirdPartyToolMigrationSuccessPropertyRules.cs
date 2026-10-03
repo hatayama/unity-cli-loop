@@ -28,8 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             RegexOptions.Compiled);
 
         // Matches only the auto-property shape; a getter with logic (e.g. "{ get { ... } }") never matches.
+        // The match ends after at most one line break so the next line's indentation stays with that line.
         private static readonly Regex SuccessAutoPropertyRegex = new(
-            @"public\s+bool\s+Success\s*\{\s*get;\s*(?:set;\s*)?\}\s*(?:=\s*[^;]+;)?\s*(?:\r?\n)?",
+            @"public\s+bool\s+Success\s*\{\s*get;\s*(?:set;\s*)?\}(?:\s*=\s*[^;]+;)?[ \t]*(?:\r?\n)?",
             RegexOptions.Compiled);
 
         // Matches both a block-bodied property start ("{ ... }") and an expression-bodied one ("=> ...;");
@@ -122,16 +123,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     continue;
                 }
 
-                int removalStartIndex = ExtendRemovalStartOverDocComments(
+                (int removalStartIndex, int removalEndIndex) = ReadSuccessPropertyRemovalRange(
                     source,
-                    ReadLegacyPlayerLoopTimingDeclarationRemovalStart(source, propertyMatch.Index, codeTextMask));
+                    propertyMatch,
+                    codeTextMask);
                 if (removalStartIndex < sourceCopyIndex)
                 {
                     continue;
                 }
 
                 builder.Append(source, sourceCopyIndex, removalStartIndex - sourceCopyIndex);
-                sourceCopyIndex = propertyMatch.Index + propertyMatch.Length;
+                sourceCopyIndex = removalEndIndex;
                 replacementCount++;
             }
 
@@ -184,6 +186,27 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return closeBraceIndex < 0 ? (false, -1, -1) : (true, openBraceIndex, closeBraceIndex);
         }
 
+        // The property is taken from its line start when only indentation precedes it and nothing follows it on
+        // that line, so removing its line break does not leave that indentation in front of the next line. Code or a
+        // comment after it on the same line keeps the indentation instead.
+        private static (int StartIndex, int EndIndex) ReadSuccessPropertyRemovalRange(
+            string source,
+            Match propertyMatch,
+            CodeTextMask codeTextMask)
+        {
+            int propertyEndIndex = propertyMatch.Index + propertyMatch.Length;
+            bool endsItsLine = propertyEndIndex == source.Length || source[propertyEndIndex - 1] == '\n';
+            int declarationStartIndex = endsItsLine && HasOnlyWhitespaceBeforeIndexOnLine(source, propertyMatch.Index)
+                ? GetLineStartIndex(source, propertyMatch.Index)
+                : propertyMatch.Index;
+            (int removalStartIndex, int removalEndIndex) = ReadDeclarationRemovalRange(
+                source,
+                declarationStartIndex,
+                propertyEndIndex,
+                codeTextMask);
+            return (ExtendRemovalStartOverDocComments(source, removalStartIndex), removalEndIndex);
+        }
+
         // Extends a removal start index over immediately preceding "///" XML doc comment lines,
         // so a property's doc comment is deleted along with the property it documents.
         private static int ExtendRemovalStartOverDocComments(string source, int removalStartIndex)
@@ -198,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 string previousLine = source.Substring(
                     previousLineStartIndex,
                     lineTerminatorIndex - previousLineStartIndex + 1);
-                if (!previousLine.TrimStart().StartsWith("///", StringComparison.Ordinal))
+                if (!IsDocCommentLine(previousLine))
                 {
                     return index;
                 }
@@ -207,6 +230,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             return index;
+        }
+
+        // Exactly three slashes start a doc comment; four or more start an ordinary comment.
+        private static bool IsDocCommentLine(string line)
+        {
+            string trimmedLine = line.TrimStart();
+            return trimmedLine.StartsWith("///", StringComparison.Ordinal)
+                && !trimmedLine.StartsWith("////", StringComparison.Ordinal);
         }
     }
 }

@@ -79,6 +79,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.Throws<ArgumentException>(() => reassembler.AddData(data, 15));
         }
         
+        /// <summary>
+        /// Verifies a complete header whose Content-Length is not a number is rejected instead of waiting for more data.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenContentLengthIsNotNumeric_ThrowsInvalidOperationException()
+        {
+            byte[] data = Encoding.UTF8.GetBytes("Content-Length: abc\r\n\r\n{}");
+            reassembler.AddData(data, data.Length);
+
+            Assert.Throws<InvalidOperationException>(() => reassembler.ExtractCompleteMessages());
+        }
+
+        /// <summary>
+        /// Verifies a complete header whose Content-Length exceeds the maximum message size is rejected instead of waiting for more data.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenContentLengthExceedsMaximum_ThrowsInvalidOperationException()
+        {
+            byte[] data = Encoding.UTF8.GetBytes("Content-Length: " + (BufferConfig.MAX_MESSAGE_SIZE + 1) + "\r\n\r\n{}");
+            reassembler.AddData(data, data.Length);
+
+            Assert.Throws<InvalidOperationException>(() => reassembler.ExtractCompleteMessages());
+        }
+
+        /// <summary>
+        /// Verifies a complete header without a Content-Length line is rejected instead of waiting for more data.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenCompleteHeaderHasNoContentLength_ThrowsInvalidOperationException()
+        {
+            byte[] data = Encoding.UTF8.GetBytes("Content-Type: application/json\r\n\r\n{}");
+            reassembler.AddData(data, data.Length);
+
+            Assert.Throws<InvalidOperationException>(() => reassembler.ExtractCompleteMessages());
+        }
+
+        /// <summary>
+        /// Verifies a valid frame that arrives before a corrupt header in the same chunk is still returned, and the framing error surfaces from ValidateState afterwards.
+        /// </summary>
+        [Test]
+        public void ExtractCompleteMessages_WhenValidFramePrecedesInvalidHeader_ReturnsValidFrameThenFailsValidation()
+        {
+            string jsonContent = "{\"jsonrpc\":\"2.0\",\"id\":1}";
+            string frames = $"Content-Length: {jsonContent.Length}\r\n\r\n{jsonContent}Content-Length: abc\r\n\r\n{{}}";
+            byte[] data = Encoding.UTF8.GetBytes(frames);
+            reassembler.AddData(data, data.Length);
+
+            string[] messages = reassembler.ExtractCompleteMessages();
+
+            Assert.That(messages, Is.EqualTo(new[] { jsonContent }));
+            Assert.Throws<InvalidOperationException>(() => reassembler.ValidateState());
+        }
+
+        /// <summary>
+        /// Verifies Clear discards a held framing error so the next valid frame is extracted normally.
+        /// </summary>
+        [Test]
+        public void Clear_AfterHeldFramingError_ExtractsNextValidFrame()
+        {
+            string jsonContent = "{\"jsonrpc\":\"2.0\",\"id\":1}";
+            byte[] corrupted = Encoding.UTF8.GetBytes($"Content-Length: {jsonContent.Length}\r\n\r\n{jsonContent}Content-Length: abc\r\n\r\n{{}}");
+            reassembler.AddData(corrupted, corrupted.Length);
+            reassembler.ExtractCompleteMessages();
+
+            reassembler.Clear();
+            byte[] valid = Encoding.UTF8.GetBytes($"Content-Length: {jsonContent.Length}\r\n\r\n{jsonContent}");
+            reassembler.AddData(valid, valid.Length);
+
+            Assert.That(reassembler.ExtractCompleteMessages(), Is.EqualTo(new[] { jsonContent }));
+        }
+
         [Test]
         public void ExtractCompleteMessages_CompleteMessage_ReturnsMessage()
         {
@@ -405,6 +476,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Assert
             Assert.AreEqual(1, messages.Length);
             Assert.AreEqual(largeJsonContent, messages[0]);
+        }
+
+        /// <summary>
+        /// Verifies a disposed reassembler reports its state as unusable instead of valid.
+        /// </summary>
+        [Test]
+        public void ValidateState_AfterDispose_ReturnsFalse()
+        {
+            MessageReassembler reassembler = new MessageReassembler(new DynamicBufferManager());
+            reassembler.Dispose();
+
+            bool isValid = reassembler.ValidateState();
+
+            Assert.That(isValid, Is.False);
         }
     }
 }

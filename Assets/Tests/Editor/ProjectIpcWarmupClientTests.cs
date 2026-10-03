@@ -61,5 +61,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return new List<byte>(Encoding.ASCII.GetBytes(header));
         }
+
+        /// <summary>
+        /// Verifies header lines other than Content-Length are skipped before the length is read.
+        /// </summary>
+        [Test]
+        public void ParseContentLength_WhenOtherHeaderPrecedesContentLength_ReturnsLength()
+        {
+            ProjectIpcWarmupClient client = new();
+            List<byte> headerBytes = HeaderBytes("Content-Type: application/json\r\nContent-Length: 7\r\n\r\n");
+
+            int contentLength = client.ParseContentLength(headerBytes);
+
+            Assert.That(contentLength, Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// Verifies a header block without Content-Length is rejected with a missing-header message.
+        /// </summary>
+        [Test]
+        public void ParseContentLength_WhenContentLengthIsMissing_ThrowsMissingHeader()
+        {
+            ProjectIpcWarmupClient client = new();
+            List<byte> headerBytes = HeaderBytes("Content-Type: application/json\r\n\r\n");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => client.ParseContentLength(headerBytes));
+
+            Assert.That(exception.Message, Does.Contain("did not include Content-Length"));
+        }
+
+        /// <summary>
+        /// Verifies a JSON-RPC error given as a plain string is reported as the warmup error with that text.
+        /// </summary>
+        [Test]
+        public void ValidateJsonRpcSuccessResponse_WhenErrorIsString_ThrowsWithErrorText()
+        {
+            ProjectIpcWarmupClient client = new();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => client.ValidateJsonRpcSuccessResponse(
+                    "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":\"protocol mismatch\"}"));
+
+            Assert.That(exception.Message, Is.EqualTo("Project IPC warmup returned JSON-RPC error: protocol mismatch"));
+        }
+
+        /// <summary>
+        /// Verifies a JSON-RPC error without a message is reported using the serialized error object.
+        /// </summary>
+        [Test]
+        public void ValidateJsonRpcSuccessResponse_WhenErrorHasNoMessage_ThrowsWithErrorObjectText()
+        {
+            ProjectIpcWarmupClient client = new();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => client.ValidateJsonRpcSuccessResponse(
+                    "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603}}"));
+
+            Assert.That(exception.Message, Does.StartWith("Project IPC warmup returned JSON-RPC error: "));
+            Assert.That(exception.Message, Does.Contain("-32603"));
+        }
+
+        /// <summary>
+        /// Verifies a response with neither error nor a non-null result is rejected.
+        /// </summary>
+        [TestCase("{\"jsonrpc\":\"2.0\",\"id\":1}")]
+        [TestCase("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}")]
+        public void ValidateJsonRpcSuccessResponse_WhenResultIsMissingOrNull_ThrowsMissingResult(string responseJson)
+        {
+            ProjectIpcWarmupClient client = new();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => client.ValidateJsonRpcSuccessResponse(responseJson));
+
+            Assert.That(exception.Message, Does.Contain("did not include a JSON-RPC result"));
+        }
     }
 }

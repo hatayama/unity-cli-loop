@@ -273,5 +273,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(usage.LegacyAssemblyDirectories, Is.Empty);
             Assert.That(usage.ToolContractsReferenceAssemblyDirectories, Is.Empty);
         }
+
+        /// <summary>
+        /// Verifies that unrelated source text is not recorded by the target scan.
+        /// </summary>
+        [Test]
+        public void RecordTargetScanInitialSourceFacts_WhenSourceHasNoMigrationCandidateText_ReturnsFalseAndRecordsNothing()
+        {
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState = CreateScanState();
+
+            bool recorded = scanState.RecordTargetScanInitialSourceFacts("public class Foo { }", SourceFilePath);
+
+            Assert.That(recorded, Is.False);
+            Assert.That(scanState.AssemblyDeclaredTypeNamesByDirectory, Is.Empty);
+        }
     }
 }

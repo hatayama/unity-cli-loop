@@ -21,6 +21,6 @@
       "UnityCLILoop.FirstPartyTools.ReplayInput.Editor",
       "UnityCLILoop.FirstPartyTools.Common.Overlay.Editor"
     ],
-    "lineCoverage": 78.4
+    "lineCoverage": 85.4
   }
 }

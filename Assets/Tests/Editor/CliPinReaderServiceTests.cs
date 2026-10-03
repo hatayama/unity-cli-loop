@@ -372,5 +372,158 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "unity-cli-loop-tests",
                 Guid.NewGuid().ToString("N"));
         }
+
+        private const string PosixInstallerEntry =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh";
+        private const string WindowsInstallerEntry =
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1";
+        private const string ArchiveEntry =
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-arm64.zip";
+
+        /// <summary>
+        /// Verifies that a whitespace-only pin path fails with the empty-path message before touching the file system.
+        /// </summary>
+        [Test]
+        public void LoadPinFromPath_WhenPathIsWhitespace_ReturnsEmptyPathFailure()
+        {
+            CliPinLoadResult result = CliPinReaderService.LoadPinFromPath("   ");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo("Unity CLI Loop pin file path is empty."));
+        }
+
+        /// <summary>
+        /// Verifies that bootstrap loading forwards the regular pin load failure message unchanged.
+        /// </summary>
+        [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenPinFileIsMissing_ReturnsRegularLoadFailure()
+        {
+            string root = CreateUniqueTempRoot();
+            string pinPath = Path.Combine(root, "project-runner-pin.json");
+
+            DispatcherBootstrapPinLoadResult result = CliPinReaderService.LoadDispatcherBootstrapPinFromPath(pinPath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo($"Unity CLI Loop pin file not found at {pinPath}."));
+        }
+
+        /// <summary>
+        /// Verifies that a release tag without the dispatcher prefix is rejected as invalid.
+        /// </summary>
+        [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenReleaseTagLacksDispatcherPrefix_ReturnsInvalidTagFailure()
+        {
+            AssertBootstrapFailure(
+                "v3.0.1",
+                BuildManifest(PosixInstallerEntry, WindowsInstallerEntry, ArchiveEntry),
+                "defines an invalid dispatcherReleaseTag.");
+        }
+
+        /// <summary>
+        /// Verifies that a release tag containing a character outside letters, digits, dots and hyphens is rejected.
+        /// </summary>
+        [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenReleaseTagContainsSlash_ReturnsInvalidTagFailure()
+        {
+            AssertBootstrapFailure(
+                "dispatcher-v3.0.1/evil",
+                BuildManifest(PosixInstallerEntry, WindowsInstallerEntry, ArchiveEntry),
+                "defines an invalid dispatcherReleaseTag.");
+        }
+
+        /// <summary>
+        /// Verifies that an LF-only manifest listing the same asset twice is rejected.
+        /// </summary>
+        [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenManifestRepeatsAssetName_ReturnsInvalidManifestFailure()
+        {
+            AssertBootstrapFailure(
+                "dispatcher-v3.0.1",
+                BuildManifest(
+                    PosixInstallerEntry,
+                    "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  install.sh",
+                    WindowsInstallerEntry),
+                "contains an invalid dispatcherArchiveManifest entry.");
+        }
+
+        /// <summary>
+        /// Verifies that a manifest digest containing a non-hexadecimal character is rejected.
+        /// </summary>
+        [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenManifestDigestIsNotHex_ReturnsInvalidManifestFailure()
+        {
+            AssertBootstrapFailure(
+                "dispatcher-v3.0.1",
+                BuildManifest(
+                    "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg  install.sh",
+                    WindowsInstallerEntry,
+                    ArchiveEntry),
+                "contains an invalid dispatcherArchiveManifest entry.");
+        }
+
+        /// <summary>
+        /// Verifies that a manifest without the Windows installer digest is rejected.
+        /// </summary>
+        [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenWindowsInstallerDigestIsMissing_ReturnsMissingDigestFailure()
+        {
+            AssertBootstrapFailure(
+                "dispatcher-v3.0.1",
+                BuildManifest(PosixInstallerEntry, ArchiveEntry, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  checksums.txt"),
+                "is missing an installer script digest.");
+        }
+
+        /// <summary>
+        /// Verifies that a manifest without the POSIX installer digest is rejected.
+        /// </summary>
+        [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenPosixInstallerDigestIsMissing_ReturnsMissingDigestFailure()
+        {
+            AssertBootstrapFailure(
+                "dispatcher-v3.0.1",
+                BuildManifest(WindowsInstallerEntry, ArchiveEntry, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  checksums.txt"),
+                "is missing an installer script digest.");
+        }
+
+        private static void AssertBootstrapFailure(string releaseTag, string manifest, string expectedMessageSuffix)
+        {
+            string root = CreateUniqueTempRoot();
+            string pinPath = Path.Combine(root, "project-runner-pin.json");
+            try
+            {
+                Directory.CreateDirectory(root);
+                File.WriteAllText(
+                    pinPath,
+                    "{\"projectRunnerVersion\":\"3.0.0\",\"minimumDispatcherVersion\":\"3.0.1\",\"dispatcherReleaseTag\":\""
+                    + releaseTag
+                    + "\",\"dispatcherArchiveManifest\":\""
+                    + manifest.Replace("\n", "\\n")
+                    + "\"}");
+
+                DispatcherBootstrapPinLoadResult result = CliPinReaderService.LoadDispatcherBootstrapPinFromPath(pinPath);
+
+                Assert.That(result.Success, Is.False);
+                Assert.That(
+                    result.ErrorMessage,
+                    Is.EqualTo($"Unity CLI Loop pin file at {pinPath} {expectedMessageSuffix}"));
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, true);
+                }
+            }
+        }
+
+        private static string BuildManifest(string firstEntry, string secondEntry, string thirdEntry)
+        {
+            return firstEntry + "\n" + secondEntry + "\n" + thirdEntry;
+        }
+
+        private static string CreateUniqueTempRoot()
+        {
+            return Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+        }
     }
 }

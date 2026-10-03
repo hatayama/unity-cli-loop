@@ -67,6 +67,60 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        // Copies a non-interpolated raw string literal whole. Why: its quotes would otherwise be read
+        // as several regular string literals and hoisted separately, which breaks the snippet.
+        internal static bool TryCopyRawStringLiteral(
+            string source,
+            StringBuilder rewrittenSource,
+            ref int index)
+        {
+            int start = index;
+            if (!TryAdvanceRawStringLiteral(source, ref index))
+            {
+                return false;
+            }
+
+            rewrittenSource.Append(source, start, index - start);
+            return true;
+        }
+
+        // A raw string closes at the first run of as many quotes as opened it, so a shorter run
+        // inside it is content.
+        private static bool TryAdvanceRawStringLiteral(string source, ref int index)
+        {
+            int quoteCount = CountQuotes(source, index);
+            if (quoteCount < 3)
+            {
+                return false;
+            }
+
+            int position = index + quoteCount;
+            while (position < source.Length)
+            {
+                int runLength = CountQuotes(source, position);
+                if (runLength >= quoteCount)
+                {
+                    index = position + quoteCount;
+                    return true;
+                }
+
+                position += runLength > 0 ? runLength : 1;
+            }
+
+            return false;
+        }
+
+        private static int CountQuotes(string source, int index)
+        {
+            int position = index;
+            while (position < source.Length && source[position] == '"')
+            {
+                position++;
+            }
+
+            return position - index;
+        }
+
         private static bool TryAdvanceInterpolatedStringLiteral(string source, ref int index)
         {
             int start = index;

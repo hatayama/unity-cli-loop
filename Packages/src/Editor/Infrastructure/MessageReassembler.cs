@@ -19,6 +19,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private int _expectedContentLength = -1;
         private int _headerLength = -1;
         private bool _headerParsed = false;
+
+        // A framing error found after valid frames in the same chunk is held here so those frames are
+        // still delivered; ValidateState and the next extraction rethrow it.
+        private InvalidOperationException _pendingFramingError;
         
         // Statistics
         private int _totalMessagesReassembled = 0;
@@ -97,11 +101,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new ObjectDisposedException(nameof(MessageReassembler));
             }
             
+            ThrowPendingFramingError();
+
             var completeMessages = new List<string>();
             
             while (_currentDataLength > 0)
             {
-                string extractedMessage = TryExtractSingleMessage();
+                string extractedMessage;
+                try
+                {
+                    extractedMessage = TryExtractSingleMessage();
+                }
+                catch (InvalidOperationException ex) when (completeMessages.Count > 0)
+                {
+                    _pendingFramingError = ex;
+                    break;
+                }
+
                 if (extractedMessage == null)
                 {
                     // No complete message available
@@ -208,9 +224,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
                 
                 _headerParsed = true;
+                return true;
             }
-            
-            return parseResult;
+
+            // More data cannot fix a header that is already complete, so waiting would only stall the session.
+            if (frameParser.ContainsCompleteHeader(_assemblyBuffer, _currentDataLength))
+            {
+                throw new InvalidOperationException("Message header has no valid Content-Length. Message framing is corrupted.");
+            }
+
+            return false;
         }
         
         /// <summary>
@@ -257,6 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             
             _currentDataLength = 0;
+            _pendingFramingError = null;
             ResetParsingState();
         }
         
@@ -279,6 +303,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             };
         }
         
+        private void ThrowPendingFramingError()
+        {
+            if (_pendingFramingError != null)
+            {
+                throw _pendingFramingError;
+            }
+        }
+
         /// <summary>
         /// Validates the current state of the reassembler.
         /// </summary>
@@ -289,6 +321,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return false;
             }
+
+            ThrowPendingFramingError();
             
             // Check for reasonable buffer size - throw exception instead of silently clearing
             if (_currentDataLength > BufferConfig.MAX_MESSAGE_SIZE)

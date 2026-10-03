@@ -12,6 +12,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class AwaitableHelper
     {
+        private const string VoidTaskResultTypeName = "System.Threading.Tasks.VoidTaskResult";
+
+        // Why a cap: a finished awaitable resolves synchronously, so one that keeps producing another awaitable
+        // (or a struct one that returns itself, which boxes to a new reference each time) would spin on the main
+        // thread forever without yielding. Real task types never nest this deep.
+        internal const int MaxReturnedAwaitableDepth = 8;
+
         public static async Task<object> AwaitIfNeeded(object value, CancellationToken cancellationToken)
         {
             if (value == null)
@@ -45,6 +52,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Awaits the value, then keeps awaiting while the result is itself awaitable, up to
+        /// MaxReturnedAwaitableDepth levels; the value reached at the cap is returned as is.
+        /// </summary>
+        public static async Task<object> AwaitReturnedAwaitablesAsync(object value, CancellationToken cancellationToken)
+        {
+            object current = value;
+            for (int depth = 0; depth < MaxReturnedAwaitableDepth && IsAwaitable(current); depth++)
+            {
+                object next = await AwaitIfNeeded(current, cancellationToken).ConfigureAwait(false);
+                if (ReferenceEquals(next, current))
+                {
+                    // An awaitable whose result is itself would otherwise use up the cap for nothing.
+                    return current;
+                }
+
+                current = next;
+            }
+
+            return current;
+        }
+
+        /// <summary>
+        /// True when AwaitIfNeeded would await the value instead of returning it unchanged.
+        /// </summary>
+        public static bool IsAwaitable(object value)
+        {
+            if (value == null)
+            {
+                return false;
+            }
+
+            Type valueType = value.GetType();
+            return typeof(Task).IsAssignableFrom(valueType)
+                || IsValueTask(valueType)
+                || IsGenericValueTask(valueType)
+                || valueType.GetMethod("GetAwaiter", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null) != null;
+        }
+
         private static async Task<object> AwaitTaskResultIfNeededAsync(
             object value,
             Type valueType,
@@ -58,6 +104,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static object TryReadGenericTaskResult(object value, Type valueType)
         {
             if (!valueType.IsGenericType || valueType.GetGenericTypeDefinition() != typeof(Task<>))
+            {
+                return null;
+            }
+
+            // Why: the runtime backs an async Task method with Task<VoidTaskResult>, whose Result is an
+            // internal placeholder rather than a value the snippet returned.
+            if (valueType.GetGenericArguments()[0].FullName == VoidTaskResultTypeName)
             {
                 return null;
             }

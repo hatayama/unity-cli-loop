@@ -200,5 +200,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "unity-cli-loop-tests",
                 Guid.NewGuid().ToString("N"));
         }
+
+        /// <summary>
+        /// Verifies that an empty Assets path resolves to no project root.
+        /// </summary>
+        [Test]
+        public void ResolveCurrentProjectRoot_WhenAssetsPathIsEmpty_ReturnsEmpty()
+        {
+            string result = CliPinSynchronizer.ResolveCurrentProjectRoot(string.Empty);
+
+            Assert.That(result, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies that a file-system root used as the Assets path resolves to no project root because it has no parent.
+        /// </summary>
+        [Test]
+        public void ResolveCurrentProjectRoot_WhenAssetsPathIsFileSystemRoot_ReturnsEmpty()
+        {
+            string fileSystemRoot = Path.GetPathRoot(Path.GetTempPath());
+
+            string result = CliPinSynchronizer.ResolveCurrentProjectRoot(fileSystemRoot);
+
+            Assert.That(result, Is.Empty);
+        }
     }
 }

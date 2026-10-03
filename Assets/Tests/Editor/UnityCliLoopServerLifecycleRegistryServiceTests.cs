@@ -129,5 +129,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             newSource.RaiseServerLoopExited();
             Assert.That(invocationCount, Is.EqualTo(1));
         }
+
+        /// <summary>
+        /// Verifies removing a ServerStateChanged handler stops it from receiving both started and stopping publishes.
+        /// </summary>
+        [Test]
+        public void ServerStateChanged_AfterHandlerRemoved_DoesNotInvokeHandlerForEitherPublish()
+        {
+            UnityCliLoopServerLifecycleRegistryService registry = new UnityCliLoopServerLifecycleRegistryService();
+            int invocationCount = 0;
+            Action handler = () => invocationCount++;
+            registry.ServerStateChanged += handler;
+            registry.ServerStateChanged -= handler;
+
+            registry.PublishServerStarted();
+            registry.PublishServerStopping();
+
+            Assert.That(invocationCount, Is.Zero);
+        }
+
+        /// <summary>
+        /// Verifies removing a ServerStopping handler stops it from receiving stopping publishes.
+        /// </summary>
+        [Test]
+        public void PublishServerStopping_AfterHandlerRemoved_DoesNotInvokeHandler()
+        {
+            UnityCliLoopServerLifecycleRegistryService registry = new UnityCliLoopServerLifecycleRegistryService();
+            int invocationCount = 0;
+            Action handler = () => invocationCount++;
+            registry.ServerStopping += handler;
+            registry.ServerStopping -= handler;
+
+            registry.PublishServerStopping();
+
+            Assert.That(invocationCount, Is.Zero);
+        }
+
+        /// <summary>
+        /// Verifies removing a ServerLoopExited handler unwires it from the registered source.
+        /// </summary>
+        [Test]
+        public void ServerLoopExited_WhenHandlerRemovedAfterRegisterSource_UnwiresHandlerFromSource()
+        {
+            UnityCliLoopServerLifecycleRegistryService registry = new UnityCliLoopServerLifecycleRegistryService();
+            FakeLifecycleSource source = new FakeLifecycleSource();
+            registry.RegisterSource(source);
+            int invocationCount = 0;
+            Action handler = () => invocationCount++;
+            registry.ServerLoopExited += handler;
+
+            registry.ServerLoopExited -= handler;
+            source.RaiseServerLoopExited();
+
+            Assert.That(invocationCount, Is.Zero);
+            Assert.That(source.HasServerLoopExitedSubscribers, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a ServerLoopExited handler removed before any source exists is not wired onto a source registered later.
+        /// </summary>
+        [Test]
+        public void ServerLoopExited_WhenHandlerRemovedBeforeRegisterSource_IsNotWiredOntoLaterSource()
+        {
+            UnityCliLoopServerLifecycleRegistryService registry = new UnityCliLoopServerLifecycleRegistryService();
+            FakeLifecycleSource source = new FakeLifecycleSource();
+            int invocationCount = 0;
+            Action handler = () => invocationCount++;
+            registry.ServerLoopExited += handler;
+
+            registry.ServerLoopExited -= handler;
+            registry.RegisterSource(source);
+            source.RaiseServerLoopExited();
+
+            Assert.That(invocationCount, Is.Zero);
+            Assert.That(source.HasServerLoopExitedSubscribers, Is.False);
+        }
     }
 }
