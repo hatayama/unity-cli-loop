@@ -16,23 +16,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             try
             {
-                if (!channel.TryQuitGracefully(GracefulQuitWaitMilliseconds))
+                if (!TryQuit(channel))
                 {
                     KillQuietly(channel);
                 }
             }
+            finally
+            {
+                channel.Dispose();
+            }
+        }
+
+        // True when the process has left or is leaving on its own; false when it has to be killed.
+        // Why the handlers cover only the quit: a kill failure of a live process must reach the
+        // caller, and a handler around the kill as well would drop it.
+        private static bool TryQuit(ITransformWorkerChannel channel)
+        {
+            try
+            {
+                return channel.TryQuitGracefully(GracefulQuitWaitMilliseconds);
+            }
             catch (IOException)
             {
                 // The pipe is already gone; the process is exiting or exited.
-                KillQuietly(channel);
+                return false;
             }
             catch (InvalidOperationException)
             {
                 // The process exited between the liveness check and the write.
-            }
-            finally
-            {
-                channel.Dispose();
+                return true;
             }
         }
 
