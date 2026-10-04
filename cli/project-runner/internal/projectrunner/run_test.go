@@ -346,17 +346,6 @@ func TestRunListPrintsLiveCatalog(t *testing.T) {
 	}
 }
 
-// Verifies that the post-compile warmup warning is silent when the warmup succeeded.
-func TestWritePostCompileWarmupWarningIsSilentWithoutError(t *testing.T) {
-	var stderr bytes.Buffer
-
-	writePostCompileWarmupWarning(&stderr, nil)
-
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr must stay empty: %q", stderr.String())
-	}
-}
-
 // Verifies that an undecodable compile result never triggers the post-compile readiness wait.
 func TestCompileResultReadinessWaitModeIgnoresMalformedResult(t *testing.T) {
 	if mode := compileResultReadinessWaitMode([]byte("not json")); mode != compileReadinessWaitNone {

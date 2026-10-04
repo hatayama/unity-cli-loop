@@ -363,9 +363,6 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 }
 
 func writePostCompileWarmupWarning(stderr io.Writer, err error) {
-	if err == nil {
-		return
-	}
 	// Why: this warmup is a hidden optimization, so it must not turn a
 	// successful compile result into a user-visible command failure.
 	_, _ = fmt.Fprintf(stderr, "warning: post-compile warmup skipped: %v\n", err)

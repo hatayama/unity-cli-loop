@@ -704,7 +704,7 @@ func assertPausePointRecoveryWarningsAgree(t *testing.T, payload map[string]any,
 }
 
 // Verifies the success probe treats enable output that fails to decode as a failure even when
-// Success was already decoded as true, and nil or failed responses never gain the switch warning.
+// Success was already decoded as true, and failed responses never gain the switch warning.
 func TestPausePointRecoveryProbesIgnoreUnusableResponses(t *testing.T) {
 	// Why this input: the decoder assigns Success=true before it hits the mistyped ErrorCode, so
 	// only the decode-error branch keeps the probe from reporting success.
@@ -712,8 +712,6 @@ func TestPausePointRecoveryProbesIgnoreUnusableResponses(t *testing.T) {
 		t.Fatal("output that fails to decode must not count as a successful enable")
 	}
 
-	applyPausePointRecoverySwitchWarning(nil)
-	appendPausePointWarningToBothForms(nil, "ignored")
 	failed := pausePointStatusResponse{Success: false}
 	applyPausePointRecoverySwitchWarning(&failed)
 	if failed.Warning != "" || len(failed.Warnings) != 0 {

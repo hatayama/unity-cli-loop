@@ -56,7 +56,7 @@ func isSuccessfulEnableResponse(raw []byte) bool {
 }
 
 func applyPausePointRecoverySwitchWarning(response *pausePointStatusResponse) {
-	if response == nil || !response.Success {
+	if !response.Success {
 		return
 	}
 	appendPausePointWarningToBothForms(response, pausePointAutoDebugSwitchWarning)
@@ -65,9 +65,6 @@ func applyPausePointRecoverySwitchWarning(response *pausePointStatusResponse) {
 // appendPausePointWarningToBothForms adds one CLI-side warning while keeping Warnings the single
 // aggregate and Warning its joined form, so neither field can carry a topic the other is missing.
 func appendPausePointWarningToBothForms(response *pausePointStatusResponse, warning string) {
-	if response == nil {
-		return
-	}
 	*response = applyPausePointWarnings(*response, warning)
 }
 
