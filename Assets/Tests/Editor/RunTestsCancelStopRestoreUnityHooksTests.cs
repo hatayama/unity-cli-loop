@@ -12,32 +12,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class RunTestsCancelStopRestoreUnityHooksTests
     {
-        [TearDown]
-        public void TearDown()
-        {
-            RunTestsCancelStopRestoreUnityHooks.OverrideHooksForTests = null;
-        }
-
-        /// <summary>
-        /// Verifies a test override replaces the production hooks.
-        /// </summary>
-        [Test]
-        public void Resolve_WithAnOverride_ReturnsTheOverride()
-        {
-            RunTestsCancelStopRestoreHooks overrideHooks = new RunTestsCancelStopRestoreHooks();
-            RunTestsCancelStopRestoreUnityHooks.OverrideHooksForTests = overrideHooks;
-
-            Assert.That(RunTestsCancelStopRestoreUnityHooks.Resolve(), Is.SameAs(overrideHooks));
-        }
-
         /// <summary>
         /// Verifies the production hooks offer cancel and run polling exactly when the bridge resolved them, and
         /// always offer the Play Mode, delay, and warning hooks.
         /// </summary>
         [Test]
-        public void Resolve_WithoutAnOverride_WiresTheCancelHelpersTheBridgeFound()
+        public void CreateDefault_WiresTheCancelHelpersTheBridgeFound()
         {
-            RunTestsCancelStopRestoreHooks hooks = RunTestsCancelStopRestoreUnityHooks.Resolve();
+            RunTestsCancelStopRestoreHooks hooks = RunTestsCancelStopRestoreUnityHooks.CreateDefault();
 
             Assert.That(hooks.TryCancelTestRun != null, Is.EqualTo(TestRunnerApiCancelBridge.HasCancelTestRun));
             Assert.That(hooks.IsRunActive != null, Is.EqualTo(TestRunnerApiCancelBridge.HasIsRunActive));

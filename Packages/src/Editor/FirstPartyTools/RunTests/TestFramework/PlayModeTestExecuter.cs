@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: true,
                     runGuid: runGuid,
-                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
+                    RunTestsCancelStopRestoreUnityHooks.CreateDefault()).ConfigureAwait(false);
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
             finally
@@ -145,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: false,
                     runGuid: runGuid,
-                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
+                    RunTestsCancelStopRestoreUnityHooks.CreateDefault()).ConfigureAwait(false);
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
         }

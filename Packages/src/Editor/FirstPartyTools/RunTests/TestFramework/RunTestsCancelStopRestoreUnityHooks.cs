@@ -14,16 +14,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class RunTestsCancelStopRestoreUnityHooks
     {
-        /// <summary>
-        /// Optional override for pure unit / EditMode stubbing. Null uses production hooks.
-        /// </summary>
-        internal static RunTestsCancelStopRestoreHooks OverrideHooksForTests { get; set; }
-
-        internal static RunTestsCancelStopRestoreHooks Resolve()
-        {
-            return OverrideHooksForTests ?? CreateDefault();
-        }
-
         internal static RunTestsCancelStopRestoreHooks CreateDefault()
         {
             TestRunnerApiCancelBridge.EnsureResolved();
