@@ -35,7 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeTimeout timeout = new FakeTimeout();
             EditorFrameWaiterService service = new EditorFrameWaiterService(timeout.Wait);
 
-            bool completed = await service.WaitFramesOrTimeoutAsync(0, 100, CancellationToken.None);
+            bool completed = await AwaitWithoutCancellationAsync(
+                service.WaitFramesOrTimeoutAsync(0, 100, CancellationToken.None));
 
             Assert.That(completed, Is.True);
             Assert.That(timeout.Requests, Is.Empty);
@@ -58,10 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(service.PendingWaitCount, Is.EqualTo(1));
 
             service.UpdateRequests();
-            bool completed = await wait;
+            // Why before the await: a frame that never completes would otherwise hang until the test timeout.
+            Assert.That(service.PendingWaitCount, Is.EqualTo(0));
+            bool completed = await AwaitWithoutCancellationAsync(wait);
 
             Assert.That(completed, Is.True);
-            Assert.That(service.PendingWaitCount, Is.EqualTo(0));
             Assert.That(timeout.Requests, Is.EqualTo(new[] { 100 }));
             Assert.That(timeout.LastTask.IsCanceled, Is.True);
         }
@@ -78,18 +80,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Task<bool> shortWait = service.WaitFramesOrTimeoutAsync(1, 100, CancellationToken.None);
             Task<bool> longWait = service.WaitFramesOrTimeoutAsync(3, 100, CancellationToken.None);
             service.UpdateRequests();
-            bool shortCompleted = await shortWait;
+            Assert.That(service.PendingWaitCount, Is.EqualTo(1));
+            bool shortCompleted = await AwaitWithoutCancellationAsync(shortWait);
 
             Assert.That(shortCompleted, Is.True);
             Assert.That(longWait.IsCompleted, Is.False);
-            Assert.That(service.PendingWaitCount, Is.EqualTo(1));
 
             service.UpdateRequests();
             service.UpdateRequests();
-            bool longCompleted = await longWait;
+            Assert.That(service.PendingWaitCount, Is.EqualTo(0));
+            bool longCompleted = await AwaitWithoutCancellationAsync(longWait);
 
             Assert.That(longCompleted, Is.True);
-            Assert.That(service.PendingWaitCount, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -103,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Task<bool> wait = service.WaitFramesOrTimeoutAsync(2, 100, CancellationToken.None);
             timeout.CompleteLast();
-            bool completed = await wait;
+            bool completed = await AwaitWithoutCancellationAsync(wait);
 
             Assert.That(completed, Is.False);
             Assert.That(service.PendingWaitCount, Is.EqualTo(0));
@@ -182,6 +184,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(service.PendingWaitCount, Is.EqualTo(0));
             Assert.That(timeout.LastTask.IsCanceled, Is.True);
+        }
+
+        /// <summary>
+        /// Awaits a wait that must produce a value. Unity Test Framework records an async test that ends Canceled
+        /// as passed, so an unexpected cancellation is turned into a failure here.
+        /// </summary>
+        private static async Task<bool> AwaitWithoutCancellationAsync(Task<bool> wait)
+        {
+            try
+            {
+                return await wait;
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("The wait was canceled instead of returning a value.");
+                return false;
+            }
         }
 
         /// <summary>
