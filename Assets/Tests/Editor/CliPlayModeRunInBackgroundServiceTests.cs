@@ -103,6 +103,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_store.IsActive, Is.True);
         }
 
+        /// <summary>
+        /// Verifies a project that already had runInBackground on gets it back after CLI Play, even when Unity
+        /// overwrote the value during the transition, instead of having it turned off.
+        /// </summary>
+        [Test]
+        public void OnPlayModeStateChanged_WhenOriginalWasOn_RestoresOnAfterPlayModeExit()
+        {
+            _runInBackground = true;
+
+            _service.EnableForCliPlayStart();
+
+            Assert.That(_store.OriginalRunInBackground, Is.True);
+
+            _runInBackground = false;
+            _service.OnPlayModeStateChanged(PlayModeStateChange.ExitingPlayMode);
+
+            Assert.That(_runInBackground, Is.True);
+
+            _runInBackground = false;
+            _service.OnPlayModeStateChanged(PlayModeStateChange.EnteredEditMode);
+
+            Assert.That(_runInBackground, Is.True);
+            Assert.That(_store.IsActive, Is.False);
+        }
+
         private sealed class InMemoryStore : ICliPlayModeRunInBackgroundStore
         {
             public bool IsActive { get; private set; }
