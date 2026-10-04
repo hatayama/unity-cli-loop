@@ -299,6 +299,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(listener.StopCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: attaching a second listener to a running server is rejected, so the first listener is still the one Stop releases.
+        /// </summary>
+        [Test]
+        public void AttachListenerForTesting_WhenAlreadyRunning_RejectsAndKeepsFirstListener()
+        {
+            FakeListener listener = new FakeListener();
+            FakeListener replacement = new FakeListener();
+            UnityCliLoopBridgeServer server = CreateServerWithListener(listener, AcceptNever);
+            server.AttachListenerForTesting(listener);
+
+            try
+            {
+                server.AttachListenerForTesting(replacement);
+                Assert.Fail("Attaching a listener to a running server should be rejected.");
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            server.StopServer();
+
+            Assert.That(listener.StopCount, Is.EqualTo(1));
+            Assert.That(replacement.StopCount, Is.EqualTo(0));
+        }
+
         private static UnityCliLoopBridgeServer CreateServerWithListener(
             FakeListener listener,
             Func<IBridgeTransportListener, CancellationToken, Task<BridgeClientConnection>> acceptClient)

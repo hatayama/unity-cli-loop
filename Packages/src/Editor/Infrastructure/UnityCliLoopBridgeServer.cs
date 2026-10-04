@@ -162,7 +162,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             System.Diagnostics.Debug.Assert(listener != null, "listener must not be null");
 
-            _transportListener = listener ?? throw new ArgumentNullException(nameof(listener));
+            IBridgeTransportListener validatedListener = listener ?? throw new ArgumentNullException(nameof(listener));
+            // Why: attaching over a running server would drop the live listener and token source without stopping them.
+            if (_isRunning)
+            {
+                throw new InvalidOperationException("A listener cannot be attached while the server is running.");
+            }
+
+            _transportListener = validatedListener;
             _cancellationTokenSource = new CancellationTokenSource();
             _unexpectedExitCleanupStarted = 0;
             _isRunning = true;
