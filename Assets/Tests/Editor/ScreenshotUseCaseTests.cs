@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class ScreenshotUseCaseTests
     {
         [Test]
-        public void ExecuteAsync_WhenRaycastLayerMaskIsSetWithoutRaycastGrid_ShouldThrowValidationException()
+        public async Task ExecuteAsync_WhenRaycastLayerMaskIsSetWithoutRaycastGrid_ShouldThrowValidationException()
         {
             // Tests that setting RaycastLayerMask without AnnotateRaycastGrid fails validation.
             JObject parameters = new JObject
@@ -23,15 +23,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ["RaycastLayerMask"] = "Default"
             };
 
-            UnityCliLoopToolParameterValidationException? exception =
-                Assert.ThrowsAsync<UnityCliLoopToolParameterValidationException>(
-                    async () => await ExecuteScreenshot(parameters));
-
-            Assert.That(exception!.Message, Does.Contain("RaycastLayerMask requires AnnotateRaycastGrid=true"));
+            // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
+            try
+            {
+                await ExecuteScreenshot(parameters);
+                Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
+            }
+            catch (UnityCliLoopToolParameterValidationException exception)
+            {
+                Assert.That(exception.Message, Does.Contain("RaycastLayerMask requires AnnotateRaycastGrid=true"));
+            }
         }
 
         [Test]
-        public void ExecuteAsync_WhenElementsOnlyHasNoAnnotationMode_ShouldThrowValidationException()
+        public async Task ExecuteAsync_WhenElementsOnlyHasNoAnnotationMode_ShouldThrowValidationException()
         {
             // Tests that ElementsOnly without AnnotateElements or AnnotateRaycastGrid fails validation.
             JObject parameters = new JObject
@@ -40,13 +45,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ["ElementsOnly"] = true
             };
 
-            UnityCliLoopToolParameterValidationException? exception =
-                Assert.ThrowsAsync<UnityCliLoopToolParameterValidationException>(
-                    async () => await ExecuteScreenshot(parameters));
-
-            Assert.That(
-                exception!.Message,
-                Does.Contain("ElementsOnly requires AnnotateElements=true or AnnotateRaycastGrid=true"));
+            // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
+            try
+            {
+                await ExecuteScreenshot(parameters);
+                Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
+            }
+            catch (UnityCliLoopToolParameterValidationException exception)
+            {
+                Assert.That(
+                    exception.Message,
+                    Does.Contain("ElementsOnly requires AnnotateElements=true or AnnotateRaycastGrid=true"));
+            }
         }
 
         [Test]
@@ -67,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ExecuteAsync_WhenRaycastLayerMaskContainsUnknownLayer_ShouldThrowValidationException()
+        public async Task ExecuteAsync_WhenRaycastLayerMaskContainsUnknownLayer_ShouldThrowValidationException()
         {
             // Tests that an unrecognized layer name in RaycastLayerMask fails validation with the layer name in the message.
             JObject parameters = new JObject
@@ -77,12 +87,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ["RaycastLayerMask"] = "MissingLayerForTest"
             };
 
-            UnityCliLoopToolParameterValidationException? exception =
-                Assert.ThrowsAsync<UnityCliLoopToolParameterValidationException>(
-                    async () => await ExecuteScreenshot(parameters));
-
-            Assert.That(exception!.Message, Does.Contain("unknown layer name"));
-            Assert.That(exception!.Message, Does.Contain("MissingLayerForTest"));
+            // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
+            try
+            {
+                await ExecuteScreenshot(parameters);
+                Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
+            }
+            catch (UnityCliLoopToolParameterValidationException exception)
+            {
+                Assert.That(exception.Message, Does.Contain("unknown layer name"));
+                Assert.That(exception.Message, Does.Contain("MissingLayerForTest"));
+            }
         }
 
         /// <summary>
@@ -102,27 +117,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// What: Edit Mode auto + annotate-elements still fails validation because auto resolves to window.
         /// </summary>
         [Test]
-        public void ExecuteAsync_WhenCaptureModeOmittedWithAnnotateElementsInEditMode_ShouldThrowValidationException()
+        public async Task ExecuteAsync_WhenCaptureModeOmittedWithAnnotateElementsInEditMode_ShouldThrowValidationException()
         {
             JObject parameters = new JObject
             {
                 ["AnnotateElements"] = true
             };
 
-            UnityCliLoopToolParameterValidationException? exception =
-                Assert.ThrowsAsync<UnityCliLoopToolParameterValidationException>(
-                    async () => await ExecuteScreenshot(parameters));
-
-            Assert.That(
-                exception!.Message,
-                Is.EqualTo("AnnotateElements is only supported when CaptureMode=rendering"));
+            // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
+            try
+            {
+                await ExecuteScreenshot(parameters);
+                Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
+            }
+            catch (UnityCliLoopToolParameterValidationException exception)
+            {
+                Assert.That(
+                    exception.Message,
+                    Is.EqualTo("AnnotateElements is only supported when CaptureMode=rendering"));
+            }
         }
 
         /// <summary>
         /// What: explicit window + annotate-elements is still rejected while Play Mode is injected.
         /// </summary>
         [Test]
-        public void CaptureAsync_WhenWindowSpecifiedWithAnnotateElementsWhilePlaying_ShouldThrowValidationException()
+        public async Task CaptureAsync_WhenWindowSpecifiedWithAnnotateElementsWhilePlaying_ShouldThrowValidationException()
         {
             JObject parameters = new JObject
             {
@@ -132,13 +152,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ScreenshotSchema schema = DeserializeScreenshotSchema(parameters);
             ScreenshotUseCase useCase = new ScreenshotUseCase(new FakeScreenshotEditorStateReader(true));
 
-            UnityCliLoopToolParameterValidationException? exception =
-                Assert.ThrowsAsync<UnityCliLoopToolParameterValidationException>(
-                    async () => await useCase.CaptureAsync(schema, CancellationToken.None));
-
-            Assert.That(
-                exception!.Message,
-                Is.EqualTo("AnnotateElements is only supported when CaptureMode=rendering"));
+            // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
+            try
+            {
+                await useCase.CaptureAsync(schema, CancellationToken.None);
+                Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
+            }
+            catch (UnityCliLoopToolParameterValidationException exception)
+            {
+                Assert.That(
+                    exception.Message,
+                    Is.EqualTo("AnnotateElements is only supported when CaptureMode=rendering"));
+            }
         }
 
         /// <summary>
