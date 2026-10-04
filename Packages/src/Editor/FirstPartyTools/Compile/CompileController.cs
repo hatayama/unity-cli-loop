@@ -30,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private int _assemblyFinishedCount;
         private int _consoleErrorCountAtCompileStart;
         private readonly CompileLifecycleRecoveryCoordinator _recoveryCoordinator;
+        private ICompilePipelinePort _pipeline = new UnityCompilePipelinePort();
 
         public CompileController(
             ICompileResultSessionRepository compileResultSessionRepository,
@@ -47,7 +48,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 IsCompileRequestCompleted,
                 () => _currentCompileTask,
                 entries => new AssemblyDefinitionConsoleErrorValidationService().FindErrors(entries),
-                ReadConsoleErrorEntries,
+                // Why a lambda instead of the method group: the coordinator must read through the
+                // port that is current at recovery time, not the one captured at construction.
+                () => _pipeline.ReadConsoleErrorEntries(),
                 () => _consoleErrorCountAtCompileStart,
                 () => new AssemblyDefinitionDuplicationValidationService().ValidateNoDuplicateAsmdefNames(),
                 () => _isForceCompile,
@@ -112,6 +115,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityEngine.Debug.Assert(resolveExternalSceneChanges != null, "resolveExternalSceneChanges must not be null");
             _resolveExternalSceneChangesForTesting = resolveExternalSceneChanges ??
                 throw new ArgumentNullException(nameof(resolveExternalSceneChanges));
+        }
+
+        /// <summary>
+        /// Replaces the Unity compile pipeline so tests can drive a compile request without
+        /// refreshing assets or starting a real compilation.
+        /// </summary>
+        internal void SetCompilePipelineForTesting(ICompilePipelinePort pipeline)
+        {
+            UnityEngine.Debug.Assert(pipeline != null, "pipeline must not be null");
+            _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
         }
 
         private (bool CanProceed, string Message, string[] ScenePaths) ResolveExternalSceneChanges()
@@ -183,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isForceCompile = forceRecompile;
             // Why before Refresh: the asmdef import errors that abort a compile are logged during
             // AssetDatabase.Refresh, so the boundary must precede it to keep them in the summary.
-            _consoleErrorCountAtCompileStart = ReadConsoleErrorEntries().Length;
+            _consoleErrorCountAtCompileStart = _pipeline.ReadConsoleErrorEntries().Length;
             bool eventsRegistered = false;
             bool compileTaskTransferred = false;
 
@@ -193,11 +206,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // and that compile can raise Script Updating Consent. Begin must be set first
                 // or the prefix lets the modal through on the typical "edit then uloop compile" path.
                 CompileApiUpdaterConsentState.BeginCliCompile();
-                AssetDatabase.Refresh();
+                _pipeline.RefreshAssets();
 
-                AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
                 AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
-                    assemblyDefinitionValidationService.FindCurrentErrors();
+                    _pipeline.FindCurrentAssemblyDefinitionErrors();
                 if (assemblyDefinitionErrors.HasErrors)
                 {
                     CompileResult result =
@@ -215,23 +227,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 // Register events.
-                CompilationPipeline.compilationFinished += HandleCompileFinished;
-                CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
+                _pipeline.SubscribeCompilationEvents(HandleCompileFinished, HandleAssemblyFinished);
                 eventsRegistered = true;
 
                 string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
                 OnCompileStarted?.Invoke(startMessage);
 
-                if (forceRecompile)
-                {
-                    CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
-                }
-                else
-                {
-                    CompilationPipeline.RequestScriptCompilation();
-                }
+                _pipeline.RequestScriptCompilation(forceRecompile);
 
-                _recoveryCoordinator.StartWatchdog(compileTask, ct);
+                _pipeline.StartWatchdog(_recoveryCoordinator, compileTask, ct);
                 compileTaskTransferred = true;
                 return await compileTask.Task.ConfigureAwait(false);
             }
@@ -249,16 +253,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool IsCompileRequestCompleted()
         {
             return _currentCompileTask == null || _currentCompileTask.Task.IsCompleted;
-        }
-
-        /// <summary>
-        /// Snapshots the current Unity Console error entries for indeterminate-result diagnosis.
-        /// </summary>
-        private static UnityCliLoopConsoleLogEntry[] ReadConsoleErrorEntries()
-        {
-            IUnityCliLoopConsoleLogService consoleLogs = new LogRetrievalService();
-            UnityCliLoopConsoleLogResult errorLogs = consoleLogs.GetLogs(UnityCliLoopLogType.Error);
-            return errorLogs.LogEntries;
         }
 
         private Dictionary<string, object> BuildCompileControllerStateContext(
@@ -455,8 +449,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private void UnregisterCompilationEvents()
         {
-            CompilationPipeline.compilationFinished -= HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
+            _pipeline.UnsubscribeCompilationEvents(HandleCompileFinished, HandleAssemblyFinished);
         }
 
         /// <summary>
@@ -544,8 +537,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public void Cleanup()
         {
             // Unregister events just in case.
-            CompilationPipeline.compilationFinished -= HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
+            UnregisterCompilationEvents();
 
             // If there is an incomplete task, cancel it.
             if (_currentCompileTask != null && !_currentCompileTask.Task.IsCompleted)
