@@ -124,7 +124,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void SetCompilePipelineForTesting(ICompilePipelinePort pipeline)
         {
             UnityEngine.Debug.Assert(pipeline != null, "pipeline must not be null");
-            _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+            ICompilePipelinePort validatedPipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+            // Why: subscribe and unsubscribe both go through the current port, so swapping it mid-compile
+            // would send the unsubscribe to the new port and leave the old subscription holding this controller.
+            if (_isCompiling)
+            {
+                throw new InvalidOperationException("The compile pipeline cannot be replaced while a compile is in flight.");
+            }
+
+            _pipeline = validatedPipeline;
         }
 
         private (bool CanProceed, string Message, string[] ScenePaths) ResolveExternalSceneChanges()

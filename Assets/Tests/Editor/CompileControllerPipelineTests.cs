@@ -218,6 +218,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: replacing the pipeline during a pending compile is rejected, so Cleanup still unsubscribes from the original port.
+        /// </summary>
+        [Test]
+        public async Task SetCompilePipelineForTesting_WhenCompileIsPending_RejectsReplacementAndKeepsOriginalPort()
+        {
+            FakeCompilePipelinePort pipeline = new();
+            FakeCompilePipelinePort replacement = new();
+            using CompileController controller = CreateController(pipeline);
+            Task<CompileResult> pendingCompile = controller.TryCompileAsync(
+                forceRecompile: false,
+                playModeStopWarning: null,
+                CancellationToken.None);
+
+            try
+            {
+                controller.SetCompilePipelineForTesting(replacement);
+                Assert.Fail("Replacing the pipeline during a pending compile should be rejected.");
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            controller.Cleanup();
+
+            Assert.That(pipeline.UnsubscribeCount, Is.EqualTo(1));
+            Assert.That(pipeline.MismatchedUnsubscribeCount, Is.EqualTo(0));
+            Assert.That(replacement.UnsubscribeCount + replacement.MismatchedUnsubscribeCount, Is.EqualTo(0));
+            try
+            {
+                await pendingCompile;
+                Assert.Fail("The pending compile should be canceled by Cleanup.");
+            }
+            catch (TaskCanceledException)
+            {
+            }
+        }
+
         private static CompileController CreateController(FakeCompilePipelinePort pipeline)
         {
             CompileController controller = new(
