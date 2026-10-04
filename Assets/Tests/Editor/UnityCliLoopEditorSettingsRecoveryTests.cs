@@ -424,7 +424,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies saving settings whose JSON exceeds the size limit is rejected and leaves the stored file unchanged.
+        /// Verifies saving settings whose JSON exceeds the size limit is rejected and leaves both the stored file and
+        /// the cached settings unchanged.
         /// </summary>
         [Test]
         public void SaveSettings_WhenJsonExceedsSizeLimit_ThrowsAndKeepsStoredSettings()
@@ -439,6 +440,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.Throws<SecurityException>(() => _editorSettingsPort.SaveSettings(oversizedSettings));
 
             Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(storedJson));
+            UnityCliLoopEditorSettingsData cachedSettings = _editorSettingsPort.GetSettings();
+            Assert.That(cachedSettings.lastSeenSetupWizardVersion, Is.Empty);
+            Assert.That(cachedSettings.showDeveloperTools, Is.True);
         }
 
         /// <summary>
