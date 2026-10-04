@@ -198,6 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
         // The modifiers of a declaration run back to the previous statement end, block brace, or attribute bracket.
+        // An array rank specifier in the return type ("int[] Run", "Task<string[]> Run") is skipped, not a boundary.
         private static string ReadModifierText(string source, CodeTextMask codeTextMask, int declarationIndex)
         {
             int startIndex = declarationIndex - 1;
@@ -205,7 +206,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             {
                 if (codeTextMask.IsCodeAt(startIndex) && IsModifierBoundary(source[startIndex]))
                 {
-                    break;
+                    int rankOpenIndex = ReadRankSpecifierOpenIndex(source, codeTextMask, startIndex);
+                    if (rankOpenIndex < 0)
+                    {
+                        break;
+                    }
+
+                    startIndex = rankOpenIndex;
                 }
 
                 startIndex--;
@@ -217,6 +224,30 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         private static bool IsModifierBoundary(char character)
         {
             return character == ';' || character == '{' || character == '}' || character == ']';
+        }
+
+        // Returns the '[' of a rank specifier ("[]", "[,]") closed at the index, or -1 for any other bracket such as
+        // an attribute. A rank specifier holds only commas and spaces and follows a type: a name, '>', ']', '?' or ')'.
+        private static int ReadRankSpecifierOpenIndex(string source, CodeTextMask codeTextMask, int closeIndex)
+        {
+            if (source[closeIndex] != ']')
+            {
+                return -1;
+            }
+
+            int index = closeIndex - 1;
+            while (index >= 0 && codeTextMask.IsCodeAt(index) && (source[index] == ',' || char.IsWhiteSpace(source[index])))
+            {
+                index--;
+            }
+
+            if (index < 0 || !codeTextMask.IsCodeAt(index) || source[index] != '[')
+            {
+                return -1;
+            }
+
+            int ownerIndex = ReadPreviousCodeIndex(source, codeTextMask, index - 1);
+            return ownerIndex >= 0 && IsNullableTypeSuffixOwner(source[ownerIndex]) ? index : -1;
         }
 
         // Scans the class body once, front to back, skipping nested type bodies, so building the index stays linear.
@@ -332,6 +363,11 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(identifierStartIndex >= 0, "identifierStartIndex must not be negative");
 
+            if (IsLambdaParameterName(source, codeTextMask, identifierStartIndex))
+            {
+                return true;
+            }
+
             int previousIndex = ReadPreviousCodeIndex(source, codeTextMask, identifierStartIndex - 1);
             if (previousIndex < 0)
             {
@@ -378,6 +414,70 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 default:
                     return !IsExpressionPunctuation(previous);
             }
+        }
+
+        // "Run => ..", or "(Run, x) => .." where the name opens or continues a parenthesized parameter list.
+        // Foo(Run, x); is still a use: its ')' is not followed by "=>".
+        private static bool IsLambdaParameterName(string source, CodeTextMask codeTextMask, int identifierStartIndex)
+        {
+            int identifierEndIndex = ReadIdentifierEndIndex(source, identifierStartIndex);
+            if (IsArrowAt(source, codeTextMask, ReadNextCodeIndex(source, codeTextMask, identifierEndIndex)))
+            {
+                return true;
+            }
+
+            int previousIndex = ReadPreviousCodeIndex(source, codeTextMask, identifierStartIndex - 1);
+            if (previousIndex < 0 || (source[previousIndex] != '(' && source[previousIndex] != ','))
+            {
+                return false;
+            }
+
+            int closeIndex = FindListCloseParenthesisIndex(source, codeTextMask, identifierEndIndex);
+            return closeIndex >= 0 &&
+                   IsArrowAt(source, codeTextMask, ReadNextCodeIndex(source, codeTextMask, closeIndex + 1));
+        }
+
+        // Finds the ')' that closes the list the index is in, or -1 when the statement or block ends first.
+        private static int FindListCloseParenthesisIndex(string source, CodeTextMask codeTextMask, int startIndex)
+        {
+            int depth = 0;
+            for (int index = startIndex; index < source.Length; index++)
+            {
+                if (!codeTextMask.IsCodeAt(index))
+                {
+                    continue;
+                }
+
+                char character = source[index];
+                if (character == '(' || character == '[')
+                {
+                    depth++;
+                }
+                else if (character == ')' || character == ']')
+                {
+                    if (depth == 0)
+                    {
+                        return character == ')' ? index : -1;
+                    }
+
+                    depth--;
+                }
+                else if (character == ';' || character == '{' || character == '}')
+                {
+                    return -1;
+                }
+            }
+
+            return -1;
+        }
+
+        private static bool IsArrowAt(string source, CodeTextMask codeTextMask, int index)
+        {
+            return index >= 0 &&
+                   index + 1 < source.Length &&
+                   source[index] == '=' &&
+                   source[index + 1] == '>' &&
+                   codeTextMask.IsCodeAt(index + 1);
         }
 
         private static bool IsNullableTypeSuffixOwner(char character)
@@ -452,6 +552,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             return index;
+        }
+
+        private static int ReadNextCodeIndex(string source, CodeTextMask codeTextMask, int startIndex)
+        {
+            int index = startIndex;
+            while (index < source.Length && (!codeTextMask.IsCodeAt(index) || char.IsWhiteSpace(source[index])))
+            {
+                index++;
+            }
+
+            return index < source.Length ? index : -1;
         }
 
         private static string ReadIdentifierEndingAt(string source, CodeTextMask codeTextMask, int endIndex)
