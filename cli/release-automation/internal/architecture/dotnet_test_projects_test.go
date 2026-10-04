@@ -1,6 +1,8 @@
 package architecture
 
 import (
+	"encoding/xml"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,7 +15,10 @@ import (
 // Tests that every dotnet test project under tests/ is run by a workflow triggered by pull_request.
 func TestDotnetTestProjectsRunInPullRequestWorkflows(t *testing.T) {
 	repositoryRoot := findRepositoryRoot(t)
-	projects := dotnetTestProjectPaths(t, repositoryRoot)
+	projects, err := dotnetTestProjectPaths(repositoryRoot)
+	if err != nil {
+		t.Fatalf("failed to scan tests/ for dotnet test projects: %v", err)
+	}
 	if len(projects) == 0 {
 		t.Fatal("no dotnet test projects found under tests/; the scan is broken, so this guard would pass without checking anything")
 	}
@@ -113,20 +118,44 @@ func TestDotnetTestProjectsMissingFromPullRequestWorkflows(t *testing.T) {
 	}
 }
 
-// Tests that the tests/ scan reports only csproj files referencing Microsoft.NET.Test.Sdk, with forward slashes.
+// Tests that the tests/ scan reports, with forward slashes, only csproj files whose PackageReference
+// elements reference Microsoft.NET.Test.Sdk, in any attribute spacing, quoting, or letter case,
+// and ignores references that are only inside XML comments.
 func TestDotnetTestProjectPathsReportsOnlyTestProjects(t *testing.T) {
 	repositoryRoot := t.TempDir()
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Alpha", "Alpha.csproj"),
 		"<Project>\n  <ItemGroup>\n    <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" />\n  </ItemGroup>\n</Project>\n")
+	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Beta", "Beta.csproj"),
+		"<Project>\n  <ItemGroup>\n    <PackageReference Include = 'microsoft.net.test.sdk' Version=\"17.11.1\" />\n  </ItemGroup>\n</Project>\n")
+	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Commented", "Commented.csproj"),
+		"<Project>\n  <ItemGroup>\n    <!-- <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" /> -->\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\" />\n  </ItemGroup>\n</Project>\n")
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Helper", "Helper.csproj"),
 		"<Project>\n  <ItemGroup>\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\" />\n  </ItemGroup>\n</Project>\n")
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Alpha", "readme.txt"), "Microsoft.NET.Test.Sdk\n")
 
-	paths := dotnetTestProjectPaths(t, repositoryRoot)
+	paths, err := dotnetTestProjectPaths(repositoryRoot)
+	if err != nil {
+		t.Fatalf("unexpected scan error: %v", err)
+	}
 
-	expected := []string{"tests/Alpha/Alpha.csproj"}
+	expected := []string{"tests/Alpha/Alpha.csproj", "tests/Beta/Beta.csproj"}
 	if !reflect.DeepEqual(paths, expected) {
 		t.Fatalf("expected %v, got %v", expected, paths)
+	}
+}
+
+// Tests that a csproj under tests/ that is not well-formed XML fails the scan with its path instead of being skipped.
+func TestDotnetTestProjectPathsRejectsMalformedProjects(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Broken", "Broken.csproj"), "<Project><ItemGroup>")
+
+	_, err := dotnetTestProjectPaths(repositoryRoot)
+
+	if err == nil {
+		t.Fatal("expected a scan error for a malformed csproj, got nil")
+	}
+	if !strings.Contains(err.Error(), "tests/Broken/Broken.csproj") {
+		t.Fatalf("expected the error to name tests/Broken/Broken.csproj, got %v", err)
 	}
 }
 
@@ -185,10 +214,40 @@ func csprojArguments(arguments []string) []string {
 	return projects
 }
 
+type csprojDocument struct {
+	ItemGroups []csprojItemGroup `xml:"ItemGroup"`
+}
+
+type csprojItemGroup struct {
+	PackageReferences []csprojPackageReference `xml:"PackageReference"`
+}
+
+type csprojPackageReference struct {
+	Include string `xml:"Include,attr"`
+}
+
+// referencesDotnetTestSdk reports whether a csproj has a PackageReference to Microsoft.NET.Test.Sdk.
+// It parses the XML instead of matching text so attribute spacing and quoting do not hide a test
+// project and a commented-out reference does not count; NuGet package IDs are case-insensitive.
+func referencesDotnetTestSdk(content []byte) (bool, error) {
+	document := csprojDocument{}
+	if err := xml.Unmarshal(content, &document); err != nil {
+		return false, err
+	}
+	for _, itemGroup := range document.ItemGroups {
+		for _, reference := range itemGroup.PackageReferences {
+			if strings.EqualFold(strings.TrimSpace(reference.Include), "Microsoft.NET.Test.Sdk") {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // dotnetTestProjectPaths returns the repository-relative, forward-slash paths of every .csproj under
-// tests/ that references Microsoft.NET.Test.Sdk, sorted.
-func dotnetTestProjectPaths(t *testing.T, repositoryRoot string) []string {
-	t.Helper()
+// tests/ that references Microsoft.NET.Test.Sdk, sorted. A csproj that cannot be parsed is an error
+// rather than skipped, because skipping it would silently take a broken test project out of the guard.
+func dotnetTestProjectPaths(repositoryRoot string) ([]string, error) {
 	paths := []string{}
 	walkErr := filepath.WalkDir(filepath.Join(repositoryRoot, "tests"), func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -197,25 +256,29 @@ func dotnetTestProjectPaths(t *testing.T, repositoryRoot string) []string {
 		if entry.IsDir() || filepath.Ext(path) != ".csproj" {
 			return nil
 		}
-		content, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		if !strings.Contains(string(content), `Include="Microsoft.NET.Test.Sdk"`) {
-			return nil
-		}
 		relativePath, relErr := filepath.Rel(repositoryRoot, path)
 		if relErr != nil {
 			return relErr
 		}
-		paths = append(paths, filepath.ToSlash(relativePath))
+		relativePath = filepath.ToSlash(relativePath)
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		isTestProject, parseErr := referencesDotnetTestSdk(content)
+		if parseErr != nil {
+			return fmt.Errorf("parse %s: %w", relativePath, parseErr)
+		}
+		if isTestProject {
+			paths = append(paths, relativePath)
+		}
 		return nil
 	})
 	if walkErr != nil {
-		t.Fatalf("failed to scan tests/ for dotnet test projects: %v", walkErr)
+		return nil, walkErr
 	}
 	sort.Strings(paths)
-	return paths
+	return paths, nil
 }
 
 func writeTestFile(t *testing.T, path string, content string) {
