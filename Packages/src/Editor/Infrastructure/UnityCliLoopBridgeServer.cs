@@ -23,6 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly UnityCliLoopBridgeClientSessionManager _clientSessionManager;
+        private readonly Func<BridgeTransportEndpoint, IBridgeTransportListener> _createListener;
+        private readonly Func<IBridgeTransportListener, CancellationToken, Task<BridgeClientConnection>> _acceptClient;
         
         private IBridgeTransportListener _transportListener;
         private CancellationTokenSource _cancellationTokenSource;
@@ -37,7 +39,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IDomainReloadDetectionService domainReloadDetectionService,
             JsonRpcRequestProcessor jsonRpcRequestProcessor,
             UnityCliLoopBridgeHeartbeatService heartbeatService,
-            UnityCliLoopBridgeClientDisconnectMonitor clientDisconnectMonitor)
+            UnityCliLoopBridgeClientDisconnectMonitor clientDisconnectMonitor,
+            Func<BridgeTransportEndpoint, IBridgeTransportListener> createListener = null,
+            Func<IBridgeTransportListener, CancellationToken, Task<BridgeClientConnection>> acceptClient = null)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
             System.Diagnostics.Debug.Assert(jsonRpcRequestProcessor != null, "jsonRpcRequestProcessor must not be null");
@@ -56,6 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 validatedJsonRpcRequestProcessor,
                 validatedHeartbeatService,
                 validatedClientDisconnectMonitor);
+            _createListener = createListener ?? BridgeTransportListenerFactory.Create;
+            _acceptClient = acceptClient ?? AcceptClientAsync;
         }
         
         /// <summary>
@@ -78,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             
             try
             {
-                _transportListener = BridgeTransportListenerFactory.Create(endpoint);
+                _transportListener = _createListener(endpoint);
                 _transportListener.Start();
                 _isRunning = true;
                 
@@ -146,6 +152,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 clientTasks,
                 cancellationTokenSource,
                 TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS)).Forget();
+        }
+
+        /// <summary>
+        /// Puts the server into the running state with the given listener without starting the accept loop,
+        /// so tests can drive ServerLoopAsync and the stop paths without binding an endpoint or using the thread pool.
+        /// </summary>
+        internal void AttachListenerForTesting(IBridgeTransportListener listener)
+        {
+            System.Diagnostics.Debug.Assert(listener != null, "listener must not be null");
+
+            _transportListener = listener ?? throw new ArgumentNullException(nameof(listener));
+            _cancellationTokenSource = new CancellationTokenSource();
+            _unexpectedExitCleanupStarted = 0;
+            _isRunning = true;
         }
 
         private CancellationTokenSource TakeCancellationTokenSource()
@@ -231,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// The server's main loop.
         /// </summary>
-        private async Task ServerLoopAsync(CancellationToken cancellationToken)
+        internal async Task ServerLoopAsync(CancellationToken cancellationToken)
         {
             try
             {
@@ -239,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     try
                     {
-                        BridgeClientConnection client = await AcceptClientAsync(_transportListener, cancellationToken);
+                        BridgeClientConnection client = await _acceptClient(_transportListener, cancellationToken);
                         if (client != null)
                         {
                             _clientSessionManager.StartClientHandler(client, cancellationToken);
