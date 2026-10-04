@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.2](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.6.1...uloop-project-runner-v3.6.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* Hot-reload fallback and run-tests compile no longer reuse a timed-out compile's result ([#3067](https://github.com/hatayama/unity-cli-loop/issues/3067)) ([3dd019e](https://github.com/hatayama/unity-cli-loop/commit/3dd019e73b3a98c89e701e206e9a8f65d6251ee5))
+
 ## [3.6.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.6.0...uloop-project-runner-v3.6.1) (2026-09-30)
 
 
