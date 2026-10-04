@@ -346,8 +346,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             };
             SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
             Task nestedInstall = null;
+            bool nestedRequested = false;
+            // Re-enters only once so a missing latch fails the test instead of recursing without end.
             _skillPort.OnInstall = () =>
-                nestedInstall ??= controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+            {
+                if (nestedRequested)
+                {
+                    return;
+                }
+
+                nestedRequested = true;
+                nestedInstall = controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+            };
 
             await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
 

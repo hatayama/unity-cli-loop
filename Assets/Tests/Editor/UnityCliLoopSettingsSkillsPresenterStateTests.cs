@@ -489,7 +489,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true)
             };
             Task nestedInstall = null;
-            _skillPort.OnInstall = () => nestedInstall ??= _presenter.HandleInstallAllSkills(CancellationToken.None);
+            bool nestedRequested = false;
+            // Re-enters only once so a missing latch fails the test instead of recursing without end.
+            _skillPort.OnInstall = () =>
+            {
+                if (nestedRequested)
+                {
+                    return;
+                }
+
+                nestedRequested = true;
+                nestedInstall = _presenter.HandleInstallAllSkills(CancellationToken.None);
+            };
 
             await _presenter.HandleInstallAllSkills(CancellationToken.None);
 
