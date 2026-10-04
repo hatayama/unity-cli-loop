@@ -178,8 +178,11 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
         // Comments and strings are blanked out so a colon or comma inside them is not read as a delimiter.
-        private static string ReadCodeOnlyText(string source, CodeTextMask codeTextMask, int startIndex, int endIndex)
+        public static string ReadCodeOnlyText(string source, CodeTextMask codeTextMask, int startIndex, int endIndex)
         {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0 && startIndex <= endIndex, "startIndex must not be negative or past endIndex");
+
             StringBuilder builder = new(endIndex - startIndex);
             for (int index = startIndex; index < endIndex; index++)
             {
@@ -189,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return builder.ToString();
         }
 
-        private static bool IsClassDeclarationKeyword(string declaration)
+        public static bool IsClassDeclarationKeyword(string declaration)
         {
             if (declaration.StartsWith("class", StringComparison.Ordinal))
             {
