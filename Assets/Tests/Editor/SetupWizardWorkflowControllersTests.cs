@@ -119,6 +119,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _cliDetector.CliVersion = "3.1.0";
             _cliDetector.IsDispatcher = true;
             _nativeCliInstaller.ManagedKind = ManagedCliKind.Homebrew;
+            // A loadable pin lets a wrongly reached install call the installer instead of stopping at the pin.
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
             SetupWizardCliWorkflowController controller = CreateCliWorkflow();
             using CancellationTokenSource cts = new CancellationTokenSource();
 
@@ -127,6 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_cliDetector.ForceRefreshTokens, Is.EqualTo(new List<CancellationToken> { cts.Token }));
             Assert.That(_nativeCliInstaller.InstallCalls, Is.Empty);
             Assert.That(_dialogs.CliPathSetupCount, Is.EqualTo(0));
+            Assert.That(_dialogs.MessageTitles, Is.Empty);
             Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { true }));
         }
 
