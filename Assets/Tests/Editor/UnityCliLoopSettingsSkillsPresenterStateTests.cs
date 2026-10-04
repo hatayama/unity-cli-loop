@@ -27,6 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private RecordingEditorSettingsPort _editorSettingsPort;
         private List<bool> _sectionRefreshCalls;
         private bool _isRefreshingVersion;
+        private RecordingPresentationDialogs _dialogs;
+        private InlineBackgroundWorkRunner _backgroundWorkRunner;
         private UnityCliLoopSettingsSkillsPresenter _presenter;
 
         [SetUp]
@@ -37,10 +39,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsPort = new RecordingEditorSettingsPort();
             _sectionRefreshCalls = new List<bool>();
             _isRefreshingVersion = false;
+            _dialogs = new RecordingPresentationDialogs();
+            _backgroundWorkRunner = new InlineBackgroundWorkRunner();
             _presenter = new UnityCliLoopSettingsSkillsPresenter(
                 new SkillSetupUseCase(_skillPort),
                 new CliSetupApplicationService(_cliDetector, new UnusedNativeCliInstaller(), new UnusedCliPinReader()),
-                _editorSettingsPort);
+                _editorSettingsPort,
+                _dialogs,
+                _backgroundWorkRunner);
             _presenter.BindCoordination(
                 includeSkillDirectoryChecks => _sectionRefreshCalls.Add(includeSkillDirectoryChecks),
                 () => _isRefreshingVersion);
@@ -265,6 +271,233 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_skillPort.InstalledToolSkills.Count, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies a background refresh with a CLI applies the full scan run through the background runner.
+        /// </summary>
+        [Test]
+        public void RefreshSelectedTargetInstallStateInBackground_WithACli_AppliesTheFullScan()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Outdated, hasSkillsDirectory: true),
+                CreateTarget(".agents", SkillInstallState.Missing, hasSkillsDirectory: false)
+            };
+            _presenter.MarkSelectedTargetInstallStateChecking();
+
+            _presenter.RefreshSelectedTargetInstallStateInBackground();
+
+            UnityCliLoopSettingsSkillsSnapshot snapshot = _presenter.GetSnapshot();
+            Assert.That(snapshot.SelectedTargetInstallState, Is.EqualTo(SkillInstallState.Outdated));
+            Assert.That(
+                snapshot.InstallableSkillTargets.Select(target => target.DirName).ToArray(),
+                Is.EqualTo(new[] { ".claude" }));
+            Assert.That(snapshot.HasSkillTargetScanResult, Is.True);
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(1));
+            Assert.That(_backgroundWorkRunner.RunCount, Is.EqualTo(1));
+            Assert.That(_sectionRefreshCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies a background refresh cancelled while scanning leaves the previous state untouched.
+        /// </summary>
+        [Test]
+        public void RefreshSelectedTargetInstallStateInBackground_WhenCancelledDuringTheScan_KeepsThePreviousState()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Installed, hasSkillsDirectory: true)
+            };
+            _skillPort.OnFullScan = () => _presenter.CancelSkillInstallStateRefresh();
+            _presenter.MarkSelectedTargetInstallStateChecking();
+
+            _presenter.RefreshSelectedTargetInstallStateInBackground();
+
+            UnityCliLoopSettingsSkillsSnapshot snapshot = _presenter.GetSnapshot();
+            Assert.That(snapshot.SelectedTargetInstallState, Is.EqualTo(SkillInstallState.Checking));
+            Assert.That(snapshot.HasSkillTargetScanResult, Is.False);
+            Assert.That(_sectionRefreshCalls, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies installing the selected skills without a CLI shows the missing-CLI message and installs nothing.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallSkills_WithoutACli_ShowsCliNotFound()
+        {
+            _cliDetector.IsCliInstalledValue = false;
+
+            await _presenter.HandleInstallSkills();
+
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "CLI Not Found" }));
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_sectionRefreshCalls, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies installing the selected skills installs the flat Claude target while marked as installing,
+        /// shows the installed dialog, and refreshes the install state afterwards.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallSkills_WithACli_InstallsTheSelectedTargetAndShowsTheInstalledDialog()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true)
+            };
+            bool installingDuringInstall = false;
+            _skillPort.OnInstall = () => installingDuringInstall = _presenter.GetSnapshot().IsInstallingSkills;
+
+            await _presenter.HandleInstallSkills();
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+            Assert.That(_skillPort.InstallGroupFlags, Is.EqualTo(new List<bool> { false }));
+            Assert.That(installingDuringInstall, Is.True);
+            Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(1));
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(2));
+            Assert.That(_presenter.GetSnapshot().HasSkillTargetScanResult, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies updating an outdated selected target installs it without the installed dialog.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallSkills_WhenTheSelectedTargetIsOutdated_SkipsTheInstalledDialog()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Outdated, hasSkillsDirectory: true)
+            };
+
+            await _presenter.HandleInstallSkills();
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies installing all skills without a CLI shows the missing-CLI message and installs nothing.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WithoutACli_ShowsCliNotFound()
+        {
+            _cliDetector.IsCliInstalledValue = false;
+
+            await _presenter.HandleInstallAllSkills(CancellationToken.None);
+
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "CLI Not Found" }));
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(0));
+            Assert.That(_sectionRefreshCalls, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies installing all skills installs every target with a skills directory and shows the installed dialog.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WithInstallableTargets_InstallsThemAndShowsTheInstalledDialog()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true),
+                CreateTarget(".codex", SkillInstallState.Installed, hasSkillsDirectory: true),
+                CreateTarget(".agents", SkillInstallState.Missing, hasSkillsDirectory: false)
+            };
+            bool installingDuringInstall = false;
+            _skillPort.OnInstall = () => installingDuringInstall = _presenter.GetSnapshot().IsInstallingSkills;
+
+            await _presenter.HandleInstallAllSkills(CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude", ".codex" }));
+            Assert.That(installingDuringInstall, Is.True);
+            Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies installing all skills with an outdated target skips the installed dialog.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WhenATargetIsOutdated_SkipsTheInstalledDialog()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true),
+                CreateTarget(".codex", SkillInstallState.Outdated, hasSkillsDirectory: true)
+            };
+
+            await _presenter.HandleInstallAllSkills(CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs.Count, Is.EqualTo(2));
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies installing all skills with no target that has a skills directory installs nothing and clears the installing flag.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WithoutInstallableTargets_InstallsNothing()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".agents", SkillInstallState.Missing, hasSkillsDirectory: false)
+            };
+
+            await _presenter.HandleInstallAllSkills(CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+            Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies installing all skills cancelled while detecting targets installs nothing.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WhenCancelledDuringDetection_InstallsNothing()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true)
+            };
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
+            _skillPort.OnFullScan = () => cancellation.Cancel();
+
+            await _presenter.HandleInstallAllSkills(cancellation.Token);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a second install-all request during an install returns without starting another install.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WhileInstalling_DoesNotStartASecondInstall()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true)
+            };
+            Task nestedInstall = null;
+            _skillPort.OnInstall = () => nestedInstall ??= _presenter.HandleInstallAllSkills(CancellationToken.None);
+
+            await _presenter.HandleInstallAllSkills(CancellationToken.None);
+
+            Assert.That(nestedInstall.IsCompleted, Is.True);
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(2));
+        }
+
         private static SkillSetupTargetInfo CreateTarget(string dirName, SkillInstallState installState, bool hasSkillsDirectory)
         {
             return new SkillSetupTargetInfo(
@@ -283,6 +516,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<string> FastScanProjectRoots { get; } = new List<string>();
             internal List<bool> FastScanGroupFlags { get; } = new List<bool>();
             internal int FullScanCount { get; private set; }
+            internal List<SkillSetupTargetInfo> FullTargets { get; set; } = new List<SkillSetupTargetInfo>();
+            internal Action OnFullScan { get; set; }
+            internal List<string> InstalledTargetDirs { get; } = new List<string>();
+            internal List<bool> InstallGroupFlags { get; } = new List<bool>();
+            internal Action OnInstall { get; set; }
             internal HashSet<string> InstalledToolNames { get; } = new HashSet<string>();
             internal List<string> RemovedTools { get; } = new List<string>();
             internal List<string> InstalledToolSkills { get; } = new List<string>();
@@ -301,7 +539,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 bool groupSkillsUnderUnityCliLoop)
             {
                 FullScanCount++;
-                return new List<SkillSetupTargetInfo>();
+                OnFullScan?.Invoke();
+                return FullTargets;
             }
 
             public void RemoveSkillFiles(string toolName)
@@ -326,7 +565,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task InstallSkillFilesAsync(
                 List<SkillSetupTargetInfo> targets,
                 bool groupSkillsUnderUnityCliLoop,
-                CancellationToken ct) => throw new NotSupportedException();
+                CancellationToken ct)
+            {
+                foreach (SkillSetupTargetInfo target in targets)
+                {
+                    InstalledTargetDirs.Add(target.DirName);
+                }
+
+                InstallGroupFlags.Add(groupSkillsUnderUnityCliLoop);
+                OnInstall?.Invoke();
+                return Task.CompletedTask;
+            }
 
             public SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
                 string projectRoot,
