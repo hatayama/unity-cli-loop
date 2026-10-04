@@ -114,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             server.ServerLoopExited += () => exitedCount++;
             server.AttachListenerForTesting(listener);
 
-            await server.ServerLoopAsync(CancellationToken.None);
+            await AwaitLoopWithoutCancellationAsync(server.ServerLoopAsync(CancellationToken.None));
 
             Assert.That(exitedCount, Is.EqualTo(1));
             Assert.That(listener.StopCount, Is.EqualTo(1));
@@ -145,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             server.AttachListenerForTesting(listener);
             LogAssert.Expect(LogType.Error, new Regex("Server accept loop failed; restarting the IPC server\\..*accept failed"));
 
-            await server.ServerLoopAsync(CancellationToken.None);
+            await AwaitLoopWithoutCancellationAsync(server.ServerLoopAsync(CancellationToken.None));
 
             Assert.That(acceptCount, Is.EqualTo(1));
             Assert.That(acceptedListener, Is.SameAs(listener));
@@ -173,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             server.ServerLoopExited += () => exitedCount++;
             server.AttachListenerForTesting(listener);
 
-            await server.ServerLoopAsync(loopCancellation.Token);
+            await AwaitLoopWithoutCancellationAsync(server.ServerLoopAsync(loopCancellation.Token));
 
             LogAssert.NoUnexpectedReceived();
             Assert.That(exitedCount, Is.EqualTo(1));
@@ -203,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             server.ServerLoopExited += () => exitedCount++;
             server.AttachListenerForTesting(listener);
 
-            await server.ServerLoopAsync(loopCancellation.Token);
+            await AwaitLoopWithoutCancellationAsync(server.ServerLoopAsync(loopCancellation.Token));
 
             Assert.That(acceptCount, Is.EqualTo(1));
             Assert.That(exitedCount, Is.EqualTo(1));
@@ -230,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             server.AttachListenerForTesting(listener);
             server.StopServer();
 
-            await server.ServerLoopAsync(CancellationToken.None);
+            await AwaitLoopWithoutCancellationAsync(server.ServerLoopAsync(CancellationToken.None));
 
             Assert.That(acceptCount, Is.EqualTo(0));
             Assert.That(exitedCount, Is.EqualTo(0));
@@ -323,6 +323,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(listener.StopCount, Is.EqualTo(1));
             Assert.That(replacement.StopCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Awaits one loop run that must exit normally. Unity Test Framework records an async test that ends
+        /// Canceled as passed, so a cancellation leaking out of the loop is turned into a failure here.
+        /// </summary>
+        private static async Task AwaitLoopWithoutCancellationAsync(Task loop)
+        {
+            try
+            {
+                await loop;
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("The server loop leaked a cancellation instead of exiting normally.");
+            }
         }
 
         private static UnityCliLoopBridgeServer CreateServerWithListener(
