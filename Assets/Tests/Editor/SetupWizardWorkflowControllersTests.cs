@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private RecordingEditorSettingsPort _editorSettingsPort;
         private StubCliInstallationDetector _cliDetector;
         private StubNativeCliInstaller _nativeCliInstaller;
+        private StubCliPinReader _pinReader;
         private RecordingSkillSetupPort _skillPort;
         private CliSetupApplicationService _cliSetupApplicationService;
         private int _resizeCount;
@@ -40,11 +41,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsPort = new RecordingEditorSettingsPort();
             _cliDetector = new StubCliInstallationDetector();
             _nativeCliInstaller = new StubNativeCliInstaller();
+            _pinReader = new StubCliPinReader();
             _skillPort = new RecordingSkillSetupPort();
             _cliSetupApplicationService = new CliSetupApplicationService(
                 _cliDetector,
                 _nativeCliInstaller,
-                new StubCliPinReader());
+                _pinReader);
             _resizeCount = 0;
             _refreshUiCalls = new List<bool>();
             _dialogs = new RecordingPresentationDialogs();
@@ -105,6 +107,213 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 _root.Q<Button>("install-cli-button").text,
                 Is.EqualTo(isWindowsEditor ? "Installed" : "Fix PATH"));
+        }
+
+        /// <summary>
+        /// Verifies a click on a package-manager-owned CLI that the shell can see re-checks the state with the
+        /// caller's token and only redraws, without installing or repairing PATH.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_WithAManagedCli_OnlyRefreshesTheUi()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _nativeCliInstaller.ManagedKind = ManagedCliKind.Homebrew;
+            // A loadable pin lets a wrongly reached install call the installer instead of stopping at the pin.
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+            using CancellationTokenSource cts = new CancellationTokenSource();
+
+            await controller.HandleInstallCliAsync(cts.Token);
+
+            Assert.That(_cliDetector.ForceRefreshTokens, Is.EqualTo(new List<CancellationToken> { cts.Token }));
+            Assert.That(_nativeCliInstaller.InstallCalls, Is.Empty);
+            Assert.That(_dialogs.CliPathSetupCount, Is.EqualTo(0));
+            Assert.That(_dialogs.MessageTitles, Is.Empty);
+            Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies a package-manager-owned CLI that the shell cannot see gets the PATH repair, which writes no
+        /// binary, instead of an install.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_WithAManagedCliHiddenFromTheShell_RepairsPathWithoutInstalling()
+        {
+            AssumePathCheckRuns();
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _cliDetector.IsVisibleFromShell = false;
+            _nativeCliInstaller.HasPackageOwnedInstall = true;
+            _nativeCliInstaller.ManagedKind = ManagedCliKind.Homebrew;
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+            using CancellationTokenSource cts = new CancellationTokenSource();
+
+            await controller.HandleInstallCliAsync(cts.Token);
+
+            AssertPathSetupRanOnceWith(cts.Token);
+            Assert.That(_nativeCliInstaller.InstallCalls, Is.Empty);
+            Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies an up-to-date package-owned CLI that the shell cannot see gets the PATH repair, re-checks
+        /// the shell afterwards with the caller's token, and is not reinstalled.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_WithACurrentCliHiddenFromTheShell_RepairsPathWithoutInstalling()
+        {
+            AssumePathCheckRuns();
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _cliDetector.IsVisibleFromShell = false;
+            _nativeCliInstaller.HasPackageOwnedInstall = true;
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+            using CancellationTokenSource cts = new CancellationTokenSource();
+
+            await controller.HandleInstallCliAsync(cts.Token);
+
+            AssertPathSetupRanOnceWith(cts.Token);
+            Assert.That(
+                _cliDetector.ShellVisibilityTokens,
+                Is.EqualTo(new List<CancellationToken> { cts.Token, cts.Token }));
+            Assert.That(_nativeCliInstaller.InstallCalls, Is.Empty);
+            Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies a first install uses the pinned release with the caller's token, runs the PATH setup once,
+        /// hides the progress, and refreshes the UI including skills.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_WithoutACli_InstallsThenRunsThePathSetup()
+        {
+            _cliDetector.CliVersion = string.Empty;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+            using CancellationTokenSource cts = new CancellationTokenSource();
+
+            await controller.HandleInstallCliAsync(cts.Token);
+
+            Assert.That(_nativeCliInstaller.InstallCalls, Is.EqualTo(new List<string> { "dispatcher-v3.1.0|<MANIFEST>" }));
+            Assert.That(_nativeCliInstaller.InstallTokens, Is.EqualTo(new List<CancellationToken> { cts.Token }));
+            AssertPathSetupRanOnceWith(cts.Token);
+            Assert.That(_dialogs.MessageTitles, Is.Empty);
+            Assert.That(_root.Q<VisualElement>("cli-install-progress").style.display.value, Is.EqualTo(DisplayStyle.None));
+            Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies a first install into the package-owned location checks the shell again afterwards with the
+        /// caller's token.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_IntoAPackageOwnedLocation_RechecksTheShellAfterInstalling()
+        {
+            AssumePathCheckRuns();
+            _cliDetector.CliVersion = string.Empty;
+            _nativeCliInstaller.HasPackageOwnedInstall = true;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+            using CancellationTokenSource cts = new CancellationTokenSource();
+
+            await controller.HandleInstallCliAsync(cts.Token);
+
+            Assert.That(_nativeCliInstaller.InstallCalls.Count, Is.EqualTo(1));
+            Assert.That(
+                _cliDetector.ShellVisibilityTokens,
+                Is.EqualTo(new List<CancellationToken> { cts.Token, cts.Token }));
+        }
+
+        /// <summary>
+        /// Verifies an update over an installed CLI refreshes the UI without the skills.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_OverAnInstalledCli_RefreshesWithoutTheSkills()
+        {
+            _cliDetector.CliVersion = "2.0.0";
+            _cliDetector.IsDispatcher = true;
+            _cliDetector.IsCliInstalledValue = true;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+
+            await controller.HandleInstallCliAsync(CancellationToken.None);
+
+            Assert.That(_nativeCliInstaller.InstallCalls.Count, Is.EqualTo(1));
+            Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { false }));
+        }
+
+        /// <summary>
+        /// Verifies a failed install shows the installer error with the manual install command, skips the PATH
+        /// setup, and still hides the progress and refreshes the UI.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_WhenTheInstallFails_ShowsTheErrorWithTheManualCommand()
+        {
+            _cliDetector.CliVersion = string.Empty;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            _nativeCliInstaller.InstallResult = new CliInstallResult(false, "<INSTALL_ERROR>");
+            _nativeCliInstaller.InstallCommandResult = NativeCliInstallCommandLoadResult.FromSuccess(
+                new NativeCliInstallCommand("<FILE>", "<ARGS>", "<MANUAL_COMMAND>"));
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+
+            await controller.HandleInstallCliAsync(CancellationToken.None);
+
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "Installation Failed" }));
+            Assert.That(
+                _dialogs.Messages,
+                Is.EqualTo(new List<string> { "Failed to install uloop CLI.\n\n<INSTALL_ERROR>\n\n<MANUAL_COMMAND>" }));
+            Assert.That(_dialogs.CliPathSetupCount, Is.EqualTo(0));
+            Assert.That(_root.Q<VisualElement>("cli-install-progress").style.display.value, Is.EqualTo(DisplayStyle.None));
+            Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies a failed install whose manual command cannot be built shows the command error instead.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_WhenTheManualCommandIsUnavailable_ShowsTheCommandError()
+        {
+            _cliDetector.CliVersion = string.Empty;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            _nativeCliInstaller.InstallResult = new CliInstallResult(false, "<INSTALL_ERROR>");
+            _nativeCliInstaller.InstallCommandResult = NativeCliInstallCommandLoadResult.FromFailure("<COMMAND_ERROR>");
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+
+            await controller.HandleInstallCliAsync(CancellationToken.None);
+
+            Assert.That(
+                _dialogs.Messages,
+                Is.EqualTo(new List<string> { "Failed to install uloop CLI.\n\n<INSTALL_ERROR>\n\n<COMMAND_ERROR>" }));
+        }
+
+        /// <summary>
+        /// Verifies an install that throws still hides the progress, clears the installing state, and refreshes
+        /// the UI before the exception reaches the caller.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_WhenTheInstallThrows_ClearsTheInstallingStateAndRethrows()
+        {
+            _cliDetector.CliVersion = string.Empty;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            _nativeCliInstaller.InstallFailure = new InvalidOperationException("<INSTALL_THROWN>");
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+
+            try
+            {
+                await controller.HandleInstallCliAsync(CancellationToken.None);
+                Assert.Fail("The install failure should reach the caller.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Assert.That(exception.Message, Is.EqualTo("<INSTALL_THROWN>"));
+            }
+
+            Assert.That(_dialogs.CliPathSetupCount, Is.EqualTo(0));
+            Assert.That(_root.Q<VisualElement>("cli-install-progress").style.display.value, Is.EqualTo(DisplayStyle.None));
+            Assert.That(_refreshUiCalls, Is.EqualTo(new List<bool> { true }));
+            await controller.RefreshAndUpdateAsync(CancellationToken.None);
+            Assert.That(_root.Q<Button>("install-cli-button").text, Is.EqualTo("Install CLI"));
         }
 
         /// <summary>
@@ -477,6 +686,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_editorSettingsPort.InstallSkillsFlatValues, Is.EqualTo(new List<bool> { true }));
         }
 
+        private static void AssumePathCheckRuns()
+        {
+            // The PATH check never runs on Windows, so the repair path cannot be reached there.
+            Assume.That(UnityEngine.Application.platform, Is.Not.EqualTo(RuntimePlatform.WindowsEditor));
+        }
+
+        private void AssertPathSetupRanOnceWith(CancellationToken token)
+        {
+            Assert.That(_dialogs.CliPathSetupCount, Is.EqualTo(1));
+            Assert.That(
+                _dialogs.CliPathSetupPlatforms,
+                Is.EqualTo(new List<RuntimePlatform> { UnityEngine.Application.platform }));
+            Assert.That(_dialogs.CliPathSetupServices[0], Is.SameAs(_cliSetupApplicationService));
+            Assert.That(_dialogs.CliPathSetupTokens, Is.EqualTo(new List<CancellationToken> { token }));
+        }
+
         private SetupWizardCliWorkflowController CreateCliWorkflow()
         {
             return new SetupWizardCliWorkflowController(
@@ -487,7 +712,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _root.Q<VisualElement>("cli-install-progress"),
                 _root.Q<Label>("cli-install-progress-label"),
                 _cliSetupApplicationService,
-                refreshSkills => _refreshUiCalls.Add(refreshSkills));
+                refreshSkills => _refreshUiCalls.Add(refreshSkills),
+                _dialogs);
         }
 
         private SetupWizardSkillsWorkflowController CreateSkillsWorkflow()
@@ -609,8 +835,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal string CliVersion { get; set; } = string.Empty;
             internal bool IsDispatcher { get; set; }
             internal bool IsVisibleFromShell { get; set; } = true;
+            internal bool IsCliInstalledValue { get; set; }
             internal int ForceRefreshCount { get; private set; }
             internal int ShellVisibilityChecks { get; private set; }
+            internal List<CancellationToken> ForceRefreshTokens { get; } = new List<CancellationToken>();
+            internal List<CancellationToken> ShellVisibilityTokens { get; } = new List<CancellationToken>();
 
             public string GetCachedCliVersion()
             {
@@ -630,24 +859,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task ForceRefreshCliVersionAsync(CancellationToken ct)
             {
                 ForceRefreshCount++;
+                ForceRefreshTokens.Add(ct);
                 return Task.CompletedTask;
             }
 
             public Task<bool> IsCliVisibleFromShellAsync(RuntimePlatform platform, CancellationToken ct)
             {
                 ShellVisibilityChecks++;
+                ShellVisibilityTokens.Add(ct);
                 return Task.FromResult(IsVisibleFromShell);
             }
 
-            public bool IsCliInstalled() => throw new NotSupportedException();
+            public bool IsCliInstalled()
+            {
+                return IsCliInstalledValue;
+            }
+
+            public void InvalidateCache()
+            {
+            }
+
             public bool IsCheckCompleted() => throw new NotSupportedException();
             public Task RefreshCliVersionAsync(CancellationToken ct) => throw new NotSupportedException();
-            public void InvalidateCache() => throw new NotSupportedException();
         }
 
         private sealed class StubNativeCliInstaller : INativeCliInstaller
         {
             internal bool HasPackageOwnedInstall { get; set; }
+            internal ManagedCliKind ManagedKind { get; set; } = ManagedCliKind.None;
+            internal CliInstallResult InstallResult { get; set; } = new CliInstallResult(true, string.Empty);
+            internal Exception InstallFailure { get; set; }
+            internal NativeCliInstallCommandLoadResult InstallCommandResult { get; set; } =
+                NativeCliInstallCommandLoadResult.FromFailure("no install command in this test");
+            internal List<string> InstallCalls { get; } = new List<string>();
+            internal List<CancellationToken> InstallTokens { get; } = new List<CancellationToken>();
 
             public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
             {
@@ -656,18 +901,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public ManagedCliKind ResolveManagedCliKind(string cliExecutablePath)
             {
-                return ManagedCliKind.None;
+                return ManagedKind;
             }
-
-            public bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform) =>
-                throw new NotSupportedException();
 
             public Task<CliInstallResult> InstallGlobalCliAsync(
                 RuntimePlatform platform,
                 string dispatcherReleaseTag,
                 string dispatcherArchiveManifest,
                 IProgress<string> installProgress,
-                CancellationToken ct) => throw new NotSupportedException();
+                CancellationToken ct)
+            {
+                InstallCalls.Add($"{dispatcherReleaseTag}|{dispatcherArchiveManifest}");
+                InstallTokens.Add(ct);
+                if (InstallFailure != null)
+                {
+                    return Task.FromException<CliInstallResult>(InstallFailure);
+                }
+
+                return Task.FromResult(InstallResult);
+            }
+
+            public NativeCliInstallCommandLoadResult GetGlobalCliInstallCommand(
+                RuntimePlatform platform,
+                string dispatcherReleaseTag,
+                string dispatcherArchiveManifest,
+                bool removeLegacyLaunchers)
+            {
+                return InstallCommandResult;
+            }
+
+            public bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform) =>
+                throw new NotSupportedException();
 
             public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct) =>
                 throw new NotSupportedException();
@@ -677,16 +941,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public CliPathSetupApplyResult ApplyGlobalCliPathSetup(CliPathSetupPlan plan) =>
                 throw new NotSupportedException();
-
-            public NativeCliInstallCommandLoadResult GetGlobalCliInstallCommand(
-                RuntimePlatform platform,
-                string dispatcherReleaseTag,
-                string dispatcherArchiveManifest,
-                bool removeLegacyLaunchers) => throw new NotSupportedException();
         }
 
         private sealed class StubCliPinReader : ICliPinReader
         {
+            internal DispatcherBootstrapPinLoadResult BootstrapPin { get; set; } =
+                DispatcherBootstrapPinLoadResult.FromFailure("no bootstrap pin in this test");
+
             public string LoadMinimumDispatcherVersionOrThrow()
             {
                 return MinimumDispatcherVersion;
@@ -694,7 +955,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public DispatcherBootstrapPinLoadResult LoadDispatcherBootstrapPin()
             {
-                return DispatcherBootstrapPinLoadResult.FromFailure("no bootstrap pin in this test");
+                return BootstrapPin;
             }
 
             public CliPinLoadResult LoadPackagePin() => throw new NotSupportedException();
