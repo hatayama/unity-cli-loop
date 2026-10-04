@@ -12,19 +12,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class RecordVideoUseCaseTests
     {
         private LastCompletedRecording _previousRecording;
+        private bool _storeSetAside;
 
         [SetUp]
         public void SetUp()
         {
-            // Stop and start act on a real recording, so the tests do not run while one is in progress. This comes
-            // before setting the store aside because TearDown does not run when SetUp fails an assumption.
+            // Stop and start act on a real recording, so the tests do not run while one is in progress. The test
+            // framework still runs TearDown when SetUp fails an assumption, so TearDown restores the store only
+            // when this SetUp actually set it aside; otherwise it would overwrite the live recording's store.
+            _storeSetAside = false;
             Assume.That(RecordVideoService.IsRecording, Is.False);
             _previousRecording = LastCompletedRecordingTestState.TakeAndClear();
+            _storeSetAside = true;
         }
 
         [TearDown]
         public void TearDown()
         {
+            if (!_storeSetAside)
+            {
+                return;
+            }
+
             LastCompletedRecordingTestState.Restore(_previousRecording);
         }
 
