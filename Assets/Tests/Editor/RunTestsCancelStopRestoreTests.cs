@@ -208,6 +208,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a throwing cancel hook during a PlayMode run still falls back to requesting and confirming the exit.
+        /// </summary>
+        [Test]
+        public async Task StopAndRestoreAsync_PlayModeWhenTheCancelHookThrows_FallsBackToTheExit()
+        {
+            _hooks.CancelException = new InvalidOperationException("cancel failed");
+            _hooks.PlayingAnswers.Enqueue(true);
+            _hooks.PlayingAnswers.Enqueue(true);
+            _hooks.PlayingAnswers.Enqueue(false);
+
+            RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: true, RunGuid);
+
+            Assert.That(_hooks.CancelGuids, Is.EqualTo(new List<string> { RunGuid }));
+            Assert.That(result.TestRunCancelAttempted, Is.True);
+            Assert.That(result.TestRunCancelSucceeded, Is.False);
+            Assert.That(_hooks.ExitRequestCount, Is.EqualTo(1));
+            Assert.That(result.PlayModeExitConfirmed, Is.True);
+            Assert.That(_hooks.Warnings.Count, Is.EqualTo(1));
+            Assert.That(_hooks.Warnings[0], Does.StartWith("TryCancelTestRun failed and was ignored"));
+        }
+
+        /// <summary>
+        /// Verifies an EditMode run without a cancel hook skips the cancel even with a run GUID, warns about the
+        /// EditMode job, and does not fall into the catch-all.
+        /// </summary>
+        [Test]
+        public async Task StopAndRestoreAsync_EditModeWithoutACancelHook_SkipsTheCancelAndWarnsAboutTheEditModeJob()
+        {
+            _hooks.CancelHookAvailable = false;
+
+            RunTestsCancelStopRestoreResult result = await StopAndRestore(isPlayMode: false, RunGuid);
+
+            Assert.That(_hooks.CancelGuids, Is.Empty);
+            Assert.That(result.TestRunCancelAttempted, Is.False);
+            Assert.That(_hooks.ExitRequestCount, Is.EqualTo(0));
+            Assert.That(
+                result.DegradationNote,
+                Does.StartWith("Unity Test Framework 1.3.9 has no public API to cancel an in-flight test job; " +
+                               "an EditMode job may still be running until it finishes. "));
+            Assert.That(_hooks.Warnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies the internal stop-wait delays receive an uncancelable token instead of the caller's canceled one.
+        /// </summary>
+        [Test]
+        public async Task StopAndRestoreAsync_InternalWaits_UseAnUncancelableToken()
+        {
+            _hooks.PlayingAnswers.Enqueue(true);
+            _hooks.PlayingAnswers.Enqueue(true);
+            _hooks.PlayingAnswers.Enqueue(true);
+            _hooks.PlayingAnswers.Enqueue(false);
+
+            await StopAndRestore(isPlayMode: true, string.Empty);
+
+            Assert.That(_hooks.DelayTokens.Count, Is.GreaterThan(0));
+            Assert.That(_hooks.DelayTokens, Is.All.EqualTo(CancellationToken.None));
+        }
+
+        /// <summary>
         /// Verifies a result built without a note never exposes null to the timeout message.
         /// </summary>
         [Test]
@@ -235,6 +295,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class ScriptedHooks
         {
             internal bool CancelResult { get; set; }
+            internal bool CancelHookAvailable { get; set; } = true;
             internal Exception CancelException { get; set; }
             internal Exception ExitException { get; set; }
             internal Exception PlayingException { get; set; }
@@ -244,6 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal bool RunActiveDefault { get; set; }
             internal List<string> CancelGuids { get; } = new List<string>();
             internal List<int> Delays { get; } = new List<int>();
+            internal List<CancellationToken> DelayTokens { get; } = new List<CancellationToken>();
             internal List<string> Warnings { get; } = new List<string>();
             internal int ExitRequestCount { get; private set; }
 
@@ -251,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 return new RunTestsCancelStopRestoreHooks
                 {
-                    TryCancelTestRun = TryCancelTestRun,
+                    TryCancelTestRun = CancelHookAvailable ? TryCancelTestRun : null,
                     IsRunActive = () => RunActiveAnswers.Count > 0 ? RunActiveAnswers.Dequeue() : RunActiveDefault,
                     IsPlaying = IsPlaying,
                     RequestExitPlayMode = RequestExitPlayMode,
@@ -294,6 +356,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 // Completes immediately so the bounded polling loop runs synchronously without wall-clock waits.
                 Delays.Add(milliseconds);
+                DelayTokens.Add(ct);
                 return Task.CompletedTask;
             }
         }
