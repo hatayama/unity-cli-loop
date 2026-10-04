@@ -50,14 +50,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies any other listener start failure is rethrown unchanged and leaves the server stopped.
+        /// Verifies a socket failure other than address-in-use is rethrown unchanged instead of being reported as
+        /// an in-use endpoint, and leaves the server stopped.
         /// </summary>
         [Test]
         public void StartServer_WhenListenerStartFailsOtherwise_RethrowsAndStaysStopped()
         {
             FakeListener listener = new FakeListener
             {
-                StartException = new IOException("bind failed")
+                StartException = new SocketException((int)SocketError.AccessDenied)
             };
             UnityCliLoopBridgeServer server = CreateServerWithListener(listener, AcceptNever);
 
@@ -66,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 server.StartServer();
                 Assert.Fail("StartServer should rethrow the listener failure.");
             }
-            catch (IOException e)
+            catch (SocketException e)
             {
                 Assert.That(e, Is.SameAs(listener.StartException));
             }
@@ -154,18 +155,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies an accept failure after the loop token was canceled exits quietly without the error log,
-        /// and is still treated as an unexpected exit because the server was not stopped.
+        /// Verifies that when StopServer interrupts a pending accept that then fails, the loop exits quietly:
+        /// no error log, no unexpected-exit hand-off, and no second listener stop from the cleanup path.
         /// </summary>
         [Test]
-        public async Task ServerLoopAsync_WhenAcceptFailsAfterCancellation_ExitsWithoutErrorLog()
+        public async Task ServerLoopAsync_WhenStopServerInterruptsFailingAccept_ExitsWithoutErrorOrLoopExited()
         {
             FakeListener listener = new FakeListener();
             using CancellationTokenSource loopCancellation = new CancellationTokenSource();
-            UnityCliLoopBridgeServer server = CreateServerWithListener(
+            UnityCliLoopBridgeServer server = null;
+            server = CreateServerWithListener(
                 listener,
                 (_, _) =>
                 {
+                    // Why cancel by hand: the test passes its own loop token, so this repeats what StopServer
+                    // does to the server's token after clearing the running flag.
+                    server.StopServer();
                     loopCancellation.Cancel();
                     return Task.FromException<BridgeClientConnection>(new IOException("accept canceled"));
                 });
@@ -176,26 +181,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await AwaitLoopWithoutCancellationAsync(server.ServerLoopAsync(loopCancellation.Token));
 
             LogAssert.NoUnexpectedReceived();
-            Assert.That(exitedCount, Is.EqualTo(1));
+            Assert.That(exitedCount, Is.EqualTo(0));
             Assert.That(server.IsRunning, Is.False);
+            Assert.That(listener.StopCount, Is.EqualTo(1));
         }
 
         /// <summary>
-        /// Verifies a canceled accept that returns no client ends the loop through the loop condition.
+        /// Verifies that when StopServer interrupts a pending accept that returns no client, the loop ends through
+        /// its condition without an unexpected-exit hand-off or a second listener stop.
         /// </summary>
         [Test]
-        public async Task ServerLoopAsync_WhenAcceptReturnsNoClientAfterCancellation_ExitsLoop()
+        public async Task ServerLoopAsync_WhenStopServerInterruptsAcceptWithNoClient_ExitsLoop()
         {
             FakeListener listener = new FakeListener();
             using CancellationTokenSource loopCancellation = new CancellationTokenSource();
             int acceptCount = 0;
-            UnityCliLoopBridgeServer server = CreateServerWithListener(
+            UnityCliLoopBridgeServer server = null;
+            server = CreateServerWithListener(
                 listener,
                 (_, _) =>
                 {
                     acceptCount++;
-                    // Why cancel first: a completed null accept with an uncanceled token would loop forever
-                    // on the test thread, because the loop has no other await or yield.
+                    // Why stop and cancel here: a completed null accept with the server still running would loop
+                    // forever on the test thread, because the loop has no other await or yield. Canceling by hand
+                    // repeats what StopServer does to the server's token.
+                    server.StopServer();
                     loopCancellation.Cancel();
                     return Task.FromResult<BridgeClientConnection>(null);
                 });
@@ -206,7 +216,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await AwaitLoopWithoutCancellationAsync(server.ServerLoopAsync(loopCancellation.Token));
 
             Assert.That(acceptCount, Is.EqualTo(1));
-            Assert.That(exitedCount, Is.EqualTo(1));
+            Assert.That(exitedCount, Is.EqualTo(0));
+            Assert.That(server.IsRunning, Is.False);
             Assert.That(listener.StopCount, Is.EqualTo(1));
         }
 
