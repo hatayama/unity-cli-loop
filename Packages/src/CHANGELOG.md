@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.4](https://github.com/hatayama/unity-cli-loop/compare/v3.11.3...v3.11.4) (2026-10-04)
+
+
+### Bug Fixes
+
+* Tool migration now removes the timing argument from inherited calls and keeps it on calls to other objects ([#3147](https://github.com/hatayama/unity-cli-loop/issues/3147)) ([ae432a9](https://github.com/hatayama/unity-cli-loop/commit/ae432a93b7578d3d74b1f3a1d057ed162263e9a1))
+
 ## [3.11.3](https://github.com/hatayama/unity-cli-loop/compare/v3.11.2...v3.11.3) (2026-10-03)
 
 
