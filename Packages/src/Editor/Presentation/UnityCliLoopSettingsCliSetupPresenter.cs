@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -18,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly UnityCliLoopSettingsWindowUI _view;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
+        private readonly IPresentationDialogs _dialogs;
 
         private Func<UnityCliLoopSettingsSkillsSnapshot> _getSkillsSnapshot;
         private Action _refreshSkillsInstallStateInBackground;
@@ -30,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal UnityCliLoopSettingsCliSetupPresenter(
             UnityCliLoopSettingsWindowUI view,
-            CliSetupApplicationService cliSetupApplicationService)
+            CliSetupApplicationService cliSetupApplicationService,
+            IPresentationDialogs dialogs = null)
         {
             Debug.Assert(view != null, "view must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
@@ -38,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view = view ?? throw new ArgumentNullException(nameof(view));
             _cliSetupApplicationService = cliSetupApplicationService
                 ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
+            _dialogs = dialogs ?? new EditorPresentationDialogs();
         }
 
         internal bool IsRefreshingVersion => _isRefreshingVersion;
@@ -313,14 +315,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     string manualInstallGuidance = commandResult.Success
                         ? commandResult.Command.ManualCommand
                         : commandResult.ErrorOutput;
-                    EditorUtility.DisplayDialog(
+                    _dialogs.ShowMessage(
                         "Installation Failed",
-                        $"Failed to install uLoop CLI.\n\n{result.ErrorOutput}\n\n{manualInstallGuidance}",
-                        "OK");
+                        $"Failed to install uLoop CLI.\n\n{result.ErrorOutput}\n\n{manualInstallGuidance}");
                     return;
                 }
 
-                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                await _dialogs.EnsureCliVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
                     _cliSetupApplicationService,
                     CancellationToken.None);
@@ -373,7 +374,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                await _dialogs.EnsureCliVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
                     _cliSetupApplicationService,
                     CancellationToken.None);
@@ -388,7 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async Task HandleUninstallCli()
         {
-            if (!CliUninstallPrompt.ConfirmUninstall())
+            if (!_dialogs.ConfirmCliUninstall())
             {
                 return;
             }
@@ -403,10 +404,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     CancellationToken.None);
                 if (!result.Success)
                 {
-                    EditorUtility.DisplayDialog(
+                    _dialogs.ShowMessage(
                         "Uninstallation Failed",
-                        $"Failed to uninstall uloop CLI.\n\n{result.ErrorOutput}",
-                        "OK");
+                        $"Failed to uninstall uloop CLI.\n\n{result.ErrorOutput}");
                     return;
                 }
             }

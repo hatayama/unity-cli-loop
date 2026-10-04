@@ -15,7 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Verifies the Settings CLI setup presenter's section refresh, background version and PATH checks,
-    /// and the primary-button paths that end without a dialog, against the real settings view.
+    /// and the primary-button install, PATH repair, and uninstall paths with recorded dialogs, against the real
+    /// settings view.
     /// </summary>
     public sealed class UnityCliLoopSettingsCliSetupPresenterFlowTests
     {
@@ -30,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private bool _includeSkillScanResult;
         private int _skillsRefreshCount;
         private List<bool> _refreshAllSectionsCalls;
+        private RecordingPresentationDialogs _dialogs;
+        private CliSetupApplicationService _cliSetupApplicationService;
 
         [SetUp]
         public void SetUp()
@@ -42,9 +45,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _includeSkillScanResult = true;
             _skillsRefreshCount = 0;
             _refreshAllSectionsCalls = new List<bool>();
-            _presenter = new UnityCliLoopSettingsCliSetupPresenter(
-                _view,
-                new CliSetupApplicationService(_cliDetector, _nativeCliInstaller, _pinReader));
+            _dialogs = new RecordingPresentationDialogs();
+            _cliSetupApplicationService = new CliSetupApplicationService(_cliDetector, _nativeCliInstaller, _pinReader);
+            _presenter = new UnityCliLoopSettingsCliSetupPresenter(_view, _cliSetupApplicationService, _dialogs);
             _presenter.BindCoordination(
                 () => new UnityCliLoopSettingsSkillsSnapshot(
                     installSkillsFlat: true,
@@ -232,8 +235,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a first install uses the pinned dispatcher release and refreshes every section, including
-        /// skills, afterwards.
+        /// Verifies a first install uses the pinned dispatcher release, runs the PATH setup once, and refreshes
+        /// every section, including skills, afterwards.
         /// </summary>
         [Test]
         public async Task HandleInstallCli_WithoutACli_InstallsFromTheBootstrapPinAndRefreshesSkills()
@@ -245,6 +248,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await _presenter.HandleInstallCli();
 
             Assert.That(_nativeCliInstaller.InstallCalls, Is.EqualTo(new List<string> { "dispatcher-v3.1.0|<MANIFEST>" }));
+            AssertPathSetupRanOnce();
+            Assert.That(_dialogs.MessageTitles, Is.Empty);
             Assert.That(_refreshAllSectionsCalls, Is.EqualTo(new List<bool> { true }));
         }
 
@@ -263,6 +268,136 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(_nativeCliInstaller.InstallCalls.Count, Is.EqualTo(1));
             Assert.That(_refreshAllSectionsCalls, Is.EqualTo(new List<bool> { false }));
+        }
+
+        /// <summary>
+        /// Verifies a failed install shows the installer error with the manual install command, skips the PATH
+        /// setup, and still refreshes every section.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallCli_WhenTheInstallFails_ShowsTheErrorWithTheManualCommand()
+        {
+            _cliDetector.CliVersion = string.Empty;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            _nativeCliInstaller.InstallResult = new CliInstallResult(false, "<INSTALL_ERROR>");
+            _nativeCliInstaller.InstallCommandResult = NativeCliInstallCommandLoadResult.FromSuccess(
+                new NativeCliInstallCommand("<FILE>", "<ARGS>", "<MANUAL_COMMAND>"));
+
+            await _presenter.HandleInstallCli();
+
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "Installation Failed" }));
+            Assert.That(
+                _dialogs.Messages,
+                Is.EqualTo(new List<string> { "Failed to install uLoop CLI.\n\n<INSTALL_ERROR>\n\n<MANUAL_COMMAND>" }));
+            Assert.That(_dialogs.CliPathSetupCount, Is.EqualTo(0));
+            Assert.That(_refreshAllSectionsCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies a failed install whose manual command cannot be built shows the command error instead.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallCli_WhenTheManualCommandIsUnavailable_ShowsTheCommandError()
+        {
+            _cliDetector.CliVersion = string.Empty;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            _nativeCliInstaller.InstallResult = new CliInstallResult(false, "<INSTALL_ERROR>");
+            _nativeCliInstaller.InstallCommandResult = NativeCliInstallCommandLoadResult.FromFailure("<COMMAND_ERROR>");
+
+            await _presenter.HandleInstallCli();
+
+            Assert.That(
+                _dialogs.Messages,
+                Is.EqualTo(new List<string> { "Failed to install uLoop CLI.\n\n<INSTALL_ERROR>\n\n<COMMAND_ERROR>" }));
+        }
+
+        /// <summary>
+        /// Verifies a click on PATH repair for a hidden package-owned install runs the PATH setup instead of an
+        /// install, checks the shell again, and refreshes the sections without the skills.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallCli_WhenThePathNeedsRepair_RunsThePathSetupWithoutInstalling()
+        {
+            Assume.That(UnityEngine.Application.platform, Is.Not.EqualTo(RuntimePlatform.WindowsEditor));
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _cliDetector.IsVisibleFromShell = false;
+            _nativeCliInstaller.HasPackageOwnedInstall = true;
+            await _presenter.RefreshCliPathSetupInBackground();
+
+            await _presenter.HandleInstallCli();
+
+            AssertPathSetupRanOnce();
+            Assert.That(_cliDetector.ShellVisibilityChecks, Is.EqualTo(3));
+            Assert.That(_nativeCliInstaller.InstallCalls, Is.Empty);
+            Assert.That(_refreshAllSectionsCalls, Is.EqualTo(new List<bool> { false }));
+        }
+
+        /// <summary>
+        /// Verifies declining the uninstall confirmation leaves the CLI and the sections untouched.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallCli_WhenTheUninstallIsDeclined_DoesNotUninstall()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _nativeCliInstaller.IsPackageOwnedPath = true;
+            _dialogs.CliUninstallConfirmResult = false;
+
+            await _presenter.HandleInstallCli();
+
+            Assert.That(_dialogs.CliUninstallConfirmCount, Is.EqualTo(1));
+            Assert.That(_nativeCliInstaller.UninstallCount, Is.EqualTo(0));
+            Assert.That(_refreshAllSectionsCalls, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies a confirmed uninstall of a package-owned CLI removes it without a dialog and refreshes every
+        /// section, including skills.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallCli_WhenTheUninstallIsConfirmed_UninstallsAndRefreshes()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _nativeCliInstaller.IsPackageOwnedPath = true;
+
+            await _presenter.HandleInstallCli();
+
+            Assert.That(_dialogs.CliUninstallConfirmCount, Is.EqualTo(1));
+            Assert.That(_nativeCliInstaller.UninstallCount, Is.EqualTo(1));
+            Assert.That(_dialogs.MessageTitles, Is.Empty);
+            Assert.That(_refreshAllSectionsCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        /// <summary>
+        /// Verifies a failed uninstall shows the uninstaller error and still refreshes every section.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallCli_WhenTheUninstallFails_ShowsTheError()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _nativeCliInstaller.IsPackageOwnedPath = true;
+            _nativeCliInstaller.UninstallResult = new CliInstallResult(false, "<UNINSTALL_ERROR>");
+
+            await _presenter.HandleInstallCli();
+
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "Uninstallation Failed" }));
+            Assert.That(
+                _dialogs.Messages,
+                Is.EqualTo(new List<string> { "Failed to uninstall uloop CLI.\n\n<UNINSTALL_ERROR>" }));
+            Assert.That(_refreshAllSectionsCalls, Is.EqualTo(new List<bool> { true }));
+        }
+
+        private void AssertPathSetupRanOnce()
+        {
+            Assert.That(_dialogs.CliPathSetupCount, Is.EqualTo(1));
+            Assert.That(
+                _dialogs.CliPathSetupPlatforms,
+                Is.EqualTo(new List<RuntimePlatform> { UnityEngine.Application.platform }));
+            Assert.That(_dialogs.CliPathSetupServices[0], Is.SameAs(_cliSetupApplicationService));
+            Assert.That(_dialogs.CliPathSetupTokens, Is.EqualTo(new List<CancellationToken> { CancellationToken.None }));
         }
 
         private sealed class StubCliInstallationDetector : ICliInstallationDetector
@@ -333,6 +468,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<string> OwnershipQueries { get; } = new List<string>();
             internal List<string> ManagedKindQueries { get; } = new List<string>();
             internal List<string> InstallCalls { get; } = new List<string>();
+            internal CliInstallResult InstallResult { get; set; } = new CliInstallResult(true, string.Empty);
+            internal NativeCliInstallCommandLoadResult InstallCommandResult { get; set; } =
+                NativeCliInstallCommandLoadResult.FromFailure("no install command in this test");
+            internal CliInstallResult UninstallResult { get; set; } = new CliInstallResult(true, string.Empty);
+            internal int UninstallCount { get; private set; }
 
             public bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform)
             {
@@ -359,11 +499,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken ct)
             {
                 InstallCalls.Add($"{dispatcherReleaseTag}|{dispatcherArchiveManifest}");
-                return Task.FromResult(new CliInstallResult(true, string.Empty));
+                return Task.FromResult(InstallResult);
             }
 
-            public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct) =>
-                throw new NotSupportedException();
+            public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
+            {
+                UninstallCount++;
+                return Task.FromResult(UninstallResult);
+            }
 
             public Task<CliPathSetupPlan> GetGlobalCliPathSetupPlanAsync(RuntimePlatform platform, CancellationToken ct) =>
                 throw new NotSupportedException();
@@ -375,7 +518,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 RuntimePlatform platform,
                 string dispatcherReleaseTag,
                 string dispatcherArchiveManifest,
-                bool removeLegacyLaunchers) => throw new NotSupportedException();
+                bool removeLegacyLaunchers)
+            {
+                return InstallCommandResult;
+            }
         }
 
         private sealed class StubCliPinReader : ICliPinReader
