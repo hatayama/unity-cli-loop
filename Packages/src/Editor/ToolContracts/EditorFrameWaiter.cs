@@ -14,7 +14,17 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     {
         private readonly object _lockObject = new object();
         private readonly List<EditorFrameWaitRequest> _requests = new List<EditorFrameWaitRequest>();
+        private readonly Func<int, CancellationToken, Task> _waitTimeout;
         private int _currentFrameCount;
+
+        /// <summary>
+        /// Creates a frame waiter whose timeout defaults to wall-clock TimerDelay; tests pass a fake
+        /// so a timeout can be completed without waiting on real time.
+        /// </summary>
+        internal EditorFrameWaiterService(Func<int, CancellationToken, Task> waitTimeout = null)
+        {
+            _waitTimeout = waitTimeout ?? TimerDelay.Wait;
+        }
 
         public int PendingWaitCount
         {
@@ -79,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             Task frameTask = WaitFramesCoreAsync(frameCount, frameCancellationSource.Token);
             using CancellationTokenSource timeoutCancellationSource =
                 CancellationTokenSource.CreateLinkedTokenSource(ct);
-            Task timeoutTask = TimerDelay.Wait(timeoutMilliseconds, timeoutCancellationSource.Token);
+            Task timeoutTask = _waitTimeout(timeoutMilliseconds, timeoutCancellationSource.Token);
 
             Task completedTask = await Task.WhenAny(frameTask, timeoutTask).ConfigureAwait(false);
             if (completedTask == timeoutTask)
@@ -109,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
         }
 
-        private void UpdateRequests()
+        internal void UpdateRequests()
         {
             List<EditorFrameWaitRequest> completedRequests = new List<EditorFrameWaitRequest>();
             lock (_lockObject)
