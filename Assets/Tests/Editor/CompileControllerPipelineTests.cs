@@ -50,10 +50,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             controller.OnCompileStarted += startedMessages.Add;
             controller.OnAssemblyCompiled += (assemblyName, _) => compiledAssemblies.Add(assemblyName);
 
-            CompileResult result = await controller.TryCompileAsync(
+            CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(result.Success, Is.True);
             Assert.That(result.WarningCount, Is.EqualTo(1));
@@ -80,10 +80,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<string> startedMessages = new();
             controller.OnCompileStarted += startedMessages.Add;
 
-            CompileResult result = await controller.TryCompileAsync(
+            CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                 forceRecompile: true,
                 playModeStopWarning: null,
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(result.IsIndeterminate, Is.True);
             Assert.That(pipeline.RequestedCleanBuildCache, Is.EqualTo(new[] { true }));
@@ -109,10 +109,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             };
             using CompileController controller = CreateController(pipeline);
 
-            CompileResult result = await controller.TryCompileAsync(
+            CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(result.Success, Is.False);
             Assert.That(pipeline.RefreshCount, Is.EqualTo(1));
@@ -149,8 +149,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(controller.IsCompiling, Is.True);
             Assert.That(secondCompile.IsCompleted, Is.False);
             pipeline.CompilationFinished(null);
-            CompileResult firstResult = await firstCompile;
-            CompileResult secondResult = await secondCompile;
+            CompileResult firstResult = await UncanceledAwaits.AwaitValueAsync(firstCompile);
+            CompileResult secondResult = await UncanceledAwaits.AwaitValueAsync(secondCompile);
 
             Assert.That(secondResult, Is.SameAs(firstResult));
         }
@@ -171,10 +171,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
             try
             {
-                await controller.TryCompileAsync(
+                await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                     forceRecompile: false,
                     playModeStopWarning: null,
-                    CancellationToken.None);
+                    CancellationToken.None));
                 Assert.Fail("TryCompileAsync should rethrow the request failure.");
             }
             catch (InvalidOperationException e)

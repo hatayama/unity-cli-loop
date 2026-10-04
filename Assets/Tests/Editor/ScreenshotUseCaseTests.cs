@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
             try
             {
-                await ExecuteScreenshot(parameters);
+                await UncanceledAwaits.AwaitValueAsync(ExecuteScreenshot(parameters));
                 Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
             }
             catch (UnityCliLoopToolParameterValidationException exception)
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
             try
             {
-                await ExecuteScreenshot(parameters);
+                await UncanceledAwaits.AwaitValueAsync(ExecuteScreenshot(parameters));
                 Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
             }
             catch (UnityCliLoopToolParameterValidationException exception)
@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
             try
             {
-                await ExecuteScreenshot(parameters);
+                await UncanceledAwaits.AwaitValueAsync(ExecuteScreenshot(parameters));
                 Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
             }
             catch (UnityCliLoopToolParameterValidationException exception)
@@ -127,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
             try
             {
-                await ExecuteScreenshot(parameters);
+                await UncanceledAwaits.AwaitValueAsync(ExecuteScreenshot(parameters));
                 Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
             }
             catch (UnityCliLoopToolParameterValidationException exception)
@@ -155,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Why not Assert.ThrowsAsync: it blocks the main thread synchronously in this NUnit version.
             try
             {
-                await useCase.CaptureAsync(schema, CancellationToken.None);
+                await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(schema, CancellationToken.None));
                 Assert.Fail("Expected UnityCliLoopToolParameterValidationException.");
             }
             catch (UnityCliLoopToolParameterValidationException exception)
