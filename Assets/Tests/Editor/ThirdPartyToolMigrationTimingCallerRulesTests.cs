@@ -148,6 +148,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDeclaringTypeCallsMethodOnExpressionReceiver_KeepsCall()
+        {
+            // Verifies a call on a returned object inside the declaring type is not treated as a call of the declaring type's method.
+            string source =
+                "public class Other\n{\n    public void Run(int value, PlayerLoopTiming timing)\n    {\n    }\n}\n" +
+                "public class Runner\n{\n    protected void Run(int value)\n    {\n    }\n\n" +
+                "    private Other GetOther()\n    {\n        return new Other();\n    }\n\n" +
+                "    public void Call()\n    {\n        GetOther().Run(1, PlayerLoopTiming.Update);\n    }\n}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationTimingCallerRules.RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
+                    source,
+                    new[] { CreateValueAndTimingSignature("Runner") },
+                    Array.Empty<string>(),
+                    ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedConstructsDeclaringType_KeepsConstructorCall()
         {
             // Verifies a constructor call in a derived class is not treated as an inherited member call.

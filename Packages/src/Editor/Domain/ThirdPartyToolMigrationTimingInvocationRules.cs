@@ -245,17 +245,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex,
             bool isThisCall)
         {
+            // An empty target also comes back for a receiver that is an expression (GetOther().Run(..)); that call
+            // binds to whatever the expression returns, not to the containing class, even inside the declaring type.
+            if (!isThisCall && IsPrecededByMemberAccess(source, methodNameIndex))
+            {
+                return false;
+            }
+
             string containingTypeName = ReadContainingTypeName(source, codeTextMask, methodNameIndex);
             if (string.Equals(containingTypeName, removedSignature.DeclaringTypeName, StringComparison.Ordinal))
             {
                 return true;
-            }
-
-            // An empty target also comes back for a receiver that is an expression (GetOther().Run(..)); that call
-            // binds to whatever the expression returns, not to the containing class.
-            if (!isThisCall && IsPrecededByMemberAccess(source, methodNameIndex))
-            {
-                return false;
             }
 
             // new Runner(..) calls a constructor, which is never inherited.
