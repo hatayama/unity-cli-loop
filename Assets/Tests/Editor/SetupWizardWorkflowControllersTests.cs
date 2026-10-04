@@ -204,6 +204,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a first install into the package-owned location checks the shell again afterwards with the
+        /// caller's token.
+        /// </summary>
+        [Test]
+        public async Task CliHandleInstall_IntoAPackageOwnedLocation_RechecksTheShellAfterInstalling()
+        {
+            AssumePathCheckRuns();
+            _cliDetector.CliVersion = string.Empty;
+            _nativeCliInstaller.HasPackageOwnedInstall = true;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+            SetupWizardCliWorkflowController controller = CreateCliWorkflow();
+            using CancellationTokenSource cts = new CancellationTokenSource();
+
+            await controller.HandleInstallCliAsync(cts.Token);
+
+            Assert.That(_nativeCliInstaller.InstallCalls.Count, Is.EqualTo(1));
+            Assert.That(
+                _cliDetector.ShellVisibilityTokens,
+                Is.EqualTo(new List<CancellationToken> { cts.Token, cts.Token }));
+        }
+
+        /// <summary>
         /// Verifies an update over an installed CLI refreshes the UI without the skills.
         /// </summary>
         [Test]

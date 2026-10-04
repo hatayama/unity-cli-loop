@@ -254,6 +254,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a first install into the package-owned location checks the shell again after the PATH setup.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallCli_IntoAPackageOwnedLocation_RechecksTheShellAfterInstalling()
+        {
+            Assume.That(UnityEngine.Application.platform, Is.Not.EqualTo(RuntimePlatform.WindowsEditor));
+            _cliDetector.CliVersion = string.Empty;
+            _nativeCliInstaller.HasPackageOwnedInstall = true;
+            _pinReader.BootstrapPin = DispatcherBootstrapPinLoadResult.FromSuccess("dispatcher-v3.1.0", "<MANIFEST>");
+
+            await _presenter.HandleInstallCli();
+
+            Assert.That(_nativeCliInstaller.InstallCalls.Count, Is.EqualTo(1));
+            Assert.That(_cliDetector.ShellVisibilityChecks, Is.EqualTo(2));
+        }
+
+        /// <summary>
         /// Verifies an update over an installed CLI refreshes the sections but not the skills.
         /// </summary>
         [Test]
