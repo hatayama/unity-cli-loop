@@ -21,6 +21,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string ExecutablePath = "<PROJECT_ROOT>/bin/uloop";
         private const string ContractArguments = CliConstants.VERSION_FLAG + " " + CliConstants.JSON_FLAG;
 
+        private int _warningCount;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _warningCount = 0;
+            UnityEngine.Application.logMessageReceived += CountWarning;
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            UnityEngine.Application.logMessageReceived -= CountWarning;
+        }
+
         /// <summary>
         /// Verifies a version read from the JSON contract output is used without running the plain version command.
         /// </summary>
@@ -125,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a command that could not run, exited with an error, or printed nothing yields no output.
+        /// Verifies a command that could not run, exited with an error, or printed nothing yields no output without warning.
         /// </summary>
         [TestCase(false, 0, "3.6.0")]
         [TestCase(true, 1, "3.6.0")]
@@ -147,6 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 runner.Execute);
 
             Assert.That(output, Is.Null);
+            Assert.That(_warningCount, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -164,6 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ThrowingRunner);
 
             Assert.That(output, Is.Null);
+            Assert.That(_warningCount, Is.EqualTo(1));
         }
 
         /// <summary>
@@ -182,7 +199,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ThrowingRunner);
 
             Assert.That(output, Is.Null);
-            LogAssert.NoUnexpectedReceived();
+            Assert.That(_warningCount, Is.EqualTo(0));
+        }
+
+        private void CountWarning(string condition, string stackTrace, LogType type)
+        {
+            if (type == LogType.Warning)
+            {
+                _warningCount++;
+            }
         }
 
         private static CliDetectionCommandResult ThrowingRunner(ProcessStartInfo startInfo, CancellationToken ct)
