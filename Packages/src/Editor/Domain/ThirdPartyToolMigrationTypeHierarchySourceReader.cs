@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 using CodeTextMask = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationParsingRules.CodeTextMask;
+using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationDeclarationNameRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationParsingRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationRuleCatalog;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingMethodBodyRules;
@@ -73,17 +74,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     /// </summary>
     public static class ThirdPartyToolMigrationTypeHierarchySourceReader
     {
-        // Words after which an identifier is in an expression, so it is a use of a name rather than a declaration.
-        // Type keywords and modifiers (var, void, int, static, override, ...) are left out on purpose: a name after
-        // them is declared, and an unknown word must count as a declaration so the walk stays on the unchanged side.
-        private static readonly HashSet<string> ExpressionKeywords = new(StringComparer.Ordinal)
-        {
-            "return", "await", "new", "else", "throw", "yield", "in", "is", "as", "case", "when",
-            "out", "ref", "typeof", "sizeof", "nameof", "default", "not", "and", "or", "goto", "using", "lock", "fixed",
-            "checked", "unchecked", "this", "base", "select", "where", "orderby", "by", "on", "equals", "ascending",
-            "descending",
-        };
-
         private static readonly Regex AccessModifierRegex =
             new(@"\b(?:public|protected|internal)\b", RegexOptions.Compiled);
 
@@ -198,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
         // The modifiers of a declaration run back to the previous statement end, block brace, or attribute bracket.
+        // An array rank specifier in the return type ("int[] Run", "Task<string[]> Run") is skipped, not a boundary.
         private static string ReadModifierText(string source, CodeTextMask codeTextMask, int declarationIndex)
         {
             int startIndex = declarationIndex - 1;
@@ -205,7 +196,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             {
                 if (codeTextMask.IsCodeAt(startIndex) && IsModifierBoundary(source[startIndex]))
                 {
-                    break;
+                    int rankOpenIndex = ReadRankSpecifierOpenIndex(source, codeTextMask, startIndex);
+                    if (rankOpenIndex < 0)
+                    {
+                        break;
+                    }
+
+                    startIndex = rankOpenIndex;
                 }
 
                 startIndex--;
@@ -217,6 +214,33 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         private static bool IsModifierBoundary(char character)
         {
             return character == ';' || character == '{' || character == '}' || character == ']';
+        }
+
+        // Returns the '[' of a rank specifier ("[]", "[,]") closed at the index, or -1 for any other bracket such as
+        // an attribute. A rank specifier holds only commas and spaces and follows a type: a name, '>', ']', '?' or ')'.
+        private static int ReadRankSpecifierOpenIndex(string source, CodeTextMask codeTextMask, int closeIndex)
+        {
+            if (source[closeIndex] != ']')
+            {
+                return -1;
+            }
+
+            int index = closeIndex - 1;
+            while (index >= 0 && codeTextMask.IsCodeAt(index) && (source[index] == ',' || char.IsWhiteSpace(source[index])))
+            {
+                index--;
+            }
+
+            if (index < 0 || !codeTextMask.IsCodeAt(index) || source[index] != '[')
+            {
+                return -1;
+            }
+
+            int ownerIndex = ReadPreviousCodeIndex(source, codeTextMask, index - 1);
+            // '?' is allowed here only: in a declaration's modifiers and type, "?[" can only be a nullable element type.
+            return ownerIndex >= 0 && (IsNullableTypeSuffixOwner(source[ownerIndex]) || source[ownerIndex] == '?')
+                ? index
+                : -1;
         }
 
         // Scans the class body once, front to back, skipping nested type bodies, so building the index stays linear.
@@ -306,165 +330,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             return index == 0 || !codeTextMask.IsCodeAt(index - 1) || !IsIdentifierCharacter(source[index - 1]);
-        }
-
-        private static int ReadIdentifierEndIndex(string source, int identifierStartIndex)
-        {
-            int index = identifierStartIndex;
-            while (index < source.Length && IsIdentifierCharacter(source[index]))
-            {
-                index++;
-            }
-
-            return index;
-        }
-
-        /// <summary>
-        /// Decides whether the identifier at the index is declared there. Only positions that are certainly
-        /// expressions count as uses; anything unclear counts as a declaration so an inherited call is left unchanged.
-        /// </summary>
-        public static bool IsDeclarationName(
-            string source,
-            CodeTextMask codeTextMask,
-            int identifierStartIndex,
-            int parenDepth)
-        {
-            Debug.Assert(source != null, "source must not be null");
-            Debug.Assert(identifierStartIndex >= 0, "identifierStartIndex must not be negative");
-
-            int previousIndex = ReadPreviousCodeIndex(source, codeTextMask, identifierStartIndex - 1);
-            if (previousIndex < 0)
-            {
-                return true;
-            }
-
-            char previous = source[previousIndex];
-            if (previous == '.')
-            {
-                // x.Run or an explicit interface implementation IFoo.Run: not a name this type can call unqualified.
-                return false;
-            }
-
-            if (IsIdentifierCharacter(previous))
-            {
-                return !ExpressionKeywords.Contains(ReadIdentifierEndingAt(source, codeTextMask, previousIndex));
-            }
-
-            return IsDeclarationAfterPunctuation(source, codeTextMask, previousIndex, parenDepth);
-        }
-
-        private static bool IsDeclarationAfterPunctuation(
-            string source,
-            CodeTextMask codeTextMask,
-            int previousIndex,
-            int parenDepth)
-        {
-            char previous = source[previousIndex];
-            switch (previous)
-            {
-                case '>':
-                    // "=> Run" is an expression; "Task<int> Run" is a type. A comparison cannot be told apart.
-                    return !(previousIndex > 0 && source[previousIndex - 1] == '=');
-                case ']':
-                    return true;
-                case '?':
-                    // "int? Run" and "(int, int)? Run" are types; the conditional "x ? Run" has a space before '?'.
-                    return previousIndex > 0 && IsNullableTypeSuffixOwner(source[previousIndex - 1]);
-                case ')':
-                    return IsTupleTypeClose(source, codeTextMask, previousIndex);
-                case ',':
-                    // Outside brackets a comma separates declarators; inside them it separates arguments.
-                    return parenDepth == 0;
-                default:
-                    return !IsExpressionPunctuation(previous);
-            }
-        }
-
-        private static bool IsNullableTypeSuffixOwner(char character)
-        {
-            return IsIdentifierCharacter(character) || character == '>' || character == ']' || character == ')';
-        }
-
-        private static bool IsExpressionPunctuation(char character)
-        {
-            return "([=;{}!&|^+-/%~:<".IndexOf(character) >= 0;
-        }
-
-        // A ')' closes a tuple type when its parentheses hold a top-level comma and no top-level ';' or '='.
-        // "if (x) Run(..)" and "(T)Run(..)" have no comma, so they stay expressions.
-        private static bool IsTupleTypeClose(string source, CodeTextMask codeTextMask, int closeIndex)
-        {
-            int depth = 0;
-            bool hasTopLevelComma = false;
-            for (int index = closeIndex - 1; index >= 0; index--)
-            {
-                if (!codeTextMask.IsCodeAt(index))
-                {
-                    continue;
-                }
-
-                char character = source[index];
-                if (character == ')' || character == ']')
-                {
-                    depth++;
-                    continue;
-                }
-
-                if (character == '(' || character == '[')
-                {
-                    if (depth == 0)
-                    {
-                        return hasTopLevelComma;
-                    }
-
-                    depth--;
-                    continue;
-                }
-
-                if (depth > 0)
-                {
-                    continue;
-                }
-
-                if (character == ';' || character == '=')
-                {
-                    return false;
-                }
-
-                if (character == '{' || character == '}')
-                {
-                    // The open parenthesis cannot be found within the statement, so the shape is unknown.
-                    return true;
-                }
-
-                hasTopLevelComma |= character == ',';
-            }
-
-            return true;
-        }
-
-        private static int ReadPreviousCodeIndex(string source, CodeTextMask codeTextMask, int startIndex)
-        {
-            int index = startIndex;
-            while (index >= 0 && (!codeTextMask.IsCodeAt(index) || char.IsWhiteSpace(source[index])))
-            {
-                index--;
-            }
-
-            return index;
-        }
-
-        private static string ReadIdentifierEndingAt(string source, CodeTextMask codeTextMask, int endIndex)
-        {
-            int startIndex = endIndex;
-            while (startIndex > 0 &&
-                   codeTextMask.IsCodeAt(startIndex - 1) &&
-                   IsIdentifierCharacter(source[startIndex - 1]))
-            {
-                startIndex--;
-            }
-
-            return source.Substring(startIndex, endIndex - startIndex + 1);
         }
 
         private readonly struct TypeBody

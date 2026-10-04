@@ -566,5 +566,144 @@ public class Derived : Runner
 
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
+
+        /// <summary>
+        /// Verifies a member whose return type ends in an array rank specifier keeps its access modifier, so derived
+        /// classes reach it unqualified and through base.
+        /// </summary>
+        [TestCase("int[]")]
+        [TestCase("Task<string[]>")]
+        [TestCase("(int, int)[]")]
+        [TestCase("int[,]")]
+        [TestCase("int[][]")]
+        [TestCase("int?[]")]
+        public void IsInheritedMemberReachable_WhenDeclaringMemberReturnsArray_ReturnsTrue(string returnTypeName)
+        {
+            string runner = RunnerSource.Replace("protected void Run", "protected " + returnTypeName + " Run");
+            string mid = "public class Mid : Runner { }";
+            string derived = DerivedCallerSource.Replace(": Runner", ": Mid");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { runner, mid, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
+            Assert.That(index.IsBaseMemberReachable("Derived", "Run", "Runner"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies the modifier scan stops at an attribute's closing bracket rather than skipping it as a rank
+        /// specifier, so the modifiers after the attribute decide the access.
+        /// </summary>
+        [TestCase("[Obsolete] protected int[] Run", true)]
+        [TestCase("[Obsolete] int[] Run", false)]
+        public void IsInheritedMemberReachable_WhenArrayReturningMemberHasAttribute_ReadsModifiersAfterAttribute(
+            string declarationStart,
+            bool expected)
+        {
+            string runner = RunnerSource.Replace("protected void Run", declarationStart);
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { runner, DerivedCallerSource });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// Verifies a lambda parameter named like the member hides it, so the class is left unchanged. Names are
+        /// collected per class, so the other unqualified calls of the name in that class are left unchanged too.
+        /// </summary>
+        [TestCase("Use(Run => Run(1, PlayerLoopTiming.Update));")]
+        [TestCase("handler = Run => Run(1, PlayerLoopTiming.Update);")]
+        [TestCase("Use((Run, x) => Run(x, PlayerLoopTiming.Update));")]
+        public void IsInheritedMemberReachable_WhenContainingClassHasLambdaParameterWithName_ReturnsFalse(
+            string statement)
+        {
+            string derived = DerivedCallerSource.Replace(
+                "Run(1, PlayerLoopTiming.Update);",
+                statement + "\n        Run(2, PlayerLoopTiming.Update);");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies the name passed as an ordinary argument is a use, not a lambda parameter declaration.
+        /// </summary>
+        [Test]
+        public void IsInheritedMemberReachable_WhenNameIsPassedAsArgument_ReturnsTrue()
+        {
+            string derived = DerivedCallerSource.Replace(
+                "Run(1, PlayerLoopTiming.Update);",
+                "Foo(Run, x);\n        Run(1, PlayerLoopTiming.Update);");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies an expression-bodied explicit interface property named like the member is not a declaration this
+        /// class can call unqualified, so the inherited member stays reachable.
+        /// </summary>
+        [Test]
+        public void IsInheritedMemberReachable_WhenContainingClassHasExpressionBodiedExplicitInterfaceProperty_ReturnsTrue()
+        {
+            string derived = DerivedCallerSource
+                .Replace(": Runner", ": Runner, IFoo")
+                .Replace("public void Call()", "int IFoo.Run => 0;\n\n    public void Call()");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(derived, Does.Contain("int IFoo.Run => 0;"));
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a local introduced by a var deconstruction, a property pattern, or a positional pattern hides the
+        /// member, so the class is left unchanged.
+        /// </summary>
+        [TestCase("var (Run, count) = pair;")]
+        [TestCase("var (count, Run) = pair;")]
+        [TestCase("foreach (var (Run, n) in pairs) { }")]
+        [TestCase("if (pair is var (Run, n)) { }")]
+        [TestCase("if (_handler is { } Run) { Run(1, PlayerLoopTiming.Update); }")]
+        [TestCase("switch (_handler) { case { } Run: break; }")]
+        [TestCase("if (_handler is Holder(1) Run) { }")]
+        [TestCase("if (_handler is Holder { } Run) { }")]
+        [TestCase("if (pair is (1, 2) Run) { }")]
+        [TestCase("int result = _handler switch { { } Run => 1, _ => 0 };")]
+        [TestCase("if (_handler is { Callback: { } Run }) { Run(1, PlayerLoopTiming.Update); }")]
+        [TestCase("bool matched = _handler is { } Run == true;")]
+        [TestCase("if (_handler is { Callback: Holder(1) Run }) { }")]
+        public void IsInheritedMemberReachable_WhenContainingClassHasDesignationWithName_ReturnsFalse(string statement)
+        {
+            string derived = DerivedCallerSource.Replace(
+                "Run(1, PlayerLoopTiming.Update);",
+                statement + "\n        Run(2, PlayerLoopTiming.Update);");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a call or generic call that starts a statement after a block is a use, not a pattern designation.
+        /// </summary>
+        [TestCase("if (true) { } Run(1, PlayerLoopTiming.Update);")]
+        [TestCase("if (true) { } Run<int>(1, PlayerLoopTiming.Update);")]
+        public void IsInheritedMemberReachable_WhenCallFollowsBlock_ReturnsTrue(string statement)
+        {
+            string derived = DerivedCallerSource.Replace("Run(1, PlayerLoopTiming.Update);", statement);
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
+        }
     }
 }

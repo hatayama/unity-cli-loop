@@ -2093,6 +2093,64 @@ public class Derived : Mid
             }
         }
 
+        /// <summary>
+        /// Verifies inherited calls of a timing method that returns an array are rewritten in every call form.
+        /// </summary>
+        [Test]
+        public void ApplyMigration_WhenInheritedTimingMethodReturnsArray_RemovesTimingFromEveryCallForm()
+        {
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string runnerPath = Path.Combine(toolDirectory, "Runner.cs");
+                string midPath = Path.Combine(toolDirectory, "Mid.cs");
+                string derivedPath = Path.Combine(toolDirectory, "Derived.cs");
+                File.WriteAllText(runnerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public class Runner
+{
+    protected async Task<int[]> RunAsync(int value, PlayerLoopTiming timing, CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(timing, ct);
+        return new[] { value };
+    }
+}");
+                File.WriteAllText(midPath, InheritedTimingMidSource);
+                File.WriteAllText(derivedPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public class Derived : Mid
+{
+    public async Task CallAsync(CancellationToken ct)
+    {
+        int[] first = await RunAsync(1, PlayerLoopTiming.Update, ct);
+        int[] second = await this.RunAsync(2, PlayerLoopTiming.Update, ct);
+        int[] third = await base.RunAsync(3, PlayerLoopTiming.Update, ct);
+    }
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                service.ApplyMigration(projectRoot);
+                string migratedRunnerSource = File.ReadAllText(runnerPath);
+                string migratedDerivedSource = File.ReadAllText(derivedPath);
+
+                Assert.That(migratedRunnerSource, Does.Contain("protected async Task<int[]> RunAsync(int value, CancellationToken ct)"));
+                Assert.That(migratedDerivedSource, Does.Contain("int[] first = await RunAsync(1, ct);"));
+                Assert.That(migratedDerivedSource, Does.Contain("int[] second = await this.RunAsync(2, ct);"));
+                Assert.That(migratedDerivedSource, Does.Contain("int[] third = await base.RunAsync(3, ct);"));
+                Assert.That(migratedDerivedSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         [Test]
         public void ApplyMigration_WhenDerivedClassForwardsTimingToInheritedMethod_PropagatesRemovalToCallers()
         {
