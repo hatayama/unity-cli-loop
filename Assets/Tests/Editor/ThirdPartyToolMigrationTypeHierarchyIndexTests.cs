@@ -673,6 +673,9 @@ public class Derived : Runner
         [TestCase("if (_handler is { } Run) { Run(1, PlayerLoopTiming.Update); }")]
         [TestCase("switch (_handler) { case { } Run: break; }")]
         [TestCase("if (_handler is Holder(1) Run) { }")]
+        [TestCase("if (_handler is Holder { } Run) { }")]
+        [TestCase("if (pair is (1, 2) Run) { }")]
+        [TestCase("int result = _handler switch { { } Run => 1, _ => 0 };")]
         public void IsInheritedMemberReachable_WhenContainingClassHasDesignationWithName_ReturnsFalse(string statement)
         {
             string derived = DerivedCallerSource.Replace(
