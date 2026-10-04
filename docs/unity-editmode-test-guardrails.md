@@ -13,6 +13,7 @@ async execution, cancellation, threads, or dynamic-code runtime paths.
 - Do not block the main thread inside Unity EditMode tests with `.Wait()`, `.Result`, `Task.WaitAll`, `Thread.Sleep`, or similar synchronous waiting APIs.
 - Do not add Unity EditMode tests that execute real dynamic-code compile-and-run flows through `ExecuteDynamicCodeTool`, `DynamicCodeCompiler`, or similar end-to-end runtime paths when a pure unit test or compile-only test can cover the behavior.
 - Do not add Unity EditMode tests that start nested test execution flows or any other long-running editor orchestration from inside a test body.
+- Unity Test Framework (checked in 1.3.9 and 1.6.0) records an `async Task` test as passed when it ends Canceled. A leaked `OperationCanceledException` therefore makes the test pass silently. When a test awaits a value or a completion, make an unexpected cancellation fail the test: catch `OperationCanceledException` and call `Assert.Fail`, or check that the task's `Status` is `RanToCompletion`. Tests that expect a cancellation keep catching it with `try` / `catch` and then check the resulting state.
 
 ## High-risk patterns to avoid by default
 
