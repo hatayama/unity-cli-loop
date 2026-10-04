@@ -18,10 +18,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const int ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES = 2;
 
         private readonly IScreenshotEditorStateReader _editorStateReader;
+        private readonly IEditorWindowCaptureService _windowCaptureService;
 
-        internal ScreenshotUseCase(IScreenshotEditorStateReader editorStateReader = null)
+        internal ScreenshotUseCase(
+            IScreenshotEditorStateReader editorStateReader = null,
+            IEditorWindowCaptureService windowCaptureService = null)
         {
             _editorStateReader = editorStateReader ?? new ScreenshotEditorStateReader();
+            _windowCaptureService = windowCaptureService ?? new EditorWindowCaptureService();
         }
 
         public async Task<ScreenshotResponse> CaptureAsync(
@@ -416,7 +420,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("window screenshot use case");
-            EditorWindow[] windows = EditorWindowCaptureUtility.FindWindowsByName(request.WindowName, request.MatchMode);
+            EditorWindow[] windows = _windowCaptureService.FindWindowsByName(request.WindowName, request.MatchMode);
             string captureWindowName = ScreenshotWindowNameResolver.ResolveCaptureWindowName(
                 request.WindowName,
                 request.MatchMode,
@@ -428,7 +432,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (usedSimulatorFallback)
             {
                 // why: Device Simulator replaces the Game tab, so the default "Game" title miss should retry Simulator
-                windows = EditorWindowCaptureUtility.FindWindowsByName(captureWindowName, request.MatchMode);
+                windows = _windowCaptureService.FindWindowsByName(captureWindowName, request.MatchMode);
                 if (windows.Length > 0)
                 {
                     VibeLogger.LogInfo(
@@ -498,7 +502,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 for (int i = 0; i < windows.Length; i++)
                 {
                     EditorWindow window = windows[i];
-                    (Texture2D texture, bool timedOut) = await EditorWindowCaptureUtility.CaptureWindowAsync(
+                    (Texture2D texture, bool timedOut) = await _windowCaptureService.CaptureWindowAsync(
                         window,
                         request.ResolutionScale,
                         UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
