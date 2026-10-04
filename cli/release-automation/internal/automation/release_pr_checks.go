@@ -75,7 +75,7 @@ func defaultReleasePRCheckDeps() releasePRCheckDeps {
 	return releasePRCheckDeps{
 		now:       releasePRCheckNow,
 		sleep:     releasePRCheckSleep,
-		runOutput: runReleasePRCheckCommandOutput,
+		runOutput: runCommandOutput,
 	}
 }
 
@@ -410,7 +410,9 @@ func verifyReleasePRCheckHeadMatchesRun(
 	return "", nil
 }
 
-func runReleasePRCheckCommandOutput(ctx context.Context, name string, args ...string) (string, error) {
+// runCommandOutput runs an external command and returns its stdout; on failure the error names the
+// command as "<name> <args> failed" and carries its stderr and stdout.
+func runCommandOutput(ctx context.Context, name string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, name, args...)
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}

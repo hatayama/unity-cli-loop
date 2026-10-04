@@ -99,7 +99,7 @@ func defaultMergePackageReleasePRDeps() mergePackageReleasePRDeps {
 	return mergePackageReleasePRDeps{
 		now:       releasePRCheckNow,
 		sleep:     releasePRCheckSleep,
-		runOutput: runReleasePRCheckCommandOutput,
+		runOutput: runCommandOutput,
 	}
 }
 

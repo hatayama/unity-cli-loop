@@ -1,12 +1,10 @@
 package automation
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -93,7 +91,7 @@ func RunNotifyPendingReleaseApprovals(ctx context.Context, stdout io.Writer, std
 
 func defaultNotifyPendingReleaseApprovalsDeps() notifyPendingReleaseApprovalsDeps {
 	return notifyPendingReleaseApprovalsDeps{
-		runOutput: runNotifyPendingReleaseApprovalsCommandOutput,
+		runOutput: runCommandOutput,
 	}
 }
 
@@ -254,17 +252,4 @@ func findExistingPendingApprovalIssue(ctx context.Context, repository string, de
 func writeNotifyPendingReleaseApprovalsLine(writer io.Writer, values ...any) {
 	// CI status output failures cannot be recovered after the command outcome is known.
 	_, _ = fmt.Fprintln(writer, values...)
-}
-
-func runNotifyPendingReleaseApprovalsCommandOutput(ctx context.Context, name string, args ...string) (string, error) {
-	command := exec.CommandContext(ctx, name, args...)
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	err := command.Run()
-	if err != nil {
-		return "", fmt.Errorf("%s %s failed: %w\n%s%s", name, strings.Join(args, " "), err, stderr.String(), stdout.String())
-	}
-	return stdout.String(), nil
 }

@@ -378,18 +378,3 @@ func TestRunNotifyPendingReleaseApprovalsUpdatesTheTrackingIssue(t *testing.T) {
 	assertNotifyPendingReleaseApprovalsContains(t, commandLogText, "gh issue edit 42 --repo owner/repository --body")
 	assertNotifyPendingReleaseApprovalsContains(t, commandLogText, "Environment: release, homebrew")
 }
-
-// Verifies the command runner returns stdout on success and names the command on failure.
-func TestRunNotifyPendingReleaseApprovalsCommandOutputCapturesOutputAndFailures(t *testing.T) {
-	output, err := runNotifyPendingReleaseApprovalsCommandOutput(context.Background(), "git", "--version")
-	if err != nil {
-		t.Fatalf("git --version failed: %v", err)
-	}
-	assertNotifyPendingReleaseApprovalsContains(t, output, "git version")
-
-	_, err = runNotifyPendingReleaseApprovalsCommandOutput(context.Background(), "git", "--no-such-option")
-	if err == nil {
-		t.Fatal("expected an unknown git option to fail")
-	}
-	assertNotifyPendingReleaseApprovalsContains(t, err.Error(), "git --no-such-option failed")
-}

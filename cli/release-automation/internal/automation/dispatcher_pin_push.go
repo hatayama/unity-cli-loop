@@ -48,7 +48,7 @@ func RunPushDispatcherPin(ctx context.Context, stdout io.Writer, stderr io.Write
 
 func defaultDispatcherPinPushDeps() dispatcherPinPushDeps {
 	return dispatcherPinPushDeps{
-		runOutput:      runReleasePRCheckCommandOutput,
+		runOutput:      runCommandOutput,
 		repositoryRoot: dispatcherPinPushRepositoryRoot,
 		stampPin:       StampDispatcherPin,
 		verifySubjects: VerifyDispatcherPinSubjects,
@@ -229,7 +229,7 @@ func dispatcherPinCommitBody(releaseTag string) string {
 }
 
 func dispatcherPinPushRepositoryRoot(ctx context.Context) (string, error) {
-	output, err := runReleasePRCheckCommandOutput(ctx, "git", "rev-parse", "--show-toplevel")
+	output, err := runCommandOutput(ctx, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("resolve repository root: %w", err)
 	}
