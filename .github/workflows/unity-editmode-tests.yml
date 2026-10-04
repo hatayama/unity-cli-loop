@@ -32,6 +32,7 @@ jobs:
           dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
           dotnet test tests/SharedRoslynCompilerWorker.UnitTests/SharedRoslynCompilerWorker.UnitTests.csproj --configuration Release
           dotnet test tests/OutputFileRetention.UnitTests/OutputFileRetention.UnitTests.csproj --configuration Release
+          dotnet test tests/RunTestsExecutionTimeout.UnitTests/RunTestsExecutionTimeout.UnitTests.csproj --configuration Release
 
   editmode-tests:
     name: EditMode Tests (${{ matrix.unity-version }})
