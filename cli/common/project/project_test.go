@@ -616,6 +616,8 @@ func TestWindowsPosixProjectPathCandidate_ShouldConvertOnlyDriveShapedPaths(t *t
 		{input: "/c", expected: `C:\`, converted: true},
 		{input: "/c/x", expected: `C:\x`, converted: true},
 		{input: "/C/x/y", expected: `C:\x\y`, converted: true},
+		{input: "/z/x", expected: `Z:\x`, converted: true},
+		{input: "/mnt/a/x", expected: `A:\x`, converted: true},
 		{input: `/c\x`, expected: `C:\x`, converted: true},
 		{input: "/mnt/d", expected: `D:\`, converted: true},
 		{input: "/mnt/d/x", expected: `D:\x`, converted: true},
@@ -632,36 +634,6 @@ func TestWindowsPosixProjectPathCandidate_ShouldConvertOnlyDriveShapedPaths(t *t
 				t.Fatalf("got (%q, %v), want (%q, %v)", candidate, converted, testCase.expected, testCase.converted)
 			}
 		})
-	}
-}
-
-func TestWindowsDrivePath_ShouldUppercaseDriveAndUseBackslashes(t *testing.T) {
-	// Verifies drive letters are uppercased and forward slashes in the rest become backslashes.
-	cases := []struct {
-		driveLetter byte
-		rest        string
-		expected    string
-	}{
-		{driveLetter: 'e', rest: "", expected: `E:\`},
-		{driveLetter: 'E', rest: "a/b", expected: `E:\a\b`},
-	}
-
-	for _, testCase := range cases {
-		actual := windowsDrivePath(testCase.driveLetter, testCase.rest)
-		if actual != testCase.expected {
-			t.Fatalf("windowsDrivePath(%q, %q) = %q, want %q", testCase.driveLetter, testCase.rest, actual, testCase.expected)
-		}
-	}
-}
-
-func TestToUpperASCIILetter_ShouldUppercaseOnlyLowercaseLetters(t *testing.T) {
-	// Verifies lowercase letters are uppercased while uppercase letters and digits are returned unchanged.
-	cases := map[byte]byte{'a': 'A', 'z': 'Z', 'A': 'A', '1': '1'}
-
-	for input, expected := range cases {
-		if actual := toUpperASCIILetter(input); actual != expected {
-			t.Fatalf("toUpperASCIILetter(%q) = %q, want %q", input, actual, expected)
-		}
 	}
 }
 
