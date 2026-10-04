@@ -131,7 +131,8 @@ func TestDotnetTestProjectPathsReportsOnlyTestProjects(t *testing.T) {
 		"<Project>\n  <ItemGroup>\n    <!-- <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" /> -->\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\" />\n  </ItemGroup>\n</Project>\n")
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Helper", "Helper.csproj"),
 		"<Project>\n  <ItemGroup>\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\" />\n  </ItemGroup>\n</Project>\n")
-	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Alpha", "readme.txt"), "Microsoft.NET.Test.Sdk\n")
+	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Alpha", "readme.txt"),
+		"<Project><ItemGroup><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" /></ItemGroup></Project>\n")
 
 	paths, err := dotnetTestProjectPaths(repositoryRoot)
 	if err != nil {
