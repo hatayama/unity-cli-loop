@@ -330,7 +330,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// Verifies an empty or blank settings file is reported as a corrupted settings load, with the JSON reader
-        /// error as the cause, instead of silently falling back to defaults.
+        /// error as the cause, instead of silently falling back to defaults, and the file is left as it was.
         /// </summary>
         [TestCase("")]
         [TestCase("   ")]
@@ -343,6 +343,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             StringAssert.StartsWith("Failed to load Unity CLI Loop Editor settings from: ", exception.Message);
             Assert.That(exception.InnerException, Is.InstanceOf<JsonReaderException>());
+            Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(content));
         }
 
         /// <summary>
@@ -382,7 +383,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies already-migrated settings load as stored when no legacy file is left.
+        /// Verifies already-migrated settings load as stored, without rewriting the file, when no legacy file is left.
         /// </summary>
         [Test]
         public void GetSettings_WhenAlreadyMigratedAndLegacyFileIsGone_KeepsCurrentSettings()
@@ -392,7 +393,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lastSeenSetupWizardVersion = "3.0.0",
                 legacySetupWizardStateMigrated = true
             };
-            string currentJson = SerializeSettingsData(currentData);
+            // Compact JSON differs from the indented JSON SaveSettings writes, so an unexpected save shows up.
+            string currentJson = JsonUtility.ToJson(UnityCliLoopEditorSettingsJsonData.FromDomain(currentData), false);
             File.WriteAllText(SettingsFilePath, currentJson);
 
             UnityCliLoopEditorSettingsData settings = _editorSettingsPort.GetSettings();
@@ -401,6 +403,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(settings.legacySetupWizardStateMigrated, Is.True);
             Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
             Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(currentJson));
+        }
+
+        /// <summary>
+        /// Verifies an oversized legacy settings file is reported as a corrupted settings load caused by the size
+        /// limit, and is left in place without writing current settings.
+        /// </summary>
+        [Test]
+        public void GetSettings_WhenLegacySettingsFileExceedsSizeLimit_ThrowsWithoutMigrating()
+        {
+            string oversizedLegacyContent = new string(' ', UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES + 1);
+            File.WriteAllText(LegacySettingsFilePath, oversizedLegacyContent);
+
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => _editorSettingsPort.GetSettings());
+
+            Assert.That(exception.InnerException, Is.InstanceOf<SecurityException>());
+            Assert.That(File.ReadAllText(LegacySettingsFilePath), Is.EqualTo(oversizedLegacyContent));
+            Assert.That(File.Exists(SettingsFilePath), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies saving settings whose JSON exceeds the size limit is rejected and leaves the stored file unchanged.
+        /// </summary>
+        [Test]
+        public void SaveSettings_WhenJsonExceedsSizeLimit_ThrowsAndKeepsStoredSettings()
+        {
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData { showDeveloperTools = true });
+            string storedJson = File.ReadAllText(SettingsFilePath);
+            UnityCliLoopEditorSettingsData oversizedSettings = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = new string('a', UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES + 1)
+            };
+
+            Assert.Throws<SecurityException>(() => _editorSettingsPort.SaveSettings(oversizedSettings));
+
+            Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(storedJson));
         }
 
         /// <summary>
