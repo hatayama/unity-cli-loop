@@ -661,5 +661,44 @@ public class Derived : Runner
             Assert.That(derived, Does.Contain("int IFoo.Run => 0;"));
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
+
+        /// <summary>
+        /// Verifies a local introduced by a var deconstruction, a property pattern, or a positional pattern hides the
+        /// member, so the class is left unchanged.
+        /// </summary>
+        [TestCase("var (Run, count) = pair;")]
+        [TestCase("var (count, Run) = pair;")]
+        [TestCase("foreach (var (Run, n) in pairs) { }")]
+        [TestCase("if (pair is var (Run, n)) { }")]
+        [TestCase("if (_handler is { } Run) { Run(1, PlayerLoopTiming.Update); }")]
+        [TestCase("switch (_handler) { case { } Run: break; }")]
+        [TestCase("if (_handler is Holder(1) Run) { }")]
+        public void IsInheritedMemberReachable_WhenContainingClassHasDesignationWithName_ReturnsFalse(string statement)
+        {
+            string derived = DerivedCallerSource.Replace(
+                "Run(1, PlayerLoopTiming.Update);",
+                statement + "\n        Run(2, PlayerLoopTiming.Update);");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a call that starts a statement after a block is a use, not a pattern designation.
+        /// </summary>
+        [Test]
+        public void IsInheritedMemberReachable_WhenCallFollowsBlock_ReturnsTrue()
+        {
+            string derived = DerivedCallerSource.Replace(
+                "Run(1, PlayerLoopTiming.Update);",
+                "if (true) { } Run(1, PlayerLoopTiming.Update);");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
+        }
     }
 }

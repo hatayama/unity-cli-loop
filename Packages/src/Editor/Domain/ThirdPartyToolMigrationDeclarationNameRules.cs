@@ -50,7 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             // After the '.' check: a lambda parameter never follows '.', and "int IFoo.Run => 0;" is not a lambda.
-            if (IsLambdaParameterName(source, codeTextMask, identifierStartIndex))
+            if (IsLambdaParameterName(source, codeTextMask, identifierStartIndex) ||
+                IsDesignationName(source, codeTextMask, identifierStartIndex, previousIndex))
             {
                 return true;
             }
@@ -109,6 +110,98 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             int closeIndex = FindListCloseParenthesisIndex(source, codeTextMask, identifierEndIndex);
             return closeIndex >= 0 &&
                    IsArrowAt(source, codeTextMask, ReadNextCodeIndex(source, codeTextMask, closeIndex + 1));
+        }
+
+        // A name introduced after punctuation by a pattern or a deconstruction: "var (Run, n)" (also in foreach and
+        // "is var"), and the designation after a property or positional pattern ("is { } Run", "is Holder(1) Run").
+        private static bool IsDesignationName(
+            string source,
+            CodeTextMask codeTextMask,
+            int identifierStartIndex,
+            int previousIndex)
+        {
+            char previous = source[previousIndex];
+            if (previous == '(' || previous == ',')
+            {
+                return IsVarDeconstructionElement(source, codeTextMask, previousIndex);
+            }
+
+            if (previous == '}' || previous == ')')
+            {
+                return IsFollowedByDesignationEnd(source, codeTextMask, ReadIdentifierEndIndex(source, identifierStartIndex));
+            }
+
+            return false;
+        }
+
+        // The list the name is in opens with a '(' right after "var". A nested "var ((a, b), c)" is not recognized.
+        private static bool IsVarDeconstructionElement(string source, CodeTextMask codeTextMask, int previousIndex)
+        {
+            int openIndex = source[previousIndex] == '('
+                ? previousIndex
+                : FindListOpenParenthesisIndex(source, codeTextMask, previousIndex - 1);
+            if (openIndex < 0)
+            {
+                return false;
+            }
+
+            int beforeOpenIndex = ReadPreviousCodeIndex(source, codeTextMask, openIndex - 1);
+            return beforeOpenIndex >= 0 &&
+                   IsIdentifierCharacter(source[beforeOpenIndex]) &&
+                   ReadIdentifierEndingAt(source, codeTextMask, beforeOpenIndex) == "var";
+        }
+
+        // A designation ends a pattern, so the next token closes or continues it. "} Run(..)" starting a statement
+        // is followed by '(' and stays a use.
+        private static bool IsFollowedByDesignationEnd(string source, CodeTextMask codeTextMask, int identifierEndIndex)
+        {
+            int nextIndex = ReadNextCodeIndex(source, codeTextMask, identifierEndIndex);
+            if (nextIndex < 0)
+            {
+                return false;
+            }
+
+            if ("),;:&|?".IndexOf(source[nextIndex]) >= 0)
+            {
+                return true;
+            }
+
+            string nextWord = source.Substring(nextIndex, ReadIdentifierEndIndex(source, nextIndex) - nextIndex);
+            return nextWord == "when" || nextWord == "and" || nextWord == "or";
+        }
+
+        // Finds the '(' that opens the list the index is in, or -1 when the statement or block starts first.
+        private static int FindListOpenParenthesisIndex(string source, CodeTextMask codeTextMask, int startIndex)
+        {
+            int depth = 0;
+            for (int index = startIndex; index >= 0; index--)
+            {
+                if (!codeTextMask.IsCodeAt(index))
+                {
+                    continue;
+                }
+
+                char character = source[index];
+                if (character == ')' || character == ']')
+                {
+                    depth++;
+                }
+                else if (character == '(' || character == '[')
+                {
+                    if (depth == 0)
+                    {
+                        return character == '(' ? index : -1;
+                    }
+
+                    depth--;
+                }
+                else if (character == ';' || character == '{' || character == '}')
+                {
+                    return -1;
+                }
+            }
+
+            return -1;
         }
 
         // Finds the ')' that closes the list the index is in, or -1 when the statement or block ends first.
