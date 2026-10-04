@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -51,6 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly SkillSetupUseCase _skillSetupUseCase;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
         private readonly IUnityCliLoopEditorSettingsPort _editorSettingsPort;
+        private readonly IPresentationDialogs _dialogs;
+        private readonly IBackgroundWorkRunner _backgroundWorkRunner;
 
         private Action<bool> _refreshCliSetupSection;
         private Func<bool> _isRefreshingVersion;
@@ -66,7 +67,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal UnityCliLoopSettingsSkillsPresenter(
             SkillSetupUseCase skillSetupUseCase,
             CliSetupApplicationService cliSetupApplicationService,
-            IUnityCliLoopEditorSettingsPort editorSettingsPort)
+            IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            IPresentationDialogs dialogs = null,
+            IBackgroundWorkRunner backgroundWorkRunner = null)
         {
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
@@ -78,6 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
             _editorSettingsPort = editorSettingsPort
                 ?? throw new ArgumentNullException(nameof(editorSettingsPort));
+            _dialogs = dialogs ?? new EditorPresentationDialogs();
+            _backgroundWorkRunner = backgroundWorkRunner ?? new ThreadPoolBackgroundWorkRunner();
         }
 
         internal void BindCoordination(
@@ -200,10 +205,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (!_cliSetupApplicationService.IsCliInstalled())
             {
-                EditorUtility.DisplayDialog(
+                _dialogs.ShowMessage(
                     "CLI Not Found",
-                    "uloop CLI is not installed. Please install the CLI first.",
-                    "OK");
+                    "uloop CLI is not installed. Please install the CLI first.");
                 return;
             }
 
@@ -235,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     CancellationToken.None);
                 if (shouldShowSkillsInstalledDialog)
                 {
-                    EditorDialogHelper.ShowSkillsInstalledDialog();
+                    _dialogs.ShowSkillsInstalled();
                 }
             }
             finally
@@ -256,10 +260,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (!_cliSetupApplicationService.IsCliInstalled())
             {
-                EditorUtility.DisplayDialog(
+                _dialogs.ShowMessage(
                     "CLI Not Found",
-                    "uloop CLI is not installed. Please install the CLI first.",
-                    "OK");
+                    "uloop CLI is not installed. Please install the CLI first.");
                 return;
             }
 
@@ -271,7 +274,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             try
             {
                 string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-                List<SkillSetupTargetInfo> targets = await Task.Run(
+                List<SkillSetupTargetInfo> targets = await _backgroundWorkRunner.RunAsync(
                     () => _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(
                         projectRoot,
                         !_installSkillsFlat));
@@ -296,7 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     ct);
                 if (shouldShowSkillsInstalledDialog)
                 {
-                    EditorDialogHelper.ShowSkillsInstalledDialog();
+                    _dialogs.ShowSkillsInstalled();
                 }
             }
             finally
@@ -336,7 +339,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             (SkillSetupTargetInfo selectedTargetInfo, List<SkillSetupTargetInfo> allTargets) =
-                await Task.Run(() => GetSelectedTargetInfo(projectRoot, includeFreshnessCheck: true));
+                await _backgroundWorkRunner.RunAsync(() => GetSelectedTargetInfo(projectRoot, includeFreshnessCheck: true));
             if (ct.IsCancellationRequested)
             {
                 return;

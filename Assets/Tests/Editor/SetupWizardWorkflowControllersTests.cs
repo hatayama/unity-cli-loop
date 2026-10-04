@@ -30,6 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private CliSetupApplicationService _cliSetupApplicationService;
         private int _resizeCount;
         private List<bool> _refreshUiCalls;
+        private RecordingPresentationDialogs _dialogs;
+        private InlineBackgroundWorkRunner _backgroundWorkRunner;
 
         [SetUp]
         public void SetUp()
@@ -45,6 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCliPinReader());
             _resizeCount = 0;
             _refreshUiCalls = new List<bool>();
+            _dialogs = new RecordingPresentationDialogs();
+            _backgroundWorkRunner = new InlineBackgroundWorkRunner();
         }
 
         /// <summary>
@@ -168,6 +172,277 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a refresh with a CLI renders the fast scan first and then the full scan run through the
+        /// background runner, resizing after each.
+        /// </summary>
+        [Test]
+        public void SkillsRefreshSection_WithACli_AppliesTheFullScanAfterTheFastScan()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FastTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing)
+            };
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Installed),
+                CreateTarget("Codex CLI", ".codex", SkillInstallState.Installed)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            controller.RefreshSkillsSection();
+
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(1));
+            Assert.That(_backgroundWorkRunner.RunCount, Is.EqualTo(1));
+            Assert.That(_resizeCount, Is.EqualTo(2));
+            Assert.That(_root.Q<VisualElement>("skill-target-status-list").childCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Verifies a full scan cancelled while running leaves the fast scan on screen.
+        /// </summary>
+        [Test]
+        public void SkillsRefreshSection_WhenCancelledDuringTheFullScan_KeepsTheFastScan()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FastTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing)
+            };
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Installed),
+                CreateTarget("Codex CLI", ".codex", SkillInstallState.Installed)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+            _skillPort.OnFullScan = () => controller.CancelSkillInstallStateRefresh();
+
+            controller.RefreshSkillsSection();
+
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(1));
+            Assert.That(_resizeCount, Is.EqualTo(1));
+            Assert.That(_root.Q<VisualElement>("skill-target-status-list").childCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a bulk install installs every target with a skills directory with the caller's token, disables the layout toggle while
+        /// installing, shows the installed dialog, and refreshes the section afterwards.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_BulkInstall_InstallsEveryInstallableTarget()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing),
+                CreateTarget("Codex CLI", ".codex", SkillInstallState.Installed),
+                CreateTarget("Agents", ".agents", SkillInstallState.Missing, hasSkillsDirectory: false)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+            controller.InitializeGroupSkillsToggle();
+            bool toggleEnabledDuringInstall = true;
+            _skillPort.OnInstall = () =>
+                toggleEnabledDuringInstall = _root.Q<Toggle>("group-skills-toggle").enabledSelf;
+
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, cancellation.Token);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude", ".codex" }));
+            Assert.That(_skillPort.InstallTokens, Is.EqualTo(new[] { cancellation.Token }));
+            Assert.That(_skillPort.InstallGroupFlags, Is.EqualTo(new List<bool> { false }));
+            Assert.That(toggleEnabledDuringInstall, Is.False);
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(1));
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+            Assert.That(_root.Q<Toggle>("group-skills-toggle").enabledSelf, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a bulk install with an outdated target installs without the installed dialog.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_WhenATargetIsOutdated_SkipsTheInstalledDialog()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Outdated)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a failed install propagates the error without the installed dialog, re-enables the layout
+        /// toggle, refreshes the section, and lets the next install run.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_WhenTheInstallFails_ReleasesTheLatchAndRefreshes()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+            _skillPort.InstallFailure = new InvalidOperationException("install failed in this test");
+
+            // Awaited in try / catch instead of Assert.ThrowsAsync, which blocks the main thread in this NUnit.
+            try
+            {
+                await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+                Assert.Fail("Expected the install failure to propagate.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Assert.That(exception.Message, Is.EqualTo("install failed in this test"));
+            }
+
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+            Assert.That(_root.Q<Toggle>("group-skills-toggle").enabledSelf, Is.True);
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+
+            _skillPort.InstallFailure = null;
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+        }
+
+        /// <summary>
+        /// Verifies a single-target install installs only the selected target.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_SingleInstall_InstallsOnlyTheSelectedTarget()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing),
+                CreateTarget("Codex CLI", ".codex", SkillInstallState.Missing)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: false, CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+        }
+
+        /// <summary>
+        /// Verifies a single-target install of an already installed target installs nothing and shows no dialog.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_SingleInstall_WhenTheSelectedTargetIsInstalled_InstallsNothing()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Installed)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: false, CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies an install cancelled while detecting targets installs nothing but still refreshes the section.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_WhenCancelledDuringDetection_InstallsNothing()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
+            _skillPort.OnFullScan = () => cancellation.Cancel();
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, cancellation.Token);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a second install request during an install returns without starting another install.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_WhileInstalling_DoesNotStartASecondInstall()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+            Task nestedInstall = null;
+            bool nestedRequested = false;
+            // Re-enters only once so a missing latch fails the test instead of recursing without end.
+            _skillPort.OnInstall = () =>
+            {
+                if (nestedRequested)
+                {
+                    return;
+                }
+
+                nestedRequested = true;
+                nestedInstall = controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+            };
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+
+            Assert.That(nestedInstall.IsCompleted, Is.True);
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+        }
+
+        /// <summary>
+        /// Verifies changing the target resizes the step and makes later single installs use the new target.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleTargetChanged_SelectsTheTargetForSingleInstalls()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing),
+                CreateTarget("Codex CLI", ".codex", SkillInstallState.Missing)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            controller.HandleTargetChanged(SkillsTarget.Codex);
+
+            Assert.That(_resizeCount, Is.EqualTo(1));
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: false, CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".codex" }));
+        }
+
+        /// <summary>
+        /// Verifies a layout change persists the flat layout and refreshes the skills section.
+        /// </summary>
+        [Test]
+        public void SkillsHandleGroupSkillsChanged_PersistsTheFlatLayoutAndRefreshes()
+        {
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            controller.HandleGroupSkillsChanged(true);
+
+            Assert.That(_editorSettingsPort.InstallSkillsFlatValues, Is.EqualTo(new List<bool> { true }));
+            Assert.That(_skillPort.FastScanGroupFlags, Is.EqualTo(new List<bool> { false }));
+            Assert.That(_resizeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// Verifies the wizard opens with both steps checking and the auto-show toggle reflecting the stored
         /// personal suppression flag.
         /// </summary>
@@ -222,7 +497,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new SkillSetupUseCase(_skillPort),
                 _editorSettingsPort,
                 _cliSetupApplicationService,
-                () => _resizeCount++);
+                () => _resizeCount++,
+                _dialogs,
+                _backgroundWorkRunner);
         }
 
         private SetupWizardWorkflowController CreateWorkflow(
@@ -255,13 +532,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _root.Q<Button>("refresh-skills-state-button"));
         }
 
-        private static SkillSetupTargetInfo CreateTarget(string displayName, string dirName, SkillInstallState installState)
+        private static SkillSetupTargetInfo CreateTarget(
+            string displayName,
+            string dirName,
+            SkillInstallState installState,
+            bool hasSkillsDirectory = true)
         {
             return new SkillSetupTargetInfo(
                 displayName,
                 dirName,
                 "--flag",
-                hasSkillsDirectory: true,
+                hasSkillsDirectory,
                 hasExistingSkills: installState != SkillInstallState.Missing,
                 hasDifferentLayoutSkills: false,
                 installState);
@@ -425,6 +706,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<string> FastScanProjectRoots { get; } = new List<string>();
             internal List<bool> FastScanGroupFlags { get; } = new List<bool>();
             internal int FullScanCount { get; private set; }
+            internal List<SkillSetupTargetInfo> FullTargets { get; set; } = new List<SkillSetupTargetInfo>();
+            internal Action OnFullScan { get; set; }
+            internal List<string> InstalledTargetDirs { get; } = new List<string>();
+            internal List<bool> InstallGroupFlags { get; } = new List<bool>();
+            internal Action OnInstall { get; set; }
+            internal List<CancellationToken> InstallTokens { get; } = new List<CancellationToken>();
+            internal Exception InstallFailure { get; set; }
 
             public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutFastAtProjectRoot(
                 string projectRoot,
@@ -440,7 +728,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 bool groupSkillsUnderUnityCliLoop)
             {
                 FullScanCount++;
-                return new List<SkillSetupTargetInfo>();
+                OnFullScan?.Invoke();
+                return FullTargets;
             }
 
             public void RemoveSkillFiles(string toolName) => throw new NotSupportedException();
@@ -449,7 +738,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task InstallSkillFilesAsync(
                 List<SkillSetupTargetInfo> targets,
                 bool groupSkillsUnderUnityCliLoop,
-                CancellationToken ct) => throw new NotSupportedException();
+                CancellationToken ct)
+            {
+                if (InstallFailure != null)
+                {
+                    return Task.FromException(InstallFailure);
+                }
+
+                foreach (SkillSetupTargetInfo target in targets)
+                {
+                    InstalledTargetDirs.Add(target.DirName);
+                }
+
+                InstallGroupFlags.Add(groupSkillsUnderUnityCliLoop);
+                InstallTokens.Add(ct);
+                OnInstall?.Invoke();
+                return Task.CompletedTask;
+            }
 
             public Task InstallSkillFilesForToolAsync(
                 string toolName,

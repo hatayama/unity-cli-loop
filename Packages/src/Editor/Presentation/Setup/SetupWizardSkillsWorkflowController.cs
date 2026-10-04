@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -23,6 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
         private readonly Action _scheduleResizeToContent;
+        private readonly IPresentationDialogs _dialogs;
+        private readonly IBackgroundWorkRunner _backgroundWorkRunner;
 
         private bool _isInstallingSkills;
         private bool _installSkillsFlat;
@@ -35,7 +36,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillSetupUseCase skillSetupUseCase,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             CliSetupApplicationService cliSetupApplicationService,
-            Action scheduleResizeToContent)
+            Action scheduleResizeToContent,
+            IPresentationDialogs dialogs = null,
+            IBackgroundWorkRunner backgroundWorkRunner = null)
         {
             Debug.Assert(skillsSetupPanelView != null, "skillsSetupPanelView must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
@@ -53,6 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
             _scheduleResizeToContent = scheduleResizeToContent
                 ?? throw new ArgumentNullException(nameof(scheduleResizeToContent));
+            _dialogs = dialogs ?? new EditorPresentationDialogs();
+            _backgroundWorkRunner = backgroundWorkRunner ?? new ThreadPoolBackgroundWorkRunner();
 
             _skillsSetupPanelView.OnInstallAllClicked += HandleInstallAllSkills;
             _skillsSetupPanelView.OnInstallSelectedClicked += HandleInstallSelectedSkills;
@@ -137,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             List<SkillSetupTargetInfo> targets =
-                await Task.Run(() => DetectDisplayedSkillTargets(projectRoot));
+                await _backgroundWorkRunner.RunAsync(() => DetectDisplayedSkillTargets(projectRoot));
             if (ct.IsCancellationRequested)
             {
                 return;
@@ -185,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             HandleInstallSkillsAsync(isBulkInstall: false, CancellationToken.None).Forget();
         }
 
-        private async Task HandleInstallSkillsAsync(bool isBulkInstall, CancellationToken ct)
+        internal async Task HandleInstallSkillsAsync(bool isBulkInstall, CancellationToken ct)
         {
             if (_isInstallingSkills)
             {
@@ -201,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
                 List<SkillSetupTargetInfo> targets =
-                    await Task.Run(() => DetectDisplayedSkillTargets(projectRoot));
+                    await _backgroundWorkRunner.RunAsync(() => DetectDisplayedSkillTargets(projectRoot));
                 if (ct.IsCancellationRequested)
                 {
                     return;
@@ -229,7 +234,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     ct);
                 if (shouldShowSkillsInstalledDialog)
                 {
-                    EditorDialogHelper.ShowSkillsInstalledDialog();
+                    _dialogs.ShowSkillsInstalled();
                 }
             }
             finally
@@ -239,7 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private void HandleTargetChanged(SkillsTarget newTarget)
+        internal void HandleTargetChanged(SkillsTarget newTarget)
         {
             _skillsTarget = newTarget;
             string cachedCliVersion = _cliSetupApplicationService.GetCachedCliVersion();
@@ -248,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _scheduleResizeToContent();
         }
 
-        private void HandleGroupSkillsChanged(bool _)
+        internal void HandleGroupSkillsChanged(bool _)
         {
             ApplyFlatSkillInstallPreference();
             RefreshSkillsSection();
