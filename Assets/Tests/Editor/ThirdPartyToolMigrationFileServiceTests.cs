@@ -2032,6 +2032,122 @@ public sealed class MainThreadCaller
             }
         }
 
+        private const string InheritedTimingRunnerSource = @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public class Runner
+{
+    protected async Task RunAsync(int value, PlayerLoopTiming timing, CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(timing, ct);
+    }
+}";
+
+        private const string InheritedTimingMidSource = @"public class Mid : Runner
+{
+}";
+
+        [Test]
+        public void ApplyMigration_WhenDerivedClassCallsInheritedTimingMethod_RemovesTimingFromEveryCallForm()
+        {
+            // Verifies that unqualified, this. and base. calls of a timing method inherited through an intermediate class in other files are all rewritten.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string runnerPath = Path.Combine(toolDirectory, "Runner.cs");
+                string midPath = Path.Combine(toolDirectory, "Mid.cs");
+                string derivedPath = Path.Combine(toolDirectory, "Derived.cs");
+                File.WriteAllText(runnerPath, InheritedTimingRunnerSource);
+                File.WriteAllText(midPath, InheritedTimingMidSource);
+                File.WriteAllText(derivedPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public class Derived : Mid
+{
+    public async Task CallAsync(CancellationToken ct)
+    {
+        await RunAsync(1, PlayerLoopTiming.Update, ct);
+        await this.RunAsync(2, PlayerLoopTiming.Update, ct);
+        await base.RunAsync(3, PlayerLoopTiming.Update, ct);
+    }
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                service.ApplyMigration(projectRoot);
+                string migratedRunnerSource = File.ReadAllText(runnerPath);
+                string migratedDerivedSource = File.ReadAllText(derivedPath);
+
+                Assert.That(migratedRunnerSource, Does.Contain("protected async Task RunAsync(int value, CancellationToken ct)"));
+                Assert.That(migratedDerivedSource, Does.Contain("await RunAsync(1, ct);"));
+                Assert.That(migratedDerivedSource, Does.Contain("await this.RunAsync(2, ct);"));
+                Assert.That(migratedDerivedSource, Does.Contain("await base.RunAsync(3, ct);"));
+                Assert.That(migratedDerivedSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenDerivedClassForwardsTimingToInheritedMethod_PropagatesRemovalToCallers()
+        {
+            // Verifies that a derived method forwarding its timing to an inherited method loses that parameter and its callers follow in the next round.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string runnerPath = Path.Combine(toolDirectory, "Runner.cs");
+                string midPath = Path.Combine(toolDirectory, "Mid.cs");
+                string derivedPath = Path.Combine(toolDirectory, "Derived.cs");
+                string callerPath = Path.Combine(toolDirectory, "Caller.cs");
+                File.WriteAllText(runnerPath, InheritedTimingRunnerSource);
+                File.WriteAllText(midPath, InheritedTimingMidSource);
+                File.WriteAllText(derivedPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public class Derived : Mid
+{
+    internal Task ForwardAsync(PlayerLoopTiming timing, CancellationToken ct)
+    {
+        return RunAsync(1, timing, ct);
+    }
+}");
+                File.WriteAllText(callerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class Caller
+{
+    public Task CallAsync(Derived derived, CancellationToken ct)
+    {
+        return derived.ForwardAsync(PlayerLoopTiming.Update, ct);
+    }
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                service.ApplyMigration(projectRoot);
+                string migratedDerivedSource = File.ReadAllText(derivedPath);
+                string migratedCallerSource = File.ReadAllText(callerPath);
+
+                Assert.That(migratedDerivedSource, Does.Contain("internal Task ForwardAsync(CancellationToken ct)"));
+                Assert.That(migratedDerivedSource, Does.Contain("return RunAsync(1, ct);"));
+                Assert.That(migratedCallerSource, Does.Contain("return derived.ForwardAsync(ct);"));
+                Assert.That(migratedDerivedSource, Does.Not.Contain("PlayerLoopTiming"));
+                Assert.That(migratedCallerSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         [Test]
         public void ApplyMigration_WhenLegacyTimingWrapperCallerIsInAnotherAssembly_RewritesCallerArguments()
         {

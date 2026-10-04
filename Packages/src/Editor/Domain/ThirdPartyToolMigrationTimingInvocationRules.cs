@@ -119,11 +119,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             CodeTextMask codeTextMask,
             int methodNameIndex,
             string[] arguments,
-            RemovedLegacyPlayerLoopTimingSignature removedSignature)
+            RemovedLegacyPlayerLoopTimingSignature removedSignature,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(methodNameIndex >= 0, "methodNameIndex must not be negative");
             Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(typeHierarchyIndex != null, "typeHierarchyIndex must not be null");
 
             string[] trimmedArguments = GetTrimmedInvocationArguments(arguments);
             if (trimmedArguments.Length > removedSignature.OriginalParameters.Length)
@@ -135,7 +137,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     source,
                     codeTextMask,
                     methodNameIndex,
-                    removedSignature))
+                    removedSignature,
+                    typeHierarchyIndex))
             {
                 return false;
             }
@@ -147,10 +150,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string source,
             CodeTextMask codeTextMask,
             int methodNameIndex,
-            RemovedLegacyPlayerLoopTimingSignature removedSignature)
+            RemovedLegacyPlayerLoopTimingSignature removedSignature,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(methodNameIndex >= 0, "methodNameIndex must not be negative");
+            Debug.Assert(typeHierarchyIndex != null, "typeHierarchyIndex must not be null");
 
             if (removedSignature.DeclaringTypeName.Length == 0)
             {
@@ -158,27 +163,26 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             string targetExpression = ReadMemberTargetExpressionBeforeMethodName(source, methodNameIndex);
-            if (targetExpression.Length == 0)
+            bool isThisCall = string.Equals(targetExpression, "this", StringComparison.Ordinal);
+            if (targetExpression.Length == 0 || isThisCall)
             {
-                string containingTypeName = ReadContainingTypeName(source, codeTextMask, methodNameIndex);
-                return string.Equals(
-                    containingTypeName,
-                    removedSignature.DeclaringTypeName,
-                    StringComparison.Ordinal);
+                return DoesImplicitInstanceCallTargetRemovedSignature(
+                    source,
+                    codeTextMask,
+                    methodNameIndex,
+                    removedSignature,
+                    typeHierarchyIndex,
+                    isThisCall);
             }
 
             if (string.Equals(targetExpression, "base", StringComparison.Ordinal))
             {
-                return DoesBaseCallTargetRemovedSignature(source, codeTextMask, methodNameIndex, removedSignature);
-            }
-
-            if (string.Equals(targetExpression, "this", StringComparison.Ordinal))
-            {
-                string containingTypeName = ReadContainingTypeName(source, codeTextMask, methodNameIndex);
-                return string.Equals(
-                    containingTypeName,
-                    removedSignature.DeclaringTypeName,
-                    StringComparison.Ordinal);
+                return DoesBaseCallTargetRemovedSignature(
+                    source,
+                    codeTextMask,
+                    methodNameIndex,
+                    removedSignature,
+                    typeHierarchyIndex);
             }
 
             if (IsQualifiedMemberTargetExpression(targetExpression))
@@ -231,9 +235,89 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 removedSignature.DeclaringTypeName);
         }
 
+        // An unqualified or this. call binds to a member of the containing class or, when that class does not
+        // declare the name, to one inherited from its base classes, which only the project-wide index can follow.
+        private static bool DoesImplicitInstanceCallTargetRemovedSignature(
+            string source,
+            CodeTextMask codeTextMask,
+            int methodNameIndex,
+            RemovedLegacyPlayerLoopTimingSignature removedSignature,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex,
+            bool isThisCall)
+        {
+            // An empty target also comes back for a receiver that is an expression (GetOther().Run(..)); that call
+            // binds to whatever the expression returns, not to the containing class, even inside the declaring type.
+            if (!isThisCall && IsPrecededByMemberAccess(source, methodNameIndex))
+            {
+                return false;
+            }
+
+            string containingTypeName = ReadContainingTypeName(source, codeTextMask, methodNameIndex);
+            if (string.Equals(containingTypeName, removedSignature.DeclaringTypeName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            // new Runner(..) calls a constructor, which is never inherited.
+            if (IsPrecededByNewKeyword(source, codeTextMask, methodNameIndex))
+            {
+                return false;
+            }
+
+            return typeHierarchyIndex.IsInheritedMemberReachable(
+                containingTypeName,
+                removedSignature.MethodName,
+                removedSignature.DeclaringTypeName);
+        }
+
+        // The ?. and !. accessors also end with '.' right before the method name.
+        private static bool IsPrecededByMemberAccess(string source, int methodNameIndex)
+        {
+            int index = SkipWhitespaceBackward(source, methodNameIndex - 1);
+            return index >= 0 && source[index] == '.';
+        }
+
+        private static bool IsPrecededByNewKeyword(string source, CodeTextMask codeTextMask, int methodNameIndex)
+        {
+            int index = methodNameIndex - 1;
+            while (index >= 0 && (!codeTextMask.IsCodeAt(index) || char.IsWhiteSpace(source[index])))
+            {
+                index--;
+            }
+
+            const string newKeyword = "new";
+            int keywordStartIndex = index - newKeyword.Length + 1;
+            if (keywordStartIndex < 0 ||
+                string.CompareOrdinal(source, keywordStartIndex, newKeyword, 0, newKeyword.Length) != 0)
+            {
+                return false;
+            }
+
+            return keywordStartIndex == 0 || !IsIdentifierCharacter(source[keywordStartIndex - 1]);
+        }
+
         // A base call resolves against the base class of the containing class, not the containing class itself.
-        // When the source cannot name that base class, the call is left unchanged rather than guessed.
+        // The direct base class named in this source is checked first; the project-wide index then follows
+        // intermediate classes in other sources. When neither can settle it, the call is left unchanged.
         private static bool DoesBaseCallTargetRemovedSignature(
+            string source,
+            CodeTextMask codeTextMask,
+            int methodNameIndex,
+            RemovedLegacyPlayerLoopTimingSignature removedSignature,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
+        {
+            if (IsDirectBaseClassDeclaringType(source, codeTextMask, methodNameIndex, removedSignature))
+            {
+                return true;
+            }
+
+            return typeHierarchyIndex.IsBaseMemberReachable(
+                ReadContainingTypeName(source, codeTextMask, methodNameIndex),
+                removedSignature.MethodName,
+                removedSignature.DeclaringTypeName);
+        }
+
+        private static bool IsDirectBaseClassDeclaringType(
             string source,
             CodeTextMask codeTextMask,
             int methodNameIndex,

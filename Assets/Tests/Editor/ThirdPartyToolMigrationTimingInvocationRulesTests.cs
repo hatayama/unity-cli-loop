@@ -96,7 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 codeTextMask,
                 source.IndexOf("Run(", StringComparison.Ordinal),
                 new[] { "1", " PlayerLoopTiming.Update", " 3" },
-                CreateValueAndTimingSignature("Runner"));
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -114,7 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 0,
-                CreateValueAndTimingSignature(string.Empty));
+                CreateValueAndTimingSignature(string.Empty),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -133,7 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.IndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Tools.Runner"));
+                CreateValueAndTimingSignature("Tools.Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.True);
         }
@@ -152,7 +155,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.IndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Runner"));
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -171,7 +175,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Runner"));
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -190,7 +195,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Runner"));
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -209,7 +215,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Runner"));
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.True);
         }
@@ -228,7 +235,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Runner"));
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.True);
         }
@@ -247,7 +255,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Game.Runner"));
+                CreateValueAndTimingSignature("Game.Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.True);
         }
@@ -267,7 +276,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("IRunner"));
+                CreateValueAndTimingSignature("IRunner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -286,7 +296,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Runner"));
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.True);
         }
@@ -305,7 +316,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("App.Lib.Runner"));
+                CreateValueAndTimingSignature("App.Lib.Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -324,7 +336,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Game.Runner"));
+                CreateValueAndTimingSignature("Game.Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(result, Is.False);
         }
@@ -343,7 +356,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 source,
                 codeTextMask,
                 source.LastIndexOf("Run(", StringComparison.Ordinal),
-                CreateValueAndTimingSignature("Lib.Runner"));
+                CreateValueAndTimingSignature("Lib.Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
+
+            Assert.That(result, Is.True);
+        }
+
+        private const string InheritedCallSource =
+            "public class Runner\n{\n    protected void Run(int value, PlayerLoopTiming timing)\n    {\n    }\n}\n" +
+            "public class Mid : Runner\n{\n}\n" +
+            "public class Derived : Mid\n{\n    void Call()\n    {\n" +
+            "        Run(1, PlayerLoopTiming.Update);\n" +
+            "        this.Run(2, PlayerLoopTiming.Update);\n" +
+            "        base.Run(3, PlayerLoopTiming.Update);\n    }\n}\n";
+
+        /// <summary>
+        /// Verifies the per-file pass, which has no hierarchy, still leaves inherited calls in a derived class unresolved.
+        /// </summary>
+        [TestCase("Run(1")]
+        [TestCase("Run(2")]
+        [TestCase("Run(3")]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenIndexIsEmpty_KeepsDerivedCallUnchanged(string callText)
+        {
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(InheritedCallSource);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                InheritedCallSource,
+                codeTextMask,
+                InheritedCallSource.IndexOf(callText, StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies unqualified and this. calls in a derived class reach the declaring class through the index.
+        /// </summary>
+        [TestCase("Run(1")]
+        [TestCase("Run(2")]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenIndexHasInheritance_TargetsUnqualifiedAndThisCalls(
+            string callText)
+        {
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(InheritedCallSource);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                InheritedCallSource,
+                codeTextMask,
+                InheritedCallSource.IndexOf(callText, StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { InheritedCallSource }));
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a base. call whose direct base class does not declare the method reaches the declaring class through the index.
+        /// </summary>
+        [Test]
+        public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenIndexHasInheritance_TargetsBaseCallThroughIntermediateClass()
+        {
+            CodeTextMask codeTextMask = CodeTextMask.CreateUncached(InheritedCallSource);
+
+            bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
+                InheritedCallSource,
+                codeTextMask,
+                InheritedCallSource.IndexOf("Run(3", StringComparison.Ordinal),
+                CreateValueAndTimingSignature("Runner"),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { InheritedCallSource }));
 
             Assert.That(result, Is.True);
         }
