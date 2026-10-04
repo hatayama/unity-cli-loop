@@ -676,6 +676,9 @@ public class Derived : Runner
         [TestCase("if (_handler is Holder { } Run) { }")]
         [TestCase("if (pair is (1, 2) Run) { }")]
         [TestCase("int result = _handler switch { { } Run => 1, _ => 0 };")]
+        [TestCase("if (_handler is { Callback: { } Run }) { Run(1, PlayerLoopTiming.Update); }")]
+        [TestCase("bool matched = _handler is { } Run == true;")]
+        [TestCase("if (_handler is { Callback: Holder(1) Run }) { }")]
         public void IsInheritedMemberReachable_WhenContainingClassHasDesignationWithName_ReturnsFalse(string statement)
         {
             string derived = DerivedCallerSource.Replace(
@@ -689,14 +692,13 @@ public class Derived : Runner
         }
 
         /// <summary>
-        /// Verifies a call that starts a statement after a block is a use, not a pattern designation.
+        /// Verifies a call or generic call that starts a statement after a block is a use, not a pattern designation.
         /// </summary>
-        [Test]
-        public void IsInheritedMemberReachable_WhenCallFollowsBlock_ReturnsTrue()
+        [TestCase("if (true) { } Run(1, PlayerLoopTiming.Update);")]
+        [TestCase("if (true) { } Run<int>(1, PlayerLoopTiming.Update);")]
+        public void IsInheritedMemberReachable_WhenCallFollowsBlock_ReturnsTrue(string statement)
         {
-            string derived = DerivedCallerSource.Replace(
-                "Run(1, PlayerLoopTiming.Update);",
-                "if (true) { } Run(1, PlayerLoopTiming.Update);");
+            string derived = DerivedCallerSource.Replace("Run(1, PlayerLoopTiming.Update);", statement);
 
             ThirdPartyToolMigrationTypeHierarchyIndex index =
                 ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });

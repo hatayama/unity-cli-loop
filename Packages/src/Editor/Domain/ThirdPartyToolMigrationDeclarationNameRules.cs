@@ -128,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             if (previous == '}' || previous == ')')
             {
-                return IsFollowedByDesignationEnd(source, codeTextMask, ReadIdentifierEndIndex(source, identifierStartIndex));
+                return !IsFollowedByCall(source, codeTextMask, ReadIdentifierEndIndex(source, identifierStartIndex));
             }
 
             return false;
@@ -151,23 +151,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                    ReadIdentifierEndingAt(source, codeTextMask, beforeOpenIndex) == "var";
         }
 
-        // A designation ends a pattern, so the next token closes or continues it. "} Run(..)" starting a statement
-        // is followed by '(' and stays a use.
-        private static bool IsFollowedByDesignationEnd(string source, CodeTextMask codeTextMask, int identifierEndIndex)
+        // After '}' or ')' a name is a designation unless it is called: "} Run(..)" and "} Run<int>(..)" start a
+        // statement. Inverting the check covers designations nested in patterns ("{ Callback: { } Run }") and
+        // designations followed by an operator without listing every token that may follow one.
+        private static bool IsFollowedByCall(string source, CodeTextMask codeTextMask, int identifierEndIndex)
         {
             int nextIndex = ReadNextCodeIndex(source, codeTextMask, identifierEndIndex);
-            if (nextIndex < 0)
-            {
-                return false;
-            }
-
-            if ("),;:&|?".IndexOf(source[nextIndex]) >= 0)
-            {
-                return true;
-            }
-
-            string nextWord = source.Substring(nextIndex, ReadIdentifierEndIndex(source, nextIndex) - nextIndex);
-            return nextWord == "when" || nextWord == "and" || nextWord == "or";
+            return nextIndex >= 0 && (source[nextIndex] == '(' || source[nextIndex] == '<');
         }
 
         // Finds the '(' that opens the list the index is in, or -1 when the statement or block starts first.
