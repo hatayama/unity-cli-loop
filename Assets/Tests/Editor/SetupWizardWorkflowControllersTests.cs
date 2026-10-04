@@ -277,6 +277,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a failed install propagates the error without the installed dialog, re-enables the layout
+        /// toggle, refreshes the section, and lets the next install run.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_WhenTheInstallFails_ReleasesTheLatchAndRefreshes()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+            _skillPort.InstallFailure = new InvalidOperationException("install failed in this test");
+
+            // Awaited in try / catch instead of Assert.ThrowsAsync, which blocks the main thread in this NUnit.
+            try
+            {
+                await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+                Assert.Fail("Expected the install failure to propagate.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Assert.That(exception.Message, Is.EqualTo("install failed in this test"));
+            }
+
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+            Assert.That(_root.Q<Toggle>("group-skills-toggle").enabledSelf, Is.True);
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+
+            _skillPort.InstallFailure = null;
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude" }));
+        }
+
+        /// <summary>
         /// Verifies a single-target install installs only the selected target.
         /// </summary>
         [Test]
@@ -383,9 +419,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
 
             controller.HandleTargetChanged(SkillsTarget.Codex);
+
+            Assert.That(_resizeCount, Is.EqualTo(1));
+
             await controller.HandleInstallSkillsAsync(isBulkInstall: false, CancellationToken.None);
 
-            Assert.That(_resizeCount, Is.GreaterThanOrEqualTo(1));
             Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".codex" }));
         }
 
@@ -674,6 +712,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<bool> InstallGroupFlags { get; } = new List<bool>();
             internal Action OnInstall { get; set; }
             internal List<CancellationToken> InstallTokens { get; } = new List<CancellationToken>();
+            internal Exception InstallFailure { get; set; }
 
             public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutFastAtProjectRoot(
                 string projectRoot,
@@ -701,6 +740,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 bool groupSkillsUnderUnityCliLoop,
                 CancellationToken ct)
             {
+                if (InstallFailure != null)
+                {
+                    return Task.FromException(InstallFailure);
+                }
+
                 foreach (SkillSetupTargetInfo target in targets)
                 {
                     InstalledTargetDirs.Add(target.DirName);

@@ -22,6 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class UnityCliLoopSettingsSkillsPresenterStateTests
     {
+        private const string CliNotFoundMessage = "uloop CLI is not installed. Please install the CLI first.";
+        private const string InstallFailureMessage = "install failed in this test";
+
         private RecordingSkillSetupPort _skillPort;
         private StubCliInstallationDetector _cliDetector;
         private RecordingEditorSettingsPort _editorSettingsPort;
@@ -331,6 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await _presenter.HandleInstallSkills();
 
             Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "CLI Not Found" }));
+            Assert.That(_dialogs.Messages, Is.EqualTo(new List<string> { CliNotFoundMessage }));
             Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
             Assert.That(_sectionRefreshCalls, Is.Empty);
         }
@@ -363,6 +367,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a failed selected install propagates the error without the installed dialog, clears the
+        /// installing flag, and still refreshes the install state.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallSkills_WhenTheInstallFails_ClearsTheInstallingFlagAndRefreshes()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true)
+            };
+            _skillPort.InstallFailure = new InvalidOperationException(InstallFailureMessage);
+
+            // Awaited in try / catch instead of Assert.ThrowsAsync, which blocks the main thread in this NUnit.
+            try
+            {
+                await _presenter.HandleInstallSkills();
+                Assert.Fail("Expected the install failure to propagate.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Assert.That(exception.Message, Is.EqualTo(InstallFailureMessage));
+            }
+
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+            Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
         /// Verifies updating an outdated selected target installs it without the installed dialog.
         /// </summary>
         [Test]
@@ -391,6 +426,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await _presenter.HandleInstallAllSkills(CancellationToken.None);
 
             Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "CLI Not Found" }));
+            Assert.That(_dialogs.Messages, Is.EqualTo(new List<string> { CliNotFoundMessage }));
             Assert.That(_skillPort.FullScanCount, Is.EqualTo(0));
             Assert.That(_sectionRefreshCalls, Is.Empty);
         }
@@ -420,6 +456,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(installingDuringInstall, Is.True);
             Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
             Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a failed install-all propagates the error without the installed dialog, clears the installing
+        /// flag, and still refreshes the install state.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WhenTheInstallFails_ClearsTheInstallingFlagAndRefreshes()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget(".claude", SkillInstallState.Missing, hasSkillsDirectory: true)
+            };
+            _skillPort.InstallFailure = new InvalidOperationException(InstallFailureMessage);
+
+            // Awaited in try / catch instead of Assert.ThrowsAsync, which blocks the main thread in this NUnit.
+            try
+            {
+                await _presenter.HandleInstallAllSkills(CancellationToken.None);
+                Assert.Fail("Expected the install failure to propagate.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Assert.That(exception.Message, Is.EqualTo(InstallFailureMessage));
+            }
+
+            Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(0));
+            Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(2));
         }
 
         /// <summary>
@@ -536,6 +603,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<bool> InstallGroupFlags { get; } = new List<bool>();
             internal Action OnInstall { get; set; }
             internal List<CancellationToken> InstallTokens { get; } = new List<CancellationToken>();
+            internal Exception InstallFailure { get; set; }
             internal HashSet<string> InstalledToolNames { get; } = new HashSet<string>();
             internal List<string> RemovedTools { get; } = new List<string>();
             internal List<string> InstalledToolSkills { get; } = new List<string>();
@@ -582,6 +650,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 bool groupSkillsUnderUnityCliLoop,
                 CancellationToken ct)
             {
+                if (InstallFailure != null)
+                {
+                    return Task.FromException(InstallFailure);
+                }
+
                 foreach (SkillSetupTargetInfo target in targets)
                 {
                     InstalledTargetDirs.Add(target.DirName);
