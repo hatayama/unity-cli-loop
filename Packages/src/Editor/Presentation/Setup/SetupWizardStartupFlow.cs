@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private readonly System.Action _showWindowOnVersionChange;
         private readonly System.Action _showThirdPartyMigrationAutoScan;
+        private readonly IBackgroundWorkRunner _backgroundWorkRunner;
         private bool _migrationAutoScanPollingActive;
         private double _migrationAutoScanPollStartTime;
 
@@ -52,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillSetupUseCase skillSetupUseCase,
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase,
             System.Action showWindowOnVersionChange,
-            System.Action showThirdPartyMigrationAutoScan)
+            System.Action showThirdPartyMigrationAutoScan,
+            IBackgroundWorkRunner backgroundWorkRunner = null)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(projectSettingsPort != null, "projectSettingsPort must not be null");
@@ -83,6 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new System.ArgumentNullException(nameof(showWindowOnVersionChange));
             _showThirdPartyMigrationAutoScan = showThirdPartyMigrationAutoScan
                 ?? throw new System.ArgumentNullException(nameof(showThirdPartyMigrationAutoScan));
+            _backgroundWorkRunner = backgroundWorkRunner ?? new ThreadPoolBackgroundWorkRunner();
         }
 
         /// <summary>
@@ -345,11 +348,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async Task<bool> HasSkillUpdateForSetupWizardAsync(CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<SkillSetupTargetInfo> targets = await Task.Run(
+            // The runner takes no token, so cancellation is checked after the scan; the only caller passes
+            // CancellationToken.None, so the scan never had a canceled start to skip.
+            List<SkillSetupTargetInfo> targets = await _backgroundWorkRunner.RunAsync(
                 () => _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(
                     projectRoot,
-                    !SetupWizardWindow.ForceFlatSkillInstall),
-                ct);
+                    !SetupWizardWindow.ForceFlatSkillInstall));
             if (ct.IsCancellationRequested)
             {
                 return false;
@@ -389,7 +393,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 EditorUtility.scriptCompilationFailed,
                 elapsedSeconds,
                 SetupWizardStartupFlowConstants.MigrationAutoScanPollTimeoutSeconds);
+            ApplyMigrationAutoScanPollAction(action);
+        }
 
+        internal void ApplyMigrationAutoScanPollAction(MigrationAutoScanPollAction action)
+        {
             switch (action)
             {
                 case MigrationAutoScanPollAction.ContinueWaiting:
@@ -433,7 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationAutoScanPollingActive = false;
         }
 
-        private bool TryRunThirdPartyToolMigrationAutoScanDetection()
+        internal bool TryRunThirdPartyToolMigrationAutoScanDetection()
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             (bool found, List<string> targetFilePaths) =
@@ -460,7 +468,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RunThirdPartyToolMigrationFallbackFullScanAsync(projectRoot).Forget();
         }
 
-        private async Task RunThirdPartyToolMigrationFallbackFullScanAsync(string projectRoot)
+        internal async Task RunThirdPartyToolMigrationFallbackFullScanAsync(string projectRoot)
         {
             bool hasTargets = await _thirdPartyToolMigrationUseCase.HasMigrationTargetsAsync(
                 projectRoot,

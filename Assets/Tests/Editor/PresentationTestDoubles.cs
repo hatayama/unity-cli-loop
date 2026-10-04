@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
+using NUnit.Framework;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -32,6 +33,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     }
 
     /// <summary>
+    /// Awaits presentation workflows so an unexpected cancellation fails the test.
+    /// </summary>
+    internal static class PresentationTestAwaits
+    {
+        /// <remarks>
+        /// Why: the Unity Test Framework reports an async test that ends in the Canceled state as passed, so a
+        /// workflow canceled by mistake would otherwise hide every assertion after the await.
+        /// </remarks>
+        internal static async Task AwaitWithoutCancellationAsync(Task workflow)
+        {
+            try
+            {
+                await workflow;
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("The workflow was canceled instead of completing.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Records presentation dialogs instead of opening modal editor windows.
     /// </summary>
     internal sealed class RecordingPresentationDialogs : IPresentationDialogs
@@ -39,12 +62,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         internal List<string> MessageTitles { get; } = new List<string>();
         internal List<string> Messages { get; } = new List<string>();
         internal List<string> ConfirmTitles { get; } = new List<string>();
+        internal List<string> ConfirmMessages { get; } = new List<string>();
+        internal List<string> ConfirmOkLabels { get; } = new List<string>();
+        internal List<string> ConfirmCancelLabels { get; } = new List<string>();
         internal bool ConfirmResult { get; set; } = true;
         internal int SkillsInstalledCount { get; private set; }
         internal bool CliUninstallConfirmResult { get; set; } = true;
         internal int CliUninstallConfirmCount { get; private set; }
         internal CliPathSetupFlowResult CliPathSetupResult { get; set; }
         internal int CliPathSetupCount { get; private set; }
+        internal List<RuntimePlatform> CliPathSetupPlatforms { get; } = new List<RuntimePlatform>();
+        internal List<CliSetupApplicationService> CliPathSetupServices { get; } =
+            new List<CliSetupApplicationService>();
+        internal List<CancellationToken> CliPathSetupTokens { get; } = new List<CancellationToken>();
 
         public void ShowMessage(string title, string message)
         {
@@ -55,6 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public bool Confirm(string title, string message, string ok, string cancel)
         {
             ConfirmTitles.Add(title);
+            ConfirmMessages.Add(message);
+            ConfirmOkLabels.Add(ok);
+            ConfirmCancelLabels.Add(cancel);
             return ConfirmResult;
         }
 
@@ -75,6 +108,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CancellationToken ct)
         {
             CliPathSetupCount++;
+            CliPathSetupPlatforms.Add(platform);
+            CliPathSetupServices.Add(cliSetupApplicationService);
+            CliPathSetupTokens.Add(ct);
             return Task.FromResult(CliPathSetupResult);
         }
     }
