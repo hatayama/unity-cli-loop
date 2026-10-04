@@ -1,8 +1,11 @@
 package architecture
 
 import (
+	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -119,14 +122,16 @@ func TestDotnetTestProjectsMissingFromPullRequestWorkflows(t *testing.T) {
 }
 
 // Tests that the tests/ scan reports, with forward slashes, only csproj files whose PackageReference
-// elements reference Microsoft.NET.Test.Sdk, in any attribute spacing, quoting, or letter case,
-// and ignores references that are only inside XML comments.
+// elements reference Microsoft.NET.Test.Sdk, in any attribute spacing, quoting, letter case, or
+// nesting such as Choose/When, and ignores references that are only inside XML comments.
 func TestDotnetTestProjectPathsReportsOnlyTestProjects(t *testing.T) {
 	repositoryRoot := t.TempDir()
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Alpha", "Alpha.csproj"),
 		"<Project>\n  <ItemGroup>\n    <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" />\n  </ItemGroup>\n</Project>\n")
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Beta", "Beta.csproj"),
 		"<Project>\n  <ItemGroup>\n    <PackageReference Include = 'microsoft.net.test.sdk' Version=\"17.11.1\" />\n  </ItemGroup>\n</Project>\n")
+	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Gamma", "Gamma.csproj"),
+		"<Project><Choose><When Condition=\"true\"><ItemGroup><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" /></ItemGroup></When></Choose></Project>\n")
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Commented", "Commented.csproj"),
 		"<Project>\n  <ItemGroup>\n    <!-- <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" /> -->\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\" />\n  </ItemGroup>\n</Project>\n")
 	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Helper", "Helper.csproj"),
@@ -139,24 +144,37 @@ func TestDotnetTestProjectPathsReportsOnlyTestProjects(t *testing.T) {
 		t.Fatalf("unexpected scan error: %v", err)
 	}
 
-	expected := []string{"tests/Alpha/Alpha.csproj", "tests/Beta/Beta.csproj"}
+	expected := []string{"tests/Alpha/Alpha.csproj", "tests/Beta/Beta.csproj", "tests/Gamma/Gamma.csproj"}
 	if !reflect.DeepEqual(paths, expected) {
 		t.Fatalf("expected %v, got %v", expected, paths)
 	}
 }
 
-// Tests that a csproj under tests/ that is not well-formed XML fails the scan with its path instead of being skipped.
+// Tests that a csproj under tests/ that is not well-formed XML, including an empty file, fails the
+// scan with its path instead of being skipped.
 func TestDotnetTestProjectPathsRejectsMalformedProjects(t *testing.T) {
-	repositoryRoot := t.TempDir()
-	writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Broken", "Broken.csproj"), "<Project><ItemGroup>")
-
-	_, err := dotnetTestProjectPaths(repositoryRoot)
-
-	if err == nil {
-		t.Fatal("expected a scan error for a malformed csproj, got nil")
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{name: "unclosed elements", content: "<Project><ItemGroup>"},
+		{name: "empty file", content: ""},
 	}
-	if !strings.Contains(err.Error(), "tests/Broken/Broken.csproj") {
-		t.Fatalf("expected the error to name tests/Broken/Broken.csproj, got %v", err)
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			repositoryRoot := t.TempDir()
+			writeTestFile(t, filepath.Join(repositoryRoot, "tests", "Broken", "Broken.csproj"), testCase.content)
+
+			_, err := dotnetTestProjectPaths(repositoryRoot)
+
+			if err == nil {
+				t.Fatalf("%s: expected a scan error for a malformed csproj, got nil", testCase.name)
+			}
+			if !strings.Contains(err.Error(), "tests/Broken/Broken.csproj") {
+				t.Fatalf("%s: expected the error to name tests/Broken/Broken.csproj, got %v", testCase.name, err)
+			}
+		})
 	}
 }
 
@@ -215,34 +233,44 @@ func csprojArguments(arguments []string) []string {
 	return projects
 }
 
-type csprojDocument struct {
-	ItemGroups []csprojItemGroup `xml:"ItemGroup"`
-}
-
-type csprojItemGroup struct {
-	PackageReferences []csprojPackageReference `xml:"PackageReference"`
-}
-
-type csprojPackageReference struct {
-	Include string `xml:"Include,attr"`
-}
-
-// referencesDotnetTestSdk reports whether a csproj has a PackageReference to Microsoft.NET.Test.Sdk.
-// It parses the XML instead of matching text so attribute spacing and quoting do not hide a test
-// project and a commented-out reference does not count; NuGet package IDs are case-insensitive.
+// referencesDotnetTestSdk reports whether a csproj has a PackageReference to Microsoft.NET.Test.Sdk
+// at any depth, including inside Choose/When. It parses the XML instead of matching text so
+// attribute spacing and quoting do not hide a test project and a commented-out reference does not
+// count; NuGet package IDs are case-insensitive. It reads to the end even after a match so a
+// csproj that is broken further down is still reported, and a file with no element is an error.
 func referencesDotnetTestSdk(content []byte) (bool, error) {
-	document := csprojDocument{}
-	if err := xml.Unmarshal(content, &document); err != nil {
-		return false, err
-	}
-	for _, itemGroup := range document.ItemGroups {
-		for _, reference := range itemGroup.PackageReferences {
-			if strings.EqualFold(strings.TrimSpace(reference.Include), "Microsoft.NET.Test.Sdk") {
-				return true, nil
+	decoder := xml.NewDecoder(bytes.NewReader(content))
+	found := false
+	sawElement := false
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			if !sawElement {
+				return false, errors.New("no root element")
 			}
+			return found, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		element, isStartElement := token.(xml.StartElement)
+		if !isStartElement {
+			continue
+		}
+		sawElement = true
+		if element.Name.Local == "PackageReference" && includesDotnetTestSdk(element.Attr) {
+			found = true
 		}
 	}
-	return false, nil
+}
+
+func includesDotnetTestSdk(attributes []xml.Attr) bool {
+	for _, attribute := range attributes {
+		if attribute.Name.Local == "Include" && strings.EqualFold(strings.TrimSpace(attribute.Value), "Microsoft.NET.Test.Sdk") {
+			return true
+		}
+	}
+	return false
 }
 
 // dotnetTestProjectPaths returns the repository-relative, forward-slash paths of every .csproj under
