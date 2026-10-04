@@ -83,10 +83,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string MigratedRunnerSource =
             "public class Runner\n{\n    protected void Run(int value)\n    {\n    }\n}\n";
 
+        /// <summary>
+        /// Verifies unqualified, this. and base. calls of an inherited method in a derived class all lose the timing argument.
+        /// </summary>
         [Test]
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedCallsInheritedMethod_RemovesTimingFromEveryForm()
         {
-            // Verifies unqualified, this. and base. calls of an inherited method in a derived class all lose the timing argument.
             string source = MigratedRunnerSource +
                 "public class Derived : Runner\n{\n    public void Call()\n    {\n" +
                 "        Run(1, PlayerLoopTiming.Update);\n" +
@@ -108,10 +110,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(replacementCount, Is.EqualTo(3));
         }
 
+        /// <summary>
+        /// Verifies an overload in the derived class keeps unqualified and this. calls while base. still reaches the base method.
+        /// </summary>
         [Test]
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedDeclaresOverload_RewritesOnlyBaseCall()
         {
-            // Verifies an overload in the derived class keeps unqualified and this. calls while base. still reaches the base method.
             string derivedHeader =
                 "public class Derived : Runner\n{\n    protected void Run(int value)\n    {\n    }\n\n" +
                 "    public void Call()\n    {\n" +
@@ -130,10 +134,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(replacementCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies a call on a returned object is not treated as a call of the inherited method.
+        /// </summary>
         [Test]
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedCallsMethodOnExpressionReceiver_KeepsCall()
         {
-            // Verifies a call on a returned object is not treated as a call of the inherited method.
             string source = MigratedRunnerSource +
                 "public class Other\n{\n    public void Run(int value, PlayerLoopTiming timing)\n    {\n    }\n}\n" +
                 "public class Derived : Runner\n{\n    private Other GetOther()\n    {\n        return new Other();\n    }\n\n" +
@@ -147,10 +153,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(replacementCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a call on a returned object inside the declaring type is not treated as a call of the declaring type's method.
+        /// </summary>
         [Test]
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDeclaringTypeCallsMethodOnExpressionReceiver_KeepsCall()
         {
-            // Verifies a call on a returned object inside the declaring type is not treated as a call of the declaring type's method.
             string source =
                 "public class Other\n{\n    public void Run(int value, PlayerLoopTiming timing)\n    {\n    }\n}\n" +
                 "public class Runner\n{\n    protected void Run(int value)\n    {\n    }\n\n" +
@@ -168,10 +176,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(replacementCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies a constructor call in a derived class is not treated as an inherited member call.
+        /// </summary>
         [Test]
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedConstructsDeclaringType_KeepsConstructorCall()
         {
-            // Verifies a constructor call in a derived class is not treated as an inherited member call.
             // Create returns object: a Runner return type would declare the name in Derived and keep the call
             // unchanged even without the constructor check.
             string source =
@@ -192,12 +202,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(replacementCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies only the signature declared up the derived class's chain rewrites the call, in either signature order.
+        /// </summary>
         [TestCase(true)]
         [TestCase(false)]
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenSignaturesShareMethodName_RewritesOnlyInheritedOne(
             bool otherSignatureFirst)
         {
-            // Verifies only the signature declared up the derived class's chain rewrites the call, in either signature order.
             string otherSource = "public class Other\n{\n    public void Run(int value)\n    {\n    }\n}\n";
             string source = MigratedRunnerSource + otherSource +
                 "public class Derived : Runner\n{\n    public void Call()\n    {\n" +

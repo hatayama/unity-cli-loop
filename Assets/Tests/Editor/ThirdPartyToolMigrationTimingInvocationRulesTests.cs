@@ -370,12 +370,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "        this.Run(2, PlayerLoopTiming.Update);\n" +
             "        base.Run(3, PlayerLoopTiming.Update);\n    }\n}\n";
 
+        /// <summary>
+        /// Verifies the per-file pass, which has no hierarchy, still leaves inherited calls in a derived class unresolved.
+        /// </summary>
         [TestCase("Run(1")]
         [TestCase("Run(2")]
         [TestCase("Run(3")]
         public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenIndexIsEmpty_KeepsDerivedCallUnchanged(string callText)
         {
-            // Verifies the per-file pass, which has no hierarchy, still leaves inherited calls in a derived class unresolved.
             CodeTextMask codeTextMask = CodeTextMask.CreateUncached(InheritedCallSource);
 
             bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
@@ -388,12 +390,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.False);
         }
 
+        /// <summary>
+        /// Verifies unqualified and this. calls in a derived class reach the declaring class through the index.
+        /// </summary>
         [TestCase("Run(1")]
         [TestCase("Run(2")]
         public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenIndexHasInheritance_TargetsUnqualifiedAndThisCalls(
             string callText)
         {
-            // Verifies unqualified and this. calls in a derived class reach the declaring class through the index.
             CodeTextMask codeTextMask = CodeTextMask.CreateUncached(InheritedCallSource);
 
             bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
@@ -406,10 +410,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.True);
         }
 
+        /// <summary>
+        /// Verifies a base. call whose direct base class does not declare the method reaches the declaring class through the index.
+        /// </summary>
         [Test]
         public void DoesPlayerLoopTimingCallerTargetRemovedSignature_WhenIndexHasInheritance_TargetsBaseCallThroughIntermediateClass()
         {
-            // Verifies a base. call whose direct base class does not declare the method reaches the declaring class through the index.
             CodeTextMask codeTextMask = CodeTextMask.CreateUncached(InheritedCallSource);
 
             bool result = ThirdPartyToolMigrationTimingInvocationRules.DoesPlayerLoopTimingCallerTargetRemovedSignature(
