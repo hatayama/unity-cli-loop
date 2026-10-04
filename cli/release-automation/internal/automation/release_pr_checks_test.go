@@ -1111,3 +1111,18 @@ func TestReleasePRChecksFailWhenBodyFileCannotBeCreated(t *testing.T) {
 	}
 	assertReleasePRCheckLogContains(t, stderr, "failed to create pull request body file")
 }
+
+// Verifies the command runner returns stdout on success and names the command on failure.
+func TestRunCommandOutputCapturesOutputAndFailures(t *testing.T) {
+	output, err := runCommandOutput(context.Background(), "git", "--version")
+	if err != nil {
+		t.Fatalf("git --version failed: %v", err)
+	}
+	assertReleasePRCheckLogContains(t, output, "git version")
+
+	_, err = runCommandOutput(context.Background(), "git", "--no-such-option")
+	if err == nil {
+		t.Fatal("expected an unknown git option to fail")
+	}
+	assertReleasePRCheckLogContains(t, err.Error(), "git --no-such-option failed")
+}

@@ -228,18 +228,3 @@ func TestCancelSupersededWaitingRunsFailsWhenRunListIsInvalidJSON(t *testing.T) 
 	}
 	assertCancelSupersededWaitingRunsLogContains(t, stderr.String(), "failed to parse waiting workflow runs")
 }
-
-// Verifies the command runner returns stdout on success and names the command on failure.
-func TestRunCancelSupersededWaitingRunsCommandOutputCapturesOutputAndFailures(t *testing.T) {
-	output, err := runCancelSupersededWaitingRunsCommandOutput(context.Background(), "git", "--version")
-	if err != nil {
-		t.Fatalf("git --version failed: %v", err)
-	}
-	assertCancelSupersededWaitingRunsLogContains(t, output, "git version")
-
-	_, err = runCancelSupersededWaitingRunsCommandOutput(context.Background(), "git", "--no-such-option")
-	if err == nil {
-		t.Fatal("expected an unknown git option to fail")
-	}
-	assertCancelSupersededWaitingRunsLogContains(t, err.Error(), "git --no-such-option failed")
-}

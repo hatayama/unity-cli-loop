@@ -49,7 +49,7 @@ func RunPublishCoverageTrend(ctx context.Context, stdout io.Writer, stderr io.Wr
 		return 2
 	}
 	return runPublishCoverageTrendWithDeps(ctx, stdout, stderr, options, publishCoverageTrendDeps{
-		runOutput: runNotifyPendingReleaseApprovalsCommandOutput,
+		runOutput: runCommandOutput,
 		now:       time.Now,
 	})
 }

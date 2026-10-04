@@ -1,15 +1,12 @@
 package automation
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"os/exec"
 	"strconv"
-	"strings"
 )
 
 // cancelSupersededWaitingRunsConfig holds the target workflow run selection for cancellation.
@@ -43,7 +40,7 @@ func RunCancelSupersededWaitingRuns(ctx context.Context, stdout io.Writer, stder
 
 func defaultCancelSupersededWaitingRunsDeps() cancelSupersededWaitingRunsDeps {
 	return cancelSupersededWaitingRunsDeps{
-		runOutput: runCancelSupersededWaitingRunsCommandOutput,
+		runOutput: runCommandOutput,
 	}
 }
 
@@ -138,17 +135,4 @@ func listCancelSupersededWaitingRuns(ctx context.Context, config cancelSupersede
 func cancelSupersededWaitingRun(ctx context.Context, config cancelSupersededWaitingRunsConfig, runID int64, deps cancelSupersededWaitingRunsDeps) error {
 	_, err := deps.runOutput(ctx, "gh", "run", "cancel", strconv.FormatInt(runID, 10), "--repo", config.repository)
 	return err
-}
-
-func runCancelSupersededWaitingRunsCommandOutput(ctx context.Context, name string, args ...string) (string, error) {
-	command := exec.CommandContext(ctx, name, args...)
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	err := command.Run()
-	if err != nil {
-		return "", fmt.Errorf("%s %s failed: %w\n%s%s", name, strings.Join(args, " "), err, stderr.String(), stdout.String())
-	}
-	return stdout.String(), nil
 }
