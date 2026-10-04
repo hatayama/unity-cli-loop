@@ -96,8 +96,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task TryCompileAsync_WhenAssemblyDefinitionErrorsExist_ReturnsFailureWithoutRequestingCompile()
         {
+            // Why CompleteOnRequest: if the early return regresses, the request still finishes
+            // and the assertions fail instead of the test hanging on a compile that never ends.
             FakeCompilePipelinePort pipeline = new()
             {
+                CompleteOnRequest = true,
                 AssemblyDefinitionErrors = new AssemblyDefinitionConsoleErrorResult(new[]
                 {
                     new AssemblyDefinitionConsoleError("broken asmdef", "Assets/Broken.asmdef", 1)
@@ -138,6 +141,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 playModeStopWarning: null,
                 CancellationToken.None);
 
+            // Why before completing: if the second call started its own compile, the first request
+            // would never finish, so the check must fail before awaiting it.
+            Assert.That(pipeline.RefreshCount, Is.EqualTo(1));
+            Assert.That(pipeline.RequestedCleanBuildCache, Is.EqualTo(new[] { false }));
             Assert.That(controller.IsCompiling, Is.True);
             Assert.That(secondCompile.IsCompleted, Is.False);
             pipeline.CompilationFinished(null);
@@ -145,8 +152,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResult secondResult = await secondCompile;
 
             Assert.That(secondResult, Is.SameAs(firstResult));
-            Assert.That(pipeline.RefreshCount, Is.EqualTo(1));
-            Assert.That(pipeline.RequestedCleanBuildCache, Is.EqualTo(new[] { false }));
         }
 
         /// <summary>
