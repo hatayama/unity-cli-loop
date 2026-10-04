@@ -338,13 +338,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string source,
             string originalSource,
             RemovedLegacyPlayerLoopTimingSignature[] removedSignatures,
-            string[] legacyAssemblyAliases)
+            string[] legacyAssemblyAliases,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
         {
             return ThirdPartyToolMigrationTimingCallerRules.RemoveLegacyPlayerLoopTimingCallerArgumentsForLegacyAssembly(
                 source,
                 originalSource,
                 removedSignatures,
-                legacyAssemblyAliases);
+                legacyAssemblyAliases,
+                typeHierarchyIndex);
         }
 
         internal static ThirdPartyToolMigrationContentResult RemoveLegacyPlayerLoopTimingParametersForLegacyAssembly(

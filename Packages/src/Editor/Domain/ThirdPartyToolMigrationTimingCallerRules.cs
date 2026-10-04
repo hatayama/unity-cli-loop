@@ -53,12 +53,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string source,
             string originalSource,
             RemovedLegacyPlayerLoopTimingSignature[] removedSignatures,
-            string[] legacyAssemblyAliases)
+            string[] legacyAssemblyAliases,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(originalSource != null, "originalSource must not be null");
             Debug.Assert(removedSignatures != null, "removedSignatures must not be null");
             Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+            Debug.Assert(typeHierarchyIndex != null, "typeHierarchyIndex must not be null");
 
             string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(
                 originalSource,
@@ -66,7 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             (string migratedContent, int replacementCount) = RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
                 source,
                 removedSignatures,
-                legacyNamespaceAliases);
+                legacyNamespaceAliases,
+                typeHierarchyIndex);
             return new ThirdPartyToolMigrationContentResult(
                 migratedContent,
                 replacementCount,
@@ -106,11 +109,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public static (string Content, int ReplacementCount) RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
             string source,
             RemovedLegacyPlayerLoopTimingSignature[] removedSignatures,
-            string[] legacyNamespaceAliases)
+            string[] legacyNamespaceAliases,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(removedSignatures != null, "removedSignatures must not be null");
             Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+            Debug.Assert(typeHierarchyIndex != null, "typeHierarchyIndex must not be null");
 
             string migratedContent = source;
             int replacementCount = 0;
@@ -120,7 +125,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     RemoveLegacyPlayerLoopTimingCallerArgumentsForMethodInCode(
                         migratedContent,
                         removedSignature,
-                        legacyNamespaceAliases);
+                        legacyNamespaceAliases,
+                        typeHierarchyIndex);
                 migratedContent = signatureMigratedContent;
                 replacementCount += signatureReplacementCount;
             }
@@ -132,11 +138,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             RemoveLegacyPlayerLoopTimingCallerArgumentsForMethodInCode(
                 string source,
                 RemovedLegacyPlayerLoopTimingSignature removedSignature,
-                string[] legacyNamespaceAliases)
+                string[] legacyNamespaceAliases,
+                ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(!string.IsNullOrEmpty(removedSignature.MethodName), "MethodName must not be null or empty");
             Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+            Debug.Assert(typeHierarchyIndex != null, "typeHierarchyIndex must not be null");
 
             Regex invocationRegex = new(
                 $@"(?<![A-Za-z0-9_]){Regex.Escape(removedSignature.MethodName)}\b",
@@ -161,7 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     codeTextMask,
                     match,
                     removedSignature,
-                    legacyNamespaceAliases);
+                    legacyNamespaceAliases,
+                    typeHierarchyIndex);
                 if (!rewritten)
                 {
                     continue;
@@ -180,7 +189,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             CodeTextMask codeTextMask,
             Match match,
             RemovedLegacyPlayerLoopTimingSignature removedSignature,
-            string[] legacyNamespaceAliases)
+            string[] legacyNamespaceAliases,
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex)
         {
             int openParenthesisIndex = FindInvocationOpenParenthesisIndex(
                 source,
@@ -209,7 +219,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     codeTextMask,
                     match.Index,
                     arguments,
-                    removedSignature))
+                    removedSignature,
+                    typeHierarchyIndex))
             {
                 return (false, source);
             }

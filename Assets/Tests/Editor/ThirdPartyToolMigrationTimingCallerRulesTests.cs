@@ -24,8 +24,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (string content, int replacementCount) =
                 ThirdPartyToolMigrationTimingCallerRules.RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
                     source,
-                    new[] { CreateValueAndTimingSignature() },
-                    Array.Empty<string>());
+                    new[] { CreateValueAndTimingSignature("Runner") },
+                    Array.Empty<string>(),
+                    ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(
                 content,
@@ -46,8 +47,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (string content, int replacementCount) =
                 ThirdPartyToolMigrationTimingCallerRules.RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
                     source,
-                    new[] { CreateValueAndTimingSignature() },
-                    Array.Empty<string>());
+                    new[] { CreateValueAndTimingSignature("Runner") },
+                    Array.Empty<string>(),
+                    ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(content, Is.EqualTo(source));
             Assert.That(replacementCount, Is.EqualTo(0));
@@ -66,8 +68,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (string content, int replacementCount) =
                 ThirdPartyToolMigrationTimingCallerRules.RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
                     source,
-                    new[] { CreateValueAndTimingSignature() },
-                    Array.Empty<string>());
+                    new[] { CreateValueAndTimingSignature("Runner") },
+                    Array.Empty<string>(),
+                    ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
 
             Assert.That(
                 content,
@@ -75,11 +78,140 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(replacementCount, Is.EqualTo(2));
         }
 
-        private static RemovedLegacyPlayerLoopTimingSignature CreateValueAndTimingSignature()
+        // The Runner declaration is written in its migrated form: the invocation pattern also matches declarations,
+        // and in the real flow the declaration is migrated before its callers are revisited.
+        private const string MigratedRunnerSource =
+            "public class Runner\n{\n    protected void Run(int value)\n    {\n    }\n}\n";
+
+        [Test]
+        public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedCallsInheritedMethod_RemovesTimingFromEveryForm()
+        {
+            // Verifies unqualified, this. and base. calls of an inherited method in a derived class all lose the timing argument.
+            string source = MigratedRunnerSource +
+                "public class Derived : Runner\n{\n    public void Call()\n    {\n" +
+                "        Run(1, PlayerLoopTiming.Update);\n" +
+                "        this.Run(2, PlayerLoopTiming.Update);\n" +
+                "        base.Run(3, PlayerLoopTiming.Update);\n    }\n}\n";
+
+            (string content, int replacementCount) = RemoveCallerArgumentsWithIndex(
+                source,
+                new[] { CreateValueAndTimingSignature("Runner") });
+
+            Assert.That(
+                content,
+                Is.EqualTo(
+                    MigratedRunnerSource +
+                    "public class Derived : Runner\n{\n    public void Call()\n    {\n" +
+                    "        Run(1);\n" +
+                    "        this.Run(2);\n" +
+                    "        base.Run(3);\n    }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedDeclaresOverload_RewritesOnlyBaseCall()
+        {
+            // Verifies an overload in the derived class keeps unqualified and this. calls while base. still reaches the base method.
+            string derivedHeader =
+                "public class Derived : Runner\n{\n    protected void Run(int value)\n    {\n    }\n\n" +
+                "    public void Call()\n    {\n" +
+                "        Run(1, PlayerLoopTiming.Update);\n" +
+                "        this.Run(2, PlayerLoopTiming.Update);\n";
+            string source = MigratedRunnerSource + derivedHeader +
+                "        base.Run(3, PlayerLoopTiming.Update);\n    }\n}\n";
+
+            (string content, int replacementCount) = RemoveCallerArgumentsWithIndex(
+                source,
+                new[] { CreateValueAndTimingSignature("Runner") });
+
+            Assert.That(
+                content,
+                Is.EqualTo(MigratedRunnerSource + derivedHeader + "        base.Run(3);\n    }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedCallsMethodOnExpressionReceiver_KeepsCall()
+        {
+            // Verifies a call on a returned object is not treated as a call of the inherited method.
+            string source = MigratedRunnerSource +
+                "public class Other\n{\n    public void Run(int value, PlayerLoopTiming timing)\n    {\n    }\n}\n" +
+                "public class Derived : Runner\n{\n    private Other GetOther()\n    {\n        return new Other();\n    }\n\n" +
+                "    public void Call()\n    {\n        GetOther().Run(1, PlayerLoopTiming.Update);\n    }\n}\n";
+
+            (string content, int replacementCount) = RemoveCallerArgumentsWithIndex(
+                source,
+                new[] { CreateValueAndTimingSignature("Runner") });
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedConstructsDeclaringType_KeepsConstructorCall()
+        {
+            // Verifies a constructor call in a derived class is not treated as an inherited member call.
+            string source =
+                "public class Runner\n{\n    public Runner()\n    {\n    }\n}\n" +
+                "public class Derived : Runner\n{\n    public Runner Create()\n    {\n" +
+                "        return new Runner(PlayerLoopTiming.Update);\n    }\n}\n";
+            RemovedLegacyPlayerLoopTimingSignature constructorSignature = new(
+                "Runner",
+                "Runner",
+                new[] { new LegacyPlayerLoopTimingParameterDeclaration(0, "PlayerLoopTiming", "timing", false) },
+                new[] { new RemovedLegacyPlayerLoopTimingParameter(0, "timing") });
+
+            (string content, int replacementCount) = RemoveCallerArgumentsWithIndex(
+                source,
+                new[] { constructorSignature });
+
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(replacementCount, Is.EqualTo(0));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenSignaturesShareMethodName_RewritesOnlyInheritedOne(
+            bool otherSignatureFirst)
+        {
+            // Verifies only the signature declared up the derived class's chain rewrites the call, in either signature order.
+            string otherSource = "public class Other\n{\n    public void Run(int value)\n    {\n    }\n}\n";
+            string source = MigratedRunnerSource + otherSource +
+                "public class Derived : Runner\n{\n    public void Call()\n    {\n" +
+                "        Run(1, PlayerLoopTiming.Update);\n    }\n}\n";
+            RemovedLegacyPlayerLoopTimingSignature runnerSignature = CreateValueAndTimingSignature("Runner");
+            RemovedLegacyPlayerLoopTimingSignature otherSignature = CreateValueAndTimingSignature("Other");
+            RemovedLegacyPlayerLoopTimingSignature[] signatures = otherSignatureFirst
+                ? new[] { otherSignature, runnerSignature }
+                : new[] { runnerSignature, otherSignature };
+
+            (string content, int replacementCount) = RemoveCallerArgumentsWithIndex(source, signatures);
+
+            Assert.That(
+                content,
+                Is.EqualTo(
+                    MigratedRunnerSource + otherSource +
+                    "public class Derived : Runner\n{\n    public void Call()\n    {\n" +
+                    "        Run(1);\n    }\n}\n"));
+            Assert.That(replacementCount, Is.EqualTo(1));
+        }
+
+        private static (string Content, int ReplacementCount) RemoveCallerArgumentsWithIndex(
+            string source,
+            RemovedLegacyPlayerLoopTimingSignature[] signatures)
+        {
+            return ThirdPartyToolMigrationTimingCallerRules.RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
+                source,
+                signatures,
+                Array.Empty<string>(),
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { source }));
+        }
+
+        private static RemovedLegacyPlayerLoopTimingSignature CreateValueAndTimingSignature(string declaringTypeName)
         {
             return new RemovedLegacyPlayerLoopTimingSignature(
                 "Run",
-                "Runner",
+                declaringTypeName,
                 new[]
                 {
                     new LegacyPlayerLoopTimingParameterDeclaration(0, "int", "value", false),
