@@ -237,7 +237,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             int ownerIndex = ReadPreviousCodeIndex(source, codeTextMask, index - 1);
-            return ownerIndex >= 0 && IsNullableTypeSuffixOwner(source[ownerIndex]) ? index : -1;
+            // '?' is allowed here only: in a declaration's modifiers and type, "?[" can only be a nullable element type.
+            return ownerIndex >= 0 && (IsNullableTypeSuffixOwner(source[ownerIndex]) || source[ownerIndex] == '?')
+                ? index
+                : -1;
         }
 
         // Scans the class body once, front to back, skipping nested type bodies, so building the index stays linear.

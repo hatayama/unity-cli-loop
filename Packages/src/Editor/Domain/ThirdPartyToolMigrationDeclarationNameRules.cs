@@ -36,11 +36,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(identifierStartIndex >= 0, "identifierStartIndex must not be negative");
 
-            if (IsLambdaParameterName(source, codeTextMask, identifierStartIndex))
-            {
-                return true;
-            }
-
             int previousIndex = ReadPreviousCodeIndex(source, codeTextMask, identifierStartIndex - 1);
             if (previousIndex < 0)
             {
@@ -52,6 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             {
                 // x.Run or an explicit interface implementation IFoo.Run: not a name this type can call unqualified.
                 return false;
+            }
+
+            // After the '.' check: a lambda parameter never follows '.', and "int IFoo.Run => 0;" is not a lambda.
+            if (IsLambdaParameterName(source, codeTextMask, identifierStartIndex))
+            {
+                return true;
             }
 
             if (IsIdentifierCharacter(previous))

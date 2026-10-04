@@ -576,6 +576,7 @@ public class Derived : Runner
         [TestCase("(int, int)[]")]
         [TestCase("int[,]")]
         [TestCase("int[][]")]
+        [TestCase("int?[]")]
         public void IsInheritedMemberReachable_WhenDeclaringMemberReturnsArray_ReturnsTrue(string returnTypeName)
         {
             string runner = RunnerSource.Replace("protected void Run", "protected " + returnTypeName + " Run");
@@ -640,6 +641,24 @@ public class Derived : Runner
             ThirdPartyToolMigrationTypeHierarchyIndex index =
                 ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
 
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies an expression-bodied explicit interface property named like the member is not a declaration this
+        /// class can call unqualified, so the inherited member stays reachable.
+        /// </summary>
+        [Test]
+        public void IsInheritedMemberReachable_WhenContainingClassHasExpressionBodiedExplicitInterfaceProperty_ReturnsTrue()
+        {
+            string derived = DerivedCallerSource
+                .Replace(": Runner", ": Runner, IFoo")
+                .Replace("public void Call()", "int IFoo.Run => 0;\n\n    public void Call()");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, derived });
+
+            Assert.That(derived, Does.Contain("int IFoo.Run => 0;"));
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
     }
