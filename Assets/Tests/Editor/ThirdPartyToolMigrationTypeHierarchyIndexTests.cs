@@ -29,10 +29,12 @@ public class Derived : Runner
 }
 ";
 
+        /// <summary>
+        /// Verifies an unqualified call reaches the declaring class through an intermediate class in another source.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenIntermediateClassInOtherSourceDoesNotDeclareMember_ReturnsTrue()
         {
-            // Verifies an unqualified call reaches the declaring class through an intermediate class in another source.
             string mid = "public class Mid : Runner { }";
             string derived = DerivedCallerSource.Replace(": Runner", ": Mid");
 
@@ -42,10 +44,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a base call reaches the declaring class through an intermediate class that does not hide the name.
+        /// </summary>
         [Test]
         public void IsBaseMemberReachable_WhenIntermediateClassDoesNotDeclareMember_ReturnsTrue()
         {
-            // Verifies a base call reaches the declaring class through an intermediate class that does not hide the name.
             string mid = "public class Mid : Runner { }";
             string derived = @"
 public class Derived : Mid
@@ -63,10 +67,12 @@ public class Derived : Mid
             Assert.That(index.IsBaseMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a same-named method on an intermediate class stops the walk before the declaring class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenIntermediateClassDeclaresSameName_ReturnsFalse()
         {
-            // Verifies a same-named method on an intermediate class stops the walk before the declaring class.
             string mid = @"
 public class Mid : Runner
 {
@@ -83,10 +89,12 @@ public class Mid : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies an overload declared by the calling class keeps the call from being attributed to the base class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenContainingClassDeclaresOverload_ReturnsFalse()
         {
-            // Verifies an overload declared by the calling class keeps the call from being attributed to the base class.
             string derived = @"
 public class Derived : Runner
 {
@@ -107,10 +115,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a local function with the member name keeps the call from being attributed to the base class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenContainingClassHasLocalFunctionWithName_ReturnsFalse()
         {
-            // Verifies a local function with the member name keeps the call from being attributed to the base class.
             string derived = @"
 public class Derived : Runner
 {
@@ -131,10 +141,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a delegate field with the member name hides the inherited method.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenContainingClassHasDelegateFieldWithName_ReturnsFalse()
         {
-            // Verifies a delegate field with the member name hides the inherited method.
             string derived = @"
 public class Derived : Runner
 {
@@ -153,10 +165,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies calls in expression positions are not mistaken for declarations of the member name.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenContainingClassOnlyInvokesName_ReturnsTrue()
         {
-            // Verifies calls in expression positions are not mistaken for declarations of the member name.
             string derived = @"
 public class Derived : Runner
 {
@@ -183,10 +197,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a member without an access modifier is private and cannot be reached from a derived class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenDeclaringMemberHasNoAccessModifier_ReturnsFalse()
         {
-            // Verifies a member without an access modifier is private and cannot be reached from a derived class.
             string runner = RunnerSource.Replace("protected void Run", "void Run");
 
             ThirdPartyToolMigrationTypeHierarchyIndex index =
@@ -195,10 +211,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a private member cannot be reached from a derived class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenDeclaringMemberIsPrivate_ReturnsFalse()
         {
-            // Verifies a private member cannot be reached from a derived class.
             string runner = RunnerSource.Replace("protected void Run", "private void Run");
 
             ThirdPartyToolMigrationTypeHierarchyIndex index =
@@ -207,10 +225,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies an internal member is reachable from a derived class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenDeclaringMemberIsInternal_ReturnsTrue()
         {
-            // Verifies an internal member is reachable from a derived class.
             string runner = RunnerSource.Replace("protected void Run", "internal void Run");
 
             ThirdPartyToolMigrationTypeHierarchyIndex index =
@@ -219,10 +239,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a base class that no indexed source declares ends the walk without a match.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseClassIsOutsideIndex_ReturnsFalse()
         {
-            // Verifies a base class that no indexed source declares ends the walk without a match.
             string derived = DerivedCallerSource.Replace(": Runner", ": MonoBehaviour");
 
             ThirdPartyToolMigrationTypeHierarchyIndex index =
@@ -231,10 +253,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a base name that two imported namespaces both declare is not resolved to either of them.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseNameIsAmbiguous_ReturnsFalse()
         {
-            // Verifies a base name that two imported namespaces both declare is not resolved to either of them.
             string runnerA = "namespace NsA {" + RunnerSource + "}";
             string runnerB = "namespace NsB {" + RunnerSource + "}";
             string derived = "using NsA;\nusing NsB;\n" + DerivedCallerSource;
@@ -245,20 +269,24 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "NsA.Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies two non-partial declarations of the same qualified name make that class ambiguous.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenClassIsDeclaredTwiceWithoutPartial_ReturnsFalse()
         {
-            // Verifies two non-partial declarations of the same qualified name make that class ambiguous.
             ThirdPartyToolMigrationTypeHierarchyIndex index =
                 ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, RunnerSource, DerivedCallerSource });
 
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies partial parts are merged so the base list of one part applies to calls in the other.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenPartialPartsSplitBaseAndMembers_ReturnsTrue()
         {
-            // Verifies partial parts are merged so the base list of one part applies to calls in the other.
             string derivedBase = "public partial class Derived : Runner { }";
             string derivedMembers = DerivedCallerSource.Replace("public class Derived : Runner", "public partial class Derived");
 
@@ -268,10 +296,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies an interface listed first in one partial part does not hide the base class listed in another.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenPartialPartsListDifferentFirstBaseEntries_ReturnsTrue()
         {
-            // Verifies an interface listed first in one partial part does not hide the base class listed in another.
             string foo = "public interface IFoo { }";
             string derivedInterfaceOnly = "public partial class Derived : IFoo { }";
             string derivedMembers = DerivedCallerSource.Replace(
@@ -284,10 +314,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a cyclic base chain stops the walk instead of looping.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseChainHasCycle_ReturnsFalse()
         {
-            // Verifies a cyclic base chain stops the walk instead of looping.
             string first = "public class First : Second { public void Call() { Run(1, PlayerLoopTiming.Update); } }";
             string second = "public class Second : First { }";
 
@@ -297,10 +329,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("First", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a constructed generic base name resolves to the generic class declaration.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseIsGeneric_ReturnsTrue()
         {
-            // Verifies a constructed generic base name resolves to the generic class declaration.
             string runner = RunnerSource.Replace("public class Runner", "public class Runner<T>");
             string derived = DerivedCallerSource.Replace(": Runner", ": Runner<int>");
 
@@ -310,10 +344,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a global-qualified base name resolves to the declaring class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseIsGlobalQualified_ReturnsTrue()
         {
-            // Verifies a global-qualified base name resolves to the declaring class.
             string runner = "namespace Vendor {" + RunnerSource + "}";
             string derived = DerivedCallerSource.Replace(": Runner", ": global::Vendor.Runner");
 
@@ -323,10 +359,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Vendor.Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a base name written relative to an enclosing namespace resolves to the declaring class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseIsRelativeToEnclosingNamespace_ReturnsTrue()
         {
-            // Verifies a base name written relative to an enclosing namespace resolves to the declaring class.
             string runner = "namespace Vendor.Tools {" + RunnerSource + "}";
             string derived = "namespace Vendor.Game {" + DerivedCallerSource.Replace(": Runner", ": Tools.Runner") + "}";
 
@@ -336,10 +374,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Vendor.Game.Derived", "Run", "Vendor.Tools.Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a base name imported by a using directive resolves to the declaring class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseIsImportedByUsing_ReturnsTrue()
         {
-            // Verifies a base name imported by a using directive resolves to the declaring class.
             string runner = "namespace Vendor.Tools {" + RunnerSource + "}";
             string derived = "using Vendor.Tools;\nnamespace Game {" + DerivedCallerSource + "}";
 
@@ -349,10 +389,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Game.Derived", "Run", "Vendor.Tools.Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a base name written through a using alias is not resolved.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenBaseUsesAliasDirective_ReturnsFalse()
         {
-            // Verifies a base name written through a using alias is not resolved.
             string runner = "namespace Vendor {" + RunnerSource + "}";
             string derived = "using R = Vendor.Runner;\n" + DerivedCallerSource.Replace(": Runner", ": R");
 
@@ -362,10 +404,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Vendor.Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a nested class does not inherit the members of the class that encloses it.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenCallIsInNestedClassOfDerived_ReturnsFalse()
         {
-            // Verifies a nested class does not inherit the members of the class that encloses it.
             string derived = @"
 public class Derived : Runner
 {
@@ -385,10 +429,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived.Inner", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a record class is indexed with its base list like a class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenContainingTypeIsRecordClass_ReturnsTrue()
         {
-            // Verifies a record class is indexed with its base list like a class.
             string runner = RunnerSource.Replace("public class Runner", "public record Runner");
             string derived = DerivedCallerSource.Replace("public class Derived", "public record class Derived");
 
@@ -398,10 +444,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.True);
         }
 
+        /// <summary>
+        /// Verifies a method returning a tuple type is recognized as a declaration of the member name.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenContainingClassDeclaresTupleReturningOverload_ReturnsFalse()
         {
-            // Verifies a method returning a tuple type is recognized as a declaration of the member name.
             string derived = @"
 public class Derived : Runner
 {
@@ -423,10 +471,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a tuple-returning method on an intermediate class stops the walk before the declaring class.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenIntermediateClassDeclaresTupleReturningOverload_ReturnsFalse()
         {
-            // Verifies a tuple-returning method on an intermediate class stops the walk before the declaring class.
             string mid = @"
 public class Mid : Runner
 {
@@ -444,10 +494,38 @@ public class Mid : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies a method whose return type ends in an array or nullable suffix is recognized as a declaration of the member name.
+        /// </summary>
+        [TestCase("int[]")]
+        [TestCase("int?")]
+        [TestCase("(int, int)?")]
+        public void IsInheritedMemberReachable_WhenIntermediateClassDeclaresNameAfterArrayOrNullableType_ReturnsFalse(
+            string returnTypeName)
+        {
+            string mid = @"
+public class Mid : Runner
+{
+    protected " + returnTypeName + @" Run(int value)
+    {
+        return default;
+    }
+}
+";
+            string derived = DerivedCallerSource.Replace(": Runner", ": Mid");
+
+            ThirdPartyToolMigrationTypeHierarchyIndex index =
+                ThirdPartyToolMigrationTypeHierarchyIndex.Build(new[] { RunnerSource, mid, derived });
+
+            Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies the second declarator of a field declaration is recognized as a declaration of the member name.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenContainingClassDeclaresNameInMultiDeclaratorField_ReturnsFalse()
         {
-            // Verifies the second declarator of a field declaration is recognized as a declaration of the member name.
             string derived = @"
 public class Derived : Runner
 {
@@ -466,10 +544,12 @@ public class Derived : Runner
             Assert.That(index.IsInheritedMemberReachable("Derived", "Run", "Runner"), Is.False);
         }
 
+        /// <summary>
+        /// Verifies calls after an if condition or a cast are not mistaken for declarations of the member name.
+        /// </summary>
         [Test]
         public void IsInheritedMemberReachable_WhenCallFollowsCloseParenthesis_ReturnsTrue()
         {
-            // Verifies calls after an if condition or a cast are not mistaken for declarations of the member name.
             string derived = @"
 public class Derived : Runner
 {
