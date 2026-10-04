@@ -23,6 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly SkillSetupUseCase _skillSetupUseCase;
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private readonly Action _scheduleResize;
+        private readonly IPresentationDialogs _dialogs;
+        private readonly IBackgroundWorkRunner _backgroundWorkRunner;
 
         // Auto-scan seed files (compile-error-matched migration targets) are only used to render the
         // initial detected-state list without scanning; RefreshUI (manual Check / re-check) always
@@ -46,7 +48,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillSetupUseCase skillSetupUseCase,
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase,
             List<string> autoScanSeedFilePaths,
-            Action scheduleResize)
+            Action scheduleResize,
+            IPresentationDialogs dialogs = null,
+            IBackgroundWorkRunner backgroundWorkRunner = null)
         {
             Debug.Assert(view != null, "view must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
@@ -65,6 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(autoScanSeedFilePaths));
             _scheduleResize = scheduleResize
                 ?? throw new ArgumentNullException(nameof(scheduleResize));
+            _dialogs = dialogs ?? new EditorPresentationDialogs();
+            _backgroundWorkRunner = backgroundWorkRunner ?? new ThreadPoolBackgroundWorkRunner();
         }
 
         internal void ShowInitialState(bool shouldShowAutoScanDetectedState)
@@ -115,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ThirdPartyToolMigrationPreview preview;
             try
             {
-                preview = await Task.Run(async () =>
+                preview = await _backgroundWorkRunner.RunTaskAsync(async () =>
                     await _thirdPartyToolMigrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct));
                 await MainThreadSwitcher.SwitchToMainThread();
             }
@@ -160,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _pendingMigrationFilePaths.Length);
             if (!ThirdPartyToolMigrationWizardWindow.ConfirmMigrationApply(
                 confirmDialogFileCount,
-                (title, message, ok, cancel) => EditorUtility.DisplayDialog(title, message, ok, cancel)))
+                _dialogs.Confirm))
             {
                 return;
             }
@@ -176,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             try
             {
                 IProgress<ThirdPartyToolMigrationProgress> progress = CreateProgressReporter(ct);
-                result = await Task.Run(async () =>
+                result = await _backgroundWorkRunner.RunTaskAsync(async () =>
                     await _thirdPartyToolMigrationUseCase.ApplyMigrationAsync(projectRoot, progress, ct));
                 if (!ThirdPartyToolMigrationWizardWindow.ShouldFinishMigrationOnMainThread(
                     ct.IsCancellationRequested,
