@@ -172,9 +172,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RemoveLegacyPlayerLoopTimingCallerArgumentsInCode_WhenDerivedConstructsDeclaringType_KeepsConstructorCall()
         {
             // Verifies a constructor call in a derived class is not treated as an inherited member call.
+            // Create returns object: a Runner return type would declare the name in Derived and keep the call
+            // unchanged even without the constructor check.
             string source =
                 "public class Runner\n{\n    public Runner()\n    {\n    }\n}\n" +
-                "public class Derived : Runner\n{\n    public Runner Create()\n    {\n" +
+                "public class Derived : Runner\n{\n    public object Create()\n    {\n" +
                 "        return new Runner(PlayerLoopTiming.Update);\n    }\n}\n";
             RemovedLegacyPlayerLoopTimingSignature constructorSignature = new(
                 "Runner",
