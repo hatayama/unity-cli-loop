@@ -294,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task RunThirdPartyToolMigrationFallbackFullScanAsync_WithoutTargets_KeepsTheWindowClosed()
         {
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(
+            await UncanceledAwaits.AwaitCompletionAsync(
                 _flow.RunThirdPartyToolMigrationFallbackFullScanAsync("<PROJECT_ROOT>"));
 
             Assert.That(_migrationPort.HasTargetsProjectRoots, Is.EqualTo(new List<string> { "<PROJECT_ROOT>" }));

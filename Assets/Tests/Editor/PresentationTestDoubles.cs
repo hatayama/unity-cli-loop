@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-using NUnit.Framework;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -29,28 +28,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             RunCount++;
             return work();
-        }
-    }
-
-    /// <summary>
-    /// Awaits presentation workflows so an unexpected cancellation fails the test.
-    /// </summary>
-    internal static class PresentationTestAwaits
-    {
-        /// <remarks>
-        /// Why: the Unity Test Framework reports an async test that ends in the Canceled state as passed, so a
-        /// workflow canceled by mistake would otherwise hide every assertion after the await.
-        /// </remarks>
-        internal static async Task AwaitWithoutCancellationAsync(Task workflow)
-        {
-            try
-            {
-                await workflow;
-            }
-            catch (OperationCanceledException)
-            {
-                Assert.Fail("The workflow was canceled instead of completing.");
-            }
         }
     }
 

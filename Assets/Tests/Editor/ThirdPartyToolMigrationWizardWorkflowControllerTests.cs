@@ -57,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateController(port, new List<string> { "/Project/Assets/Tool.cs" });
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.RefreshUI());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.RefreshUI());
 
             Assert.That(port.PreviewMigrationAsyncCallCount, Is.EqualTo(2));
             Assert.That(_backgroundWorkRunner.RunCount, Is.EqualTo(2));
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateControllerWithRoot(root, port, new List<string>());
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.RefreshUI());
 
             Assert.That(_backgroundWorkRunner.RunCount, Is.EqualTo(1));
             Assert.That(GetStatusText(root), Is.EqualTo(ThirdPartyToolMigrationWizardText.GetMigrationStatusText(2)));
@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateControllerWithRoot(root, port, new List<string>());
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.RefreshUI());
 
             Assert.That(GetStatusText(root), Is.EqualTo(ThirdPartyToolMigrationWizardText.NoMigrationTargetsText));
         }
@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateControllerWithRoot(root, port, new List<string>());
             LogAssert.Expect(LogType.Exception, new Regex("<PREVIEW_THROWN>"));
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.RefreshUI());
 
             Assert.That(GetStatusText(root), Is.EqualTo(ThirdPartyToolMigrationWizardText.MigrationNotCheckedText));
         }
@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateControllerWithRoot(root, port, new List<string>());
             port.OnPreview = controller.CancelMigrationOperation;
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.RefreshUI());
 
             Assert.That(
                 GetStatusText(root),
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateController(port, new List<string>());
             _dialogs.ConfirmResult = false;
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.HandleMigrateThirdPartyTools());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.HandleMigrateThirdPartyTools());
 
             Assert.That(
                 _dialogs.ConfirmTitles,
@@ -213,9 +213,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateController(port, new List<string>());
             _dialogs.ConfirmResult = false;
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.RefreshUI());
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.HandleMigrateThirdPartyTools());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.HandleMigrateThirdPartyTools());
 
             Assert.That(
                 _dialogs.ConfirmMessages,
@@ -235,7 +235,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _dialogs.ConfirmResult = false;
             controller.ShowInitialState(shouldShowAutoScanDetectedState: true);
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.HandleMigrateThirdPartyTools());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.HandleMigrateThirdPartyTools());
 
             Assert.That(
                 _dialogs.ConfirmMessages,
@@ -254,7 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateControllerWithRoot(root, port, new List<string>());
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.HandleMigrateThirdPartyTools());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.HandleMigrateThirdPartyTools());
 
             Assert.That(port.ApplyMigrationAsyncCallCount, Is.EqualTo(1));
             Assert.That(port.PreviewMigrationAsyncCallCount, Is.EqualTo(0));
@@ -279,7 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateControllerWithRoot(root, port, new List<string>());
             LogAssert.Expect(LogType.Exception, new Regex("<APPLY_THROWN>"));
 
-            await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.HandleMigrateThirdPartyTools());
+            await UncanceledAwaits.AwaitCompletionAsync(controller.HandleMigrateThirdPartyTools());
 
             Assert.That(port.ApplyMigrationAsyncCallCount, Is.EqualTo(1));
             Assert.That(port.PreviewMigrationAsyncCallCount, Is.EqualTo(1));

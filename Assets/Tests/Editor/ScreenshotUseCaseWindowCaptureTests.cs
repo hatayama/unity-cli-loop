@@ -49,9 +49,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeWindowCaptureService captureService = new();
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest("Inspector"),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("Window 'Inspector' not found (MatchMode: exact)"));
@@ -68,9 +68,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeWindowCaptureService captureService = new();
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest(UnityCliLoopConstants.SCREENSHOT_DEFAULT_WINDOW_NAME),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Success, Is.False);
             Assert.That(
@@ -95,9 +95,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             captureService.WindowCounts[UnityCliLoopConstants.SCREENSHOT_SIMULATOR_WINDOW_NAME] = 1;
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest(UnityCliLoopConstants.SCREENSHOT_DEFAULT_WINDOW_NAME),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Screenshots.Count, Is.EqualTo(1));
             Assert.That(Path.GetFileName(response.Screenshots[0].ImagePath), Does.StartWith("Simulator_"));
@@ -113,9 +113,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             captureService.WindowCounts["Inspector"] = 1;
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest("Inspector"),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Screenshots.Count, Is.EqualTo(1));
             ScreenshotInfo info = response.Screenshots[0];
@@ -138,9 +138,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             captureService.WindowCounts["Inspector"] = 2;
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest("Inspector"),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Screenshots.Count, Is.EqualTo(2));
             Assert.That(Path.GetFileName(response.Screenshots[0].ImagePath), Does.StartWith("Inspector_1_"));
@@ -158,9 +158,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             captureService.NullTextureCaptureIndexes.Add(0);
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest("Inspector"),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Screenshots.Count, Is.EqualTo(1));
             Assert.That(Path.GetFileName(response.Screenshots[0].ImagePath), Does.StartWith("Inspector_2_"));
@@ -177,9 +177,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             captureService.TimedOutCaptureIndex = 1;
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest("Inspector"),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Does.Contain("EditorWindow capture"));
@@ -199,9 +199,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             captureService.BeforeReturningTexture = () => Directory.Delete(_outputDirectory, true);
             ScreenshotUseCase useCase = CreateUseCase(captureService);
 
-            ScreenshotResponse response = await useCase.CaptureAsync(
+            ScreenshotResponse response = await UncanceledAwaits.AwaitValueAsync(useCase.CaptureAsync(
                 CreateRequest("Inspector"),
-                CancellationToken.None);
+                CancellationToken.None));
 
             Assert.That(response.Screenshots, Is.Empty);
             Assert.That(captureService.CapturedTextures[0] == null, Is.True);
