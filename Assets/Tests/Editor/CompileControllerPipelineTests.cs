@@ -60,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(pipeline.RefreshCount, Is.EqualTo(1));
             Assert.That(pipeline.SubscribeCount, Is.EqualTo(1));
             Assert.That(pipeline.UnsubscribeCount, Is.EqualTo(1));
+            Assert.That(pipeline.MismatchedUnsubscribeCount, Is.EqualTo(0));
             Assert.That(pipeline.RequestedCleanBuildCache, Is.EqualTo(new[] { false }));
             Assert.That(pipeline.WatchdogStartCount, Is.EqualTo(1));
             Assert.That(startedMessages, Is.EqualTo(new[] { "Compilation started after asset refresh..." }));
@@ -182,6 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             Assert.That(pipeline.UnsubscribeCount, Is.EqualTo(1));
+            Assert.That(pipeline.MismatchedUnsubscribeCount, Is.EqualTo(0));
             Assert.That(pipeline.WatchdogStartCount, Is.EqualTo(0));
             Assert.That(controller.IsCompiling, Is.False);
             Assert.That(CompileApiUpdaterConsentState.IsCliCompileInFlight, Is.False);
@@ -203,6 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             controller.Cleanup();
 
             Assert.That(pipeline.UnsubscribeCount, Is.EqualTo(1));
+            Assert.That(pipeline.MismatchedUnsubscribeCount, Is.EqualTo(0));
             Assert.That(controller.IsCompiling, Is.False);
             Assert.That(CompileApiUpdaterConsentState.IsCliCompileInFlight, Is.False);
             try
@@ -254,6 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public int RefreshCount { get; private set; }
             public int SubscribeCount { get; private set; }
             public int UnsubscribeCount { get; private set; }
+            public int MismatchedUnsubscribeCount { get; private set; }
             public int WatchdogStartCount { get; private set; }
             public List<bool> RequestedCleanBuildCache { get; } = new();
 
@@ -285,7 +289,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Action<object> compilationFinished,
                 Action<string, CompilerMessage[]> assemblyFinished)
             {
-                UnsubscribeCount++;
+                // Why compare delegates: production unsubscribes with -=, which silently removes nothing
+                // when it is handed a different delegate than the one it subscribed.
+                if (compilationFinished == _compilationFinished && assemblyFinished == _assemblyFinished)
+                {
+                    UnsubscribeCount++;
+                    return;
+                }
+
+                MismatchedUnsubscribeCount++;
             }
 
             public void RequestScriptCompilation(bool cleanBuildCache)
