@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -18,12 +19,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class CliPlayModeRunInBackgroundService : ICliPlayModeRunInBackgroundStarter
     {
         private readonly CliPlayModeRunInBackgroundController _controller;
+        private readonly Action<bool> _setRunInBackground;
+        private readonly Func<bool> _getRunInBackground;
         private bool _isPlayModeCallbackRegistered;
 
-        public CliPlayModeRunInBackgroundService(CliPlayModeRunInBackgroundController controller)
+        public CliPlayModeRunInBackgroundService(
+            CliPlayModeRunInBackgroundController controller,
+            Action<bool>? setRunInBackground = null,
+            Func<bool>? getRunInBackground = null)
         {
             System.Diagnostics.Debug.Assert(controller != null, "controller must not be null");
             _controller = controller!;
+            _setRunInBackground = setRunInBackground ?? (value => Application.runInBackground = value);
+            _getRunInBackground = getRunInBackground ?? (() => Application.runInBackground);
         }
 
         /// <summary>
@@ -36,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool? desiredRunInBackground = _controller.OnEditorStartup(EditorApplication.isPlaying);
             if (desiredRunInBackground.HasValue)
             {
-                Application.runInBackground = desiredRunInBackground.Value;
+                _setRunInBackground(desiredRunInBackground.Value);
             }
         }
 
@@ -45,8 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public void EnableForCliPlayStart()
         {
-            bool desiredRunInBackground = _controller.OnCliPlayStarting(Application.runInBackground);
-            Application.runInBackground = desiredRunInBackground;
+            bool desiredRunInBackground = _controller.OnCliPlayStarting(_getRunInBackground());
+            _setRunInBackground(desiredRunInBackground);
         }
 
         private void RegisterPlayModeCallback()
@@ -62,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isPlayModeCallbackRegistered = true;
         }
 
-        private void OnPlayModeStateChanged(PlayModeStateChange state)
+        internal void OnPlayModeStateChanged(PlayModeStateChange state)
         {
             // Why: ExitingPlayMode covers CLI Stop and the toolbar Stop button, but Unity may
             // overwrite runInBackground during the transition or domain-reload afterward.
@@ -72,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool? originalRunInBackground = _controller.PeekOriginalIfActive();
                 if (originalRunInBackground.HasValue)
                 {
-                    Application.runInBackground = originalRunInBackground.Value;
+                    _setRunInBackground(originalRunInBackground.Value);
                 }
 
                 return;
@@ -86,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool? restoredRunInBackground = _controller.CommitRestoreAfterPlayModeExit();
             if (restoredRunInBackground.HasValue)
             {
-                Application.runInBackground = restoredRunInBackground.Value;
+                _setRunInBackground(restoredRunInBackground.Value);
             }
         }
     }

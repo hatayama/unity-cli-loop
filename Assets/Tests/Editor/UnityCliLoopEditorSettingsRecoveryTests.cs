@@ -1,6 +1,8 @@
+using System;
 using System.IO;
 using System.Security;
 
+using Newtonsoft.Json;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -300,6 +302,166 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool installSkillsFlat = _editorSettingsPort.GetSettings().installSkillsFlat;
 
             Assert.IsTrue(installSkillsFlat);
+        }
+
+        /// <summary>
+        /// Verifies the setup wizard auto-show suppression is written to the settings file.
+        /// </summary>
+        [Test]
+        public void SetSuppressSetupWizardAutoShow_PersistsValue()
+        {
+            _editorSettingsPort.SetSuppressSetupWizardAutoShow(true);
+            _editorSettingsRepository.InvalidateCache();
+
+            Assert.That(_editorSettingsPort.GetSuppressSetupWizardAutoShow(), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies hiding the tool settings is written to the settings file.
+        /// </summary>
+        [Test]
+        public void SetShowToolSettings_PersistsValue()
+        {
+            _editorSettingsPort.SetShowToolSettings(false);
+            _editorSettingsRepository.InvalidateCache();
+
+            Assert.That(_editorSettingsPort.GetSettings().showToolSettings, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies an empty or blank settings file is reported as a corrupted settings load, with the JSON reader
+        /// error as the cause, instead of silently falling back to defaults, and the file is left as it was.
+        /// </summary>
+        [TestCase("")]
+        [TestCase("   ")]
+        public void GetSettings_WhenSettingsFileIsBlank_ThrowsCorruptedSettingsError(string content)
+        {
+            File.WriteAllText(SettingsFilePath, content);
+
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => _editorSettingsPort.GetSettings());
+
+            StringAssert.StartsWith("Failed to load Unity CLI Loop Editor settings from: ", exception.Message);
+            Assert.That(exception.InnerException, Is.InstanceOf<JsonReaderException>());
+            Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(content));
+        }
+
+        /// <summary>
+        /// Verifies a blank legacy settings file is deleted without migrating anything or writing current settings.
+        /// </summary>
+        [Test]
+        public void GetSettings_WhenLegacySettingsFileIsBlank_DeletesItWithoutMigrating()
+        {
+            File.WriteAllText(LegacySettingsFilePath, "   ");
+
+            UnityCliLoopEditorSettingsData settings = _editorSettingsPort.GetSettings();
+
+            Assert.That(settings.lastSeenSetupWizardVersion, Is.Empty);
+            Assert.That(settings.legacySetupWizardStateMigrated, Is.False);
+            Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
+            Assert.That(File.Exists(SettingsFilePath), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a legacy settings file with no seen version and no suppression is deleted without migrating
+        /// anything or writing current settings.
+        /// </summary>
+        [Test]
+        public void GetSettings_WhenLegacySettingsHaveNothingToMigrate_DeletesItWithoutMigrating()
+        {
+            File.WriteAllText(
+                LegacySettingsFilePath,
+                "{\"lastSeenSetupWizardVersion\":\"\",\"suppressSetupWizardAutoShow\":false}");
+
+            UnityCliLoopEditorSettingsData settings = _editorSettingsPort.GetSettings();
+
+            Assert.That(settings.lastSeenSetupWizardVersion, Is.Empty);
+            Assert.That(settings.suppressSetupWizardAutoShow, Is.False);
+            Assert.That(settings.legacySetupWizardStateMigrated, Is.False);
+            Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
+            Assert.That(File.Exists(SettingsFilePath), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies already-migrated settings load as stored, without rewriting the file, when no legacy file is left.
+        /// </summary>
+        [Test]
+        public void GetSettings_WhenAlreadyMigratedAndLegacyFileIsGone_KeepsCurrentSettings()
+        {
+            UnityCliLoopEditorSettingsData currentData = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "3.0.0",
+                legacySetupWizardStateMigrated = true
+            };
+            // Compact JSON differs from the indented JSON SaveSettings writes, so an unexpected save shows up.
+            string currentJson = JsonUtility.ToJson(UnityCliLoopEditorSettingsJsonData.FromDomain(currentData), false);
+            File.WriteAllText(SettingsFilePath, currentJson);
+
+            UnityCliLoopEditorSettingsData settings = _editorSettingsPort.GetSettings();
+
+            Assert.That(settings.lastSeenSetupWizardVersion, Is.EqualTo("3.0.0"));
+            Assert.That(settings.legacySetupWizardStateMigrated, Is.True);
+            Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
+            Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(currentJson));
+        }
+
+        /// <summary>
+        /// Verifies an oversized legacy settings file is reported as a corrupted settings load caused by the size
+        /// limit, and is left in place without writing current settings.
+        /// </summary>
+        [Test]
+        public void GetSettings_WhenLegacySettingsFileExceedsSizeLimit_ThrowsWithoutMigrating()
+        {
+            string oversizedLegacyContent = new string(' ', UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES + 1);
+            File.WriteAllText(LegacySettingsFilePath, oversizedLegacyContent);
+
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => _editorSettingsPort.GetSettings());
+
+            Assert.That(exception.InnerException, Is.InstanceOf<SecurityException>());
+            Assert.That(File.ReadAllText(LegacySettingsFilePath), Is.EqualTo(oversizedLegacyContent));
+            Assert.That(File.Exists(SettingsFilePath), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies saving settings whose JSON exceeds the size limit is rejected and leaves both the stored file and
+        /// the cached settings unchanged.
+        /// </summary>
+        [Test]
+        public void SaveSettings_WhenJsonExceedsSizeLimit_ThrowsAndKeepsStoredSettings()
+        {
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData { showDeveloperTools = true });
+            string storedJson = File.ReadAllText(SettingsFilePath);
+            UnityCliLoopEditorSettingsData oversizedSettings = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = new string('a', UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES + 1)
+            };
+
+            Assert.Throws<SecurityException>(() => _editorSettingsPort.SaveSettings(oversizedSettings));
+
+            Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(storedJson));
+            UnityCliLoopEditorSettingsData cachedSettings = _editorSettingsPort.GetSettings();
+            Assert.That(cachedSettings.lastSeenSetupWizardVersion, Is.Empty);
+            Assert.That(cachedSettings.showDeveloperTools, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies legacy transient fields nested inside arrays are removed while the array itself is kept.
+        /// </summary>
+        [Test]
+        public void RecoverSettingsFileIfNeeded_WhenLegacyFieldsAreNestedInArrays_ShouldRemoveThem()
+        {
+            File.WriteAllText(
+                SettingsFilePath,
+                "{\"showDeveloperTools\":true,\"history\":[{\"customPort\":18447,\"name\":\"kept\"},[{\"serverSessionId\":\"stale\"}]]}");
+
+            _editorSettingsPort.RecoverSettingsFileIfNeeded();
+
+            string recoveredJson = File.ReadAllText(SettingsFilePath);
+            StringAssert.DoesNotContain("customPort", recoveredJson);
+            StringAssert.DoesNotContain("serverSessionId", recoveredJson);
+            StringAssert.Contains("\"history\"", recoveredJson);
+            StringAssert.Contains("\"kept\"", recoveredJson);
         }
 
         [Test]

@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -21,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly CliInstallProgressView _installProgressView;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
         private readonly Action<bool> _refreshUi;
+        private readonly IPresentationDialogs _dialogs;
 
         private bool _isInstallingCli;
         private bool _needsCliPathSetup;
@@ -33,7 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement installProgressContainer,
             Label installProgressLabel,
             CliSetupApplicationService cliSetupApplicationService,
-            Action<bool> refreshUi)
+            Action<bool> refreshUi,
+            IPresentationDialogs dialogs = null)
         {
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
             Debug.Assert(refreshUi != null, "refreshUi must not be null");
@@ -42,6 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
             _refreshUi = refreshUi
                 ?? throw new ArgumentNullException(nameof(refreshUi));
+            _dialogs = dialogs ?? new EditorPresentationDialogs();
             _installProgressView = new CliInstallProgressView(
                 installProgressContainer,
                 installCliButton,
@@ -101,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             HandleInstallCliAsync(CancellationToken.None).Forget();
         }
 
-        private async Task HandleInstallCliAsync(CancellationToken ct)
+        internal async Task HandleInstallCliAsync(CancellationToken ct)
         {
             await RefreshCliPrimaryActionStateAsync(ct);
 
@@ -162,15 +164,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     string manualInstallGuidance = commandResult.Success
                         ? commandResult.Command.ManualCommand
                         : commandResult.ErrorOutput;
-                    EditorUtility.DisplayDialog(
+                    _dialogs.ShowMessage(
                         "Installation Failed",
                         $"Failed to install uloop CLI.\n\n{result.ErrorOutput}\n\n"
-                        + manualInstallGuidance,
-                        "OK");
+                        + manualInstallGuidance);
                     return;
                 }
 
-                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                await _dialogs.EnsureCliVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
                     _cliSetupApplicationService,
                     ct);
@@ -220,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                await _dialogs.EnsureCliVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
                     _cliSetupApplicationService,
                     ct);

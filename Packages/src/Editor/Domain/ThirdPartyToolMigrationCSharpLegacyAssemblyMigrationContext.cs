@@ -374,11 +374,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
                 ApplyReplacementResult(migratedContent, replacementCount);
                 _removedPlayerLoopTimingSignatures.AddRange(localRemovedTimingSignatures);
+                // This pass sees one file, so it cannot follow inheritance; the cross-file pass revisits every file
+                // with the project's type hierarchy and rewrites the inherited calls left here.
                 (string timingCallerMigratedContent, int timingCallerReplacementCount) =
                     RemoveLegacyPlayerLoopTimingCallerArgumentsInCode(
                         _migratedContent,
                         localRemovedTimingSignatures,
-                        _legacyNamespaceAliases);
+                        _legacyNamespaceAliases,
+                        ThirdPartyToolMigrationTypeHierarchyIndex.Empty);
                 ApplyReplacementResult(timingCallerMigratedContent, timingCallerReplacementCount);
                 migratedCalleeMethodNames = localRemovedTimingSignatures
                     .Select(signature => signature.MethodName)

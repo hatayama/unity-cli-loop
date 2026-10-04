@@ -75,6 +75,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return 0;
             }
 
+            ThirdPartyToolMigrationTypeHierarchyIndex typeHierarchyIndex =
+                BuildTypeHierarchyIndex(csharpFilePaths, changes, readAllText);
             int replacementCount = 0;
             while (HasRemovedPlayerLoopTimingSignatures(activeRemovedSignaturesByAssemblyDirectory))
             {
@@ -110,7 +112,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                             source,
                             originalSource,
                             activeRemovedSignatures.ToArray(),
-                            legacyAssemblyAliases);
+                            legacyAssemblyAliases,
+                            typeHierarchyIndex);
                     if (!callerResult.Changed)
                     {
                         continue;
@@ -150,6 +153,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return replacementCount;
+        }
+
+        // Built once from the pending content so it sees the same version of each file as the caller rewrite does.
+        // Later rounds change only argument and parameter text, never class names, base lists, namespaces, usings,
+        // or member names, so the index is not rebuilt between rounds.
+        private static ThirdPartyToolMigrationTypeHierarchyIndex BuildTypeHierarchyIndex(
+            List<string> csharpFilePaths,
+            List<MigrationFileChange> changes,
+            Func<string, string> readAllText)
+        {
+            List<string> sources = new(csharpFilePaths.Count);
+            foreach (string csharpFilePath in csharpFilePaths)
+            {
+                sources.Add(GetPendingMigrationFileContent(csharpFilePath, changes, readAllText(csharpFilePath)));
+            }
+
+            return ThirdPartyToolMigrationTypeHierarchyIndex.Build(sources);
         }
 
         internal static bool CanMigrateBareLegacyPlayerLoopTimingForAssembly(

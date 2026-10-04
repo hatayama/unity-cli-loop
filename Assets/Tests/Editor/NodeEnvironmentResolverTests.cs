@@ -317,5 +317,105 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result, Is.Null);
         }
+
+        /// <summary>
+        /// Verifies a .cmd or .exe entry is chosen over an earlier extensionless entry, ignoring extension case.
+        /// </summary>
+        [TestCase(@"C:\tools\uloop.cmd")]
+        [TestCase(@"C:\tools\uloop.EXE")]
+        public void SelectWindowsExecutable_WhenLaunchableEntryFollowsExtensionlessEntry_ReturnsLaunchableEntry(
+            string launchablePath)
+        {
+            string[] paths = { @"C:\tools\uloop", launchablePath };
+
+            string result = NodeEnvironmentResolver.SelectWindowsExecutable(paths);
+
+            Assert.That(result, Is.EqualTo(launchablePath));
+        }
+
+        /// <summary>
+        /// Verifies the first entry is chosen when no entry has a .cmd or .exe extension.
+        /// </summary>
+        [Test]
+        public void SelectWindowsExecutable_WhenNoLaunchableEntryExists_ReturnsFirstEntry()
+        {
+            string[] paths = { @"C:\tools\uloop", @"C:\tools\uloop.ps1" };
+
+            string result = NodeEnvironmentResolver.SelectWindowsExecutable(paths);
+
+            Assert.That(result, Is.EqualTo(@"C:\tools\uloop"));
+        }
+
+        /// <summary>
+        /// Verifies that missing or empty where results select nothing.
+        /// </summary>
+        [Test]
+        public void SelectWindowsExecutable_WhenNoPathsExist_ReturnsNull()
+        {
+            Assert.That(NodeEnvironmentResolver.SelectWindowsExecutable(null), Is.Null);
+            Assert.That(NodeEnvironmentResolver.SelectWindowsExecutable(Array.Empty<string>()), Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies CRLF where output is split into trimmed paths without carriage returns or blank lines.
+        /// </summary>
+        [Test]
+        public void ParseWhereOutput_WhenOutputUsesCrlf_ReturnsTrimmedPaths()
+        {
+            string output = "C:\\tools\\uloop\r\n\r\n  C:\\tools\\uloop.cmd  \r\n";
+
+            string[] result = NodeEnvironmentResolver.ParseWhereOutput(output);
+
+            Assert.That(result, Is.EqualTo(new[] { @"C:\tools\uloop", @"C:\tools\uloop.cmd" }));
+        }
+
+        /// <summary>
+        /// Verifies LF where output is split into one path per line.
+        /// </summary>
+        [Test]
+        public void ParseWhereOutput_WhenOutputUsesLf_ReturnsPaths()
+        {
+            string output = "C:\\tools\\uloop\nC:\\tools\\uloop.exe";
+
+            string[] result = NodeEnvironmentResolver.ParseWhereOutput(output);
+
+            Assert.That(result, Is.EqualTo(new[] { @"C:\tools\uloop", @"C:\tools\uloop.exe" }));
+        }
+
+        /// <summary>
+        /// Verifies that missing output, or output with only blank lines, yields no paths.
+        /// </summary>
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase(" \r\n\r\n ")]
+        public void ParseWhereOutput_WhenOutputHasNoPaths_ReturnsNull(string output)
+        {
+            string[] result = NodeEnvironmentResolver.ParseWhereOutput(output);
+
+            Assert.That(result, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies user names made of letters, digits, underscores, hyphens, and dots are accepted for the directory lookup.
+        /// </summary>
+        [TestCase("user_name-1.test")]
+        [TestCase("a")]
+        public void IsSafeDirectoryServiceUserName_WhenNameUsesAllowedCharacters_ReturnsTrue(string userName)
+        {
+            Assert.That(NodeEnvironmentResolver.IsSafeDirectoryServiceUserName(userName), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies empty names and names with characters that could change the lookup path are rejected.
+        /// </summary>
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("user name")]
+        [TestCase("../user")]
+        [TestCase("user;id")]
+        public void IsSafeDirectoryServiceUserName_WhenNameIsEmptyOrUnsafe_ReturnsFalse(string userName)
+        {
+            Assert.That(NodeEnvironmentResolver.IsSafeDirectoryServiceUserName(userName), Is.False);
+        }
     }
 }

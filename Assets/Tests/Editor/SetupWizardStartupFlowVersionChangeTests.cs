@@ -15,7 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Verifies the setup wizard's version-change evaluation for already-seen package versions:
-    /// when it records the last-seen state, when it refreshes the CLI, and when it does nothing.
+    /// when it records the last-seen state, when it refreshes the CLI, and when it does nothing. Also covers the
+    /// migration auto-scan poll actions and the fallback full scan with recording ports.
     /// </summary>
     public sealed class SetupWizardStartupFlowVersionChangeTests
     {
@@ -25,6 +26,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private StubProjectSettingsPort _projectSettingsPort;
         private StubCliInstallationDetector _cliDetector;
         private int _showWindowCount;
+        private int _showAutoScanCount;
+        private RecordingSessionFlagsRepository _sessionFlagsRepository;
+        private RecordingAutoScanSeedRepository _autoScanSeedRepository;
+        private RecordingSkillSetupPort _skillSetupPort;
+        private RecordingMigrationPort _migrationPort;
+        private InlineBackgroundWorkRunner _backgroundWorkRunner;
         private SetupWizardStartupFlow _flow;
 
         [SetUp]
@@ -34,6 +41,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _projectSettingsPort = new StubProjectSettingsPort();
             _cliDetector = new StubCliInstallationDetector();
             _showWindowCount = 0;
+            _showAutoScanCount = 0;
+            _sessionFlagsRepository = new RecordingSessionFlagsRepository();
+            _autoScanSeedRepository = new RecordingAutoScanSeedRepository();
+            _skillSetupPort = new RecordingSkillSetupPort();
+            _migrationPort = new RecordingMigrationPort();
+            _backgroundWorkRunner = new InlineBackgroundWorkRunner();
             CliSetupApplicationService cliSetupApplicationService = new CliSetupApplicationService(
                 _cliDetector,
                 new UnusedNativeCliInstaller(),
@@ -41,13 +54,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _flow = new SetupWizardStartupFlow(
                 _editorSettingsPort,
                 _projectSettingsPort,
-                new UnusedSessionFlagsRepository(),
-                new UnusedAutoScanSeedRepository(),
+                _sessionFlagsRepository,
+                _autoScanSeedRepository,
                 cliSetupApplicationService,
-                new SkillSetupUseCase(new UnusedSkillSetupPort()),
-                new ThirdPartyToolMigrationUseCase(new UnusedMigrationPort()),
+                new SkillSetupUseCase(_skillSetupPort),
+                new ThirdPartyToolMigrationUseCase(_migrationPort),
                 () => _showWindowCount++,
-                () => throw new InvalidOperationException("the migration auto-scan must not open"));
+                () => _showAutoScanCount++,
+                _backgroundWorkRunner);
         }
 
         /// <summary>
@@ -158,6 +172,137 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(_cliDetector.ForceRefreshCount, Is.EqualTo(1));
             Assert.That(_editorSettingsPort.UpdateCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a new package version with a current CLI scans the installed skills on the background runner,
+        /// at the project root and in the wizard's forced layout, and records the state when nothing is outdated.
+        /// </summary>
+        [Test]
+        public void TryShowOnVersionChange_WhenThePackageChangedAndTheSkillsAreCurrent_ScansSkillsAndRecords()
+        {
+            const string PreviousVersion = "3.0.0-previous.1";
+            Assume.That(UnityCliLoopConstants.PackageInfo.version, Is.Not.EqualTo(PreviousVersion));
+            _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = PreviousVersion,
+                lastSeenSetupWizardMinimumDispatcherVersion = MinimumDispatcherVersion
+            };
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+
+            _flow.TryShowOnVersionChange();
+
+            Assert.That(_backgroundWorkRunner.RunCount, Is.EqualTo(1));
+            Assert.That(_skillSetupPort.DetectProjectRoots, Is.EqualTo(new List<string> { UnityCliLoopPathResolver.GetProjectRoot() }));
+            Assert.That(_skillSetupPort.DetectGroupFlags, Is.EqualTo(new List<bool> { !SetupWizardWindow.ForceFlatSkillInstall }));
+            Assert.That(_editorSettingsPort.UpdateCount, Is.EqualTo(1));
+            Assert.That(
+                _editorSettingsPort.Settings.lastSeenSetupWizardVersion,
+                Is.EqualTo(UnityCliLoopConstants.PackageInfo.version));
+            Assert.That(_showWindowCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a compile-error detection that finds legacy files stores them as seeds, flags the auto-scan for
+        /// this session, and opens the migration window once.
+        /// </summary>
+        [Test]
+        public void ApplyMigrationAutoScanPollAction_WhenDetectionFindsFiles_StoresSeedsAndOpensTheMigrationWindow()
+        {
+            _migrationPort.DetectionFound = true;
+            _migrationPort.DetectedFilePaths = new List<string> { "/Project/Assets/A.cs", "/Project/Assets/B.cs" };
+
+            _flow.ApplyMigrationAutoScanPollAction(MigrationAutoScanPollAction.RunDetection);
+
+            Assert.That(
+                _migrationPort.DetectionProjectRoots,
+                Is.EqualTo(new List<string> { UnityCliLoopPathResolver.GetProjectRoot() }));
+            Assert.That(_autoScanSeedRepository.StoredSeedFilePaths.Count, Is.EqualTo(1));
+            Assert.That(
+                _autoScanSeedRepository.StoredSeedFilePaths[0],
+                Is.EqualTo(new[] { "/Project/Assets/A.cs", "/Project/Assets/B.cs" }));
+            Assert.That(_sessionFlagsRepository.ShouldAutoScanValues, Is.EqualTo(new List<bool> { true }));
+            Assert.That(_showAutoScanCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a detection that finds nothing yet stores nothing and keeps the migration window closed.
+        /// </summary>
+        [Test]
+        public void ApplyMigrationAutoScanPollAction_WhenDetectionFindsNothing_KeepsTheWindowClosed()
+        {
+            _flow.ApplyMigrationAutoScanPollAction(MigrationAutoScanPollAction.RunDetection);
+
+            Assert.That(_migrationPort.DetectionProjectRoots.Count, Is.EqualTo(1));
+            Assert.That(_autoScanSeedRepository.StoredSeedFilePaths, Is.Empty);
+            Assert.That(_sessionFlagsRepository.ShouldAutoScanValues, Is.Empty);
+            Assert.That(_showAutoScanCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a throwing detection reaches the caller without opening the migration window.
+        /// </summary>
+        [Test]
+        public void ApplyMigrationAutoScanPollAction_WhenDetectionThrows_RethrowsWithoutOpeningTheWindow()
+        {
+            _migrationPort.DetectionFailure = new InvalidOperationException("<DETECTION_THROWN>");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => _flow.ApplyMigrationAutoScanPollAction(MigrationAutoScanPollAction.RunDetection));
+
+            Assert.That(exception.Message, Is.EqualTo("<DETECTION_THROWN>"));
+            Assert.That(_showAutoScanCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies waiting and terminating poll actions touch neither the migration port nor the window.
+        /// </summary>
+        [TestCase(MigrationAutoScanPollAction.ContinueWaiting)]
+        [TestCase(MigrationAutoScanPollAction.Terminate)]
+        public void ApplyMigrationAutoScanPollAction_WhenWaitingOrTerminating_DoesNotScan(MigrationAutoScanPollAction action)
+        {
+            _flow.ApplyMigrationAutoScanPollAction(action);
+
+            Assert.That(_migrationPort.DetectionProjectRoots, Is.Empty);
+            Assert.That(_migrationPort.HasTargetsProjectRoots, Is.Empty);
+            Assert.That(_showAutoScanCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies the timeout fallback runs a full scan at the project root and opens the migration window when it
+        /// finds targets.
+        /// </summary>
+        [Test]
+        public void ApplyMigrationAutoScanPollAction_WhenFallingBackAndTargetsExist_OpensTheMigrationWindow()
+        {
+            _migrationPort.HasTargets = true;
+
+            _flow.ApplyMigrationAutoScanPollAction(MigrationAutoScanPollAction.FallBackToFullScan);
+
+            Assert.That(
+                _migrationPort.HasTargetsProjectRoots,
+                Is.EqualTo(new List<string> { UnityCliLoopPathResolver.GetProjectRoot() }));
+            Assert.That(_migrationPort.DetectionProjectRoots, Is.Empty);
+            Assert.That(_sessionFlagsRepository.ShouldAutoScanValues, Is.EqualTo(new List<bool> { true }));
+            Assert.That(_showAutoScanCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a fallback full scan without targets keeps the migration window closed.
+        /// </summary>
+        [Test]
+        public async Task RunThirdPartyToolMigrationFallbackFullScanAsync_WithoutTargets_KeepsTheWindowClosed()
+        {
+            await UncanceledAwaits.AwaitCompletionAsync(
+                _flow.RunThirdPartyToolMigrationFallbackFullScanAsync("<PROJECT_ROOT>"));
+
+            Assert.That(_migrationPort.HasTargetsProjectRoots, Is.EqualTo(new List<string> { "<PROJECT_ROOT>" }));
+            Assert.That(
+                _migrationPort.HasTargetsTokens,
+                Is.EqualTo(new List<CancellationToken> { CancellationToken.None }));
+            Assert.That(_sessionFlagsRepository.ShouldAutoScanValues, Is.Empty);
+            Assert.That(_showAutoScanCount, Is.EqualTo(0));
         }
 
         private sealed class RecordingEditorSettingsPort : IUnityCliLoopEditorSettingsPort
@@ -350,8 +495,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
-        private sealed class UnusedSessionFlagsRepository : ISessionFlagsRepository
+        private sealed class RecordingSessionFlagsRepository : ISessionFlagsRepository
         {
+            internal List<bool> ShouldAutoScanValues { get; } = new List<bool>();
+
+            public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration)
+            {
+                ShouldAutoScanValues.Add(shouldAutoScanThirdPartyToolMigration);
+            }
+
             public bool GetIsServerRunning() => throw new NotSupportedException();
             public bool GetIsServerManuallyStopped() => throw new NotSupportedException();
             public bool GetIsAfterCompile() => throw new NotSupportedException();
@@ -362,7 +514,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void SetIsReconnecting(bool isReconnecting) => throw new NotSupportedException();
             public void SetShowReconnectingUI(bool showReconnectingUI) => throw new NotSupportedException();
             public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI) => throw new NotSupportedException();
-            public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration) => throw new NotSupportedException();
             public bool ConsumeShouldAutoScanThirdPartyToolMigration() => throw new NotSupportedException();
             public void MarkServerStarted() => throw new NotSupportedException();
             public void MarkServerManuallyStopped() => throw new NotSupportedException();
@@ -374,21 +525,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void ClearDomainReloadRecoveryFlags() => throw new NotSupportedException();
         }
 
-        private sealed class UnusedAutoScanSeedRepository : IThirdPartyToolMigrationAutoScanSeedRepository
+        private sealed class RecordingAutoScanSeedRepository : IThirdPartyToolMigrationAutoScanSeedRepository
         {
-            public void StoreSeedFilePaths(string[] filePaths) => throw new NotSupportedException();
+            internal List<string[]> StoredSeedFilePaths { get; } = new List<string[]>();
+
+            public void StoreSeedFilePaths(string[] filePaths)
+            {
+                StoredSeedFilePaths.Add(filePaths);
+            }
+
             public string[] GetSeedFilePaths() => throw new NotSupportedException();
             public void ClearSeedFilePaths() => throw new NotSupportedException();
         }
 
-        private sealed class UnusedSkillSetupPort : ISkillSetupPort
+        private sealed class RecordingSkillSetupPort : ISkillSetupPort
         {
+            internal List<string> DetectProjectRoots { get; } = new List<string>();
+            internal List<bool> DetectGroupFlags { get; } = new List<bool>();
+
             public void RemoveSkillFiles(string toolName) => throw new NotSupportedException();
             public bool IsSkillInstalled(string toolName) => throw new NotSupportedException();
 
             public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutAtProjectRoot(
                 string projectRoot,
-                bool groupSkillsUnderUnityCliLoop) => throw new NotSupportedException();
+                bool groupSkillsUnderUnityCliLoop)
+            {
+                DetectProjectRoots.Add(projectRoot);
+                DetectGroupFlags.Add(groupSkillsUnderUnityCliLoop);
+                return new List<SkillSetupTargetInfo>
+                {
+                    new SkillSetupTargetInfo(
+                        "Claude Code",
+                        ".claude",
+                        "--claude",
+                        hasSkillsDirectory: true,
+                        hasExistingSkills: true,
+                        hasDifferentLayoutSkills: false,
+                        SkillInstallState.Installed)
+                };
+            }
 
             public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutFastAtProjectRoot(
                 string projectRoot,
@@ -422,8 +597,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken ct) => throw new NotSupportedException();
         }
 
-        private sealed class UnusedMigrationPort : IThirdPartyToolMigrationPort
+        private sealed class RecordingMigrationPort : IThirdPartyToolMigrationPort
         {
+            internal bool DetectionFound { get; set; }
+            internal List<string> DetectedFilePaths { get; set; } = new List<string>();
+            internal Exception DetectionFailure { get; set; }
+            internal List<string> DetectionProjectRoots { get; } = new List<string>();
+            internal bool HasTargets { get; set; }
+            internal List<string> HasTargetsProjectRoots { get; } = new List<string>();
+            internal List<CancellationToken> HasTargetsTokens { get; } = new List<CancellationToken>();
+
+            public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
+                string projectRoot)
+            {
+                DetectionProjectRoots.Add(projectRoot);
+                if (DetectionFailure != null)
+                {
+                    throw DetectionFailure;
+                }
+
+                return (DetectionFound, DetectedFilePaths);
+            }
+
+            public Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)
+            {
+                HasTargetsProjectRoots.Add(projectRoot);
+                HasTargetsTokens.Add(ct);
+                return Task.FromResult(HasTargets);
+            }
+
             public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot) => throw new NotSupportedException();
 
             public Task<ThirdPartyToolMigrationPreview> PreviewMigrationAsync(
@@ -431,11 +633,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 IProgress<ThirdPartyToolMigrationProgress> progress,
                 CancellationToken ct) => throw new NotSupportedException();
 
-            public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
-                string projectRoot) => throw new NotSupportedException();
-
-            public Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct) =>
-                throw new NotSupportedException();
 
             public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot) => throw new NotSupportedException();
 

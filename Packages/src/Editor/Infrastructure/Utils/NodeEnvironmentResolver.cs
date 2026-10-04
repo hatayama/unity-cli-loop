@@ -58,11 +58,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         /// <summary>
         /// Finds the first executable path for the given name using the Windows 'where' command.
-        /// Prioritizes .cmd/.exe over extensionless entries because native Windows shims must be launched directly.
         /// </summary>
         private static string TryWhereCommand(string executableName)
         {
-            string[] paths = TryWhereCommandAll(executableName);
+            return SelectWindowsExecutable(TryWhereCommandAll(executableName));
+        }
+
+        /// <summary>
+        /// Picks the path to launch from 'where' results.
+        /// Prioritizes .cmd/.exe over extensionless entries because native Windows shims must be launched directly.
+        /// </summary>
+        internal static string SelectWindowsExecutable(string[] paths)
+        {
             if (paths == null || paths.Length == 0)
             {
                 return null;
@@ -92,7 +99,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CreateNoWindow = true
             };
 
-            string output = ExecuteAndGetOutput(startInfo);
+            return ParseWhereOutput(ExecuteAndGetOutput(startInfo));
+        }
+
+        // Splits on LF and trims each line so CRLF output from cmd.exe leaves no carriage returns behind.
+        internal static string[] ParseWhereOutput(string output)
+        {
             if (!string.IsNullOrEmpty(output))
             {
                 string[] lines = output.Split('\n');
@@ -300,7 +312,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ExtractDirectoryServiceUserShell(ExecuteAndGetOutput(startInfo));
         }
 
-        private static bool IsSafeDirectoryServiceUserName(string userName)
+        internal static bool IsSafeDirectoryServiceUserName(string userName)
         {
             if (string.IsNullOrEmpty(userName))
             {

@@ -37,12 +37,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private string _cachedCliExecutablePath;
         private bool _cacheInitialized;
         private bool _isRefreshing;
+        private Func<CancellationToken, Task<CliInstallationDetection>> _detect = DetectCliInstallationAsync;
 
         public CliInstallationDetector(ICliPinReader cliPinReader)
         {
             UnityEngine.Debug.Assert(cliPinReader != null, "cliPinReader must not be null");
 
             _cliPinReader = cliPinReader ?? throw new ArgumentNullException(nameof(cliPinReader));
+        }
+
+        // Replaces the process-backed detection so tests can drive the cache without running the CLI.
+        internal void SetDetectionForTesting(Func<CancellationToken, Task<CliInstallationDetection>> detect)
+        {
+            UnityEngine.Debug.Assert(detect != null, "detect must not be null");
+
+            _detect = detect;
         }
 
         public bool IsCliInstalled()
@@ -80,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _isRefreshing = true;
             try
             {
-                CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
+                CliInstallationDetection detection = await _detect(ct);
                 _cachedCliVersion = detection.Version;
                 _cachedCliIsDispatcher = detection.IsDispatcher;
                 _cachedCliExecutablePath = detection.ExecutablePath;
@@ -94,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public async Task ForceRefreshCliVersionAsync(CancellationToken ct)
         {
-            CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
+            CliInstallationDetection detection = await _detect(ct);
             _cachedCliVersion = detection.Version;
             _cachedCliIsDispatcher = detection.IsDispatcher;
             _cachedCliExecutablePath = detection.ExecutablePath;
@@ -167,7 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return new CliInstallationDetection(null, executablePath);
             }
 
-            return DetectCliInstallationAtExecutablePath(executablePath, ct);
+            return DetectCliInstallationAtExecutablePath(executablePath, ct, CliDetectionCommandRunner.Execute);
         }
 
         private static CliInstallationDetection DetectShellCliInstallationBlocking(RuntimePlatform platform, CancellationToken ct)
@@ -180,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string executablePath = NodeEnvironmentResolver.FindExecutablePathAtPlatform(
                 CliConstants.EXECUTABLE_NAME,
                 platform);
-            return DetectCliInstallationAtExecutablePath(executablePath, ct);
+            return DetectCliInstallationAtExecutablePath(executablePath, ct, CliDetectionCommandRunner.Execute);
         }
 
         private static CliInstallationDetection DetectShellCliInstallationFromLoginShell(RuntimePlatform platform, CancellationToken ct)
@@ -200,28 +209,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return CliShellInstallationProbe.ParseShellCliInstallationOutput(output);
         }
 
-        private static CliInstallationDetection DetectCliInstallationAtExecutablePath(
+        internal static CliInstallationDetection DetectCliInstallationAtExecutablePath(
             string executablePath,
-            CancellationToken ct)
+            CancellationToken ct,
+            Func<ProcessStartInfo, CancellationToken, CliDetectionCommandResult> runCommand)
         {
             string fileName = executablePath ?? CliConstants.EXECUTABLE_NAME;
-            string contractOutput = ExecuteCliVersionCommand(fileName, CliConstants.VERSION_FLAG + " " + CliConstants.JSON_FLAG, ct);
+            string contractOutput = ExecuteCliVersionCommand(
+                fileName,
+                CliConstants.VERSION_FLAG + " " + CliConstants.JSON_FLAG,
+                ct,
+                runCommand);
             CliInstallationDetection contractDetection = CliShellInstallationProbe.ParseCliContractOutput(contractOutput, executablePath);
             if (!string.IsNullOrEmpty(contractDetection.Version))
             {
                 return contractDetection;
             }
 
-            string versionOutput = ExecuteCliVersionCommand(fileName, CliConstants.VERSION_FLAG, ct);
+            string versionOutput = ExecuteCliVersionCommand(fileName, CliConstants.VERSION_FLAG, ct, runCommand);
             string version = string.IsNullOrEmpty(versionOutput) ? null : versionOutput;
             return new CliInstallationDetection(version, executablePath);
         }
 
-        private static string ExecuteCliVersionCommand(
+        internal static string ExecuteCliVersionCommand(
             string fileName,
             string arguments,
-            CancellationToken ct)
+            CancellationToken ct,
+            Func<ProcessStartInfo, CancellationToken, CliDetectionCommandResult> runCommand)
         {
+            UnityEngine.Debug.Assert(runCommand != null, "runCommand must not be null");
+
             ProcessStartInfo startInfo = new()
             {
                 FileName = fileName,
@@ -234,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             try
             {
-                CliDetectionCommandResult commandResult = CliDetectionCommandRunner.Execute(startInfo, ct);
+                CliDetectionCommandResult commandResult = runCommand(startInfo, ct);
                 if (commandResult == null)
                 {
                     return null;

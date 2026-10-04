@@ -880,12 +880,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             StubEditorUnsavedChangesQuietSaver quietSaver = new(
                 saveFailures: System.Array.Empty<string>(),
                 remainingAfterSave: System.Array.Empty<string>());
+            // Why a recording starter: the default is the Editor's real service, which would write
+            // Application.runInBackground and leave the CLI override active in SessionState.
+            RecordingRunInBackgroundStarter runInBackgroundStarter = new();
             ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
                 new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider());
+                new StubDomainReloadDropStateProvider(),
+                runInBackgroundStarter: runInBackgroundStarter);
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -897,6 +901,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ResumedFromPause, Is.False);
             Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
             Assert.That(editorState.IsPlaying, Is.True);
+            Assert.That(runInBackgroundStarter.EnableCallCount, Is.EqualTo(1));
         }
 
         /// <summary>
@@ -915,7 +920,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider(changeCount: 2));
+                new StubDomainReloadDropStateProvider(changeCount: 2),
+                runInBackgroundStarter: new RecordingRunInBackgroundStarter());
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -950,7 +956,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider(pausePointCount: 1, persistedPausePointCount: 1));
+                new StubDomainReloadDropStateProvider(pausePointCount: 1, persistedPausePointCount: 1),
+                runInBackgroundStarter: new RecordingRunInBackgroundStarter());
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -1006,7 +1013,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider());
+                new StubDomainReloadDropStateProvider(),
+                runInBackgroundStarter: new RecordingRunInBackgroundStarter());
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
