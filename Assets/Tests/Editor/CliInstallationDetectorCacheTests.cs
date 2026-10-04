@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -34,6 +35,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(detector.GetCachedCliExecutablePath(), Is.EqualTo(DetectedPath));
             Assert.That(detector.GetCachedCliIsDispatcher(), Is.True);
             Assert.That(detection.CallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a refresh hands the caller's token to the detection so cancelling it can stop the CLI process.
+        /// </summary>
+        [Test]
+        public async Task RefreshCliVersionAsync_PassesTheCallerTokenToDetection()
+        {
+            CountingDetection detection = new(new CliInstallationDetection(DetectedVersion, DetectedPath));
+            CliInstallationDetector detector = CreateDetector(detection);
+            using CancellationTokenSource cancellation = new();
+
+            await detector.RefreshCliVersionAsync(cancellation.Token);
+
+            Assert.That(detection.ReceivedTokens, Is.EqualTo(new[] { cancellation.Token }));
+        }
+
+        /// <summary>
+        /// Verifies a forced refresh hands the caller's token to the detection so cancelling it can stop the CLI process.
+        /// </summary>
+        [Test]
+        public async Task ForceRefreshCliVersionAsync_PassesTheCallerTokenToDetection()
+        {
+            CountingDetection detection = new(new CliInstallationDetection(DetectedVersion, DetectedPath));
+            CliInstallationDetector detector = CreateDetector(detection);
+            using CancellationTokenSource cancellation = new();
+
+            await detector.ForceRefreshCliVersionAsync(cancellation.Token);
+
+            Assert.That(detection.ReceivedTokens, Is.EqualTo(new[] { cancellation.Token }));
         }
 
         /// <summary>
@@ -223,9 +254,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public int CallCount { get; private set; }
 
+            public List<CancellationToken> ReceivedTokens { get; } = new();
+
             public Task<CliInstallationDetection> DetectAsync(CancellationToken ct)
             {
                 CallCount++;
+                ReceivedTokens.Add(ct);
                 return Task.FromResult(_result);
             }
         }

@@ -79,6 +79,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies both version commands receive the caller's token so cancelling it can stop the CLI process.
+        /// </summary>
+        [Test]
+        public void DetectCliInstallationAtExecutablePath_PassesTheCallerTokenToEveryCommand()
+        {
+            RecordingCommandRunner runner = new();
+            runner.Add(ContractArguments, new CliDetectionCommandResult(Array.Empty<string>(), 1));
+            runner.Add(CliConstants.VERSION_FLAG, new CliDetectionCommandResult(new[] { "2.9.0" }, 0));
+            using CancellationTokenSource cancellation = new();
+
+            CliInstallationDetector.DetectCliInstallationAtExecutablePath(
+                ExecutablePath,
+                cancellation.Token,
+                runner.Execute);
+
+            Assert.That(runner.Tokens, Is.EqualTo(new[] { cancellation.Token, cancellation.Token }));
+        }
+
+        /// <summary>
+        /// Verifies the version command receives the caller's token so cancelling it can stop the CLI process.
+        /// </summary>
+        [Test]
+        public void ExecuteCliVersionCommand_PassesTheCallerTokenToTheCommand()
+        {
+            RecordingCommandRunner runner = new();
+            runner.Add(CliConstants.VERSION_FLAG, new CliDetectionCommandResult(new[] { "3.6.0" }, 0));
+            using CancellationTokenSource cancellation = new();
+
+            CliInstallationDetector.ExecuteCliVersionCommand(
+                ExecutablePath,
+                CliConstants.VERSION_FLAG,
+                cancellation.Token,
+                runner.Execute);
+
+            Assert.That(runner.Tokens, Is.EqualTo(new[] { cancellation.Token }));
+        }
+
+        /// <summary>
         /// Verifies both version commands failing reports no version while keeping the executable path.
         /// </summary>
         [Test]
@@ -221,6 +259,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public List<ProcessStartInfo> StartInfos { get; } = new();
 
+            public List<CancellationToken> Tokens { get; } = new();
+
             public List<string> Arguments
             {
                 get
@@ -257,6 +297,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public CliDetectionCommandResult Execute(ProcessStartInfo startInfo, CancellationToken ct)
             {
                 StartInfos.Add(startInfo);
+                Tokens.Add(ct);
                 return _resultsByArguments[startInfo.Arguments];
             }
         }

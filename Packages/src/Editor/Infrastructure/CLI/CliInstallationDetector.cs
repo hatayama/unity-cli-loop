@@ -237,6 +237,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CancellationToken ct,
             Func<ProcessStartInfo, CancellationToken, CliDetectionCommandResult> runCommand)
         {
+            UnityEngine.Debug.Assert(runCommand != null, "runCommand must not be null");
+
             ProcessStartInfo startInfo = new()
             {
                 FileName = fileName,
