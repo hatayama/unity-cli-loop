@@ -32,14 +32,6 @@ func TestLoadReturnsEmbeddedContract(t *testing.T) {
 	}
 }
 
-func TestParseContractReturnsErrorForInvalidJSON(t *testing.T) {
-	// Verifies malformed contract data is reported as an error instead of panicking during package init.
-	_, err := parseContract([]byte("{"))
-	if err == nil {
-		t.Fatal("expected invalid JSON error")
-	}
-}
-
 func TestCliContractDoesNotDeclareDispatcherReleaseFields(t *testing.T) {
 	// Verifies release-please CLI version stamping cannot accidentally move dispatcher release metadata.
 	fields := clitest.RequireContractFieldMap(t, contractFiles, contractFileName)

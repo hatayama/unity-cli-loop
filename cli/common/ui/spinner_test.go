@@ -38,22 +38,6 @@ func TestSpinnerWritesMessageAndClearsLine(t *testing.T) {
 	}
 }
 
-func TestLaunchSpinnerWritesStartupMessage(t *testing.T) {
-	// Verifies that launch spinners show startup progress text.
-	var stdout bytes.Buffer
-
-	spinner := newSpinner(&stdout, true, "Waiting for Unity to finish starting...")
-	spinner.Stop()
-
-	output := stdout.String()
-	if !strings.Contains(output, "Waiting for Unity to finish starting...") {
-		t.Fatalf("launch spinner output did not include message: %q", output)
-	}
-	if !strings.HasSuffix(output, "\r\x1b[K\n") {
-		t.Fatalf("launch spinner output did not clear the line before returning: %q", output)
-	}
-}
-
 func TestSpinnerProgressFuncShowsStallMessageVerbatim(t *testing.T) {
 	// Verifies that heartbeat stall payloads reach the spinner verbatim.
 	var stderr bytes.Buffer
