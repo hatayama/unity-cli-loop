@@ -225,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a bulk install installs every target with a skills directory, disables the layout toggle while
+        /// Verifies a bulk install installs every target with a skills directory with the caller's token, disables the layout toggle while
         /// installing, shows the installed dialog, and refreshes the section afterwards.
         /// </summary>
         [Test]
@@ -244,9 +244,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _skillPort.OnInstall = () =>
                 toggleEnabledDuringInstall = _root.Q<Toggle>("group-skills-toggle").enabledSelf;
 
-            await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, cancellation.Token);
 
             Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude", ".codex" }));
+            Assert.That(_skillPort.InstallTokens, Is.EqualTo(new[] { cancellation.Token }));
             Assert.That(_skillPort.InstallGroupFlags, Is.EqualTo(new List<bool> { false }));
             Assert.That(toggleEnabledDuringInstall, Is.False);
             Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(1));
@@ -670,6 +673,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<string> InstalledTargetDirs { get; } = new List<string>();
             internal List<bool> InstallGroupFlags { get; } = new List<bool>();
             internal Action OnInstall { get; set; }
+            internal List<CancellationToken> InstallTokens { get; } = new List<CancellationToken>();
 
             public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutFastAtProjectRoot(
                 string projectRoot,
@@ -703,6 +707,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }
 
                 InstallGroupFlags.Add(groupSkillsUnderUnityCliLoop);
+                InstallTokens.Add(ct);
                 OnInstall?.Invoke();
                 return Task.CompletedTask;
             }

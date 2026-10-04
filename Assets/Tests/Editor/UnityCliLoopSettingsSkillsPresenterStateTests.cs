@@ -396,7 +396,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies installing all skills installs every target with a skills directory and shows the installed dialog.
+        /// Verifies installing all skills installs every target with a skills directory with the caller's token
+        /// and shows the installed dialog.
         /// </summary>
         [Test]
         public async Task HandleInstallAllSkills_WithInstallableTargets_InstallsThemAndShowsTheInstalledDialog()
@@ -410,10 +411,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             };
             bool installingDuringInstall = false;
             _skillPort.OnInstall = () => installingDuringInstall = _presenter.GetSnapshot().IsInstallingSkills;
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
 
-            await _presenter.HandleInstallAllSkills(CancellationToken.None);
+            await _presenter.HandleInstallAllSkills(cancellation.Token);
 
             Assert.That(_skillPort.InstalledTargetDirs, Is.EqualTo(new List<string> { ".claude", ".codex" }));
+            Assert.That(_skillPort.InstallTokens, Is.EqualTo(new[] { cancellation.Token }));
             Assert.That(installingDuringInstall, Is.True);
             Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
             Assert.That(_dialogs.SkillsInstalledCount, Is.EqualTo(1));
@@ -532,6 +535,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<string> InstalledTargetDirs { get; } = new List<string>();
             internal List<bool> InstallGroupFlags { get; } = new List<bool>();
             internal Action OnInstall { get; set; }
+            internal List<CancellationToken> InstallTokens { get; } = new List<CancellationToken>();
             internal HashSet<string> InstalledToolNames { get; } = new HashSet<string>();
             internal List<string> RemovedTools { get; } = new List<string>();
             internal List<string> InstalledToolSkills { get; } = new List<string>();
@@ -584,6 +588,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }
 
                 InstallGroupFlags.Add(groupSkillsUnderUnityCliLoop);
+                InstallTokens.Add(ct);
                 OnInstall?.Invoke();
                 return Task.CompletedTask;
             }
