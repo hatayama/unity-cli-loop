@@ -30,8 +30,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void SetUp()
         {
             // The last-recording store is shared with the live recording, so the tests do not run while one is
-            // in progress. This comes before setting the store aside because TearDown does not run when SetUp
-            // fails an assumption.
+            // in progress. The test framework still runs TearDown when SetUp fails an assumption, and the fixture
+            // instance is reused across tests, so clear the previous test's host first; TearDown skips cleanup
+            // when no host was created.
+            _host = null;
+            _previousRecording = default;
             Assume.That(RecordVideoService.IsRecording, Is.False);
             _previousRecording = LastCompletedRecordingTestState.TakeAndClear();
             _outputDirectory = Path.Combine(Path.GetTempPath(), "uloop-record-video-host-" + Guid.NewGuid().ToString("N"));
@@ -57,6 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TearDown]
         public void TearDown()
         {
+            if (_host == null)
+            {
+                return;
+            }
+
             // Why: the session owns a HideAndDontSave Texture2D that only Stop destroys.
             _clockThrows = false;
             _host.Stop("teardown");
@@ -163,6 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(lastRecording.HasValue, Is.True);
             Assert.That(lastRecording.Snapshot.StoppedBy, Is.EqualTo(RecordVideoConstants.StoppedByMaxDuration));
             Assert.That(_retentionCount, Is.EqualTo(1));
+            Assert.That(_host.GetSnapshot().OutputPath, Is.Null);
         }
 
         /// <summary>
@@ -194,6 +203,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_updateCallbacks, Is.Empty);
             Assert.That(LastCompletedRecordingStore.TryRead().HasValue, Is.False);
             Assert.That(_retentionCount, Is.EqualTo(0));
+            Assert.That(_host.GetSnapshot().OutputPath, Is.Null);
+
+            // A stopped session must not linger: a later assembly reload would otherwise save it as a new recording.
+            _host.OnBeforeAssemblyReload();
+
+            Assert.That(LastCompletedRecordingStore.TryRead().HasValue, Is.False);
         }
 
         /// <summary>
