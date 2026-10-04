@@ -441,7 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationAutoScanPollingActive = false;
         }
 
-        internal bool TryRunThirdPartyToolMigrationAutoScanDetection()
+        private bool TryRunThirdPartyToolMigrationAutoScanDetection()
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             (bool found, List<string> targetFilePaths) =

@@ -147,19 +147,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a canceled scan leaves the window to the owner that canceled it: nothing is logged and the
-        /// checking state stays.
+        /// Verifies a scan canceled by its owner mid-flight, as when the window closes, leaves the window to that
+        /// owner: nothing is logged and the checking state stays.
         /// </summary>
         [Test]
-        public async Task RefreshUI_WhenTheScanIsCanceled_LeavesTheCheckingState()
+        public async Task RefreshUI_WhenTheOwnerCancelsTheScan_LeavesTheCheckingState()
         {
             VisualElement root = new();
             RecordingThirdPartyToolMigrationPort port = new()
             {
-                PreviewFailure = new OperationCanceledException()
+                CancelPreviewWithToken = true
             };
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateControllerWithRoot(root, port, new List<string>());
+            port.OnPreview = controller.CancelMigrationOperation;
 
             await PresentationTestAwaits.AwaitWithoutCancellationAsync(controller.RefreshUI());
 
@@ -328,6 +329,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal int PreviewMigrationAsyncCallCount { get; private set; }
             internal string[] PreviewFilePaths { get; set; } = Array.Empty<string>();
             internal Exception PreviewFailure { get; set; }
+            internal Action OnPreview { get; set; }
+            internal bool CancelPreviewWithToken { get; set; }
             internal int ApplyMigrationAsyncCallCount { get; private set; }
             internal Exception ApplyFailure { get; set; }
 
@@ -342,6 +345,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken ct)
             {
                 PreviewMigrationAsyncCallCount++;
+                OnPreview?.Invoke();
+                if (CancelPreviewWithToken)
+                {
+                    // Like the real port, cancellation surfaces only through the token the owner canceled.
+                    Assert.That(ct.IsCancellationRequested, Is.True);
+                    return Task.FromCanceled<ThirdPartyToolMigrationPreview>(ct);
+                }
+
                 if (PreviewFailure != null)
                 {
                     return Task.FromException<ThirdPartyToolMigrationPreview>(PreviewFailure);
