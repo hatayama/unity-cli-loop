@@ -45,21 +45,21 @@ func readyAndMergePackageReleasePR(
 	releasePR mergePackageReleasePullRequest,
 	pinnedTag string,
 	deps mergePackageReleasePRDeps,
-) (settled bool, exitCode int) {
+) (outcome mergePackageReleasePRPassOutcome, exitCode int) {
 	if releasePR.IsDraft {
 		settled, exitCode := readyPackageReleasePRBeforeMerge(ctx, stdout, stderr, config, releasePR, deps)
 		if settled {
-			return true, exitCode
+			return mergePackageReleasePRPassSettled, exitCode
 		}
 	}
 
 	mergeErr := squashMergePackageReleasePR(ctx, config, releasePR, deps)
 	if mergeErr != nil {
-		return true, resolvePackageReleasePRMergeFailure(ctx, stdout, stderr, config, releasePR, mergeErr, deps)
+		return mergePackageReleasePRPassSettled, resolvePackageReleasePRMergeFailure(ctx, stdout, stderr, config, releasePR, mergeErr, deps)
 	}
 	writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
 		"Merged Unity package release PR #%d at %s; it pins %s.", releasePR.Number, releasePR.HeadRefOID, pinnedTag))
-	return true, 0
+	return mergePackageReleasePRPassSettled, 0
 }
 
 // readyPackageReleasePRBeforeMerge lifts the draft. settled is false only when
