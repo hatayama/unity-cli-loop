@@ -4,9 +4,11 @@ Date: 2026-07-15
 
 ## Decision
 
-The repository uses GitHub CodeQL for C# security analysis with `build-mode: none` and the `security-extended` query suite. The workflow pins `github/codeql-action` to the full commit SHA for v4.37.0 and selects its linked CodeQL 2.26.0 toolchain. A repository-owned Go guard validates the scanner identity, tool version, SARIF structure, successful no-build completion, extracted-source evidence, and database-quality floor before upload.
+The repository uses GitHub CodeQL for C# security analysis with `build-mode: none` and the `security-extended` query suite. The workflow pins `github/codeql-action` to the full commit SHA for v4.38.2 and selects its linked CodeQL 2.27.1 toolchain. A repository-owned Go guard validates the scanner identity, tool version, SARIF structure, successful no-build completion, extracted-source evidence, and database-quality floor before upload.
 
 The approved local proof analyzed all 975 C# files under `Packages/src` and `Assets/Tests`, generated SARIF 2.1.0, and reported call-target resolution of 68% and known-type resolution of 82%. A second proof added a temporary command-injection source outside the repository checkout. CodeQL 2.26.0 with `codeql/csharp-queries@1.7.5` and `security-extended` reported `cs/command-line-injection`. Only the resulting minimal SARIF evidence is retained under release-automation test data; the vulnerable source is not part of the repository.
+
+The 2026-10-05 toolchain bump to CodeQL 2.27.1 repeated both proofs on the then-current corpus of 2,224 C# files. The no-build scan still emitted the database-quality diagnostic in the same format (69% call targets, 82% known types), and `codeql/csharp-queries@1.10.0` with `security-extended` again reported `cs/command-line-injection` for a temporary probe outside the repository checkout. The recorded test data was regenerated from those runs.
 
 The probe is recorded rather than rerun as a separate CodeQL job on every pull request because a second database extraction and 70-query analysis would approximately double C# scan time. The production workflow fixes both the action commit and reported CodeQL semantic version, while tests reject scanner-version drift and require the recorded probe finding to remain non-empty.
 

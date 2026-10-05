@@ -15,7 +15,7 @@ func TestValidateCodeQLSARIFAcceptsNonEmptyFindingAtQualityBaseline(t *testing.T
 	  "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
 	  "version":"2.1.0",
 	  "runs":[{
-	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.26.0"}},
+	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.27.1"}},
 	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":119122}]},
 	    "invocations":[{"executionSuccessful":true,"toolExecutionNotifications":[
 	      {"descriptor":{"id":"csharp/autobuilder/buildless/complete"},"message":{"text":"C# analysis with build-mode 'none' completed."}},
@@ -36,8 +36,8 @@ func TestValidateCodeQLSARIFAcceptsNonEmptyFindingAtQualityBaseline(t *testing.T
 }
 
 func TestValidateCodeQLSARIFAcceptsCodeQLCLIProofFixture(t *testing.T) {
-	// Verifies parsing stays compatible with the SARIF shape emitted by the approved CodeQL 2.26.0 proof scan.
-	sarifPath := filepath.Join("testdata", "codeql-cli-2.26.0-sarif.json")
+	// Verifies parsing stays compatible with the SARIF shape emitted by the approved CodeQL 2.27.1 proof scan.
+	sarifPath := filepath.Join("testdata", "codeql-cli-2.27.1-sarif.json")
 	sarif, err := os.ReadFile(sarifPath)
 	if err != nil {
 		t.Fatalf("read CodeQL proof fixture: %v", err)
@@ -50,7 +50,7 @@ func TestValidateCodeQLSARIFAcceptsCodeQLCLIProofFixture(t *testing.T) {
 
 func TestCodeQLCLIProofFixtureContainsSecurityFinding(t *testing.T) {
 	// Verifies the pinned CodeQL security-extended probe produced a real command-injection finding.
-	sarifPath := filepath.Join("testdata", "codeql-cli-2.26.0-security-probe-sarif.json")
+	sarifPath := filepath.Join("testdata", "codeql-cli-2.27.1-security-probe-sarif.json")
 	sarif, err := os.ReadFile(sarifPath)
 	if err != nil {
 		t.Fatalf("read CodeQL security probe fixture: %v", err)
@@ -104,7 +104,7 @@ func TestValidateCodeQLSARIFRejectsUnexpectedSchema(t *testing.T) {
 func TestValidateCodeQLSARIFRejectsUnexpectedCodeQLVersion(t *testing.T) {
 	// Verifies a CodeQL tool replacement is surfaced rather than silently changing the approved scanner.
 	sarif := validCodeQLSARIF(`"CodeQL"`, true, 55, 70)
-	sarif = []byte(strings.Replace(string(sarif), `"semanticVersion":"2.26.0"`, `"semanticVersion":"2.25.0"`, 1))
+	sarif = []byte(strings.Replace(string(sarif), `"semanticVersion":"2.27.1"`, `"semanticVersion":"2.25.0"`, 1))
 
 	if err := ValidateCodeQLSARIF(sarif); err == nil {
 		t.Fatal("expected unexpected CodeQL version to fail")
@@ -195,7 +195,7 @@ func TestValidateCodeQLSARIFRejectsCompilationCollapse(t *testing.T) {
 	  "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
 	  "version":"2.1.0",
 	  "runs":[{
-	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.26.0"}},
+	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.27.1"}},
 	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":75000}]},
 	    "invocations":[{"executionSuccessful":true,"toolExecutionNotifications":[
 	      {"descriptor":{"id":"csharp/autobuilder/buildless/complete"},"message":{"text":"C# analysis with build-mode 'none' completed."}},
@@ -228,7 +228,7 @@ func validCodeQLSARIFWithExtractedFilesAndValues(toolName string, executionSucce
 	  "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
 	  "version":"2.1.0",
 	  "runs":[{
-	    "tool":{"driver":{"name":` + toolName + `,"semanticVersion":"2.26.0"}},
+	    "tool":{"driver":{"name":` + toolName + `,"semanticVersion":"2.27.1"}},
 	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":75000}]},
 	    "invocations":[{"executionSuccessful":` + boolJSON(executionSuccessful) + `,"toolExecutionNotifications":[
 	      {"descriptor":{"id":"csharp/autobuilder/buildless/complete"},"message":{"text":"C# analysis with build-mode 'none' completed."}},
@@ -244,7 +244,7 @@ func validCodeQLSARIFWithoutCompletion() []byte {
 	  "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
 	  "version":"2.1.0",
 	  "runs":[{
-	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.26.0"}},
+	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.27.1"}},
 	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":75000}]},
 	    "invocations":[{"executionSuccessful":true,"toolExecutionNotifications":[
 	      {"descriptor":{"id":"csharp/diagnostic/database-quality"},"message":{"text":"Some metrics of the database quality are: Percentage of calls with call target: 55 % (threshold 85 %). Percentage of expressions with known type: 70 % (threshold 85 %)."}},
@@ -260,7 +260,7 @@ func validCodeQLSARIFWithoutQualityDiagnostic() []byte {
 	  "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
 	  "version":"2.1.0",
 	  "runs":[{
-	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.26.0"}},
+	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.27.1"}},
 	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":75000}]},
 	    "invocations":[{"executionSuccessful":true,"toolExecutionNotifications":[
 	      {"descriptor":{"id":"csharp/autobuilder/buildless/complete"},"message":{"text":"C# analysis with build-mode 'none' completed."}},

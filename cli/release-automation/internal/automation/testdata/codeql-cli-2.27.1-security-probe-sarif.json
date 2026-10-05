@@ -6,14 +6,14 @@
       "tool": {
         "driver": {
           "name": "CodeQL",
-          "semanticVersion": "2.26.0"
+          "semanticVersion": "2.27.1"
         }
       },
       "results": [
         {
           "ruleId": "cs/command-line-injection",
           "message": {
-            "text": "This command line depends on a user-provided value."
+            "text": "This command line depends on a [user-provided value](1)."
           },
           "locations": [
             {
@@ -27,7 +27,7 @@
         }
       ],
       "properties": {
-        "probeQueryPack": "codeql/csharp-queries@1.7.5",
+        "probeQueryPack": "codeql/csharp-queries@1.10.0",
         "probeQuerySuite": "security-extended"
       }
     }
