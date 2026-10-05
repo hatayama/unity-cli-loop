@@ -1,6 +1,7 @@
 #if ULOOP_HAS_TEST_FRAMEWORK
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEditor.TestTools.TestRunner.Api;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -10,6 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SerializableTestResultConverter
     {
+        private const string DuplicateNameSuffixPrefix = " GeneratedTestCase";
+
         private enum RunTestsResultClassification
         {
             NoTestsFound,
@@ -38,7 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     failedCount = 0,
                     skippedCount = 0,
                     inconclusiveCount = 0,
-                    xmlPath = null
+                    xmlPath = null,
+                    rerunTargetFullNames = Array.Empty<string>()
                 };
             }
 
@@ -84,8 +88,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 failedTests = CollectFailedTestDetails(result),
                 skippedTests = CollectSkippedTestFullNames(result),
                 inconclusiveTests = CollectInconclusiveTestDetails(result),
-                failedSuites = failedSuites
+                failedSuites = failedSuites,
+                rerunTargetFullNames = CollectRerunTargetFullNames(result)
             };
+        }
+
+        /// <summary>
+        /// The name that selects the test in Unity's testNames filter: the full name without the
+        /// " GeneratedTestCase{ChildIndex}" suffix Unity adds to tell duplicate names apart.
+        /// </summary>
+        // Why strip it: the filter compares NUnit's unsuffixed name, so a suffixed name matches nothing
+        // and the failure would silently drop out of the rerun. Same-named siblings all run instead.
+        internal static string ToFilterName(ITestAdaptor test)
+        {
+            string fullName = test.FullName;
+            string suffix = DuplicateNameSuffixPrefix + test.ChildIndex.ToString(CultureInfo.InvariantCulture);
+            if (fullName.EndsWith(suffix + ")", StringComparison.Ordinal))
+            {
+                return fullName.Substring(0, fullName.Length - suffix.Length - 1) + ")";
+            }
+
+            if (fullName.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                return fullName.Substring(0, fullName.Length - suffix.Length);
+            }
+
+            return fullName;
         }
 
         /// <summary>
@@ -375,6 +403,85 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        // Why no cap, unlike the detail lists: a rerun has to select every failure, not the first ten.
+        private static string[] CollectRerunTargetFullNames(ITestResultAdaptor root)
+        {
+            List<string> names = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            AppendRerunTargets(root, true, names, seen);
+            return names.ToArray();
+        }
+
+        private static void AppendRerunTargets(
+            ITestResultAdaptor result,
+            bool isRoot,
+            List<string> names,
+            HashSet<string> seen)
+        {
+            if (!result.Test.IsSuite)
+            {
+                if (result.TestStatus == TestStatus.Failed || result.TestStatus == TestStatus.Inconclusive)
+                {
+                    AddRerunTarget(ToFilterName(result.Test), names, seen);
+                }
+
+                return;
+            }
+
+            // Why the AppendFailedSuiteDetails condition: the rerun must cover exactly the FailedSuites.
+            if (result.TestStatus == TestStatus.Failed && FailedOutsideItsTests(result))
+            {
+                // Why every leaf instead: the filter matches the root by no name, and an assembly only by
+                // its file name while its full name is the dll path.
+                if (isRoot || result.Test.IsTestAssembly)
+                {
+                    AppendEveryLeaf(result, names, seen);
+                    return;
+                }
+
+                // Why not descend: the suite's name already reruns everything beneath it.
+                AddRerunTarget(ToFilterName(result.Test), names, seen);
+                return;
+            }
+
+            if (result.Children == null)
+            {
+                return;
+            }
+
+            foreach (ITestResultAdaptor child in result.Children)
+            {
+                AppendRerunTargets(child, false, names, seen);
+            }
+        }
+
+        private static void AppendEveryLeaf(ITestResultAdaptor result, List<string> names, HashSet<string> seen)
+        {
+            if (!result.Test.IsSuite)
+            {
+                AddRerunTarget(ToFilterName(result.Test), names, seen);
+                return;
+            }
+
+            if (result.Children == null)
+            {
+                return;
+            }
+
+            foreach (ITestResultAdaptor child in result.Children)
+            {
+                AppendEveryLeaf(child, names, seen);
+            }
+        }
+
+        private static void AddRerunTarget(string name, List<string> names, HashSet<string> seen)
+        {
+            if (!string.IsNullOrEmpty(name) && seen.Add(name))
+            {
+                names.Add(name);
+            }
         }
 
         private static string[] CollectSkippedTestFullNames(ITestResultAdaptor result)

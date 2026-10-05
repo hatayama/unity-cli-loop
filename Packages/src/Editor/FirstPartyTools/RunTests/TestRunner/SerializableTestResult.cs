@@ -46,6 +46,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public FailedTestDetail[] failedSuites;
 
         /// <summary>
+        /// Names to pass to the Unity testNames filter to rerun every failed or inconclusive test of this run; not capped. Empty, never null.
+        /// </summary>
+        // Why an initializer unlike the arrays above: results built without the converter, such as
+        // test stubs, would otherwise hand null to the last-run record, which rejects it.
+        public string[] rerunTargetFullNames = Array.Empty<string>();
+
+        /// <summary>
         /// One inconclusive test leaf included in a run-tests response, with the message that names
         /// the assumption it could not meet.
         /// </summary>
