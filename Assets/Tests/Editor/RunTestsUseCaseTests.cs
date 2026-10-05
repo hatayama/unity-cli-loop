@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -14,6 +15,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class RunTestsUseCaseTests
     {
+        private const string RecordedCompletedAt = "2026-01-02T03:04:05.0000000Z";
+
+        // Why a temporary store for every use case: ExecuteAsync rewrites the last-run record, and the
+        // project's own record must not be replaced by stub results while uloop runs these tests.
+        private string _recordDirectory;
+        private RunTestsLastRunRecordStore _recordStore;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _recordDirectory = Path.Combine(Path.GetTempPath(), "uloop-last-run-" + Guid.NewGuid().ToString("N"));
+            _recordStore = new RunTestsLastRunRecordStore(_recordDirectory);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (Directory.Exists(_recordDirectory))
+            {
+                Directory.Delete(_recordDirectory, true);
+            }
+        }
+
         [Test]
         public async Task ExecuteAsync_WithInvalidExecutionState_ShouldFailFastWithoutRunningTests()
         {
@@ -25,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -60,6 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -86,6 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -112,6 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -139,6 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -167,6 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -193,6 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new();
@@ -217,6 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -265,6 +297,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -301,6 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -329,6 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
@@ -356,6 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
@@ -385,6 +421,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
@@ -411,6 +448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 clearActivePausePoints: () =>
                 {
                     clearCalled = true;
@@ -438,6 +476,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 clearActivePausePoints: () =>
                 {
                     clearCalled = true;
@@ -463,6 +502,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 clearActivePausePoints: () => new[] { "Assets/Scripts/Foo.cs:42", "my-custom-marker" },
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
@@ -484,6 +524,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 clearActivePausePoints: () => null,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
@@ -532,6 +573,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -579,6 +621,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -600,6 +643,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -649,6 +693,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -702,6 +747,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -726,6 +772,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -747,6 +794,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 2);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -772,6 +820,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 0);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -796,6 +845,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () =>
                 {
@@ -828,6 +878,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new TestFilterCreationService(),
                     executionService,
                     validationService,
+                    _recordStore,
                     waitForTestRunnerCleanupAsync: NoCleanupWait);
                 RunTestsSchema parameters = new RunTestsSchema();
 
@@ -861,6 +912,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 2);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -890,6 +942,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 0);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -915,6 +968,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 2);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -936,6 +990,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 clearActivePausePoints: () =>
                 {
                     clearCalled = true;
@@ -989,6 +1044,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
+                _recordStore,
                 waitForTestRunnerCleanupAsync: cleanupResume.ResumeAsync,
                 appendNoTestsDiagnostics: diagnosticCapture.Append);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1025,6 +1081,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema
             {
@@ -1068,6 +1125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1101,6 +1159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics,
                 proposeTestAsmdef: _ => proposal);
@@ -1132,6 +1191,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics,
                 proposeTestAsmdef: _ => null);
@@ -1164,6 +1224,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 proposeTestAsmdef: _ =>
                 {
@@ -1205,6 +1266,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1238,6 +1300,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: AppendPeriodTerminatedAsmdefHint);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1269,6 +1332,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1319,6 +1383,589 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return message;
         }
 
+        /// <summary>
+        /// What: a completed run replaces the old record of its test mode with this run's failures.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunCompletes_RecordsFailedTestsForTestMode()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.Old.StaleFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateCompletedRunResult(RunTestsExecutionStatus.Failed, 3, 2, "Ns.C.FailA", "Ns.C.FailB")
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            await ExecuteToCompletionAsync(useCase, new RunTestsSchema());
+
+            AssertRecord(UnityCliLoopTestMode.EditMode, RunCompletedAt, "Ns.C.FailA", "Ns.C.FailB");
+        }
+
+        /// <summary>
+        /// What: a run that times out leaves no record, so the next --rerun-failed cannot rerun stale failures.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunTimesOut_LeavesNoRecord()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.Old.StaleFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                ThrowsExecutionTimeout = true
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(useCase, new RunTestsSchema());
+
+            Assert.That(response.Success, Is.False);
+            AssertNoRecord(UnityCliLoopTestMode.EditMode);
+        }
+
+        /// <summary>
+        /// What: a request cancelled before it starts leaves the existing record as it was.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenCancelledBeforeStart_LeavesRecordUntouched()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.Old.StaleFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            using CancellationTokenSource parent = new CancellationTokenSource();
+            parent.Cancel();
+
+            bool canceled = await ExecuteExpectingCancellationAsync(useCase, new RunTestsSchema(), parent.Token);
+
+            Assert.That(canceled, Is.True);
+            Assert.That(executionService.WasCalled, Is.False);
+            AssertRecord(UnityCliLoopTestMode.EditMode, RecordedCompletedAt, "Ns.Old.StaleFailure");
+        }
+
+        /// <summary>
+        /// What: a request cancelled while the tests run leaves no record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenParentCancelsDuringRun_LeavesNoRecord()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.Old.StaleFailure" });
+            using CancellationTokenSource parent = new CancellationTokenSource();
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                OnExecuteStarted = () => parent.Cancel()
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            bool canceled = await ExecuteExpectingCancellationAsync(useCase, new RunTestsSchema(), parent.Token);
+
+            Assert.That(canceled, Is.True);
+            AssertNoRecord(UnityCliLoopTestMode.EditMode);
+        }
+
+        /// <summary>
+        /// What: a request cancelled during the cleanup wait after the run finished keeps that run's record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenParentCancelsDuringCleanupWait_KeepsRecordOfCompletedRun()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.Old.StaleFailure" });
+            using CancellationTokenSource parent = new CancellationTokenSource();
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateCompletedRunResult(RunTestsExecutionStatus.Failed, 2, 1, "Ns.C.FailA")
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(
+                executionService,
+                waitForTestRunnerCleanupAsync: ct =>
+                {
+                    parent.Cancel();
+                    ct.ThrowIfCancellationRequested();
+                    return Task.CompletedTask;
+                });
+
+            bool canceled = await ExecuteExpectingCancellationAsync(useCase, new RunTestsSchema(), parent.Token);
+
+            Assert.That(canceled, Is.True);
+            AssertRecord(UnityCliLoopTestMode.EditMode, RunCompletedAt, "Ns.C.FailA");
+        }
+
+        /// <summary>
+        /// What: a record that cannot be removed stops the request before it runs tests or clears pause points.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRecordCannotBeCleared_DoesNotRun()
+        {
+            OccupyRecordPathWithDirectory(UnityCliLoopTestMode.EditMode);
+            bool pausePointsCleared = false;
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(
+                executionService,
+                clearActivePausePoints: () =>
+                {
+                    pausePointsCleared = true;
+                    return new[] { "pause-point-1" };
+                });
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(useCase, new RunTestsSchema());
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.Message, Does.Contain(_recordStore.GetRecordPath(UnityCliLoopTestMode.EditMode)));
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(pausePointsCleared, Is.False);
+            Assert.That(response.ClearedPausePointIds, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a completed run writes only its own test mode's record, empty when nothing failed.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunCompletes_LeavesOtherTestModeRecordUntouched()
+        {
+            SeedRecord(UnityCliLoopTestMode.PlayMode, new[] { "Ns.Play.Failure" });
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateCompletedRunResult(RunTestsExecutionStatus.Passed, 1, 0)
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.@class,
+                FilterValue = "SomeTests"
+            };
+
+            await ExecuteToCompletionAsync(useCase, parameters);
+
+            AssertRecord(UnityCliLoopTestMode.EditMode, RunCompletedAt);
+            AssertRecord(UnityCliLoopTestMode.PlayMode, RecordedCompletedAt, "Ns.Play.Failure");
+        }
+
+        /// <summary>
+        /// What: a run that produced no result tree fails without writing a record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunProducesNoResult_LeavesNoRecord()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.Old.StaleFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = new SerializableTestResult
+                {
+                    success = false,
+                    status = RunTestsExecutionStatus.ExecutionFailed,
+                    noTestsFoundExplanation = string.Empty,
+                    message = "Test execution failed: no test result was produced",
+                    completedAt = RunCompletedAt
+                }
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(useCase, new RunTestsSchema());
+
+            Assert.That(response.Success, Is.False);
+            AssertNoRecord(UnityCliLoopTestMode.EditMode);
+        }
+
+        /// <summary>
+        /// What: a completed run whose filter matched no tests records an empty target list.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunFindsNoTests_RecordsEmptyTargets()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.Old.StaleFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult()
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                FilterType = TestFilterType.@class,
+                FilterValue = "NoSuchTests"
+            };
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(useCase, parameters);
+
+            Assert.That(response.NoTestsFound, Is.True);
+            AssertRecord(UnityCliLoopTestMode.EditMode, "2026-01-01T00:00:00.0000000Z");
+        }
+
+        /// <summary>
+        /// What: --rerun-failed with a filter type is rejected without running or touching the record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithFilterType_ReturnsConflictWithoutRunning()
+        {
+            await AssertRerunFilterConflictAsync(TestFilterType.@class, "SomeTests");
+        }
+
+        /// <summary>
+        /// What: --rerun-failed with a filter value is rejected without running or touching the record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithFilterValue_ReturnsConflictWithoutRunning()
+        {
+            await AssertRerunFilterConflictAsync(TestFilterType.all, "Ns.C.M");
+        }
+
+        /// <summary>
+        /// What: a whitespace-only filter value counts as a filter value and is rejected with --rerun-failed.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithWhitespaceFilterValue_ReturnsConflictWithoutRunning()
+        {
+            await AssertRerunFilterConflictAsync(TestFilterType.all, "  ");
+        }
+
+        /// <summary>
+        /// What: a null filter value counts as no filter value, so --rerun-failed runs the recorded tests.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithNullFilterValue_RunsRecordedTests()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.C.FirstFailure", "Ns.C.SecondFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateCompletedRunResult(RunTestsExecutionStatus.Failed, 2, 1, "Ns.C.SecondFailure")
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                RerunFailed = true,
+                FilterValue = null
+            };
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(useCase, parameters);
+
+            Assert.That(executionService.ExecuteCallCount, Is.EqualTo(1));
+            Assert.That(executionService.LastFilter.FilterType, Is.EqualTo(TestExecutionFilterType.TestNames));
+            Assert.That(response.RerunTargetCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: --rerun-failed without a record of the test mode fails without running.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithoutRecord_ReturnsFailureWithoutRunning()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema { RerunFailed = true });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "No completed EditMode run is recorded for this project. Run uloop run-tests without --rerun-failed first."));
+            Assert.That(executionService.WasCalled, Is.False);
+        }
+
+        /// <summary>
+        /// What: --rerun-failed with an unreadable record fails without running and leaves the file as it was.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithUnreadableRecord_ReturnsFailureWithoutRunning()
+        {
+            const string invalidRecord = "{ \"FormatVersion\": 1, ";
+            Directory.CreateDirectory(_recordDirectory);
+            string recordPath = _recordStore.GetRecordPath(UnityCliLoopTestMode.EditMode);
+            File.WriteAllText(recordPath, invalidRecord);
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema { RerunFailed = true });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.Message, Does.StartWith("The recorded EditMode run could not be read (invalid JSON"));
+            Assert.That(response.Message, Does.EndWith("Run uloop run-tests without --rerun-failed."));
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(File.ReadAllText(recordPath), Is.EqualTo(invalidRecord));
+        }
+
+        /// <summary>
+        /// What: --rerun-failed with a record of no failures succeeds as NothingToRerun without running,
+        /// clearing pause points, or touching the record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithEmptyRecord_ReturnsNothingToRerun()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, Array.Empty<string>());
+            bool pausePointsCleared = false;
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(
+                executionService,
+                clearActivePausePoints: () =>
+                {
+                    pausePointsCleared = true;
+                    return null;
+                });
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema { RerunFailed = true });
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.NothingToRerun));
+            Assert.That(response.HasFailures, Is.False);
+            Assert.That(response.NoTestsFound, Is.False);
+            Assert.That(response.TestCount, Is.EqualTo(0));
+            Assert.That(response.RerunTargetCount, Is.EqualTo(0));
+            Assert.That(response.RerunSourceCompletedAt, Is.EqualTo(RecordedCompletedAt));
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(pausePointsCleared, Is.False);
+            AssertRecord(UnityCliLoopTestMode.EditMode, RecordedCompletedAt);
+        }
+
+        /// <summary>
+        /// What: --rerun-failed runs the recorded tests once by name, reports the rerun, and records the new failures.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWithRecord_RunsRecordedTestsAndRewritesRecord()
+        {
+            string[] recordedTargets = { "Ns.C.FirstFailure", "Ns.C.SecondFailure" };
+            SeedRecord(UnityCliLoopTestMode.EditMode, recordedTargets);
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateCompletedRunResult(RunTestsExecutionStatus.Failed, 2, 1, "Ns.C.SecondFailure")
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema { RerunFailed = true });
+
+            Assert.That(executionService.ExecuteCallCount, Is.EqualTo(1));
+            Assert.That(executionService.LastFilter.FilterType, Is.EqualTo(TestExecutionFilterType.TestNames));
+            Assert.That(executionService.LastFilter.FilterValues, Is.EqualTo(recordedTargets));
+            Assert.That(response.FailedCount, Is.EqualTo(1));
+            Assert.That(response.RerunTargetCount, Is.EqualTo(2));
+            Assert.That(response.RerunSourceCompletedAt, Is.EqualTo(RecordedCompletedAt));
+            AssertRecord(UnityCliLoopTestMode.EditMode, RunCompletedAt, "Ns.C.SecondFailure");
+        }
+
+        /// <summary>
+        /// What: a rerun whose recorded tests no longer exist says so instead of giving the no-test-assembly advice.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWhenRecordedTestsAreGone_ReportsRenamedOrRemoved()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.C.FirstFailure", "Ns.C.SecondFailure" });
+            bool asmdefProposed = false;
+            RecordingNoTestsDiagnosticCapture diagnosticCapture = new RecordingNoTestsDiagnosticCapture();
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                PredefinedAssemblyTestFindings = RunTestsPredefinedAssemblyTestFindings.Create(
+                    1,
+                    new[] { "Assembly-CSharp: Game.Foo.Alpha" }),
+                UnfilteredTestListResult = RunTestsUnfilteredTestListResult.Success(new[] { "Example.Tests.Alpha" })
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(
+                executionService,
+                appendNoTestsDiagnostics: diagnosticCapture.Append,
+                proposeTestAsmdef: _ =>
+                {
+                    asmdefProposed = true;
+                    return new RunTestsTestAsmdefProposal("Assets/Tests/Editor/Game.Tests.Editor.asmdef", "{}");
+                });
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema { RerunFailed = true });
+
+            Assert.That(response.NoTestsFound, Is.True);
+            Assert.That(response.RerunTargetCount, Is.EqualTo(2));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "None of the 2 tests recorded as failed in the EditMode run completed at 2026-01-02T03:04:05.0000000Z exist any more; they were renamed or removed. Run uloop run-tests without --rerun-failed."));
+            Assert.That(response.ProposedTestAsmdef, Is.Null);
+            Assert.That(response.UnfilteredTestNames, Is.Null);
+            Assert.That(diagnosticCapture.AppendCalled, Is.False);
+            Assert.That(asmdefProposed, Is.False);
+        }
+
+        /// <summary>
+        /// What: --rerun-failed in PlayMode reads only the PlayMode record, even when an EditMode record exists.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedUsesRecordOfRequestedTestMode()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.C.EditModeFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema
+                {
+                    TestMode = UnityCliLoopTestMode.PlayMode,
+                    RerunFailed = true
+                });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "No completed PlayMode run is recorded for this project. Run uloop run-tests without --rerun-failed first."));
+            Assert.That(executionService.WasCalled, Is.False);
+        }
+
+        /// <summary>
+        /// What: a rerun that times out leaves no record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedTimesOut_LeavesNoRecord()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.C.FirstFailure", "Ns.C.SecondFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                ThrowsExecutionTimeout = true
+            };
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema { RerunFailed = true });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(executionService.LastFilter.FilterType, Is.EqualTo(TestExecutionFilterType.TestNames));
+            AssertNoRecord(UnityCliLoopTestMode.EditMode);
+        }
+
+        private async Task AssertRerunFilterConflictAsync(TestFilterType filterType, string filterValue)
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.C.FirstFailure" });
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                RerunFailed = true,
+                FilterType = filterType,
+                FilterValue = filterValue
+            };
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(useCase, parameters);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "--rerun-failed cannot be combined with --filter-type or --filter-value; it reruns the failures recorded for the test mode."));
+            Assert.That(executionService.WasCalled, Is.False);
+            AssertRecord(UnityCliLoopTestMode.EditMode, RecordedCompletedAt, "Ns.C.FirstFailure");
+        }
+
+        // Builds a use case whose Editor-touching hooks are inert, so record tests change nothing outside
+        // the temporary record directory.
+        private RunTestsUseCase CreateRecordingUseCase(
+            StubTestExecutionService executionService,
+            Func<string[]> clearActivePausePoints = null,
+            Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
+            Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
+            Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> proposeTestAsmdef = null)
+        {
+            return new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
+                clearActivePausePoints: clearActivePausePoints ?? (() => null),
+                waitForTestRunnerCleanupAsync: waitForTestRunnerCleanupAsync ?? NoCleanupWait,
+                appendNoTestsDiagnostics: appendNoTestsDiagnostics ?? PassThroughNoTestsDiagnostics,
+                getActiveHotReloadChangeCount: () => 0,
+                proposeTestAsmdef: proposeTestAsmdef ?? (_ => null));
+        }
+
+        // Why catch: Unity Test Framework passes an async test that ends Canceled, so an unexpected
+        // cancellation must fail the test instead of skipping its assertions.
+        private static async Task<RunTestsResponse> ExecuteToCompletionAsync(
+            RunTestsUseCase useCase,
+            RunTestsSchema parameters)
+        {
+            try
+            {
+                return await useCase.ExecuteAsync(parameters, CancellationToken.None);
+            }
+            catch (OperationCanceledException exception)
+            {
+                Assert.Fail("ExecuteAsync was cancelled unexpectedly: " + exception);
+                return null;
+            }
+        }
+
+        private static async Task<bool> ExecuteExpectingCancellationAsync(
+            RunTestsUseCase useCase,
+            RunTestsSchema parameters,
+            CancellationToken ct)
+        {
+            try
+            {
+                await useCase.ExecuteAsync(parameters, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private const string RunCompletedAt = "2026-01-03T04:05:06.0000000Z";
+
+        private static SerializableTestResult CreateCompletedRunResult(
+            string status,
+            int testCount,
+            int failedCount,
+            params string[] rerunTargets)
+        {
+            return new SerializableTestResult
+            {
+                success = status == RunTestsExecutionStatus.Passed,
+                status = status,
+                hasFailures = failedCount > 0,
+                noTestsFound = false,
+                noTestsFoundExplanation = string.Empty,
+                message = "Test execution completed with status: " + status,
+                completedAt = RunCompletedAt,
+                testCount = testCount,
+                passedCount = testCount - failedCount,
+                failedCount = failedCount,
+                rerunTargetFullNames = rerunTargets
+            };
+        }
+
+        private void SeedRecord(UnityCliLoopTestMode testMode, string[] rerunTargets)
+        {
+            Assert.That(_recordStore.TryWrite(testMode, RecordedCompletedAt, rerunTargets), Is.True);
+        }
+
+        private void OccupyRecordPathWithDirectory(UnityCliLoopTestMode testMode)
+        {
+            string recordPath = _recordStore.GetRecordPath(testMode);
+            Directory.CreateDirectory(recordPath);
+            File.WriteAllText(Path.Combine(recordPath, "keep.txt"), "occupied");
+        }
+
+        private void AssertRecord(UnityCliLoopTestMode testMode, string completedAt, params string[] rerunTargets)
+        {
+            RunTestsLastRunRecordReadResult read = _recordStore.Read(testMode);
+            Assert.That(read.Status, Is.EqualTo(RunTestsLastRunRecordReadStatus.Found), read.UnreadableReason);
+            Assert.That(read.Record.CompletedAt, Is.EqualTo(completedAt));
+            Assert.That(read.Record.RerunTargets, Is.EqualTo(rerunTargets));
+        }
+
+        private void AssertNoRecord(UnityCliLoopTestMode testMode)
+        {
+            Assert.That(_recordStore.Read(testMode).Status, Is.EqualTo(RunTestsLastRunRecordReadStatus.Missing));
+        }
+
         private static Task NoCleanupWait(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -1355,6 +2002,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool TestFrameworkAvailable { get; set; } = true;
             public bool WasCalled { get; private set; }
+            public int ExecuteCallCount { get; private set; }
+            public TestExecutionFilter LastFilter { get; private set; }
+            // Runs first in both execute methods, before the token check, so a test can cancel mid-run.
+            public Action OnExecuteStarted { get; set; }
             public bool PlayModeWasCalled { get; private set; }
             public bool LastRespectEnterPlayModeSettings { get; private set; }
             public string LastRequestId { get; private set; }
@@ -1380,8 +2031,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken ct,
                 RunTestsPlayModeRunOptions options)
             {
+                OnExecuteStarted?.Invoke();
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
+                ExecuteCallCount++;
+                LastFilter = filter;
                 PlayModeWasCalled = true;
                 LastRespectEnterPlayModeSettings = options.RespectEnterPlayModeSettings;
                 LastRequestId = options.RequestId;
@@ -1393,8 +2047,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public override Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
+                OnExecuteStarted?.Invoke();
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
+                ExecuteCallCount++;
+                LastFilter = filter;
                 if (ThrowsExecutionTimeout)
                 {
                     throw new OperationCanceledException();
