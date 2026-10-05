@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -136,7 +137,8 @@ type fileState struct {
 	content string
 }
 
-// snapshotTree records the type, modification time, and file contents of everything under root.
+// snapshotTree records the type, modification time, and file contents of everything under root,
+// except folder modification times on Windows (see TestRunDoesNotModifyProject).
 func snapshotTree(t *testing.T, root string) map[string]fileState {
 	t.Helper()
 	states := map[string]fileState{}
@@ -148,7 +150,10 @@ func snapshotTree(t *testing.T, root string) map[string]fileState {
 		if err != nil {
 			return err
 		}
-		state := fileState{mode: info.Mode(), modTime: info.ModTime()}
+		state := fileState{mode: info.Mode()}
+		if !info.IsDir() || runtime.GOOS != "windows" {
+			state.modTime = info.ModTime()
+		}
 		if info.Mode().IsRegular() {
 			content, err := os.ReadFile(path)
 			if err != nil {
@@ -165,7 +170,9 @@ func snapshotTree(t *testing.T, root string) map[string]fileState {
 	return states
 }
 
-// Verifies a run over a project full of problems creates, changes, and deletes nothing.
+// Verifies a run over a project full of problems creates, changes, and deletes nothing. On Windows
+// a directory listing can report a stale modification time for a folder, so folder times are
+// compared on the other platforms only; Run does not branch by OS, so they still guard it.
 func TestRunDoesNotModifyProject(t *testing.T) {
 	root := writeProject(t, map[string]string{
 		"Assets/NoMeta.cs":                      "class NoMeta {}",
