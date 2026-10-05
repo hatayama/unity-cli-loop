@@ -107,6 +107,18 @@ func TestRunTreatsTmpFolderAsAsset(t *testing.T) {
 	assertFindings(t, runProject(t, root), metaMissing("Assets/cache.tmp"))
 }
 
+// Verifies a folder named like an asset's .meta file does not count as that .meta file, since only
+// entries that are not folders are .meta files.
+func TestRunDoesNotPairAssetWithFolderNamedLikeItsMeta(t *testing.T) {
+	root := writeProjectWithManifest(t, map[string]string{
+		"Assets/X.txt":           "x",
+		"Assets/X.txt.meta/":     "",
+		"Assets/X.txt.meta.meta": metaText(guidOf(1)),
+	})
+
+	assertFindings(t, runProject(t, root), metaMissing("Assets/X.txt"))
+}
+
 // Verifies an asset and a .meta file whose names differ only in case are not paired.
 func TestRunMatchesMetaNamesExactly(t *testing.T) {
 	root := writeProjectWithManifest(t, map[string]string{

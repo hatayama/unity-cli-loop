@@ -42,7 +42,8 @@ func (v *verifier) scanDirectory(dir string, display string) error {
 			}
 			continue
 		}
-		if _, ok := byName[name+metaFileExtension]; !ok {
+		// A folder named like the .meta file is an ordinary folder, not this asset's .meta file.
+		if metaEntry, ok := byName[name+metaFileExtension]; !ok || metaEntry.IsDir() {
 			v.addFinding(CheckMetaMissing, entryDisplay, 0, metaMissingMessage(entryDisplay))
 		}
 		if err := v.scanAsset(entry, entryPath, entryDisplay); err != nil {
