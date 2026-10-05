@@ -28,6 +28,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public void RunFinished(ITestResultAdaptor result)
         {
             SerializableTestResult serializableResult = SerializableTestResultConverter.FromTestResult(result);
+            // Why record here: this callback runs only after a domain reload during a PlayMode run that
+            // respects Enter Play Mode settings, and that reload cancels the use case's await before it
+            // can record, so this is the run's only writer.
+            // Why check the root's TestMode: after a run abandoned with its request still pending, this
+            // callback receives the next run's RunFinished, which can be an EditMode run, and an EditMode
+            // result must not become the PlayMode record.
+            bool isPlayModeRun = result != null && result.Test != null && result.Test.TestMode == TestMode.PlayMode;
+            RunTestsLastRunRecordStore.TryRecordRecoveredPlayModeRun(
+                RunTestsLastRunRecordStore.CreateForProject(),
+                serializableResult,
+                isPlayModeRun);
             if (SerializableTestResultConverter.ShouldSaveResultXml(serializableResult))
             {
                 serializableResult.xmlPath = PlayModeTestExecuter.TrySaveFailureXml(result);

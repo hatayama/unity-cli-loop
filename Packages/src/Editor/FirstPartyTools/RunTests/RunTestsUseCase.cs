@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading.Tasks;
 using System.Threading;
 using UnityEngine;
@@ -17,11 +18,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Marks a failure raised before the test run started, where no domain reload could have
         // discarded a hot-reload patch.
-        private const int NoHotReloadChangesObserved = 0;
+        internal const int NoHotReloadChangesObserved = 0;
+
+        // Format: path of the record that could not be removed, the reason.
+        private const string ClearRecordFailedMessageFormat =
+            "Could not clear the last-run record at {0} ({1}), so no tests were run. Remove that path and run uloop run-tests again.";
 
         private readonly TestFilterCreationService _filterService;
         private readonly TestExecutionService _executionService;
         private readonly TestExecutionStateValidationService _validationService;
+        private readonly RunTestsLastRunRecordStore _lastRunRecordStore;
         private readonly Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> _appendNoTestsDiagnostics;
         private readonly Func<string[]> _clearActivePausePoints;
         private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
@@ -33,14 +39,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             : this(
                 new TestFilterCreationService(),
                 new TestExecutionService(),
-                new TestExecutionStateValidationService())
+                new TestExecutionStateValidationService(),
+                RunTestsLastRunRecordStore.CreateForProject())
         {
         }
 
-        public RunTestsUseCase(
+        // Why internal: the record store is internal, and a public constructor cannot take it (CS0051).
+        // Why the store is required: a test that forgot it would rewrite the project's own record.
+        internal RunTestsUseCase(
             TestFilterCreationService filterService,
             TestExecutionService executionService,
             TestExecutionStateValidationService validationService,
+            RunTestsLastRunRecordStore lastRunRecordStore,
             Func<string[]> clearActivePausePoints = null,
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
             Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
@@ -50,9 +60,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
             Debug.Assert(validationService != null, "validationService must not be null");
+            if (lastRunRecordStore == null)
+            {
+                throw new ArgumentNullException(nameof(lastRunRecordStore));
+            }
+
             _filterService = filterService;
             _executionService = executionService;
             _validationService = validationService;
+            _lastRunRecordStore = lastRunRecordStore;
             RunTestsNoTestsDiagnosticService noTestsDiagnosticService = new RunTestsNoTestsDiagnosticService();
             _appendNoTestsDiagnostics = appendNoTestsDiagnostics
                 ?? ((string message, bool noTestsFound, UnityCliLoopTestMode testMode, TestFilterType filterType) =>
@@ -95,22 +111,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse(timeoutError, NoHotReloadChangesObserved);
             }
 
+            // 1. Test filter creation
+            // Why before the Editor-state validation: that validation saves or discards unsaved
+            // changes, which a request that runs no tests must not do.
+            RunTestsExecutionTarget target = ResolveExecutionTarget(parameters);
+            if (target.EarlyResponse != null)
+            {
+                return target.EarlyResponse;
+            }
+
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.UnsavedChanges);
             if (!validation.IsValid)
             {
                 return CreateFailureResponse(validation.ErrorMessage, NoHotReloadChangesObserved);
             }
 
-            // 1. Test filter creation
-            TestExecutionFilter filter = null;
-            if (parameters.FilterType != TestFilterType.all)
+            return await RunAndBuildResponseAsync(parameters, target, ct).ConfigureAwait(false);
+        }
+
+        // Why every rejection is decided here, by reading only: a request that is rejected or has
+        // nothing to rerun must change nothing, so it has to stop before unsaved changes are saved or
+        // discarded and before the record or the pause points are touched.
+        private RunTestsExecutionTarget ResolveExecutionTarget(RunTestsSchema parameters)
+        {
+            if (parameters.RerunFailed)
             {
-                (TestExecutionFilter createdFilter, string filterError) = _filterService.TryCreateFilter(parameters.FilterType, parameters.FilterValue);
-                if (filterError != null)
-                {
-                    return CreateFailureResponse(filterError, NoHotReloadChangesObserved);
-                }
-                filter = createdFilter;
+                return RunTestsRerunFailedResolver.Resolve(parameters, _lastRunRecordStore);
+            }
+
+            if (parameters.FilterType == TestFilterType.all)
+            {
+                return RunTestsExecutionTarget.Run(null, null);
+            }
+
+            (TestExecutionFilter createdFilter, string filterError) = _filterService.TryCreateFilter(parameters.FilterType, parameters.FilterValue);
+            if (filterError != null)
+            {
+                return RunTestsExecutionTarget.Stop(CreateFailureResponse(filterError, NoHotReloadChangesObserved));
+            }
+
+            return RunTestsExecutionTarget.Run(createdFilter, null);
+        }
+
+        private async Task<RunTestsResponse> RunAndBuildResponseAsync(
+            RunTestsSchema parameters,
+            RunTestsExecutionTarget target,
+            CancellationToken ct)
+        {
+            // Why before the run: the record must only describe a run that finished. A run that times
+            // out or is cancelled must leave no record, or the next --rerun-failed reruns stale failures.
+            // Why before clearing pause points: deleting can fail, and failing here leaves the pause
+            // points in place instead of clearing them for a run that never starts.
+            try
+            {
+                _lastRunRecordStore.Delete(parameters.TestMode);
+            }
+            catch (Exception exception) when (RunTestsLastRunRecordStore.IsFileAccessFailure(exception))
+            {
+                return CreateFailureResponse(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        ClearRecordFailedMessageFormat,
+                        _lastRunRecordStore.GetRecordPath(parameters.TestMode),
+                        exception.Message),
+                    NoHotReloadChangesObserved);
             }
 
             string[] clearedPausePointIds = _clearActivePausePoints();
@@ -131,14 +195,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
                 {
                     result = await _executionService.ExecutePlayModeTestAsync(
-                        filter,
+                        target.Filter,
                         executionCt,
                         CreatePlayModeRunOptions(parameters)).ConfigureAwait(false);
                 }
                 else
                 {
-                    result = await _executionService.ExecuteEditModeTestAsync(filter, executionCt).ConfigureAwait(false);
+                    result = await _executionService.ExecuteEditModeTestAsync(target.Filter, executionCt).ConfigureAwait(false);
                 }
+
+                // Why before the cleanup wait: the run has finished here, so a request cancelled while
+                // waiting must still leave this run's record for the next --rerun-failed.
+                RecordCompletedRun(parameters.TestMode, result);
 
                 // Why parent ct (not executionCt): CancelAfter only guards the RunFinished wait.
                 // Using the linked token here would mis-report a successful run as timed out when
@@ -173,6 +241,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
+            if (target.RerunSource != null)
+            {
+                return ApplyRerunFields(response, parameters.TestMode, target.RerunSource);
+            }
 
             // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is
             // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, and the
@@ -189,6 +261,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AttachTestAsmdefProposalIfNeeded(response, parameters);
             await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
                 .ConfigureAwait(false);
+            return response;
+        }
+
+        // Why not record a run without a result tree: it has no names to rerun, and recording it as
+        // empty would make the next --rerun-failed report nothing to rerun after a broken run.
+        private void RecordCompletedRun(UnityCliLoopTestMode testMode, SerializableTestResult result)
+        {
+            if (result.status == RunTestsExecutionStatus.ExecutionFailed)
+            {
+                return;
+            }
+
+            _lastRunRecordStore.TryWrite(testMode, result.completedAt, result.rerunTargetFullNames);
+        }
+
+        // Why a rerun skips the no-tests diagnostics: they explain an empty project or filter, while a
+        // rerun that finds nothing means the recorded tests were renamed or removed since that run.
+        private static RunTestsResponse ApplyRerunFields(
+            RunTestsResponse response,
+            UnityCliLoopTestMode testMode,
+            RunTestsRerunSource source)
+        {
+            response.RerunTargetCount = source.TargetCount;
+            response.RerunSourceCompletedAt = source.SourceCompletedAt;
+            if (response.NoTestsFound)
+            {
+                // Why the explanation too: its default text advises adding a test assembly, which
+                // would send the caller to create an .asmdef for tests that were only renamed or removed.
+                string rerunTargetsMissingMessage = RunTestsRerunFailedResolver.FormatRerunTargetsMissingMessage(
+                    source.TargetCount,
+                    testMode,
+                    source.SourceCompletedAt);
+                response.Message = rerunTargetsMissingMessage;
+                response.NoTestsFoundExplanation = rerunTargetsMissingMessage;
+            }
+
             return response;
         }
 
@@ -281,7 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why the count is a parameter: only failures raised after the run started can have cost
         // an active patch, so paths that fail before it pass NoHotReloadChangesObserved and stay
         // warning-free instead of blaming a reload that never happened.
-        private static RunTestsResponse CreateFailureResponse(
+        internal static RunTestsResponse CreateFailureResponse(
             string message,
             int activeHotReloadChangeCountAtStart)
         {

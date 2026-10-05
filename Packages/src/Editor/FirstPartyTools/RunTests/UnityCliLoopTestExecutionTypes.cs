@@ -43,5 +43,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string Inconclusive = "Inconclusive";
         public const string NoTestsFound = "NoTestsFound";
         public const string ExecutionFailed = "ExecutionFailed";
+        public const string NothingToRerun = "NothingToRerun";
     }
 }

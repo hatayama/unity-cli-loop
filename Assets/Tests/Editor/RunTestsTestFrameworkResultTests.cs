@@ -1103,6 +1103,250 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(refreshCall, Is.Null, "SaveTestResultAsXml must not call AssetDatabase.Refresh.");
         }
 
+        /// <summary>
+        /// What: every failed leaf becomes a rerun target, beyond the cap that applies to FailedTests.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenTwelveTestsFail_CollectsEveryFailedLeafAsRerunTarget()
+        {
+            List<ITestResultAdaptor> children = new List<ITestResultAdaptor>();
+            for (int index = 1; index <= 12; index++)
+            {
+                children.Add(CreateTestCase("FailingTest" + index, TestResultStatus.Failed, 0.1));
+            }
+
+            ITestResultAdaptor resultAdaptor = CreateTestSuite("RootSuite", TestResultStatus.Failed, 0.1, children);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedTests.Length, Is.EqualTo(RunTestsConstants.FailedTestDetailsLimit));
+            Assert.That(result.rerunTargetFullNames.Length, Is.EqualTo(12));
+            Assert.That(result.rerunTargetFullNames[0], Is.EqualTo("Example.Tests.FailingTest1"));
+            Assert.That(result.rerunTargetFullNames[11], Is.EqualTo("Example.Tests.FailingTest12"));
+        }
+
+        /// <summary>
+        /// What: only failed and inconclusive leaves become rerun targets, in depth-first order.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenLeafStatusesAreMixed_CollectsFailedAndInconclusiveLeavesInOrder()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1),
+                    CreateTestSuite(
+                        "NestedFixture",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("NestedFailingTest", TestResultStatus.Failed, 0.1)
+                        },
+                        ChildFailureMessage,
+                        resultState: ChildFailureResultState),
+                    CreateTestCase("SkippedTest", TestResultStatus.Skipped, 0.1),
+                    CreateTestCase("InconclusiveTest", TestResultStatus.Inconclusive, 0.1)
+                },
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(
+                result.rerunTargetFullNames,
+                Is.EqualTo(new[]
+                {
+                    "Example.Tests.FailingTest",
+                    "Example.Tests.NestedFailingTest",
+                    "Example.Tests.InconclusiveTest"
+                }));
+        }
+
+        /// <summary>
+        /// What: a fixture whose OneTimeTearDown threw becomes one rerun target, while its passed tests do not.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenFixtureTearDownFails_CollectsFixtureAsRerunTarget()
+        {
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(
+                CreateRunWithFailedTearDownFixture());
+
+            Assert.That(result.rerunTargetFullNames, Is.EqualTo(new[] { "Example.Tests.TearDownFixture" }));
+        }
+
+        /// <summary>
+        /// What: a fixture whose OneTimeSetUp threw becomes one rerun target instead of its failed tests.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenFixtureSetUpFails_CollectsOnlyFixtureAsRerunTarget()
+        {
+            string inheritedMessage = "OneTimeSetUp: " + SetUpFailureMessage;
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "SetUpFixture",
+                        TestResultStatus.Failed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("FirstTest", TestResultStatus.Failed, 0.1, inheritedMessage),
+                            CreateTestCase("SecondTest", TestResultStatus.Failed, 0.1, inheritedMessage)
+                        },
+                        SetUpFailureMessage,
+                        resultState: SetUpErrorResultState)
+                },
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.rerunTargetFullNames, Is.EqualTo(new[] { "Example.Tests.SetUpFixture" }));
+        }
+
+        /// <summary>
+        /// What: a failed test-assembly suite, whose name no filter matches, is replaced by every leaf under it.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenTestAssemblySuiteFailsOutsideItsTests_CollectsEveryLeafUnderIt()
+        {
+            ITestResultAdaptor assemblySuite = new FakeTestResultAdaptor(
+                new FakeTestAdaptor(
+                    "Example.Tests.dll",
+                    true,
+                    fullName: "Library/ScriptAssemblies/Example.Tests.dll",
+                    isTestAssembly: true),
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("FirstTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("SecondTest", TestResultStatus.Passed, 0.1)
+                },
+                TearDownFailureMessage,
+                resultState: TearDownErrorResultState);
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor> { assemblySuite },
+                ChildFailureMessage,
+                resultState: ChildFailureResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(
+                result.rerunTargetFullNames,
+                Is.EqualTo(new[] { "Example.Tests.FirstTest", "Example.Tests.SecondTest" }));
+        }
+
+        /// <summary>
+        /// What: a root that failed outside its tests, as a cancelled run does, is replaced by every leaf under it.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenRootFailsOutsideItsTests_CollectsEveryLeafUnderIt()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestSuite(
+                        "PassingFixture",
+                        TestResultStatus.Passed,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("FirstTest", TestResultStatus.Passed, 0.1),
+                            CreateTestCase("SecondTest", TestResultStatus.Passed, 0.1)
+                        })
+                },
+                "Cancelled by user",
+                resultState: CancelledResultState);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(
+                result.rerunTargetFullNames,
+                Is.EqualTo(new[] { "Example.Tests.FirstTest", "Example.Tests.SecondTest" }));
+        }
+
+        /// <summary>
+        /// What: failed leaves sharing one name are rerun once under the unsuffixed name the filter compares.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenDuplicateNamedLeavesFail_CollectsSharedFilterNameOnce()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCaseWithFullName("Ns.C.M(1)", -1, TestResultStatus.Failed),
+                    CreateTestCaseWithFullName("Ns.C.M(1 GeneratedTestCase2)", 2, TestResultStatus.Failed)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.rerunTargetFullNames, Is.EqualTo(new[] { "Ns.C.M(1)" }));
+        }
+
+        /// <summary>
+        /// What: ToFilterName strips the GeneratedTestCase suffix only when it matches the test's own ChildIndex.
+        /// </summary>
+        [TestCase("Ns.C.M(1 GeneratedTestCase2)", 2, "Ns.C.M(1)")]
+        [TestCase("Ns.C.M GeneratedTestCase3", 3, "Ns.C.M")]
+        [TestCase("Ns.C.M(1 GeneratedTestCase2)", -1, "Ns.C.M(1 GeneratedTestCase2)")]
+        public void ToFilterName_StripsOnlySuffixOfOwnChildIndex(string fullName, int childIndex, string expected)
+        {
+            FakeTestAdaptor test = new FakeTestAdaptor("M", false, fullName: fullName, childIndex: childIndex);
+
+            Assert.That(SerializableTestResultConverter.ToFilterName(test), Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// What: a fully passed run has an empty, non-null rerun target list.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenAllTestsPass_HasNoRerunTargets()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Passed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.rerunTargetFullNames, Is.Not.Null);
+            Assert.That(result.rerunTargetFullNames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a run that produced no result tree has an empty, non-null rerun target list.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenResultIsNull_HasNoRerunTargets()
+        {
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(null);
+
+            Assert.That(result.rerunTargetFullNames, Is.Not.Null);
+            Assert.That(result.rerunTargetFullNames, Is.Empty);
+        }
+
         // Resolves every method a method body calls, so a test can assert on the callee set
         // instead of on source text.
         private static IReadOnlyList<MethodBase> ResolveCalledMethods(MethodInfo method)
@@ -1294,6 +1538,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 stackTrace);
         }
 
+        // Builds a leaf with a full name and ChildIndex as Unity reports them, for duplicate-name cases.
+        private static ITestResultAdaptor CreateTestCaseWithFullName(
+            string fullName,
+            int childIndex,
+            TestResultStatus status)
+        {
+            FakeTestAdaptor test = new FakeTestAdaptor(fullName, false, fullName: fullName, childIndex: childIndex);
+            return new FakeTestResultAdaptor(test, status, 0.1, new List<ITestResultAdaptor>());
+        }
+
         private sealed class FakeTestResultAdaptor : ITestResultAdaptor
         {
             private readonly ITestAdaptor _test;
@@ -1370,16 +1624,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             private readonly string _name;
             private readonly bool _isSuite;
+            private readonly string _fullName;
+            private readonly int _childIndex;
+            private readonly bool _isTestAssembly;
 
-            public FakeTestAdaptor(string name, bool isSuite)
+            // Why childIndex defaults to -1: Unity reports -1 for every test without a duplicate name.
+            public FakeTestAdaptor(
+                string name,
+                bool isSuite,
+                string fullName = null,
+                int childIndex = -1,
+                bool isTestAssembly = false)
             {
                 _name = name;
                 _isSuite = isSuite;
+                _fullName = fullName ?? $"Example.Tests.{name}";
+                _childIndex = childIndex;
+                _isTestAssembly = isTestAssembly;
             }
 
             public string Id => FullName;
             public string Name => _name;
-            public string FullName => $"Example.Tests.{_name}";
+            public string FullName => _fullName;
             public int TestCaseCount => _isSuite ? 0 : 1;
             public bool HasChildren => false;
             public bool IsSuite => _isSuite;
@@ -1390,7 +1656,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public NUnitMethodInfo Method => null;
             public object[] Arguments => Array.Empty<object>();
             public string[] Categories => Array.Empty<string>();
-            public bool IsTestAssembly => false;
+            public bool IsTestAssembly => _isTestAssembly;
             public TestRunState RunState => TestRunState.Runnable;
             public string Description => string.Empty;
             public string SkipReason => string.Empty;
@@ -1398,7 +1664,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public string ParentFullName => string.Empty;
             public string UniqueName => FullName;
             public string ParentUniqueName => string.Empty;
-            public int ChildIndex => 0;
+            public int ChildIndex => _childIndex;
             public TestRunnerMode TestMode => TestRunnerMode.EditMode;
         }
     }

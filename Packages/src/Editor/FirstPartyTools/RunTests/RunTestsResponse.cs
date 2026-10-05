@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -16,6 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string NoTestsFoundMessage = "No tests found matching the specified filter criteria";
         internal const string NoTestsFoundExplanationText =
             "No tests were discovered for this run. This is not a test failure; check TestMode, FilterType, and FilterValue. If newly added test scripts are never discovered, the most common cause is a missing test assembly: add an .asmdef with Test Assemblies enabled to the test folder (EditMode test assemblies target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests. An .asmdef cannot reference the predefined Assembly-CSharp: if the code under test lives there, move it into its own .asmdef and add any package assemblies it uses to that .asmdef's references.";
+
+        // Format: TestMode, CompletedAt of the record the rerun read.
+        internal const string NothingToRerunMessageFormat =
+            "The {0} run completed at {1} had no failed or inconclusive tests; nothing to rerun.";
 
         public static readonly string TestFrameworkUnavailableMessage =
             $"run-tests requires the Unity Test Framework package ({UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK}). Install it via Package Manager to use test execution.";
@@ -143,6 +148,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public RunTestsTestAsmdefProposal ProposedTestAsmdef { get; set; }
 
+        /// <summary>
+        /// Number of tests and fixtures a --rerun-failed run asked Unity to run. Null otherwise; omitted from JSON.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? RerunTargetCount { get; set; }
+
+        /// <summary>
+        /// CompletedAt of the recorded run whose failures --rerun-failed reran. Null otherwise; omitted from JSON.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string RerunSourceCompletedAt { get; set; }
+
         public bool ShouldSerializeProposedTestAsmdef()
         {
             return ProposedTestAsmdef != null;
@@ -229,6 +246,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailures: false,
                 noTestsFound: false,
                 noTestsFoundExplanation: string.Empty);
+        }
+
+        /// <summary>
+        /// The response of a --rerun-failed run that stopped because the recorded run had no failures.
+        /// </summary>
+        internal static RunTestsResponse CreateNothingToRerun(UnityCliLoopTestMode testMode, string sourceCompletedAt)
+        {
+            return new RunTestsResponse(
+                success: true,
+                message: string.Format(
+                    CultureInfo.InvariantCulture,
+                    NothingToRerunMessageFormat,
+                    testMode,
+                    sourceCompletedAt),
+                completedAt: DateTime.UtcNow.ToString("o"),
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0,
+                inconclusiveCount: 0,
+                xmlPath: null,
+                status: RunTestsExecutionStatus.NothingToRerun,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty)
+            {
+                RerunTargetCount = 0,
+                RerunSourceCompletedAt = sourceCompletedAt
+            };
         }
     }
 }

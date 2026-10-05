@@ -439,5 +439,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(
                     "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards every active hot-reload change, including introduced types - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
         }
+
+        /// <summary>
+        /// What: a response that is not a --rerun-failed run omits both rerun fields from JSON.
+        /// </summary>
+        [Test]
+        public void RunTestsResponse_WhenNotARerun_OmitsRerunFields()
+        {
+            RunTestsResponse response = new RunTestsResponse(
+                success: true,
+                message: "Test execution completed with status: Passed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 1,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0,
+                inconclusiveCount: 0,
+                xmlPath: string.Empty,
+                status: RunTestsExecutionStatus.Passed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty);
+
+            JObject parsed = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    response,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(parsed.Property("RerunTargetCount"), Is.Null);
+            Assert.That(parsed.Property("RerunSourceCompletedAt"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a rerun with no recorded failures serializes as a successful NothingToRerun response
+        /// with zero targets and the source record's completion time.
+        /// </summary>
+        [Test]
+        public void CreateNothingToRerun_WhenSerialized_ReportsSuccessWithZeroTargets()
+        {
+            const string sourceCompletedAt = "2026-01-02T03:04:05.0000000Z";
+            RunTestsResponse response = RunTestsResponse.CreateNothingToRerun(
+                UnityCliLoopTestMode.EditMode,
+                sourceCompletedAt);
+
+            JObject parsed = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    response,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(parsed.Value<string>("Status"), Is.EqualTo("NothingToRerun"));
+            Assert.That(parsed.Value<bool>("Success"), Is.True);
+            Assert.That(parsed.Value<bool>("HasFailures"), Is.False);
+            Assert.That(parsed.Value<bool>("NoTestsFound"), Is.False);
+            Assert.That(parsed.Value<int>("TestCount"), Is.EqualTo(0));
+            Assert.That(parsed.Value<int>("RerunTargetCount"), Is.EqualTo(0));
+            Assert.That(parsed.Property("RerunSourceCompletedAt"), Is.Not.Null);
+            Assert.That(response.RerunSourceCompletedAt, Is.EqualTo(sourceCompletedAt));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "The EditMode run completed at 2026-01-02T03:04:05.0000000Z had no failed or inconclusive tests; nothing to rerun."));
+        }
     }
 }

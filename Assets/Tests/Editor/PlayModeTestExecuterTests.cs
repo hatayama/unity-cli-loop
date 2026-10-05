@@ -91,5 +91,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // var expected = "^" + System.Text.RegularExpressions.Regex.Escape(regexPattern) + "(\\.|$)";
             // Assert.That(unityFilter.groupNames, Is.EquivalentTo(new[] { expected }));
         }
+
+        /// <summary>
+        /// What: a TestNames filter hands every name to Unity's testNames in order and sets no other filter.
+        /// </summary>
+        [Test]
+        public void CreateUnityFilter_WithTestNamesFilter_PassesEveryNameAsTestNames()
+        {
+            string[] testNames = { "Ns.C.Second", "Ns.C.M(1)", "Ns.FixtureWhoseOneTimeTearDownThrew" };
+            TestExecutionFilter filter = TestExecutionFilter.ByTestNames(testNames);
+            System.Reflection.MethodInfo createUnityFilterMethod = typeof(PlayModeTestExecuter)
+                .GetMethod("CreateUnityFilter", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.That(createUnityFilterMethod, Is.Not.Null, "CreateUnityFilter method not found");
+
+            Filter unityFilter = (Filter)createUnityFilterMethod.Invoke(
+                null,
+                new object[] { TestMode.EditMode, filter });
+
+            Assert.That(unityFilter.testMode, Is.EqualTo(TestMode.EditMode));
+            Assert.That(unityFilter.testNames, Is.EqualTo(testNames));
+            Assert.That(unityFilter.groupNames, Is.Null.Or.Empty);
+            Assert.That(unityFilter.assemblyNames, Is.Null.Or.Empty);
+        }
     }
 }
