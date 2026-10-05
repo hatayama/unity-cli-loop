@@ -188,6 +188,25 @@ namespace UnityCliLoop.CodeComplexity.Tests
                 issue.Message.Contains("ProductionBranch", StringComparison.Ordinal)), Is.True);
         }
 
+        // Verifies that a root without production sources is rejected instead of being reported as clean.
+        [Test]
+        public void AnalyzeAsync_WhenNoProductionSourceExists_ShouldThrow()
+        {
+            DeleteProductionSources(_rootPath);
+            CodeComplexityAnalyzerRunner runner = new();
+            CodeComplexityOptions options = new(
+                _rootPath,
+                maxComplexity: 1,
+                includeNonProduction: false,
+                ReportFormat.Table,
+                failOnExceeded: false);
+
+            InvalidOperationException? exception = Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await runner.AnalyzeAsync(options, CancellationToken.None));
+
+            Assert.That(exception?.Message, Does.Contain(Path.Combine(_rootPath, "Packages", "src")));
+        }
+
         // Verifies that advisory mode keeps the command successful when CA1502 diagnostics are present.
         [Test]
         public void Main_WhenFailOnExceededIsFalse_ShouldReturnSuccessForFindings()
@@ -275,6 +294,21 @@ namespace UnityCliLoop.CodeComplexity.Tests
             Assert.That(exitCode, Is.EqualTo(2));
         }
 
+        // Verifies that a root without production sources returns the validation failure code.
+        [Test]
+        public void Main_WhenNoProductionSourceExists_ShouldReturnValidationFailure()
+        {
+            DeleteProductionSources(_rootPath);
+
+            int exitCode = Program.Main(new[]
+            {
+                "--root",
+                _rootPath
+            });
+
+            Assert.That(exitCode, Is.EqualTo(2));
+        }
+
         private static void CreateSampleRepository(string rootPath)
         {
             string packageDirectory = Path.Combine(rootPath, "Packages", "src", "Editor", "Sample");
@@ -332,6 +366,15 @@ namespace UnityCliLoop.CodeComplexity.Tests
                     }
                 }
                 """);
+        }
+
+        private static void DeleteProductionSources(string rootPath)
+        {
+            string packageSourcePath = Path.Combine(rootPath, "Packages", "src");
+            foreach (string sourceFile in Directory.GetFiles(packageSourcePath, "*.cs", SearchOption.AllDirectories))
+            {
+                File.Delete(sourceFile);
+            }
         }
 
         private static void WriteFile(string path, string content)

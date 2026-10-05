@@ -39,12 +39,15 @@ namespace UnityCliLoop.CodeComplexity
             Debug.Assert(options.MaxComplexity > 0, "Command-line parsing must reject non-positive thresholds.");
 
             SourceFileSet fileSet = SourceFileCollector.Collect(options.RootPath);
-            string[] sourceFiles = CreateSourceFileList(fileSet, options.IncludeNonProduction);
-            if (sourceFiles.Length == 0)
+            // An empty scan must not pass as "no issues": a wrong --root or an over-broad exclusion
+            // would otherwise turn the check green without analyzing anything.
+            if (fileSet.ProductionFiles.Count == 0)
             {
-                return Array.Empty<CodeComplexityIssue>();
+                throw new InvalidOperationException(
+                    $"No C# source files were found below {Path.Combine(options.RootPath, "Packages", "src")}. Check --root.");
             }
 
+            string[] sourceFiles = CreateSourceFileList(fileSet, options.IncludeNonProduction);
             Compilation compilation = CreateCompilation(sourceFiles);
             ImmutableArray<DiagnosticAnalyzer> analyzers = ImmutableArray.Create<DiagnosticAnalyzer>(new CodeMetricsAnalyzer());
             AnalyzerOptions analyzerOptions = new(ImmutableArray.Create<AdditionalText>(CreateCodeMetricsConfig(options.MaxComplexity)));
