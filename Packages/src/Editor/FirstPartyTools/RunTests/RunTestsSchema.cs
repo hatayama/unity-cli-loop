@@ -46,6 +46,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool RespectEnterPlayModeSettings { get; set; } = false;
 
         /// <summary>
+        /// When true, reruns only the tests that failed or were inconclusive in the most recent completed run of the same TestMode, plus whole fixtures whose OneTimeSetUp or OneTimeTearDown failed. Cannot be combined with FilterType or FilterValue.
+        /// </summary>
+        public bool RerunFailed { get; set; } = false;
+
+        /// <summary>
         /// Internal request identifier used for delayed result recovery across domain reload.
         /// </summary>
         [Browsable(false)]
