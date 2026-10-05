@@ -111,24 +111,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse(timeoutError, NoHotReloadChangesObserved);
             }
 
-            ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.UnsavedChanges);
-            if (!validation.IsValid)
-            {
-                return CreateFailureResponse(validation.ErrorMessage, NoHotReloadChangesObserved);
-            }
-
             // 1. Test filter creation
+            // Why before the Editor-state validation: that validation saves or discards unsaved
+            // changes, which a request that runs no tests must not do.
             RunTestsExecutionTarget target = ResolveExecutionTarget(parameters);
             if (target.EarlyResponse != null)
             {
                 return target.EarlyResponse;
             }
 
+            ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.UnsavedChanges);
+            if (!validation.IsValid)
+            {
+                return CreateFailureResponse(validation.ErrorMessage, NoHotReloadChangesObserved);
+            }
+
             return await RunAndBuildResponseAsync(parameters, target, ct).ConfigureAwait(false);
         }
 
-        // Why every rejection is decided here: a request that is rejected or has nothing to rerun
-        // must change nothing, so it has to stop before the record or the pause points are touched.
+        // Why every rejection is decided here, by reading only: a request that is rejected or has
+        // nothing to rerun must change nothing, so it has to stop before unsaved changes are saved or
+        // discarded and before the record or the pause points are touched.
         private RunTestsExecutionTarget ResolveExecutionTarget(RunTestsSchema parameters)
         {
             if (parameters.RerunFailed)

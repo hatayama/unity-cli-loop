@@ -350,6 +350,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
             Assert.That(response.Message, Does.Contain("Unsupported filter type"));
             Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
         }
 
         [Test]
@@ -1647,7 +1648,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteAsync_RerunFailedWithoutRecord_ReturnsFailureWithoutRunning()
         {
             StubTestExecutionService executionService = new StubTestExecutionService();
-            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            StubTestExecutionStateValidationService validationService = CreatePassingValidationService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService, validationService: validationService);
 
             RunTestsResponse response = await ExecuteToCompletionAsync(
                 useCase,
@@ -1660,6 +1662,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(
                     "No completed EditMode run is recorded for this project. Run uloop run-tests without --rerun-failed first."));
             Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
         }
 
         /// <summary>
@@ -1673,7 +1676,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string recordPath = _recordStore.GetRecordPath(UnityCliLoopTestMode.EditMode);
             File.WriteAllText(recordPath, invalidRecord);
             StubTestExecutionService executionService = new StubTestExecutionService();
-            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            StubTestExecutionStateValidationService validationService = CreatePassingValidationService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService, validationService: validationService);
 
             RunTestsResponse response = await ExecuteToCompletionAsync(
                 useCase,
@@ -1684,6 +1688,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Does.StartWith("The recorded EditMode run could not be read (invalid JSON"));
             Assert.That(response.Message, Does.EndWith("Run uloop run-tests without --rerun-failed."));
             Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
             Assert.That(File.ReadAllText(recordPath), Is.EqualTo(invalidRecord));
         }
 
@@ -1697,8 +1702,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SeedRecord(UnityCliLoopTestMode.EditMode, Array.Empty<string>());
             bool pausePointsCleared = false;
             StubTestExecutionService executionService = new StubTestExecutionService();
+            StubTestExecutionStateValidationService validationService = CreatePassingValidationService();
             RunTestsUseCase useCase = CreateRecordingUseCase(
                 executionService,
+                validationService: validationService,
                 clearActivePausePoints: () =>
                 {
                     pausePointsCleared = true;
@@ -1717,6 +1724,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.RerunTargetCount, Is.EqualTo(0));
             Assert.That(response.RerunSourceCompletedAt, Is.EqualTo(RecordedCompletedAt));
             Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
             Assert.That(pausePointsCleared, Is.False);
             AssertRecord(UnityCliLoopTestMode.EditMode, RecordedCompletedAt);
         }
@@ -1838,11 +1846,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             AssertNoRecord(UnityCliLoopTestMode.EditMode);
         }
 
+        /// <summary>
+        /// What: a rerun stopped by the Editor-state validation leaves the record and the pause points untouched.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RerunFailedWhenStateValidationFails_LeavesRecordAndPausePointsUntouched()
+        {
+            SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.C.FirstFailure" });
+            bool pausePointsCleared = false;
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            StubTestExecutionStateValidationService validationService = new StubTestExecutionStateValidationService(
+                ValidationResult.Failure("EditMode tests cannot run during play mode"));
+            RunTestsUseCase useCase = CreateRecordingUseCase(
+                executionService,
+                validationService: validationService,
+                clearActivePausePoints: () =>
+                {
+                    pausePointsCleared = true;
+                    return null;
+                });
+
+            RunTestsResponse response = await ExecuteToCompletionAsync(
+                useCase,
+                new RunTestsSchema { RerunFailed = true });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("EditMode tests cannot run during play mode"));
+            Assert.That(validationService.WasCalled, Is.True);
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(pausePointsCleared, Is.False);
+            AssertRecord(UnityCliLoopTestMode.EditMode, RecordedCompletedAt, "Ns.C.FirstFailure");
+        }
+
         private async Task AssertRerunFilterConflictAsync(TestFilterType filterType, string filterValue)
         {
             SeedRecord(UnityCliLoopTestMode.EditMode, new[] { "Ns.C.FirstFailure" });
             StubTestExecutionService executionService = new StubTestExecutionService();
-            RunTestsUseCase useCase = CreateRecordingUseCase(executionService);
+            StubTestExecutionStateValidationService validationService = CreatePassingValidationService();
+            RunTestsUseCase useCase = CreateRecordingUseCase(executionService, validationService: validationService);
             RunTestsSchema parameters = new RunTestsSchema
             {
                 RerunFailed = true,
@@ -1859,6 +1900,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(
                     "--rerun-failed cannot be combined with --filter-type or --filter-value; it reruns the failures recorded for the test mode."));
             Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
             AssertRecord(UnityCliLoopTestMode.EditMode, RecordedCompletedAt, "Ns.C.FirstFailure");
         }
 
@@ -1866,6 +1908,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         // the temporary record directory.
         private RunTestsUseCase CreateRecordingUseCase(
             StubTestExecutionService executionService,
+            StubTestExecutionStateValidationService validationService = null,
             Func<string[]> clearActivePausePoints = null,
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
             Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
@@ -1874,13 +1917,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new RunTestsUseCase(
                 new TestFilterCreationService(),
                 executionService,
-                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                validationService ?? CreatePassingValidationService(),
                 _recordStore,
                 clearActivePausePoints: clearActivePausePoints ?? (() => null),
                 waitForTestRunnerCleanupAsync: waitForTestRunnerCleanupAsync ?? NoCleanupWait,
                 appendNoTestsDiagnostics: appendNoTestsDiagnostics ?? PassThroughNoTestsDiagnostics,
                 getActiveHotReloadChangeCount: () => 0,
                 proposeTestAsmdef: proposeTestAsmdef ?? (_ => null));
+        }
+
+        private static StubTestExecutionStateValidationService CreatePassingValidationService()
+        {
+            return new StubTestExecutionStateValidationService(ValidationResult.Success());
         }
 
         // Why catch: Unity Test Framework passes an async test that ends Canceled, so an unexpected
