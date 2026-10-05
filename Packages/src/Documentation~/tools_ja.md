@@ -35,11 +35,13 @@ Unity Test Runnerを実行し、テスト結果を取得します。FilterType�
 - FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（テストのフルネームに対する正規表現）、assembly（アセンブリ名）、class（テストクラス名。名前空間付きでも可）
 - FilterValue: フィルタータイプに応じた値（クラス名、名前空間など）
 - UnsavedChanges: テスト前の未保存 Scene / Prefab Stage 変更の扱い。`save`（デフォルト）は保存、`fail` は残っていれば停止、`discard` はディスク状態へ戻す（Untitled シーンは破棄できず失敗）。
+- RerunFailed: 同じ TestMode で直近に完了した実行で失敗・inconclusive だったテストだけを再実行します。FilterType / FilterValue とは併用できません。
 テスト結果をxmlで出力する事が可能です。出力pathを返すので、それをAIに読み取ってもらう事ができます。
 これもコンテキストを圧迫しないための工夫です。
 ```text
 → run-tests (FilterType: exact, FilterValue: "PlayerControllerTests.TestJump")
 → run-tests (--unsaved-changes fail、未保存のエディタ変更があれば停止)
+→ run-tests (--rerun-failed、直近に完了した実行で失敗したものだけを再実行)
 → 失敗したテストを確認、実装を修正してテストをパス
 ```
 > [!WARNING]

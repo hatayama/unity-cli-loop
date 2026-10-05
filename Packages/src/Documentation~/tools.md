@@ -35,11 +35,13 @@ Executes Unity Test Runner and retrieves test results. You can set conditions wi
 - FilterType: all (all tests), exact (individual test method name), regex (regex over full test names), assembly (assembly name), class (test class name, bare or namespace-qualified)
 - FilterValue: Value according to filter type (class name, namespace, etc.)
 - UnsavedChanges: How to handle unsaved loaded Scene and Prefab Stage changes before tests. `save` (default) writes them, `fail` stops if any remain, `discard` reloads disk state (Untitled scenes fail).
+- RerunFailed: Rerun only the tests that failed or were inconclusive in the most recent completed run of the same TestMode. Cannot be combined with FilterType or FilterValue.
 Test results can be output as xml. The output path is returned so AI can read it.
 This is also a strategy to avoid consuming context.
 ```text
 → run-tests (FilterType: exact, FilterValue: "PlayerControllerTests.TestJump")
 → run-tests (--unsaved-changes fail, stop if editor changes are unsaved)
+→ run-tests (--rerun-failed, rerun only what failed in the last completed run)
 → Check failed tests, fix implementation to pass tests
 ```
 > [!WARNING]
