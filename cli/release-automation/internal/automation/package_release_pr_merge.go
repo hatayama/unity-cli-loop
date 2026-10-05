@@ -22,6 +22,7 @@ type mergePackageReleasePRConfig struct {
 	dispatcherTag             string
 	requireNoOpenDispatcherPR bool
 	waitForMergeable          bool
+	checksGrace               time.Duration
 	workflows                 []string
 	timeout                   time.Duration
 	interval                  time.Duration
@@ -32,6 +33,17 @@ type mergePackageReleasePRDeps struct {
 	sleep     func(context.Context, time.Duration) error
 	runOutput func(context.Context, string, ...string) (string, error)
 }
+
+// mergePackageReleasePRPassOutcome is what one pass of the wait loop
+// concluded. The two waiting outcomes are kept apart because only a head whose
+// check runs are not visible yet can be resolved within seconds.
+type mergePackageReleasePRPassOutcome int
+
+const (
+	mergePackageReleasePRPassSettled mergePackageReleasePRPassOutcome = iota
+	mergePackageReleasePRPassAwaitingPin
+	mergePackageReleasePRPassAwaitingChecks
+)
 
 type mergePackageReleasePullRequest struct {
 	Number      int    `json:"number"`
@@ -110,6 +122,7 @@ func parseMergePackageReleasePRFlags(args []string) (mergePackageReleasePRConfig
 	dispatcherTag := flagSet.String("dispatcher-tag", "", "dispatcher release tag the package pin must record (default: the tag the base branch manifest releases)")
 	requireNoOpenDispatcherPR := flagSet.Bool("require-no-open-dispatcher-pr", false, "refuse to merge while a dispatcher release pull request is open")
 	noWait := flagSet.Bool("no-wait", false, "decide once and leave the pull request draft instead of polling")
+	checksGraceSeconds := flagSet.Int("checks-grace-seconds", 0, "with --no-wait, keep re-reading for this long while the head's check runs are not listed as finished yet")
 	timeoutMinutes := flagSet.Int("timeout-minutes", defaultMergePackageReleasePRTimeoutMinutes, "how long to wait for the pull request to become mergeable")
 	intervalSeconds := flagSet.Int("interval-seconds", defaultMergePackageReleasePRIntervalSeconds, "how long to wait between polls")
 	err := flagSet.Parse(args)
@@ -126,6 +139,9 @@ func parseMergePackageReleasePRFlags(args []string) (mergePackageReleasePRConfig
 	if *timeoutMinutes <= 0 || *intervalSeconds <= 0 {
 		return mergePackageReleasePRConfig{}, fmt.Errorf("%s: --timeout-minutes and --interval-seconds must be positive", mergePackageReleasePRCommandName)
 	}
+	if *checksGraceSeconds < 0 {
+		return mergePackageReleasePRConfig{}, fmt.Errorf("%s: --checks-grace-seconds must not be negative", mergePackageReleasePRCommandName)
+	}
 
 	workflows, err := releasePRCheckWorkflowsFromEnvironment()
 	if err != nil {
@@ -138,6 +154,7 @@ func parseMergePackageReleasePRFlags(args []string) (mergePackageReleasePRConfig
 		dispatcherTag:             *dispatcherTag,
 		requireNoOpenDispatcherPR: *requireNoOpenDispatcherPR,
 		waitForMergeable:          !*noWait,
+		checksGrace:               time.Duration(*checksGraceSeconds) * time.Second,
 		workflows:                 workflows,
 		timeout:                   time.Duration(*timeoutMinutes) * time.Minute,
 		interval:                  time.Duration(*intervalSeconds) * time.Second,
@@ -152,19 +169,23 @@ func waitAndMergePackageReleasePR(
 	deps mergePackageReleasePRDeps,
 ) int {
 	deadline := deps.now().Add(config.timeout)
+	checksGraceDeadline := deps.now().Add(config.checksGrace)
 	for {
-		settled, exitCode := attemptMergePackageReleasePR(ctx, stdout, stderr, config, deps)
-		if settled {
+		outcome, exitCode := attemptMergePackageReleasePR(ctx, stdout, stderr, config, deps)
+		if outcome == mergePackageReleasePRPassSettled {
 			return exitCode
 		}
 		// The release-please path runs on every push to the base branch, so a
 		// pull request that is not mergeable now is reconsidered by the next
-		// push rather than being waited out inside one workflow run.
-		if !config.waitForMergeable {
+		// push rather than being waited out inside one workflow run. The one
+		// exception is a head whose runs finished moments ago: the run listing
+		// lags their completion by tens of seconds, and the next push may never
+		// come, so that case alone is re-read until the checks grace runs out.
+		if !config.waitForMergeable && !withinChecksGrace(outcome, checksGraceDeadline, deps) {
 			writeMergePackageReleasePRLine(stdout, "The Unity package release pull request is not mergeable yet; leaving it draft.")
 			return 0
 		}
-		if !deps.now().Before(deadline) {
+		if config.waitForMergeable && !deps.now().Before(deadline) {
 			writeMergePackageReleasePRLine(stderr, fmt.Errorf(
 				"%s: waiting for the Unity package release pull request to record %s timed out; merge the pull request by hand once its checks pass",
 				mergePackageReleasePRCommandName, mergePackageReleasePRAwaitedTag(config)))
@@ -178,6 +199,14 @@ func waitAndMergePackageReleasePR(
 	}
 }
 
+func withinChecksGrace(
+	outcome mergePackageReleasePRPassOutcome,
+	checksGraceDeadline time.Time,
+	deps mergePackageReleasePRDeps,
+) bool {
+	return outcome == mergePackageReleasePRPassAwaitingChecks && deps.now().Before(checksGraceDeadline)
+}
+
 // mergePackageReleasePRAwaitedTag names what the wait was for. The tag is
 // resolved per pass, so the timeout report has to describe the source rather
 // than a value when the caller named no tag.
@@ -188,31 +217,31 @@ func mergePackageReleasePRAwaitedTag(config mergePackageReleasePRConfig) string 
 	return "the dispatcher release the " + config.baseBranch + " manifest publishes"
 }
 
-// attemptMergePackageReleasePR runs one pass of the wait loop. settled is false
-// while the pull request is still expected to reach a mergeable state, so the
-// caller keeps polling until the deadline.
+// attemptMergePackageReleasePR runs one pass of the wait loop. The outcome is
+// a waiting one while the pull request is still expected to reach a mergeable
+// state, so the caller keeps polling until the deadline.
 func attemptMergePackageReleasePR(
 	ctx context.Context,
 	stdout io.Writer,
 	stderr io.Writer,
 	config mergePackageReleasePRConfig,
 	deps mergePackageReleasePRDeps,
-) (settled bool, exitCode int) {
+) (outcome mergePackageReleasePRPassOutcome, exitCode int) {
 	releasePR, found, err := findPackageReleasePullRequest(ctx, config, deps)
 	if err != nil {
 		writeMergePackageReleasePRLine(stderr, err)
-		return true, 1
+		return mergePackageReleasePRPassSettled, 1
 	}
 	if !found {
 		writeMergePackageReleasePRLine(stdout, "No open Unity package release pull request; nothing to merge.")
-		return true, 0
+		return mergePackageReleasePRPassSettled, 0
 	}
 
 	if config.requireNoOpenDispatcherPR {
 		dispatcherPRIsOpen, err := openDispatcherReleasePullRequestExists(ctx, deps.runOutput, config.repository, config.baseBranch)
 		if err != nil {
 			writeMergePackageReleasePRLine(stderr, err)
-			return true, 1
+			return mergePackageReleasePRPassSettled, 1
 		}
 		// Waiting here cannot help: the dispatcher release has to be merged,
 		// published and stamped, which takes far longer than this command runs.
@@ -220,26 +249,26 @@ func attemptMergePackageReleasePR(
 			writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
 				"PR #%d stays draft: a dispatcher release pull request is open; the dispatcher must be released and stamped first.",
 				releasePR.Number))
-			return true, 0
+			return mergePackageReleasePRPassSettled, 0
 		}
 	}
 
 	dispatcherTag, err := mergePackageReleasePRDispatcherTag(ctx, stdout, config, deps)
 	if err != nil {
 		writeMergePackageReleasePRLine(stderr, err)
-		return true, 1
+		return mergePackageReleasePRPassSettled, 1
 	}
 
 	pinnedTag, err := packageReleasePullRequestPinnedTag(ctx, config, releasePR, deps)
 	if err != nil {
 		writeMergePackageReleasePRLine(stderr, err)
-		return true, 1
+		return mergePackageReleasePRPassSettled, 1
 	}
 	if pinnedTag != dispatcherTag {
 		writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
 			"PR #%d head %s still pins %s; waiting for release-please to rebase it onto the stamp.",
 			releasePR.Number, releasePR.HeadRefOID, pinnedTag))
-		return false, 0
+		return mergePackageReleasePRPassAwaitingPin, 0
 	}
 	// The draft flag is not consulted as evidence: it exists to keep people from
 	// merging this pull request, not to prove its checks ran. What proves that
@@ -247,10 +276,10 @@ func attemptMergePackageReleasePR(
 	// held to that head by --match-head-commit at the merge.
 	checksPassed, exitCode := packageReleasePullRequestChecksPassed(ctx, stdout, stderr, config, releasePR, deps)
 	if exitCode != 0 {
-		return true, exitCode
+		return mergePackageReleasePRPassSettled, exitCode
 	}
 	if !checksPassed {
-		return false, 0
+		return mergePackageReleasePRPassAwaitingChecks, 0
 	}
 
 	return readyAndMergePackageReleasePR(ctx, stdout, stderr, config, releasePR, pinnedTag, deps)

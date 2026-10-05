@@ -46,6 +46,10 @@ and is merged only by automation; the other two are the ones people merge.
    dispatcher release pull request is open **and** the pin at the package head
    already records the dispatcher version `main`'s manifest releases. Otherwise
    it leaves the pull request draft and reconsiders on the next push to `main`.
+   The one wait it does allow is `--checks-grace-seconds`: GitHub's per-workflow
+   run listing can show a run as unfinished for tens of seconds after it
+   completed, so a head whose checks are not yet listed as finished is re-read
+   for up to two minutes before the pull request is left draft.
 4. The **project runner** release pull request carries no cross-component
    ordering constraint and can be merged at any time.
 

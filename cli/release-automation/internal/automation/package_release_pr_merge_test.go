@@ -373,6 +373,79 @@ func TestMergePackageReleasePRWithNoWaitLeavesStalePinDraftAfterOnePass(t *testi
 	assertMergePackageReleasePRListCount(t, stub, 1)
 }
 
+// Verifies --no-wait with a checks grace re-reads a head whose finished runs the run listing does not show yet, and merges once they appear.
+func TestMergePackageReleasePRWithNoWaitMergesWhenChecksAppearWithinGrace(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", true),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            map[string]string{},
+		},
+		{
+			prListJSON:      packageReleasePRListJSON("package123", true),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            packageReleasePRRunsAt("package123"),
+		},
+	}, []string{"--dispatcher-tag", "dispatcher-v3.4.0", "--no-wait", "--checks-grace-seconds", "90"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "has not finished for this head; waiting.")
+	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
+	assertMergePackageReleasePRListCount(t, stub, 2)
+}
+
+// Verifies --no-wait with a checks grace still leaves the pull request draft, without failing the job, when the runs never appear within the grace.
+func TestMergePackageReleasePRWithNoWaitLeavesDraftWhenChecksStayMissingPastGrace(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", true),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.4.0"),
+			runs:            map[string]string{},
+		},
+	}, []string{"--dispatcher-tag", "dispatcher-v3.4.0", "--no-wait", "--checks-grace-seconds", "90"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "is not mergeable yet; leaving it draft.")
+	assertMergePackageReleasePRNeverMerged(t, stub)
+	// The 30-second interval fits three re-reads into the 90-second grace after the first pass.
+	assertMergePackageReleasePRListCount(t, stub, 4)
+}
+
+// Verifies the checks grace does not apply to a stale pin: the stamp takes far longer than the grace, so --no-wait still decides in one pass.
+func TestMergePackageReleasePRWithNoWaitIgnoresChecksGraceForStalePin(t *testing.T) {
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{
+		{
+			prListJSON:      packageReleasePRListJSON("package123", true),
+			pinnedTagsByRef: packageReleasePRPinAt("package123", "dispatcher-v3.3.1"),
+			runs:            packageReleasePRRunsAt("package123"),
+		},
+	}, []string{"--dispatcher-tag", "dispatcher-v3.4.0", "--no-wait", "--checks-grace-seconds", "90"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "is not mergeable yet; leaving it draft.")
+	assertMergePackageReleasePRNeverMerged(t, stub)
+	assertMergePackageReleasePRListCount(t, stub, 1)
+}
+
+// Verifies a negative checks grace is rejected rather than silently treated as no grace.
+func TestMergePackageReleasePRRejectsNegativeChecksGrace(t *testing.T) {
+	exitCode, _, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{
+		{prListJSON: packageReleasePRListJSON("package123", true)},
+	}, []string{"--dispatcher-tag", "dispatcher-v3.4.0", "--no-wait", "--checks-grace-seconds", "-1"})
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "--checks-grace-seconds must not be negative")
+	assertMergePackageReleasePRListCount(t, stub, 0)
+}
+
 // Verifies a failed merge is a success rather than a failed job when the pull request is already merged: the command reports it and exits 0.
 func TestMergePackageReleasePRAcceptsAPullRequestAnotherRunMerged(t *testing.T) {
 	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{
