@@ -417,17 +417,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteCommandAsync_WhenCommandIsGetEditorStatus_ReturnsEditorStatusPayloadWithoutWaiting()
         {
             // Tests that editor status routes as a CLI-only bridge command that answers without
-            // awaiting anything, not as a public tool. The status is checked before the await
-            // because a cancelled async test would otherwise be recorded as passed.
+            // waiting for the Editor main thread, not as a public tool. Why the queueing dispatcher:
+            // this test runs on the main thread, where a switch to it completes at once, so only a
+            // dispatcher that reports a background thread and holds its queue makes a switch leave
+            // the task unfinished. The status is checked before the await because awaiting a held
+            // switch would never return, and a cancelled async test would be recorded as passed.
             UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouter();
+            MainThreadSwitcher.RegisterService(new QueueingDispatcher());
 
-            Task<UnityCliLoopToolResponse> execution = executionRouter.ExecuteAsync(
-                UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
-                new JObject(),
-                CancellationToken.None);
+            try
+            {
+                Task<UnityCliLoopToolResponse> execution = executionRouter.ExecuteAsync(
+                    UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                    new JObject(),
+                    CancellationToken.None);
 
-            Assert.That(execution.Status, Is.EqualTo(TaskStatus.RanToCompletion));
-            Assert.That(await execution, Is.InstanceOf<GetEditorStatusResponse>());
+                Assert.That(execution.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+                Assert.That(await execution, Is.InstanceOf<GetEditorStatusResponse>());
+            }
+            finally
+            {
+                EditorMainThreadDispatcherRestorer.Restore();
+            }
         }
 
         [Test]

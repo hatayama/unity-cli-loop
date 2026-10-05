@@ -1,7 +1,6 @@
 using NUnit.Framework;
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -88,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             finally
             {
                 cancellation.Dispose();
-                RestoreEditorMainThreadDispatcher();
+                EditorMainThreadDispatcherRestorer.Restore();
             }
         }
 
@@ -114,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             finally
             {
                 cancellation.Dispose();
-                RestoreEditorMainThreadDispatcher();
+                EditorMainThreadDispatcherRestorer.Restore();
             }
         }
 
@@ -150,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             finally
             {
                 MainThreadWaitObservation.SetCurrent(null);
-                RestoreEditorMainThreadDispatcher();
+                EditorMainThreadDispatcherRestorer.Restore();
             }
         }
 
@@ -189,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 cancellation.Dispose();
                 MainThreadWaitObservation.SetCurrent(null);
-                RestoreEditorMainThreadDispatcher();
+                EditorMainThreadDispatcherRestorer.Restore();
             }
         }
 
@@ -220,48 +219,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             finally
             {
                 MainThreadWaitObservation.SetCurrent(null);
-                RestoreEditorMainThreadDispatcher();
+                EditorMainThreadDispatcherRestorer.Restore();
             }
         }
 
         private static async Task AwaitSwitchAsync(CancellationToken ct)
         {
             await MainThreadSwitcher.SwitchToMainThread(ct);
-        }
-
-        private static void RestoreEditorMainThreadDispatcher()
-        {
-            EditorMainThreadDispatcher dispatcher = new EditorMainThreadDispatcher();
-            MainThreadSwitcher.RegisterService(dispatcher);
-            dispatcher.Initialize();
-        }
-
-        // Reports a background thread and keeps queued continuations until the test runs them, as a
-        // stalled Editor main thread would.
-        private sealed class QueueingDispatcher : IMainThreadDispatcher
-        {
-            private readonly List<Action> _queued = new();
-
-            public bool IsMainThread => false;
-
-            public void Initialize()
-            {
-            }
-
-            public void AddContinuation(Action continuation)
-            {
-                _queued.Add(continuation);
-            }
-
-            public void RunQueued()
-            {
-                foreach (Action continuation in _queued)
-                {
-                    continuation();
-                }
-
-                _queued.Clear();
-            }
         }
 
         private sealed class MainThreadReportingDispatcher : IMainThreadDispatcher
@@ -349,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                RestoreEditorMainThreadDispatcher();
+                EditorMainThreadDispatcherRestorer.Restore();
             }
         }
 
