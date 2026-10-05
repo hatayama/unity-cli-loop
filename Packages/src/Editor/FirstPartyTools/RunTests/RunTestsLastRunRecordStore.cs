@@ -149,6 +149,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Records a run-tests result recovered after a domain reload, but only when it came from a
+        /// PlayMode run. Returns whether a record was written.
+        /// </summary>
+        internal static bool TryRecordRecoveredPlayModeRun(
+            RunTestsLastRunRecordStore store,
+            SerializableTestResult result,
+            bool isPlayModeRun)
+        {
+            if (store == null)
+            {
+                throw new ArgumentNullException(nameof(store));
+            }
+
+            if (result == null)
+            {
+                throw new ArgumentNullException(nameof(result));
+            }
+
+            // Why not record a run without a result tree: it has no names to rerun.
+            if (result.status == RunTestsExecutionStatus.ExecutionFailed)
+            {
+                return false;
+            }
+
+            if (!isPlayModeRun)
+            {
+                return false;
+            }
+
+            return store.TryWrite(UnityCliLoopTestMode.PlayMode, result.completedAt, result.rerunTargetFullNames);
+        }
+
         private static RunTestsLastRunRecordReadResult Validate(
             RunTestsLastRunRecord record,
             UnityCliLoopTestMode testMode)

@@ -280,6 +280,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(Directory.GetFiles(_recordDirectory, "*.tmp"), Is.Empty);
         }
 
+        /// <summary>
+        /// What: a recovered PlayMode run with a failure becomes the PlayMode record.
+        /// </summary>
+        [Test]
+        public void TryRecordRecoveredPlayModeRun_WithPlayModeRun_RecordsPlayModeTargets()
+        {
+            bool recorded = RunTestsLastRunRecordStore.TryRecordRecoveredPlayModeRun(
+                _store,
+                CreateRecoveredResult(RunTestsExecutionStatus.Failed, "Ns.Play.Failure"),
+                isPlayModeRun: true);
+
+            Assert.That(recorded, Is.True);
+            RunTestsLastRunRecordReadResult read = _store.Read(UnityCliLoopTestMode.PlayMode);
+            Assert.That(read.Status, Is.EqualTo(RunTestsLastRunRecordReadStatus.Found), read.UnreadableReason);
+            Assert.That(read.Record.CompletedAt, Is.EqualTo(CompletedAt));
+            Assert.That(read.Record.RerunTargets, Is.EqualTo(new[] { "Ns.Play.Failure" }));
+        }
+
+        /// <summary>
+        /// What: a recovered result of a run that was not PlayMode writes no record of either test mode.
+        /// </summary>
+        [Test]
+        public void TryRecordRecoveredPlayModeRun_WithEditModeRun_WritesNoRecord()
+        {
+            bool recorded = RunTestsLastRunRecordStore.TryRecordRecoveredPlayModeRun(
+                _store,
+                CreateRecoveredResult(RunTestsExecutionStatus.Failed, "Ns.Edit.Failure"),
+                isPlayModeRun: false);
+
+            Assert.That(recorded, Is.False);
+            Assert.That(_store.Read(UnityCliLoopTestMode.PlayMode).Status, Is.EqualTo(RunTestsLastRunRecordReadStatus.Missing));
+            Assert.That(_store.Read(UnityCliLoopTestMode.EditMode).Status, Is.EqualTo(RunTestsLastRunRecordReadStatus.Missing));
+        }
+
+        /// <summary>
+        /// What: a recovered PlayMode result without a result tree writes no record.
+        /// </summary>
+        [Test]
+        public void TryRecordRecoveredPlayModeRun_WithoutResultTree_WritesNoRecord()
+        {
+            bool recorded = RunTestsLastRunRecordStore.TryRecordRecoveredPlayModeRun(
+                _store,
+                CreateRecoveredResult(RunTestsExecutionStatus.ExecutionFailed),
+                isPlayModeRun: true);
+
+            Assert.That(recorded, Is.False);
+            Assert.That(_store.Read(UnityCliLoopTestMode.PlayMode).Status, Is.EqualTo(RunTestsLastRunRecordReadStatus.Missing));
+        }
+
+        /// <summary>
+        /// What: a recovered result of a run that was not PlayMode leaves an existing PlayMode record as it was.
+        /// </summary>
+        [Test]
+        public void TryRecordRecoveredPlayModeRun_WithEditModeRun_KeepsExistingPlayModeRecord()
+        {
+            const string existingCompletedAt = "2026-01-01T00:00:00.0000000Z";
+            _store.TryWrite(UnityCliLoopTestMode.PlayMode, existingCompletedAt, new[] { "Ns.Play.Existing" });
+
+            RunTestsLastRunRecordStore.TryRecordRecoveredPlayModeRun(
+                _store,
+                CreateRecoveredResult(RunTestsExecutionStatus.Failed, "Ns.Edit.Failure"),
+                isPlayModeRun: false);
+
+            RunTestsLastRunRecordReadResult read = _store.Read(UnityCliLoopTestMode.PlayMode);
+            Assert.That(read.Status, Is.EqualTo(RunTestsLastRunRecordReadStatus.Found), read.UnreadableReason);
+            Assert.That(read.Record.CompletedAt, Is.EqualTo(existingCompletedAt));
+            Assert.That(read.Record.RerunTargets, Is.EqualTo(new[] { "Ns.Play.Existing" }));
+        }
+
+        /// <summary>
+        /// What: recording a recovered run without a store is rejected as a caller error.
+        /// </summary>
+        [Test]
+        public void TryRecordRecoveredPlayModeRun_WithNullStore_ThrowsArgumentNullException()
+        {
+            SerializableTestResult result = CreateRecoveredResult(RunTestsExecutionStatus.Failed, "Ns.Play.Failure");
+
+            Assert.That(
+                () => RunTestsLastRunRecordStore.TryRecordRecoveredPlayModeRun(null, result, isPlayModeRun: true),
+                Throws.ArgumentNullException);
+        }
+
+        /// <summary>
+        /// What: recording a recovered run without a result is rejected as a caller error.
+        /// </summary>
+        [Test]
+        public void TryRecordRecoveredPlayModeRun_WithNullResult_ThrowsArgumentNullException()
+        {
+            Assert.That(
+                () => RunTestsLastRunRecordStore.TryRecordRecoveredPlayModeRun(_store, null, isPlayModeRun: true),
+                Throws.ArgumentNullException);
+        }
+
+        private static SerializableTestResult CreateRecoveredResult(string status, params string[] rerunTargets)
+        {
+            return new SerializableTestResult
+            {
+                status = status,
+                completedAt = CompletedAt,
+                rerunTargetFullNames = rerunTargets
+            };
+        }
+
         private void WriteRawRecord(UnityCliLoopTestMode testMode, string json)
         {
             Directory.CreateDirectory(_recordDirectory);
