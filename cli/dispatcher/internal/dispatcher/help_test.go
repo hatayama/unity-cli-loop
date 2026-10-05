@@ -24,6 +24,7 @@ func TestPrintDispatcherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T)
 		"Dispatcher. Finds the Unity project, then dispatches live Unity tool commands.",
 		"Native commands:",
 		"  launch",
+		"  verify-project",
 		"  focus-window",
 		"  list",
 		"  skills",
@@ -67,6 +68,7 @@ func TestPrintProjectLocalHelpListsNativeCommandsAndLiveToolGuidance(t *testing.
 	for _, expected := range []string{
 		"Native commands:",
 		"  launch",
+		"  verify-project",
 		"  focus-window",
 		"  list",
 		"  sync",

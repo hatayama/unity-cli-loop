@@ -205,7 +205,8 @@ func shouldKeepDispatcherProcessCommand(args []string) bool {
 	}
 	switch args[0] {
 	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName,
-		clicore.LaunchCommandName, clicore.CompileCheckCommandName, clicore.PackageCommandName:
+		clicore.LaunchCommandName, clicore.CompileCheckCommandName, clicore.VerifyProjectCommandName,
+		clicore.PackageCommandName:
 		return true
 	default:
 		return false
