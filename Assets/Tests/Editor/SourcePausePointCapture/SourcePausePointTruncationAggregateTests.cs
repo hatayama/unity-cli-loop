@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             object[] locals = { "longText", longValue, "hp", 42 };
 
             (UloopPausePointCapturedVariableFrame frame, List<UloopCapturedVariable> variables, bool truncated) =
-                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.True);
             Assert.That(frame.Truncated, Is.True);
@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             (UloopPausePointCapturedVariableFrame frame, _, bool truncated) =
-                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.True);
             Assert.That(frame.TruncatedVariableCount, Is.EqualTo(25));
@@ -98,7 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             (UloopPausePointCapturedVariableFrame frame, _, bool truncated) =
-                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.True);
             Assert.That(frame.TruncatedVariableCount, Is.EqualTo(4));
@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             object[] locals = { "speed", 5, "damage", 3 };
 
             (UloopPausePointCapturedVariableFrame frame, _, bool truncated) =
-                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.False);
             Assert.That(frame.Truncated, Is.False);
@@ -136,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             LogAssert.Expect(LogType.Assert, "name must not be null or empty");
 
             (UloopPausePointCapturedVariableFrame frame, _, bool truncated) =
-                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.True);
             Assert.That(frame.Truncated, Is.True);
@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             (UloopPausePointCapturedVariableFrame frame, _, bool truncated) =
-                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.True);
             Assert.That(frame.TruncatedVariableCount, Is.EqualTo(21));

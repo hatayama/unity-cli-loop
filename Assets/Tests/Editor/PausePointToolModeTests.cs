@@ -289,7 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<int> values = Enumerable.Range(0, maxPreviewElements + 5).ToList();
 
             SourcePausePointCapture.Capture(
-                "jump", null, Array.Empty<object>(), new object[] { "scores", values });
+                "jump", null, Array.Empty<object>(), Array.Empty<object>(), new object[] { "scores", values });
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
             Assert.That(snapshot.CapturedVariables.Single().Value.Split(',').Length, Is.EqualTo(maxPreviewElements));
@@ -314,7 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 parseResult.Condition);
 
             SourcePausePointCapture.Capture(
-                "jump", null, Array.Empty<object>(), new object[] { "speed", 5 });
+                "jump", null, Array.Empty<object>(), Array.Empty<object>(), new object[] { "speed", 5 });
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
@@ -344,7 +344,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 parseResult.Condition);
 
             SourcePausePointCapture.Capture(
-                "jump", null, Array.Empty<object>(), new object[] { "speed", 5 });
+                "jump", null, Array.Empty<object>(), Array.Empty<object>(), new object[] { "speed", 5 });
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
@@ -494,7 +494,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "jump", 30, UloopPausePointCaptureMode.SingleShot, 20, 10, 0);
 
             SourcePausePointCapture.Capture(
-                "jump", null, Array.Empty<object>(), Array.Empty<object>());
+                "jump", null, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
             Assert.That(snapshot.CallerFrames, Is.Empty);

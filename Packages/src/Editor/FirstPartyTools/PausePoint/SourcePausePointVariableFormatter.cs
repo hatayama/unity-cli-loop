@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int maxCollectionPreviewElementCount = SourcePausePointConstants.MaxCollectionPreviewElementCount)
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                instance, parameterNamesAndValues, localNamesAndValues);
+                instance, Array.Empty<object>(), parameterNamesAndValues, localNamesAndValues);
             return FormatFrame(frame, maxCollectionPreviewElementCount);
         }
 

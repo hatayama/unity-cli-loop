@@ -16,6 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SourcePausePointCaptureEligibility
     {
+        private const string CompilerGeneratedAttributeFullName =
+            "System.Runtime.CompilerServices.CompilerGeneratedAttribute";
+
         internal static List<SourcePausePointLocalVariable> CollectCapturableLocals(
             MethodDefinition method,
             int offset)
@@ -164,7 +167,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // byref locals/parameters (ref, out, in) and pointers cannot be boxed; ref structs
             // (Span<T>, and any user-defined "ref struct") cannot be boxed either.
             // Why derived from the reason: the excluded set and the reported set must stay the
-            // same set, so a parameter is never both captured and named as not capturable.
+            // same set, so a parameter is never both captured and named as not capturable. The one
+            // exception is a by-ref closure struct, which is excluded but not reported because its
+            // variables are captured through it (see SourcePausePointClosureFrameArgument).
             return DescribeNotCapturableReason(type).Length > 0;
         }
 
@@ -221,6 +226,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> results = new List<string>();
             foreach (ParameterDefinition parameter in method.Parameters)
             {
+                if (IsClosureFrameParameter(parameter.ParameterType))
+                {
+                    continue;
+                }
+
                 string reason = DescribeNotCapturableReason(parameter.ParameterType);
                 if (reason.Length == 0)
                 {
@@ -302,6 +312,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = startIndex; index < runtimeParameters.Length; index++)
             {
                 System.Reflection.ParameterInfo parameter = runtimeParameters[index];
+                if (SourcePausePointClosureFrameArgument.FrameTypeOrNull(parameter.ParameterType) != null)
+                {
+                    continue;
+                }
+
                 string reason = DescribeNotCapturableReasonFromReflection(parameter.ParameterType);
                 if (reason.Length == 0)
                 {
@@ -312,6 +327,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return results;
+        }
+
+        // Cecil counterpart of SourcePausePointClosureFrameArgument.FrameTypeOrNull. A closure
+        // struct is always declared in the module being read, so its reference is already a
+        // TypeDefinition and no assembly has to be resolved.
+        private static bool IsClosureFrameParameter(TypeReference type)
+        {
+            if (!(type is ByReferenceType byReferenceType))
+            {
+                return false;
+            }
+
+            if (!(byReferenceType.ElementType is TypeDefinition elementType)
+                || !elementType.IsValueType
+                || !elementType.HasCustomAttributes)
+            {
+                return false;
+            }
+
+            foreach (CustomAttribute attribute in elementType.CustomAttributes)
+            {
+                if (attribute.AttributeType.FullName == CompilerGeneratedAttributeFullName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>

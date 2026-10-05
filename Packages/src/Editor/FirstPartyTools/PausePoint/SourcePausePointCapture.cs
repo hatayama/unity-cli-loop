@@ -14,9 +14,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class SourcePausePointCapture
     {
         public static void Capture(
-            string id, object instance, object[] parameterNamesAndValues, object[] localNamesAndValues)
+            string id,
+            object instance,
+            object[] closureFrames,
+            object[] parameterNamesAndValues,
+            object[] localNamesAndValues)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty");
+            Debug.Assert(closureFrames != null, "closureFrames must not be null");
             Debug.Assert(parameterNamesAndValues != null, "parameterNamesAndValues must not be null");
             Debug.Assert(localNamesAndValues != null, "localNamesAndValues must not be null");
 
@@ -26,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                instance, parameterNamesAndValues, localNamesAndValues);
+                instance, closureFrames, parameterNamesAndValues, localNamesAndValues);
             UloopPausePointHitWhenCondition condition = UloopPausePointRegistry.GetHitWhenCondition(id);
             if (condition != null)
             {
@@ -83,11 +88,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static (UloopPausePointCapturedVariableFrame Frame, List<UloopCapturedVariable> Variables, bool Truncated)
             CaptureFrame(
-                object instance, object[] parameterNamesAndValues, object[] localNamesAndValues,
+                object instance, object[] closureFrames, object[] parameterNamesAndValues, object[] localNamesAndValues,
                 int maxPreviewElements = SourcePausePointConstants.MaxCollectionPreviewElementCount)
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                instance, parameterNamesAndValues, localNamesAndValues);
+                instance, closureFrames, parameterNamesAndValues, localNamesAndValues);
             return FormatFrame(frame, maxPreviewElements);
         }
 
