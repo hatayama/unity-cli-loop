@@ -51,8 +51,10 @@ func TestRunReportsCleanProject(t *testing.T) {
 }
 
 // Verifies findings are listed by check order, then by path, and summarized per check. The local
-// package outside the project is scanned after Assets but sorts first by its absolute path, and
-// the conflict block is found after both .cs files, so the order is the sort's, not the scan's.
+// package in Addons is scanned after Assets but sorts first by its path, and the conflict block is
+// found after both .cs files, so the order is the sort's, not the scan's. The package sits inside
+// the project so that its display path sorts the same way on every OS: an absolute path starts
+// with "/" on Unix but with a drive letter on Windows.
 func TestRunSortsFindingsAndSummarizes(t *testing.T) {
 	root := writeProject(t, map[string]string{
 		"Assets/b.cs":       "class B {}",
@@ -60,16 +62,15 @@ func TestRunSortsFindingsAndSummarizes(t *testing.T) {
 		"Assets/c.txt":      conflictBlock,
 		"Assets/c.txt.meta": metaText(guidOf(1)),
 	})
-	packageDir := filepath.Join(filepath.Dir(root), "OutsidePkg")
-	writePackage(t, packageDir, map[string]string{"Runtime.cs": "class Runtime {}"})
+	writePackage(t, filepath.Join(root, "Addons"), map[string]string{"Runtime.cs": "class Runtime {}"})
 	writeFileAt(t, filepath.Join(root, "Packages", "manifest.json"),
-		manifestJSON(t, map[string]any{"com.example.outside": "file:../../OutsidePkg"}))
+		manifestJSON(t, map[string]any{"com.example.addons": "file:../Addons"}))
 
 	report := runProject(t, root)
 
 	assertFindings(t, report,
 		conflictMarker("Assets/c.txt", 2),
-		metaMissing(filepath.ToSlash(packageDir)+"/Runtime.cs"),
+		metaMissing("Addons/Runtime.cs"),
 		metaMissing("Assets/a.cs"),
 		metaMissing("Assets/b.cs"))
 	if report.Message != "Found 4 problems: 1 CONFLICT_MARKER, 3 META_MISSING." {
