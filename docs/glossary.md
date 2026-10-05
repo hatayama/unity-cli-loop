@@ -43,8 +43,11 @@ an agent can run (for example `compile`, `get-logs`, `run-tests`). Tool names us
 A CLI-only request handled inside the Unity package that must not appear in the
 extension-facing tool registry (for example `get-version`, `get-compile-status`).
 Routed by `InternalBridgeCommandRouter`; names use `UnityCliLoopConstants.COMMAND_NAME_*`
-constants. Anything an end user or third-party extension should call is a tool, not an
-internal bridge command.
+constants. The one exception is `get-editor-status`: `UnityCliLoopExecutionRouter` answers it
+before switching to the Editor main thread, without going through
+`InternalBridgeCommandRouter`, because `uloop status` must answer while that thread is blocked.
+Anything an end user or third-party extension should call is a tool, not an internal bridge
+command.
 
 ### Native command
 
