@@ -20,6 +20,7 @@ func TestNativeCommandEntriesDeclareOwners(t *testing.T) {
 		PausePointAwaitCommandName:      RunnerOwned,
 		PausePointStatusUserCommandName: RunnerOwned,
 		SetCodeOptimizationCommandName:  RunnerOwned,
+		StatusCommandName:               RunnerOwned,
 	}
 	if len(NativeCommands) != len(expectedOwners) {
 		t.Fatalf("native command owner fixture is stale: %#v", NativeCommands)
@@ -74,6 +75,7 @@ func TestIsRunnerOwnedCommandName(t *testing.T) {
 		PausePointAwaitCommandName,
 		PausePointStatusUserCommandName,
 		SetCodeOptimizationCommandName,
+		StatusCommandName,
 	} {
 		if !IsRunnerOwnedCommandName(command) {
 			t.Fatalf("%s must be runner-owned", command)
