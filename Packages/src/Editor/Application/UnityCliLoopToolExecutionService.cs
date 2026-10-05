@@ -74,6 +74,22 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
         }
 
+        // Why convert here: Infrastructure cannot see the Domain snapshot type, so the phase leaves
+        // as its wire name, the same way the busy exception below carries it.
+        internal UnityCliLoopExecutionStatus GetExecutionStatus()
+        {
+            ToolExecutionSessionSnapshot snapshot = _executionSession.GetSnapshot();
+            if (!snapshot.IsBusy)
+            {
+                return UnityCliLoopExecutionStatus.Idle();
+            }
+
+            return UnityCliLoopExecutionStatus.Busy(
+                snapshot.RunningToolName,
+                snapshot.RunningToolElapsedSeconds,
+                snapshot.RunningToolPhase.ToString());
+        }
+
         internal static UnityCliLoopToolBusyException CreateBusyException(
             string runningToolName,
             string requestedToolName,

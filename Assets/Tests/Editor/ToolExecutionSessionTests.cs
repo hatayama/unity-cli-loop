@@ -620,6 +620,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             holderLease.Dispose();
         }
 
+        /// <summary>
+        /// Verifies a snapshot of a session nobody has entered reports it idle.
+        /// </summary>
+        [Test]
+        public void GetSnapshot_WhenNothingRuns_ShouldReportIdle()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+
+            ToolExecutionSessionSnapshot snapshot = session.GetSnapshot();
+
+            Assert.That(snapshot.IsBusy, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a snapshot of a held slot reports the holder's name, elapsed seconds, and executing phase.
+        /// </summary>
+        [Test]
+        public void GetSnapshot_WhenToolHoldsSlot_ShouldReportNameElapsedAndExecutingPhase()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            ToolExecutionLease runningLease = session.TryEnter("run-tests").Lease;
+            timestamp += 3 * Stopwatch.Frequency;
+
+            ToolExecutionSessionSnapshot snapshot = session.GetSnapshot();
+
+            Assert.That(snapshot.IsBusy, Is.True);
+            Assert.That(snapshot.RunningToolName, Is.EqualTo("run-tests"));
+            Assert.That(snapshot.RunningToolElapsedSeconds, Is.EqualTo(3));
+            Assert.That(snapshot.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.Executing));
+
+            runningLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a snapshot reports the holder as waiting once it waits for the main thread.
+        /// </summary>
+        [Test]
+        public void GetSnapshot_WhenHolderWaitsForMainThread_ShouldReportWaitingPhase()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease runningLease = session.TryEnter("run-tests").Lease;
+            runningLease.MarkMainThreadWaitStarted();
+
+            ToolExecutionSessionSnapshot snapshot = session.GetSnapshot();
+
+            Assert.That(snapshot.IsBusy, Is.True);
+            Assert.That(snapshot.RunningToolPhase, Is.EqualTo(ToolExecutionPhase.WaitingForMainThread));
+
+            runningLease.MarkMainThreadWaitEnded();
+            runningLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a snapshot does not count as seeing a cancelled execute-dynamic-code holder, so the
+        /// grace period still starts at the first busy retry after it; a snapshot that started it would
+        /// let that retry enter.
+        /// </summary>
+        [Test]
+        public void GetSnapshot_WhenDynamicCodeHolderIsCancelled_ShouldNotStartGracePeriod()
+        {
+            long timestamp = 0;
+            long pastGraceTicks = (ToolExecutionSession.CancelledLeaseGraceSeconds + 1) * Stopwatch.Frequency;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            using CancellationTokenSource requestCancellation = new CancellationTokenSource();
+            ToolExecutionLease holderLease = session.TryEnter(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                requestCancellation.Token).Lease;
+            requestCancellation.Cancel();
+
+            session.GetSnapshot();
+            timestamp += pastGraceTicks;
+            ToolExecutionSessionEnterResult firstObservingAttempt = session.TryEnter("run-tests");
+            timestamp += pastGraceTicks;
+            ToolExecutionSessionEnterResult lateAttempt = session.TryEnter("run-tests");
+
+            Assert.That(firstObservingAttempt.IsEntered, Is.False);
+            Assert.That(lateAttempt.IsEntered, Is.True);
+
+            lateAttempt.Lease.Dispose();
+            holderLease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a snapshot reports the session idle again once the holder returns its lease.
+        /// </summary>
+        [Test]
+        public void GetSnapshot_AfterHolderDisposesLease_ShouldReportIdle()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease runningLease = session.TryEnter("run-tests").Lease;
+            runningLease.Dispose();
+
+            ToolExecutionSessionSnapshot snapshot = session.GetSnapshot();
+
+            Assert.That(snapshot.IsBusy, Is.False);
+        }
+
         private static long GraceTicks => ToolExecutionSession.CancelledLeaseGraceSeconds * Stopwatch.Frequency;
 
         private static UnityCliLoopToolRegistry CreateRegistry(InMemoryToolSettingsPort settingsPort, IUnityCliLoopTool[] tools)

@@ -105,6 +105,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _toolExecutionService.ExecuteToolAsync(SharedRegistry, toolName, paramsToken, ct);
         }
 
+        internal UnityCliLoopExecutionStatus GetExecutionStatus()
+        {
+            return _toolExecutionService.GetExecutionStatus();
+        }
+
         public void WarmupRegistry()
         {
             _ = SharedRegistry;

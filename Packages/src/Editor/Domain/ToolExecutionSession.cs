@@ -163,6 +163,25 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return revokedLeases;
         }
 
+        // Reads the slot for status reporting without entering it. Why not TryEnter: it takes the
+        // slot, and its revocation pass starts the grace timer of a cancelled lease, so asking for
+        // the status would change when that lease is taken back.
+        internal ToolExecutionSessionSnapshot GetSnapshot()
+        {
+            lock (_executionStateLock)
+            {
+                if (_activeLeases.Count == 0)
+                {
+                    return ToolExecutionSessionSnapshot.Idle();
+                }
+
+                return ToolExecutionSessionSnapshot.Busy(
+                    GetRunningToolNameInsideLock(),
+                    GetRunningToolElapsedSecondsInsideLock(),
+                    GetRunningToolPhaseInsideLock());
+            }
+        }
+
         private static void LogRevokedLeases(List<RevokedLeaseRecord> revokedLeases)
         {
             if (revokedLeases == null)
@@ -428,6 +447,44 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             ToolExecutionPhase? runningToolPhase)
         {
             return new ToolExecutionSessionEnterResult(false, null, runningToolName, runningToolElapsedSeconds, runningToolPhase);
+        }
+    }
+
+    /// <summary>
+    /// Read-only view of the execution slot for status reporting, taken without entering the slot.
+    /// </summary>
+    internal readonly struct ToolExecutionSessionSnapshot
+    {
+        public readonly bool IsBusy;
+        public readonly string RunningToolName;
+        public readonly int RunningToolElapsedSeconds;
+        public readonly ToolExecutionPhase RunningToolPhase;
+
+        private ToolExecutionSessionSnapshot(
+            bool isBusy,
+            string runningToolName,
+            int runningToolElapsedSeconds,
+            ToolExecutionPhase runningToolPhase)
+        {
+            IsBusy = isBusy;
+            RunningToolName = runningToolName;
+            RunningToolElapsedSeconds = runningToolElapsedSeconds;
+            RunningToolPhase = runningToolPhase;
+        }
+
+        public static ToolExecutionSessionSnapshot Idle()
+        {
+            return new ToolExecutionSessionSnapshot(false, null, 0, ToolExecutionPhase.Executing);
+        }
+
+        public static ToolExecutionSessionSnapshot Busy(
+            string runningToolName,
+            int runningToolElapsedSeconds,
+            ToolExecutionPhase runningToolPhase)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace");
+
+            return new ToolExecutionSessionSnapshot(true, runningToolName, runningToolElapsedSeconds, runningToolPhase);
         }
     }
 
