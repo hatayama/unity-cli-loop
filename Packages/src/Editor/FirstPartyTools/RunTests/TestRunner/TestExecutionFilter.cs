@@ -1,3 +1,4 @@
+using System;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -26,7 +27,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Filter by assembly name.
         /// </summary>
-        AssemblyName
+        AssemblyName,
+
+        /// <summary>
+        /// Runs the tests whose full name equals any of FilterValues; used by --rerun-failed.
+        /// </summary>
+        TestNames
     }
     
     /// <summary>
@@ -48,14 +54,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// • When FilterType is AssemblyName: "UnityCLILoop.Tests.Editor"
         /// </summary>
         public string FilterValue { get; }
+
+        /// <summary>
+        /// The full names to run when FilterType is TestNames; empty for every other filter type.
+        /// </summary>
+        public string[] FilterValues { get; }
         
         /// <summary>
         /// Creates a test execution filter.
         /// </summary>
-        public TestExecutionFilter(TestExecutionFilterType filterType, string filterValue)
+        public TestExecutionFilter(TestExecutionFilterType filterType, string filterValue, string[] filterValues = null)
         {
             FilterType = filterType;
             FilterValue = filterValue;
+            FilterValues = filterValues ?? Array.Empty<string>();
         }
         
         /// <summary>
@@ -103,6 +115,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new TestExecutionFilter(TestExecutionFilterType.AssemblyName, assemblyName);
         }
         
+        /// <summary>
+        /// Creates a filter that runs exactly the tests with these full names, used by --rerun-failed.
+        /// </summary>
+        public static TestExecutionFilter ByTestNames(string[] testNames)
+        {
+            if (testNames == null)
+            {
+                throw new ArgumentNullException(nameof(testNames));
+            }
+
+            // Why reject an empty list: Unity treats empty testNames as no filter and runs every test.
+            if (testNames.Length == 0)
+            {
+                throw new ArgumentException("At least one test name is required.", nameof(testNames));
+            }
+
+            if (Array.Exists(testNames, string.IsNullOrWhiteSpace))
+            {
+                throw new ArgumentException("Test names must not be empty.", nameof(testNames));
+            }
+
+            // Why copy: the names were validated here, so later edits to the caller's array must not reach the filter.
+            string[] copiedTestNames = (string[])testNames.Clone();
+            return new TestExecutionFilter(TestExecutionFilterType.TestNames, string.Empty, copiedTestNames);
+        }
+
         /// <summary>
         /// Creates a filter to run all tests without any filter.
         /// </summary>

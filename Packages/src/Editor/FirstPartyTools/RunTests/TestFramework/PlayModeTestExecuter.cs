@@ -235,6 +235,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 case TestExecutionFilterType.AssemblyName:
                     unityFilter.assemblyNames = new[] { filter.FilterValue };
                     break;
+                case TestExecutionFilterType.TestNames:
+                    unityFilter.testNames = filter.FilterValues;
+                    break;
             }
 
             return unityFilter;
