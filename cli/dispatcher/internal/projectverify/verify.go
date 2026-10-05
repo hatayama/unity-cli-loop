@@ -3,7 +3,9 @@
 package projectverify
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -60,9 +62,10 @@ type Finding struct {
 }
 
 // Run reads projectRoot the way Unity would on its next import and reports what Unity would
-// silently change or fail on. It never writes. projectRoot must be absolute, and its Assets and
-// ProjectSettings entries must be directories. A missing manifest or local package is a
-// finding; any other file system error stops the run and is returned.
+// silently change or fail on. It never writes. projectRoot must be absolute, its Assets and
+// ProjectSettings entries must be directories, and its Packages entry, if present, must be a
+// directory. A missing manifest or local package is a finding; any other file system error stops
+// the run and is returned.
 func Run(projectRoot string) (Report, error) {
 	if err := requireProjectLayout(projectRoot); err != nil {
 		return Report{}, err
@@ -89,7 +92,7 @@ func Run(projectRoot string) (Report, error) {
 }
 
 // requireProjectLayout enforces Run's precondition: an absolute root whose Assets and
-// ProjectSettings are directories.
+// ProjectSettings are directories, and whose Packages, if present, is a directory.
 func requireProjectLayout(projectRoot string) error {
 	if !filepath.IsAbs(projectRoot) {
 		return fmt.Errorf("project root must be an absolute path: %s", projectRoot)
@@ -103,6 +106,25 @@ func requireProjectLayout(projectRoot string) error {
 		if !info.IsDir() {
 			return fmt.Errorf("%s is not a directory", path)
 		}
+	}
+	return requireDirectoryIfPresent(filepath.Join(projectRoot, packagesDirectoryName))
+}
+
+// requireDirectoryIfPresent fails when path exists but is not a directory, so that every reader of
+// Packages can rely on it being absent or a folder. Their own errors cannot be relied on: on
+// Windows, a regular file read as a folder, and a path below it, can read as empty or missing
+// instead of failing, which would turn the broken layout into a missing-manifest finding there only.
+// Stat follows a symbolic link, so a linked Packages folder is still accepted.
+func requireDirectoryIfPresent(path string) error {
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", path)
 	}
 	return nil
 }

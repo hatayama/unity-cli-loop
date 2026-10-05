@@ -372,5 +372,5 @@ func TestRunFailsWhenManifestIsADirectory(t *testing.T) {
 func TestRunFailsWhenPackagesIsAFile(t *testing.T) {
 	root := writeProject(t, map[string]string{"Packages": ""})
 
-	assertRunFails(t, root, filepath.Join(root, "Packages"))
+	assertRunFails(t, root, filepath.Join(root, "Packages")+" is not a directory")
 }
