@@ -114,6 +114,30 @@ func TestRunProjectLocalSetCodeOptimizationHelpOutput(t *testing.T) {
 	}
 }
 
+// Verifies status --help prints its usage line and registry description with only the global
+// option, since status takes no options of its own.
+func TestStatusHelpPrintsUsage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"status", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("status --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	const expected = "Usage:\n" +
+		"  uloop status\n" +
+		"\n" +
+		"Report whether the Unity Editor for this project can take a command now, without changing anything\n" +
+		"\n" +
+		"Global options:\n" +
+		"  --project-path <path>   Run against a Unity project outside the current directory\n"
+	if stdout.String() != expected {
+		t.Fatalf("status --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+	}
+}
+
 // Verifies list --help prints the complete names-only option contract, including the usage and
 // global options sections that callers need after the unknown-option recovery guidance.
 func TestRunProjectLocalListHelpOutput(t *testing.T) {
