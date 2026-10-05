@@ -7,6 +7,7 @@ func TestNativeCommandEntriesDeclareOwners(t *testing.T) {
 	expectedOwners := map[string]CommandOwner{
 		LaunchCommandName:               DispatcherOwned,
 		CompileCheckCommandName:         DispatcherOwned,
+		VerifyProjectCommandName:        DispatcherOwned,
 		InstallCommandName:              DispatcherOwned,
 		UpdateCommandName:               DispatcherOwned,
 		UninstallCommandName:            DispatcherOwned,
@@ -38,6 +39,7 @@ func TestNativeCommandEntriesDeclareOwners(t *testing.T) {
 func TestIsDispatcherOwnedCommandName(t *testing.T) {
 	for _, command := range []string{
 		LaunchCommandName,
+		VerifyProjectCommandName,
 		InstallCommandName,
 		UpdateCommandName,
 		UninstallCommandName,

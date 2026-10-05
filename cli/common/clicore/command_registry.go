@@ -3,6 +3,7 @@ package clicore
 const (
 	LaunchCommandName               = "launch"
 	CompileCheckCommandName         = "compile-check"
+	VerifyProjectCommandName        = "verify-project"
 	InstallCommandName              = "install"
 	UpdateCommandName               = "update"
 	UninstallCommandName            = "uninstall"
@@ -37,6 +38,7 @@ var NativeCommands = []NativeCommandEntry{
 	// Why compile-check is hidden: it covers too few situations to recommend yet, so it stays
 	// runnable for development while nothing user-facing advertises it.
 	{Name: CompileCheckCommandName, Description: "Compile changed assemblies with the Editor's bundled C# compiler without launching Unity", Owner: DispatcherOwned, Hidden: true},
+	{Name: VerifyProjectCommandName, Description: "Check .meta files, GUIDs, merge conflict markers, and Packages/manifest.json without Unity", Owner: DispatcherOwned},
 	{Name: "list", Description: "Show Unity tools currently exposed by the Editor", Owner: RunnerOwned},
 	{Name: "sync", Description: "Refresh .uloop/tools.json from the running Editor", Owner: RunnerOwned},
 	{Name: "focus-window", Description: "Bring the Unity Editor window to the foreground", Owner: RunnerOwned},
