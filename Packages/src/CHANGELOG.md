@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.5](https://github.com/hatayama/unity-cli-loop/compare/v3.11.4...v3.11.5) (2026-10-05)
+
+
+### Bug Fixes
+
+* Pause points inside local functions now show this and every variable they use from the enclosing scopes ([#3157](https://github.com/hatayama/unity-cli-loop/issues/3157)) ([4cbce9d](https://github.com/hatayama/unity-cli-loop/commit/4cbce9dcde0f318d628779922fc69797c23ebdc4))
+
 ## [3.11.4](https://github.com/hatayama/unity-cli-loop/compare/v3.11.3...v3.11.4) (2026-10-04)
 
 
