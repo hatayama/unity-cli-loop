@@ -286,7 +286,7 @@ func TestRunFailsWhenDirectoryCannotBeRead(t *testing.T) {
 		"Assets/Locked/A.txt": "a",
 		"Assets/Locked.meta":  metaText(guidOf(1)),
 	})
-	lockDirectory(t, filepath.Join(root, "Assets", "Locked"))
+	lockDirectory(t, filepath.Join(root, "Assets", "Locked"), 0)
 
 	assertRunFails(t, root, filepath.Join(root, "Assets", "Locked"))
 }

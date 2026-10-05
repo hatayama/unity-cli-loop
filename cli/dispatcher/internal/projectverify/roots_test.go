@@ -336,9 +336,20 @@ func TestRunFailsWhenLocalPackageCannotBeInspected(t *testing.T) {
 	writePackage(t, packageDir, nil)
 	writeFileAt(t, filepath.Join(root, "Packages", "manifest.json"),
 		manifestJSON(t, map[string]any{"com.example.locked": "file:../../Locked/Pkg"}))
-	lockDirectory(t, lockedDir)
+	lockDirectory(t, lockedDir, 0)
 
 	assertRunFails(t, root, packageDir)
+}
+
+// Verifies a Packages folder that cannot be listed stops the run instead of silently skipping
+// every embedded package. The folder stays searchable, so the manifest below it still reads and
+// only the listing fails.
+func TestRunFailsWhenPackagesCannotBeRead(t *testing.T) {
+	root := writeProjectWithManifest(t, nil)
+	packagesDir := filepath.Join(root, "Packages")
+	lockDirectory(t, packagesDir, searchOnlyMode)
+
+	assertRunFails(t, root, packagesDir)
 }
 
 // Verifies registry and git dependencies are neither checked nor scanned.

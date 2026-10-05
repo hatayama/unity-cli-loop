@@ -112,9 +112,13 @@ func makeSymlink(t *testing.T, target string, link string) {
 	}
 }
 
-// lockDirectory removes every permission from directory and restores them when the test ends,
-// so t.TempDir can clean up.
-func lockDirectory(t *testing.T, directory string) {
+// searchOnlyMode lets the owner reach the paths below a directory without listing it.
+const searchOnlyMode os.FileMode = 0o100
+
+// lockDirectory sets directory's permissions to mode and restores them when the test ends, so
+// t.TempDir can clean up. Mode 0 makes everything below it unreachable; searchOnlyMode keeps the
+// paths below it reachable and only stops listing the directory itself.
+func lockDirectory(t *testing.T, directory string, mode os.FileMode) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX directory permissions are required for this failure.")
@@ -122,7 +126,7 @@ func lockDirectory(t *testing.T, directory string) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores file and directory permissions.")
 	}
-	if err := os.Chmod(directory, 0); err != nil {
+	if err := os.Chmod(directory, mode); err != nil {
 		t.Fatalf("failed to chmod %s: %v", directory, err)
 	}
 	t.Cleanup(func() {
