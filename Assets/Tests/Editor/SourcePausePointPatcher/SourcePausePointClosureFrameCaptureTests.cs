@@ -95,14 +95,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies a static local function receiving one closure struct per enclosing scope
             // captures the variables of every scope, not only those of the first struct.
+            // Called with 2 so that offset (4) and inner (3) differ: with equal values, reading
+            // every struct from the first struct's argument would go unnoticed.
             UloopPausePointSnapshot snapshot = EnableAndHit(
                 "closure-frame-nested", NestedScopesLocalFunctionReturnLine,
-                () => Assert.That(PatcherClosureFrameLocalFunctionFixture.SumAcrossNestedScopes(1), Is.EqualTo(4)));
+                () => Assert.That(PatcherClosureFrameLocalFunctionFixture.SumAcrossNestedScopes(2), Is.EqualTo(7)));
 
             Assert.That(snapshot.CapturedVariables.Any(v => v.Name == "this"), Is.False, FormatCaptured(snapshot));
-            Assert.That(AssertCaptured(snapshot, "offset", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("2"));
-            Assert.That(AssertCaptured(snapshot, "inner", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("2"));
-            Assert.That(AssertCaptured(snapshot, "sum", UloopCapturedVariableScope.Local).Value, Is.EqualTo("4"));
+            Assert.That(AssertCaptured(snapshot, "offset", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("4"));
+            Assert.That(AssertCaptured(snapshot, "inner", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("3"));
+            Assert.That(AssertCaptured(snapshot, "sum", UloopCapturedVariableScope.Local).Value, Is.EqualTo("7"));
         }
 
         [Test]
@@ -110,18 +112,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies an instance local function whose closure structs follow its own declared
             // parameter captures that parameter and every struct, each read from its own argument.
+            // Called with 2 so that offset (4) and inner (3) differ, as in the static case above.
             UloopPausePointSnapshot snapshot = EnableAndHit(
                 "closure-frame-parameter", ParameterNestedScopesLocalFunctionReturnLine,
                 () => Assert.That(
-                    new PatcherClosureFrameLocalFunctionFixture(10).SumWithParameterAcrossNestedScopes(1),
-                    Is.EqualTo(114)));
+                    new PatcherClosureFrameLocalFunctionFixture(10).SumWithParameterAcrossNestedScopes(2),
+                    Is.EqualTo(117)));
 
             AssertCaptured(snapshot, "this", UloopCapturedVariableScope.This);
             Assert.That(AssertCaptured(snapshot, "_value", UloopCapturedVariableScope.InstanceField).Value, Is.EqualTo("10"));
             Assert.That(AssertCaptured(snapshot, "extra", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("100"));
-            Assert.That(AssertCaptured(snapshot, "offset", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("2"));
-            Assert.That(AssertCaptured(snapshot, "inner", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("2"));
-            Assert.That(AssertCaptured(snapshot, "sum", UloopCapturedVariableScope.Local).Value, Is.EqualTo("114"));
+            Assert.That(AssertCaptured(snapshot, "offset", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("4"));
+            Assert.That(AssertCaptured(snapshot, "inner", UloopCapturedVariableScope.Parameter).Value, Is.EqualTo("3"));
+            Assert.That(AssertCaptured(snapshot, "sum", UloopCapturedVariableScope.Local).Value, Is.EqualTo("117"));
         }
 
         [Test]
