@@ -32,7 +32,7 @@ func (v *verifier) collectRoots() ([]scanRoot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return dropNestedRoots(append(append(roots, embedded...), local...)), nil
+	return dropNestedRoots(append(append(roots, embedded...), local...))
 }
 
 // embeddedPackageRoots lists the package folders checked into Packages/, in name order.
@@ -195,13 +195,21 @@ func (v *verifier) resolveLocalPackage(name string, location string) (scanRoot, 
 }
 
 // dropNestedRoots keeps each folder once: scanning a folder twice would count its .meta files
-// twice and report every GUID in it as a duplicate. The outer folder wins.
-func dropNestedRoots(roots []scanRoot) []scanRoot {
+// twice and report every GUID in it as a duplicate. The outer folder wins, but only where its scan
+// actually walks down to the inner one; a root below a hidden, plugin, or linked folder is never
+// reached that way and stays a root of its own.
+func dropNestedRoots(roots []scanRoot) ([]scanRoot, error) {
 	byLength := append([]scanRoot{}, roots...)
 	sort.SliceStable(byLength, func(i, j int) bool { return len(byLength[i].path) < len(byLength[j].path) })
+	keptPaths := []string{}
 	kept := map[string]bool{}
 	for _, root := range byLength {
-		if !isCoveredByAny(root.path, kept) {
+		covered, err := isCoveredByAny(root.path, keptPaths)
+		if err != nil {
+			return nil, err
+		}
+		if !covered {
+			keptPaths = append(keptPaths, root.path)
 			kept[root.path] = true
 		}
 	}
@@ -214,23 +222,59 @@ func dropNestedRoots(roots []scanRoot) []scanRoot {
 			seen[root.path] = true
 		}
 	}
-	return result
+	return result, nil
 }
 
-// isCoveredByAny reports whether path is one of the kept folders or sits inside one.
-func isCoveredByAny(path string, kept map[string]bool) bool {
-	for keptPath := range kept {
-		if path == keptPath || isWithin(path, keptPath) {
-			return true
+// isCoveredByAny reports whether path is one of the kept folders, or sits inside one whose scan
+// reaches it.
+func isCoveredByAny(path string, keptPaths []string) (bool, error) {
+	for _, keptPath := range keptPaths {
+		if path == keptPath {
+			return true, nil
+		}
+		rel, below := relativeBelow(path, keptPath)
+		if !below {
+			continue
+		}
+		reached, err := scanReaches(keptPath, rel)
+		if err != nil || reached {
+			return reached, err
 		}
 	}
-	return false
+	return false, nil
+}
+
+// scanReaches reports whether scanning the root folder walks down to rel below it: every folder on
+// the way, the last one included, must be one the scan descends into.
+func scanReaches(root string, rel string) (bool, error) {
+	current := root
+	for _, name := range strings.Split(rel, string(filepath.Separator)) {
+		current = filepath.Join(current, name)
+		// Lstat, so that a linked folder on the way counts as the link the scan stops at.
+		info, err := os.Lstat(current)
+		if err != nil {
+			return false, fmt.Errorf("inspect %s: %w", current, err)
+		}
+		if !scanDescendsInto(name, info.Mode()) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // isWithin reports whether child sits below parent; the same folder is not within itself.
 func isWithin(child string, parent string) bool {
+	_, below := relativeBelow(child, parent)
+	return below
+}
+
+// relativeBelow returns child's path relative to parent when child sits below parent.
+func relativeBelow(child string, parent string) (string, bool) {
 	rel, err := filepath.Rel(parent, child)
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
 }
 
 // displayPath names a folder the way findings do: relative to the project when inside it,

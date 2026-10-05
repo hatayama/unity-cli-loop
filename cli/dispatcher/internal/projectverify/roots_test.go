@@ -239,6 +239,74 @@ func TestRunScansLocalPackagePointingAtEmbeddedPackageOnce(t *testing.T) {
 	assertFindings(t, report)
 }
 
+// Verifies a local package inside a hidden folder of an embedded package is scanned as its own
+// root, since the embedded package's scan never enters the hidden folder.
+func TestRunScansLocalPackageBelowHiddenFolderOfEmbeddedPackage(t *testing.T) {
+	root := writeProject(t, nil)
+	embeddedDir := filepath.Join(root, "Packages", "com.example.embedded")
+	writePackage(t, embeddedDir, nil)
+	writePackage(t, filepath.Join(embeddedDir, "Sub~", "com.example.inner"),
+		map[string]string{"NoMeta.cs": "class NoMeta {}"})
+	writeFileAt(t, filepath.Join(root, "Packages", "manifest.json"), manifestJSON(t, map[string]any{
+		"com.example.inner": "file:com.example.embedded/Sub~/com.example.inner",
+	}))
+
+	report := runProject(t, root)
+
+	assertScannedRoots(t, report,
+		"Assets", "Packages/com.example.embedded", "Packages/com.example.embedded/Sub~/com.example.inner")
+	assertFindings(t, report, metaMissing("Packages/com.example.embedded/Sub~/com.example.inner/NoMeta.cs"))
+}
+
+// Verifies a local package inside a plugin folder of Assets is scanned as its own root, since the
+// Assets scan treats the plugin folder as one asset and never enters it.
+func TestRunScansLocalPackageInsidePluginFolder(t *testing.T) {
+	root := writeProject(t, map[string]string{"Assets/Tool.bundle.meta": metaText(guidOf(1))})
+	writePackage(t, filepath.Join(root, "Assets", "Tool.bundle", "com.example.inner"),
+		map[string]string{"NoMeta.cs": "class NoMeta {}"})
+	writeFileAt(t, filepath.Join(root, "Packages", "manifest.json"), manifestJSON(t, map[string]any{
+		"com.example.inner": "file:../Assets/Tool.bundle/com.example.inner",
+	}))
+
+	report := runProject(t, root)
+
+	assertScannedRoots(t, report, "Assets", "Assets/Tool.bundle/com.example.inner")
+	assertFindings(t, report, metaMissing("Assets/Tool.bundle/com.example.inner/NoMeta.cs"))
+}
+
+// Verifies a local package reached through a linked folder in Assets is scanned as its own root,
+// since the Assets scan does not follow the link.
+func TestRunScansLocalPackageBehindSymlinkInsideAssets(t *testing.T) {
+	root := writeProject(t, map[string]string{"Assets/Link.meta": metaText(guidOf(1))})
+	linkedDir := filepath.Join(filepath.Dir(root), "LinkedPackages")
+	writePackage(t, filepath.Join(linkedDir, "com.example.linked"),
+		map[string]string{"NoMeta.cs": "class NoMeta {}"})
+	makeSymlink(t, linkedDir, filepath.Join(root, "Assets", "Link"))
+	writeFileAt(t, filepath.Join(root, "Packages", "manifest.json"), manifestJSON(t, map[string]any{
+		"com.example.linked": "file:../Assets/Link/com.example.linked",
+	}))
+
+	report := runProject(t, root)
+
+	assertScannedRoots(t, report, "Assets", "Assets/Link/com.example.linked")
+	assertFindings(t, report, metaMissing("Assets/Link/com.example.linked/NoMeta.cs"))
+}
+
+// Verifies a local package whose own folder in Assets has a hidden name is scanned as its own
+// root, since the Assets scan skips hidden folders.
+func TestRunScansLocalPackageWhoseFolderIsHidden(t *testing.T) {
+	root := writeProject(t, nil)
+	writePackage(t, filepath.Join(root, "Assets", "Inner~"), map[string]string{"NoMeta.cs": "class NoMeta {}"})
+	writeFileAt(t, filepath.Join(root, "Packages", "manifest.json"), manifestJSON(t, map[string]any{
+		"com.example.inner": "file:../Assets/Inner~",
+	}))
+
+	report := runProject(t, root)
+
+	assertScannedRoots(t, report, "Assets", "Assets/Inner~")
+	assertFindings(t, report, metaMissing("Assets/Inner~/NoMeta.cs"))
+}
+
 // Verifies a file: path to the project itself or to a folder containing it is reported and not scanned.
 func TestRunReportsLocalPackageThatContainsProject(t *testing.T) {
 	root := writeProject(t, nil)

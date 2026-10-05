@@ -55,22 +55,29 @@ func (v *verifier) scanDirectory(dir string, display string) error {
 // scanAsset looks inside one asset that already has its .meta file checked.
 func (v *verifier) scanAsset(entry fs.DirEntry, path string, display string) error {
 	switch {
-	case entry.Type()&fs.ModeSymlink != 0:
-		// Unity imports the link itself; following it can leave the project or loop.
-		return nil
-	case entry.IsDir():
-		// Unity imports these folders as one plugin. Whether the files inside have .meta files
-		// depends on how the plugin was built, so they are not checked.
-		if isOpaquePluginFolder(entry.Name()) {
-			return nil
-		}
+	case scanDescendsInto(entry.Name(), entry.Type()):
 		return v.scanDirectory(path, display)
 	case entry.Type().IsRegular():
 		return v.scanFileForConflicts(path, display)
 	default:
-		// Sockets and devices are not assets.
+		// Links, plugin folders, sockets, and devices have nothing to scan inside.
 		return nil
 	}
+}
+
+// scanDescendsInto reports whether the .meta scan walks into the entry named name with the given
+// mode. It is the only place that rule lives: the scan uses it to decide where to go, and the root
+// list uses it to decide which nested roots the scan already covers, so the two cannot drift into
+// scanning a folder twice or not at all.
+func scanDescendsInto(name string, mode fs.FileMode) bool {
+	// Unity imports a link itself; following it can leave the project or loop. IsDir is false
+	// for a link, so this also stops at linked folders.
+	if !mode.IsDir() {
+		return false
+	}
+	// Unity skips hidden folders, and imports plugin folders as one plugin whose files may or may
+	// not have .meta files depending on how the plugin was built.
+	return !isUnityHiddenName(name, true) && !isOpaquePluginFolder(name)
 }
 
 // checkMetaFile pairs one .meta file with its asset, then checks its GUID and contents.
