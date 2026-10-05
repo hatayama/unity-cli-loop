@@ -16,10 +16,10 @@ namespace UnityCliLoop.CodeComplexity
             string assetsPath = Path.Combine(rootPath, "Assets");
             string testsPath = Path.Combine(rootPath, "tests");
 
-            string[] productionFiles = CollectFiles(packageSourcePath);
+            string[] productionFiles = CollectFiles(rootPath, packageSourcePath);
             List<string> nonProductionFiles = new();
-            nonProductionFiles.AddRange(CollectFiles(assetsPath));
-            nonProductionFiles.AddRange(CollectFiles(testsPath));
+            nonProductionFiles.AddRange(CollectFiles(rootPath, assetsPath));
+            nonProductionFiles.AddRange(CollectFiles(rootPath, testsPath));
 
             return new SourceFileSet(
                 productionFiles,
@@ -29,7 +29,7 @@ namespace UnityCliLoop.CodeComplexity
                     .ToArray());
         }
 
-        private static string[] CollectFiles(string directoryPath)
+        private static string[] CollectFiles(string rootPath, string directoryPath)
         {
             if (!Directory.Exists(directoryPath))
             {
@@ -37,16 +37,20 @@ namespace UnityCliLoop.CodeComplexity
             }
 
             return Directory.GetFiles(directoryPath, "*.cs", SearchOption.AllDirectories)
-                .Where(path => !IsGeneratedSkillCopy(path))
+                .Where(path => !IsGeneratedSkillCopy(rootPath, path))
                 .OrderBy(path => path, StringComparer.Ordinal)
                 .ToArray();
         }
 
-        private static bool IsGeneratedSkillCopy(string path)
+        // Judged on the path relative to the scan root: a checkout that itself sits below a .claude or
+        // .agents directory, such as a git worktree, would otherwise have every file skipped.
+        private static bool IsGeneratedSkillCopy(string rootPath, string path)
         {
-            string normalized = path.Replace(Path.DirectorySeparatorChar, '/');
-            return normalized.Contains("/.agents/", StringComparison.Ordinal)
-                || normalized.Contains("/.claude/", StringComparison.Ordinal);
+            string relativePath = Path.GetRelativePath(rootPath, path).Replace(Path.DirectorySeparatorChar, '/');
+            return relativePath.StartsWith(".agents/", StringComparison.Ordinal)
+                || relativePath.Contains("/.agents/", StringComparison.Ordinal)
+                || relativePath.StartsWith(".claude/", StringComparison.Ordinal)
+                || relativePath.Contains("/.claude/", StringComparison.Ordinal);
         }
     }
 }
