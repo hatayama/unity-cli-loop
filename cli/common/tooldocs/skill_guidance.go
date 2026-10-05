@@ -35,6 +35,8 @@ var commandSkillNames = map[string]string{
 	"enable-watch":       "uloop-pause-point",
 	"clear-watch":        "uloop-pause-point",
 	"get-watch-values":   "uloop-pause-point",
+
+	"verify-project": "uloop-verify-project",
 }
 
 // SkillGuidanceLine returns the closing line of a command's --help output: an instruction to load

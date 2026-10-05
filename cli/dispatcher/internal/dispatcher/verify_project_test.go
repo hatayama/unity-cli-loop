@@ -198,7 +198,8 @@ func TestVerifyProjectRejectsPositionalArgument(t *testing.T) {
 		callVerifyProject([]string{"verify-project", "extra"}, projectRoot, ""), "extra")
 }
 
-// Verifies --help or -h anywhere after the command prints the usage, even next to an unknown option.
+// Verifies --help or -h anywhere after the command prints the usage and points to the skill, even
+// next to an unknown option.
 func TestVerifyProjectHelpPrintsUsage(t *testing.T) {
 	for _, args := range [][]string{
 		{"verify-project", "--help"},
@@ -210,7 +211,9 @@ func TestVerifyProjectHelpPrintsUsage(t *testing.T) {
 		if !call.handled || call.code != 0 || call.stderr != "" {
 			t.Fatalf("%v: handled=%v code=%d stderr=%s", args, call.handled, call.code, call.stderr)
 		}
-		for _, expected := range []string{"uloop verify-project", "Global options:"} {
+		for _, expected := range []string{
+			"uloop verify-project", "Global options:", "Load the uloop-verify-project skill",
+		} {
 			if !strings.Contains(call.stdout, expected) {
 				t.Fatalf("%v: help output missing %q:\n%s", args, expected, call.stdout)
 			}

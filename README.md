@@ -184,10 +184,11 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 
 
 <details>
-<summary>All 19 Bundled Skills</summary>
+<summary>All 20 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-compile` - Execute compilation
+- `/uloop-verify-project` - Check .meta files, GUIDs, conflict markers, and the package manifest without Unity
 - `/uloop-get-logs` - Get console logs
 - `/uloop-run-tests` - Run tests
 - `/uloop-hot-reload` - Apply method-body changes to running code instantly, without recompiling
@@ -225,6 +226,9 @@ uloop launch -p Android
 
 # Kill running Unity and restart
 uloop launch -r
+
+# Check .meta files, GUIDs, and conflict markers without Unity
+uloop verify-project
 
 # Execute compilation
 uloop compile
