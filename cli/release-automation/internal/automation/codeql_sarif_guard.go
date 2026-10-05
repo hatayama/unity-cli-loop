@@ -11,7 +11,7 @@ const (
 	expectedCodeQLSARIFSchema         = "https://json.schemastore.org/sarif-2.1.0.json"
 	expectedCodeQLSARIFVersion        = "2.1.0"
 	expectedCodeQLToolName            = "CodeQL"
-	expectedCodeQLToolSemanticVersion = "2.26.0"
+	expectedCodeQLToolSemanticVersion = "2.27.1"
 	// These hard floors detect extractor collapse without rejecting normal Unity-source composition changes.
 	minimumCodeQLCallTargetPercentage = 55
 	minimumCodeQLKnownTypePercentage  = 70
@@ -151,7 +151,7 @@ func validateCodeQLSARIFQuality(run codeQLSARIFRun) (CodeQLSARIFValidationResult
 // helper: those three notification kinds are one scan, and leaving the loop
 // inline kept validateCodeQLSARIFQuality over the cyclop limit.
 func scanCodeQLQualityNotifications(invocation codeQLSARIFInvocation) (codeQLQualityScan, error) {
-	// CodeQL 2.26.0 emits the database-quality diagnostic only below its own 85% thresholds. The strict semantic-version check above freezes that behavior, so absence means both metrics are at least 85%, not that evidence was silently lost.
+	// CodeQL 2.27.1 emits the database-quality diagnostic only below its own 85% thresholds. The strict semantic-version check above freezes that behavior, so absence means both metrics are at least 85%, not that evidence was silently lost.
 	scan := codeQLQualityScan{
 		callTargets: 100,
 		knownTypes:  100,
