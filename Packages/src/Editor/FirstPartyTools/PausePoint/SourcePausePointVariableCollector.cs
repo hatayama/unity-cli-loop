@@ -24,9 +24,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // "this", so this never collides with a captured local, parameter, or field.
         private const string ThisEntryName = "this";
 
+        /// <summary>
+        /// Lists locals, then parameters, then the variables the compiler-generated holders carry,
+        /// then the instance as "this" followed by its fields. The holders are the instance when it
+        /// is a closure or state machine, and every closure struct in closureFrames.
+        /// </summary>
         public static UloopPausePointCapturedVariableFrame Collect(
-            object instance, object[] parameterNamesAndValues, object[] localNamesAndValues)
+            object instance, object[] closureFrames, object[] parameterNamesAndValues, object[] localNamesAndValues)
         {
+            Debug.Assert(closureFrames != null, "closureFrames must not be null");
             Debug.Assert(parameterNamesAndValues != null, "parameterNamesAndValues must not be null");
             Debug.Assert(localNamesAndValues != null, "localNamesAndValues must not be null");
             Debug.Assert(parameterNamesAndValues.Length % 2 == 0, "parameterNamesAndValues must contain name/value pairs");
@@ -47,12 +53,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount, ref truncated,
                 parameterNamesAndValues, UloopCapturedVariableScope.Parameter);
 
-            if (instance != null)
-            {
-                CollectInstanceFieldVariables(
-                    instance, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
-                    ref truncated);
-            }
+            CollectHolderAndInstanceVariables(
+                instance, closureFrames, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
+                ref truncated);
 
             return new UloopPausePointCapturedVariableFrame(
                 entries, truncated, truncatedVariableNames, truncatedVariableCount);
@@ -77,39 +80,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static void CollectInstanceFieldVariables(
+        private static void CollectHolderAndInstanceVariables(
             object instance,
+            object[] closureFrames,
             List<UloopPausePointCapturedVariableEntry> entries,
             HashSet<string> capturedNames,
             List<string> truncatedVariableNames,
             ref int truncatedVariableCount,
             ref bool truncated)
         {
-            // Normal method: the paused instance itself is `this`, emitted before its fields so the
-            // count cap keeps prioritizing locals and parameters over instance state.
-            if (!IsCompilerGeneratedHolder(instance.GetType()))
+            // A normal instance is `this` itself. A compiler-generated instance (closure or state
+            // machine) is only a holder: the real `this` is found through its links, never the
+            // holder itself.
+            object receiver = instance != null && !IsCompilerGeneratedHolder(instance.GetType()) ? instance : null;
+            object outerThis = null;
+            if (instance != null && receiver == null)
             {
-                TryAppendEntry(
-                    entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount, ref truncated,
-                    ThisEntryName, UloopCapturedVariableScope.This, instance);
+                object linkedOuterThis = CollectDirectFieldVariables(
+                    instance, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
+                    ref truncated, followOuterThis: true);
+                outerThis ??= linkedOuterThis;
             }
 
-            object outerThis = CollectDirectFieldVariables(
-                instance, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
-                ref truncated, followOuterThis: true);
-            if (outerThis == null)
+            // Closure structs hold variables of the enclosing scopes, so they are listed before the
+            // instance state to keep the count cap prioritizing variables over fields. Every struct
+            // is walked even after one of them links to the instance, because each carries the
+            // variables of its own scope.
+            foreach (object closureFrame in closureFrames)
+            {
+                if (closureFrame == null)
+                {
+                    continue;
+                }
+
+                object linkedOuterThis = CollectDirectFieldVariables(
+                    closureFrame, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
+                    ref truncated, followOuterThis: true);
+                outerThis ??= linkedOuterThis;
+            }
+
+            object thisValue = receiver ?? outerThis;
+            if (thisValue == null)
             {
                 return;
             }
 
-            // State machine or closure: the real `this` is the outer instance found through the
-            // compiler-generated holders, never a holder itself. Emit it before its fields.
             TryAppendEntry(
                 entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount, ref truncated,
-                ThisEntryName, UloopCapturedVariableScope.This, outerThis);
+                ThisEntryName, UloopCapturedVariableScope.This, thisValue);
 
+            // Why no link following: only compiler-generated holders link outward, and `this` is
+            // never one of them.
             CollectDirectFieldVariables(
-                outerThis, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
+                thisValue, entries, capturedNames, truncatedVariableNames, ref truncatedVariableCount,
                 ref truncated, followOuterThis: false);
         }
 

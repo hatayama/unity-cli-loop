@@ -157,6 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             AppendInstanceLoad(emitted, injection, method);
+            AppendClosureFramesLoad(emitted, method);
 
             // InstanceFromFirstArgument stores absolute GetParameters() indexes (including the
             // hole left by skipping __uloopInstance at 0), so argOffset stays 0. Ordinary
@@ -252,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (injection.IsStatic)
             {
-                AppendStaticInstanceLoad(emitted, method);
+                emitted.Add(new CodeInstruction(OpCodes.Ldnull));
                 return;
             }
 
@@ -276,24 +277,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // Why a static method may still pass an instance: a local function receives its enclosing
-        // scopes as a by-ref closure struct, and the collector walks that struct to the variables
-        // and the instance it holds, as it does for a lambda's closure class. The struct is copied
-        // into the box, so the capture is a snapshot and cannot write back into the frame.
-        private static void AppendStaticInstanceLoad(List<CodeInstruction> emitted, MethodBase method)
+        // Why pass the by-ref closure structs separately from the instance: a local function
+        // receives the variables of its enclosing scopes, and often the instance, in those structs,
+        // and the collector walks them the way it walks a lambda's closure class. They cannot be
+        // captured as parameters because by-ref arguments cannot be boxed as they are; each struct
+        // is copied into a box, so the capture is a snapshot and cannot write back into the frame.
+        private static void AppendClosureFramesLoad(List<CodeInstruction> emitted, MethodBase method)
         {
-            int frameIndex = SourcePausePointClosureFrameArgument.FindIndexOrMinusOne(method);
-            if (frameIndex < 0)
-            {
-                emitted.Add(new CodeInstruction(OpCodes.Ldnull));
-                return;
-            }
+            List<int> frameIndexes = SourcePausePointClosureFrameArgument.FindIndexes(method);
+            // Fully qualify: ToolContracts also defines ParameterInfo (tool schema DTO).
+            System.Reflection.ParameterInfo[] parameters = method.GetParameters();
+            // GetParameters() omits the hidden `this` that occupies argument slot 0 of an instance
+            // method. Decided by the patched method itself: a hot-reload shim taking the instance as
+            // its first declared parameter is static, so its indexes already match its slots.
+            int slotOffset = method.IsStatic ? 0 : 1;
 
-            Type frameType = SourcePausePointClosureFrameArgument.FrameTypeOrNull(
-                method.GetParameters()[frameIndex].ParameterType);
-            emitted.Add(CodeInstruction.LoadArgument(frameIndex, false));
-            emitted.Add(new CodeInstruction(OpCodes.Ldobj, frameType));
-            emitted.Add(new CodeInstruction(OpCodes.Box, frameType));
+            emitted.Add(new CodeInstruction(OpCodes.Ldc_I4, frameIndexes.Count));
+            emitted.Add(new CodeInstruction(OpCodes.Newarr, typeof(object)));
+            for (int i = 0; i < frameIndexes.Count; i++)
+            {
+                int frameIndex = frameIndexes[i];
+                Type frameType = SourcePausePointClosureFrameArgument.FrameTypeOrNull(parameters[frameIndex].ParameterType);
+                emitted.Add(new CodeInstruction(OpCodes.Dup));
+                emitted.Add(new CodeInstruction(OpCodes.Ldc_I4, i));
+                emitted.Add(CodeInstruction.LoadArgument(frameIndex + slotOffset, false));
+                emitted.Add(new CodeInstruction(OpCodes.Ldobj, frameType));
+                emitted.Add(new CodeInstruction(OpCodes.Box, frameType));
+                emitted.Add(new CodeInstruction(OpCodes.Stelem_Ref));
+            }
         }
 
         private static void AppendNameValueArray<T>(

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
@@ -46,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             object[] parameters = { "damage", 3 };
             object[] locals = { "speed", 5 };
 
-            SourcePausePointCapture.Capture("jump", null, parameters, locals);
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), parameters, locals);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
             Assert.That(snapshot.IsHit, Is.True);
@@ -62,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             VibeLogger.ClearMemoryLogs();
 
-            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>());
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             string logs = VibeLogger.GetLogsForAi("pause_point_hit");
             Assert.That(logs, Does.Contain("pause_point_hit"));
@@ -74,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Capture_WhenPausePointIsNotArmed_DoesNotPauseOrRecordAHit()
         {
             // Verifies the IsArmed fast path no-ops when the marker was never enabled.
-            SourcePausePointCapture.Capture("never-enabled", null, Array.Empty<object>(), Array.Empty<object>());
+            SourcePausePointCapture.Capture("never-enabled", null, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("never-enabled");
             Assert.That(snapshot.IsHit, Is.False);
@@ -86,9 +87,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies a one-shot marker disarms itself so a second pass through the same line no-ops.
             UloopPausePointRegistry.Enable("jump", 30);
-            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>());
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
-            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>());
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
         }
@@ -101,8 +102,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             UloopPausePointRegistry.Enable("jump", 30, UloopPausePointCaptureMode.Continuous, 20);
 
-            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), new object[] { "speed", 1 });
-            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), new object[] { "speed", 2 });
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>(), new object[] { "speed", 1 });
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>(), new object[] { "speed", 2 });
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
@@ -123,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             object[] locals = { "speed", 5 };
 
-            Task.Run(() => SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), locals));
+            Task.Run(() => SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>(), locals));
 
             float timeoutTime = Time.realtimeSinceStartup + 5f;
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
@@ -146,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             NormalInstanceFixture instance = new();
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                instance, Array.Empty<object>(), Array.Empty<object>());
+                instance, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             UloopPausePointCapturedVariableEntry thisEntry = frame.Entries.Single(entry => entry.Name == "this");
             Assert.That(thisEntry.Scope, Is.EqualTo(UloopCapturedVariableScope.This));
@@ -163,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             object[] parameters = { "damage", 3 };
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                instance, parameters, locals);
+                instance, Array.Empty<object>(), parameters, locals);
 
             List<string> names = frame.Entries.Select(entry => entry.Name).ToList();
             int thisIndex = names.IndexOf("this");
@@ -185,7 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             outerThisField.SetValue(stateMachine, outer);
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+                stateMachine, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             UloopPausePointCapturedVariableEntry thisEntry = frame.Entries.Single(entry => entry.Name == "this");
             Assert.That(thisEntry.Scope, Is.EqualTo(UloopCapturedVariableScope.This));
@@ -201,7 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (object stateMachine, _) = CreateStateMachine();
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+                stateMachine, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             Assert.That(frame.Entries.Any(entry => entry.Name == "this"), Is.False);
         }
@@ -224,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             receiverField.SetValue(stateMachine, receiver);
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+                stateMachine, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             AssertReceiverSurfacesAsThis(frame, receiver);
         }
@@ -238,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Func<int> closure = ShimShapedFixture.CaptureReceiver(receiver, 3);
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                closure.Target, Array.Empty<object>(), Array.Empty<object>());
+                closure.Target, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             AssertReceiverSurfacesAsThis(frame, receiver);
             Assert.That(frame.Entries.Any(entry => entry.Name == "bonus"), Is.True);
@@ -254,7 +255,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Func<int> closure = ShimShapedFixture.CaptureReceiverInLoop(receiver, 2);
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                closure.Target, Array.Empty<object>(), Array.Empty<object>());
+                closure.Target, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             AssertReceiverSurfacesAsThis(frame, receiver);
             Assert.That(frame.Entries.Any(entry => entry.Name == "x"), Is.True);
@@ -271,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             object stateMachine = CreateAsyncLambdaStateMachine(asyncLambda.Target);
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+                stateMachine, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             AssertReceiverSurfacesAsThis(frame, receiver);
             Assert.That(frame.Entries.Any(entry => ReferenceEquals(entry.Value, stateMachine)), Is.False);
@@ -287,7 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             object stateMachine = CreateAsyncLambdaStateMachine(asyncLambda.Target);
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+                stateMachine, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             AssertReceiverSurfacesAsThis(frame, instance);
             Assert.That(frame.Entries.Any(entry => entry.Name == "bonus"), Is.True);
@@ -330,9 +331,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             object[] locals = { "speed", 5 };
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                null, Array.Empty<object>(), locals);
+                null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(frame.Entries.Any(entry => entry.Name == "this"), Is.False);
+        }
+
+        [Test]
+        public void Collect_WithFramesAndNullInstance_ListsEveryFrameVariableWithoutThis()
+        {
+            // Verifies a static local function's closure structs each contribute their variables
+            // as parameters, and none of them surfaces as "this".
+            object[] closureFrames = { new OuterScopeFrameShape { offset = 2 }, new InnerScopeFrameShape { inner = 3 } };
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                null, closureFrames, Array.Empty<object>(), Array.Empty<object>());
+
+            Assert.That(frame.Entries.Select(entry => entry.Name), Is.EqualTo(new[] { "offset", "inner" }));
+            Assert.That(frame.Entries.All(entry => entry.Scope == UloopCapturedVariableScope.Parameter), Is.True);
+        }
+
+        [Test]
+        public void Collect_WithNormalInstanceAndFrame_ListsFrameVariablesBeforeThis()
+        {
+            // Verifies a closure struct's variables land after locals and parameters but before
+            // "this" and the instance fields, so the count cap keeps prioritizing variables.
+            NormalInstanceFixture instance = new() { Health = 7 };
+            object[] closureFrames = { new OuterScopeFrameShape { offset = 2 } };
+            object[] parameters = { "damage", 3 };
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                instance, closureFrames, parameters, Array.Empty<object>());
+
+            Assert.That(
+                frame.Entries.Select(entry => entry.Name),
+                Is.EqualTo(new[] { "damage", "offset", "this", "Health" }));
+            Assert.That(frame.Entries.Single(entry => entry.Name == "this").Value, Is.SameAs(instance));
+        }
+
+        [Test]
+        public void Collect_WithShimReceiverInLaterFrame_ResolvesThisFromThatFrame()
+        {
+            // Verifies a closure-class holder plus several closure structs lists every holder's
+            // variables and finds "this" through the receiver field of a struct that is not the
+            // first one, without listing the receiver field itself.
+            AsyncStateMachineFixture receiver = new() { OuterField = 7 };
+            LoopClosureShape holder = new() { j = 1 };
+            object[] closureFrames =
+            {
+                new OuterScopeFrameShape { offset = 2 },
+                new ShimReceiverFrameShape { __uloopInstance = receiver, delta = 5 },
+            };
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                holder, closureFrames, Array.Empty<object>(), Array.Empty<object>());
+
+            AssertReceiverSurfacesAsThis(frame, receiver);
+            foreach (string name in new[] { "j", "offset", "delta" })
+            {
+                UloopPausePointCapturedVariableEntry entry = frame.Entries.Single(e => e.Name == name);
+                Assert.That(entry.Scope, Is.EqualTo(UloopCapturedVariableScope.Parameter), name);
+            }
         }
 
         [Test]
@@ -351,7 +409,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             NormalInstanceFixture instance = new();
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                instance, Array.Empty<object>(), locals);
+                instance, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(frame.Entries.Count, Is.EqualTo(SourcePausePointConstants.MaxCapturedVariableCount));
             Assert.That(frame.Entries.Any(entry => entry.Name == "this"), Is.False);
@@ -374,7 +432,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                null, Array.Empty<object>(), locals);
+                null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(frame.Entries.Count, Is.EqualTo(SourcePausePointConstants.MaxCapturedVariableCount));
             Assert.That(frame.Truncated, Is.True);
@@ -390,7 +448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             object[] locals = { "speed", 5, "damage", 3 };
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                null, Array.Empty<object>(), locals);
+                null, Array.Empty<object>(), Array.Empty<object>(), locals);
 
             Assert.That(frame.Truncated, Is.False);
             Assert.That(frame.TruncatedVariableCount, Is.EqualTo(0));
@@ -407,7 +465,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             instance.SetVerticalVelocity(4.5f);
 
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
-                instance, Array.Empty<object>(), Array.Empty<object>());
+                instance, Array.Empty<object>(), Array.Empty<object>(), Array.Empty<object>());
 
             UloopPausePointCapturedVariableEntry entry = frame.Entries.Single(entry => entry.Name == "VerticalVelocity");
             Assert.That(entry.Scope, Is.EqualTo(UloopCapturedVariableScope.InstanceField));
@@ -426,6 +484,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class NormalInstanceFixture
         {
             public int Health;
+        }
+
+        // Shapes of the compiler-generated holders a local function receives: a lambda's closure
+        // class, and the closure structs passed by reference. Field names follow the compiler's.
+        [CompilerGenerated]
+        private sealed class LoopClosureShape
+        {
+            public int j;
+        }
+
+        [CompilerGenerated]
+        private struct OuterScopeFrameShape
+        {
+            public int offset;
+        }
+
+        [CompilerGenerated]
+        private struct InnerScopeFrameShape
+        {
+            public int inner;
+        }
+
+        [CompilerGenerated]
+        private struct ShimReceiverFrameShape
+        {
+            public AsyncStateMachineFixture __uloopInstance;
+            public int delta;
         }
 
         private sealed class AutoPropertyFixture

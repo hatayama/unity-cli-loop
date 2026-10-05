@@ -802,6 +802,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a pause point inside a local function of a hot-reloaded method, where a lambda
+        /// capturing the loop variable turns the loop scope into a closure class, captures the
+        /// instance as "this" with its fields and the variables of every enclosing scope, although
+        /// the instance and the method parameter travel in a by-ref closure struct that the loop
+        /// closure class does not link to.
+        /// </summary>
+        [Test]
+        public async Task Enable_OnHotReloadedLocalFunctionOfLoopClosure_CapturesInstanceAndEnclosingScopes()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            const string compiledBody =
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            return _secret + delta;\n"
+                + "        }";
+            Assert.That(onDisk, Does.Contain(compiledBody), "Precondition: ComputeWithPrivate body must exist.");
+            string editedSource = onDisk.Replace(
+                compiledBody,
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            int total = 0;\n"
+                + "            for (int j = 0; j < 1; j++)\n            {\n"
+                + "                Func<int> read = () => j;\n"
+                + "                int Local()\n                {\n"
+                + "                    int loopSum = _secret + delta + j;\n"
+                + "                    return loopSum;\n"
+                + "                }\n\n"
+                + "                total += Local() + read();\n"
+                + "            }\n\n"
+                + "            return total;\n"
+                + "        }",
+                StringComparison.Ordinal);
+            int enableLine = FindLineNumber(editedSource, "return loopSum;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractLoopClosureLocalFunction.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(fixture.SecretForAssert + 5));
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
+            Assert.That(status.CapturedVariables.Any(v => v.Name == "this"), Is.True, FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "_secret" && v.Scope == UloopCapturedVariableScope.InstanceField),
+                Is.True,
+                FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "delta" && v.Value == "5"),
+                Is.True,
+                FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "j" && v.Value == "0"),
+                Is.True,
+                FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == HotReloadShimMethodLookup.ShimReceiverParameterName),
+                Is.False,
+                FormatCaptured(status));
+            // Read from the registry: the enable response turns an empty list into null.
+            Assert.That(status.NotCapturableVariables, Is.Empty);
+        }
+
+        /// <summary>
         /// What: RevertAll after enable on a hot-reloaded async body restores instrumentation
         /// onto the compiled MoveNext and hits with the original (non-edited) return value.
         /// </summary>
