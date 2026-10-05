@@ -5,7 +5,8 @@ using io.github.hatayama.UnityCliLoop.Application;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     // Owns the EditorApplication event subscriptions that used to live in Application, so Application
-    // stays free of UnityEditor while UnityCliLoopEditorStateSnapshot keeps caching the latest play state.
+    // stays free of UnityEditor while UnityCliLoopEditorStateSnapshot keeps caching the latest play and
+    // compile state.
     /// <summary>
     /// Keeps <see cref="UnityCliLoopEditorStateSnapshot"/> refreshed from Editor update and play-mode events.
     /// </summary>
@@ -30,6 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopEditorStateSnapshot.SetPlayState(
                 EditorApplication.isPlaying,
                 EditorApplication.isPaused);
+            UnityCliLoopEditorStateSnapshot.SetCompileState(
+                EditorApplication.isCompiling,
+                EditorApplication.isUpdating);
         }
     }
 }

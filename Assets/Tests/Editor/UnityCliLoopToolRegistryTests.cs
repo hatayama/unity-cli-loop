@@ -414,6 +414,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteCommandAsync_WhenCommandIsGetEditorStatus_ReturnsEditorStatusPayloadWithoutWaiting()
+        {
+            // Tests that editor status routes as a CLI-only bridge command that answers without
+            // awaiting anything, not as a public tool. The status is checked before the await
+            // because a cancelled async test would otherwise be recorded as passed.
+            UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouter();
+
+            Task<UnityCliLoopToolResponse> execution = executionRouter.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                new JObject(),
+                CancellationToken.None);
+
+            Assert.That(execution.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            Assert.That(await execution, Is.InstanceOf<GetEditorStatusResponse>());
+        }
+
+        [Test]
         public void Constructor_WhenLegacyDevelopmentToolsAreRemoved_DoesNotRegisterThem()
         {
             // Tests that legacy MCP-era development tools are not exposed through the runtime registry.
