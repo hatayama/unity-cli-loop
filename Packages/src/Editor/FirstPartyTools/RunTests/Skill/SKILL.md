@@ -37,36 +37,14 @@ uloop run-tests [options]
 | `--skip-compile` | flag | - | Skip the CLI-side compile before running tests; use only while validating active hot-reload patches. Unity still imports script edits saved since the last compile. |
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 | `--respect-enter-play-mode-settings` | flag | - | PlayMode only: keep the project's Enter Play Mode settings instead of forcing Domain Reload off. A Domain Reload during the run is survived; the result is recovered after the reload. Use for projects whose libraries require a Domain Reload on Play entry. |
+| `--rerun-failed` | flag | - | Rerun only the tests that failed or were inconclusive in the most recent completed run of the same --test-mode (whole fixtures for a failed OneTimeSetUp/OneTimeTearDown). Cannot be combined with --filter-type or --filter-value |
 
 By default PlayMode still forces Domain Reload off. With `--respect-enter-play-mode-settings`, a Domain Reload may run and the command takes longer; pause-point and hot-reload notes are omitted from a result recovered after reload. Canceling the CLI (Ctrl-C) does not stop the Unity-side run on this path.
 
 exact matches the full test name (Namespace.Class.Method). class runs every test of one class by bare or namespace-qualified name, e.g. --filter-type class --filter-value PlayerTests; the name is matched literally and whole, so PlayerTests does not run EnemyPlayerTests. regex matches a .NET regex against full test names, e.g. --filter-type regex --filter-value '^MyGame\.Tests\.'
 
+`--rerun-failed` reads the record that every completed run writes for its test mode, so it reruns the failures of the most recent completed run, filtered or not. A run that timed out or was cancelled leaves no record. With nothing recorded as failed it returns `Status: NothingToRerun` without running; to tell a flaky test from a real failure, run `--rerun-failed` again after a failure.
+
 ## Output
 
-Returns JSON with:
-
-- `Success` (boolean): Whether every test passed or was skipped; `false` when a test or suite failed or a test was inconclusive
-- `Status` (string): Machine-readable execution status such as `Passed`, `Failed`, `Inconclusive`, `NoTestsFound`, or `ExecutionFailed`
-- `HasFailures` (boolean): Whether any discovered test or suite failed
-- `Message` (string): Summary message
-- `NoTestsFound` (boolean): Whether Unity Test Runner discovered zero matching tests
-- `NoTestsFoundExplanation` (string): Agent-facing explanation when `NoTestsFound` is true; empty otherwise
-- `CompletedAt` (string): ISO timestamp when the run finished
-- `TestCount` (number): Total tests executed
-- `PassedCount` (number): Passed tests
-- `FailedCount` (number): Failed tests
-- `SkippedCount` (number): Skipped tests
-- `InconclusiveCount` (number): Inconclusive tests (an `Assume` was not met)
-- `XmlPath` (string or null): Path to NUnit XML result file. `null` when no XML was saved (typically on `Success: true`); set only when a test or suite failed or a test was inconclusive and the file exists on disk.
-- `ClearedPausePointIds` (string[], optional): IDs of pause points that were cleared before test execution. Omitted from JSON when no pause points were active.
-- `FailedTests` (array, optional): Up to 10 failed leaf tests with `FullName`, `Message`, and when the stack trace contains a path:line location, `File` and `Line`. Omitted when no tests failed. When `FailedCount` is greater than 10, `Message` ends with `first 10 of N failures listed; see XmlPath for full results.`
-- `SkippedTests` (string[], optional): Up to 10 full names of skipped leaf tests. Omitted when no tests were skipped. When `SkippedCount` is greater than 10, only the first 10 names are listed.
-- `InconclusiveTests` (array, optional): Up to 10 inconclusive leaf tests with `FullName` and `Message`. Omitted when no test was inconclusive. When `InconclusiveCount` is greater than 10, only the first 10 are listed; the XML at `XmlPath` has every message.
-- `FailedSuites` (array, optional): Up to 10 suites that failed outside their tests (e.g. a `OneTimeSetUp` or `OneTimeTearDown` threw), with the `FailedTests` fields. The run is `Failed` even when `FailedCount` is 0. Omitted when none.
-- `ProposedTestAsmdef` (object, optional): `AssetPath` and `Content` of a ready-to-write test `.asmdef` (test-assembly wiring plus references to the project's assemblies under test). Present only when an unfiltered run found no tests and no test assembly exists for the TestMode.
-- `CompileNote` (string, optional): States that the automatic compile ran and succeeded before the tests and names `--skip-compile` as the opt-out. When the compile response carried a Warning (for example active hot-reload changes dropped by the domain reload), the note repeats it. Omitted when `--skip-compile` was passed; a failed compile returns the compile error response instead.
-
-### XML Result File
-
-Saved to `{project_root}/.uloop/outputs/TestResults/<timestamp>.xml`. What it records, including failed suites: `references/xml-results.md`.
+Returns JSON. `Success`, `Status`, `Message`, `FailedTests` (up to 10), and `XmlPath` (set when a test or suite failed or was inconclusive) are usually enough; every field is described in `references/response-fields.md`, and the XML file in `references/xml-results.md`.
