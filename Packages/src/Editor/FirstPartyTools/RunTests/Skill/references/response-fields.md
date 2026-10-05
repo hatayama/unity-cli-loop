@@ -7,7 +7,7 @@ Returns JSON with:
 - `HasFailures` (boolean): Whether any discovered test or suite failed
 - `Message` (string): Summary message
 - `NoTestsFound` (boolean): Whether Unity Test Runner discovered zero matching tests
-- `NoTestsFoundExplanation` (string): Agent-facing explanation when `NoTestsFound` is true; empty otherwise
+- `NoTestsFoundExplanation` (string): Agent-facing explanation when `NoTestsFound` is true; empty otherwise. When `--rerun-failed` finds that every recorded test was renamed or removed, it says that instead of the test-assembly advice.
 - `CompletedAt` (string): ISO timestamp when the run finished
 - `TestCount` (number): Total tests executed
 - `PassedCount` (number): Passed tests

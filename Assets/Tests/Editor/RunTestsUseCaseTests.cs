@@ -1780,10 +1780,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.NoTestsFound, Is.True);
             Assert.That(response.RerunTargetCount, Is.EqualTo(2));
-            Assert.That(
-                response.Message,
-                Is.EqualTo(
-                    "None of the 2 tests recorded as failed in the EditMode run completed at 2026-01-02T03:04:05.0000000Z exist any more; they were renamed or removed. Run uloop run-tests without --rerun-failed."));
+            const string expectedMessage =
+                "None of the 2 tests recorded as failed in the EditMode run completed at 2026-01-02T03:04:05.0000000Z exist any more; they were renamed or removed. Run uloop run-tests without --rerun-failed.";
+            Assert.That(response.Message, Is.EqualTo(expectedMessage));
+            Assert.That(response.NoTestsFoundExplanation, Is.EqualTo(expectedMessage));
             Assert.That(response.ProposedTestAsmdef, Is.Null);
             Assert.That(response.UnfilteredTestNames, Is.Null);
             Assert.That(diagnosticCapture.AppendCalled, Is.False);

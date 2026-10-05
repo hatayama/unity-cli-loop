@@ -284,10 +284,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.RerunSourceCompletedAt = source.SourceCompletedAt;
             if (response.NoTestsFound)
             {
-                response.Message = RunTestsRerunFailedResolver.FormatRerunTargetsMissingMessage(
+                // Why the explanation too: its default text advises adding a test assembly, which
+                // would send the caller to create an .asmdef for tests that were only renamed or removed.
+                string rerunTargetsMissingMessage = RunTestsRerunFailedResolver.FormatRerunTargetsMissingMessage(
                     source.TargetCount,
                     testMode,
                     source.SourceCompletedAt);
+                response.Message = rerunTargetsMissingMessage;
+                response.NoTestsFoundExplanation = rerunTargetsMissingMessage;
             }
 
             return response;
