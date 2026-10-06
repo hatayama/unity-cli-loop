@@ -26,16 +26,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static Assembly ShimAssembly => typeof(HotReloadHandwrittenShims).Assembly;
 
         private HotReloadDomainTestScope _scope;
+        private HotReloadMethodMatcher _matcher;
 
         [SetUp]
         public void SetUp()
         {
             _scope = new HotReloadDomainTestScope();
+            _matcher = HotReloadMethodMatcher.CreateReadingFromDisk();
         }
 
         [TearDown]
         public void TearDown()
         {
+            _matcher.Dispose();
             _scope.Dispose();
         }
 
@@ -80,6 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
                 FileHomeResolver,
+                _matcher.Resolve,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -114,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
                 FileHomeResolver,
+                _matcher.Resolve,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -158,6 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
                 FileHomeResolver,
+                _matcher.Resolve,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -197,6 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
                 FileHomeResolver,
+                _matcher.Resolve,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -233,6 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
                 FileHomeResolver,
+                _matcher.Resolve,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -273,6 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
                 FileHomeResolver,
+                _matcher.Resolve,
                 FilePath,
                 ShimAssembly,
                 entries,
@@ -310,6 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
                 TestAssemblyHome,
                 FileHomeResolver,
+                _matcher.Resolve,
                 FilePath,
                 ShimAssembly,
                 entries,

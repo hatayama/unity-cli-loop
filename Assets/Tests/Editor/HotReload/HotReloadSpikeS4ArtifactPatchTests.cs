@@ -75,7 +75,8 @@ namespace SpikeS4
         {
             LoadedArtifact artifact = await CompileAndLoadArtifactAsync("SpikeS4Artifact_Matcher");
 
-            HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
+            using HotReloadMethodMatcher matcher = HotReloadMethodMatcher.CreateReadingFromDisk();
+            HotReloadMethodMatchResult matchResult = matcher.Resolve(
                 artifact.Home,
                 IntroducedTypeMetadataName,
                 "Compute",
@@ -167,7 +168,8 @@ namespace SpikeS4
 
         private static MethodBase ResolveOrFail(LoadedArtifact artifact, string methodName)
         {
-            HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
+            using HotReloadMethodMatcher matcher = HotReloadMethodMatcher.CreateReadingFromDisk();
+            HotReloadMethodMatchResult matchResult = matcher.Resolve(
                 artifact.Home,
                 IntroducedTypeMetadataName,
                 methodName,

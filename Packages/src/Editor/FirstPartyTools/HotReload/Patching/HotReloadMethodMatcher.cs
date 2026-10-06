@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Reflection;
 
@@ -15,20 +16,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         string[] parameterTypeFullNames,
         int genericArity);
 
+    /// <summary>Reads the compiled image at a path; the shape of the matcher's assembly loader.</summary>
+    internal delegate AssemblyDefinition HotReloadCompiledAssemblyLoader(string dllPath);
+
     /// <summary>
     /// Resolves a hot-reload manifest entry (type metadata name + method name + parameter type
     /// full names) to the matching MethodBase in the running AppDomain, using Cecil metadata
     /// tokens and an Mvid guard against stale script assemblies.
     /// </summary>
-    internal static class HotReloadMethodMatcher
+    internal sealed class HotReloadMethodMatcher : IDisposable
     {
+        private readonly HotReloadCompiledAssemblyLoader _loadAssembly;
+
+        /// <param name="loadAssembly">
+        /// How a compiled image is read; production passes ReadCompiledAssembly, and tests count
+        /// the reads.
+        /// </param>
+        internal HotReloadMethodMatcher(HotReloadCompiledAssemblyLoader loadAssembly)
+        {
+            if (loadAssembly == null)
+            {
+                throw new ArgumentNullException(nameof(loadAssembly));
+            }
+
+            _loadAssembly = loadAssembly;
+        }
+
+        /// <summary>A matcher for one run that reads the compiled images from disk.</summary>
+        internal static HotReloadMethodMatcher CreateReadingFromDisk()
+        {
+            return new HotReloadMethodMatcher(ReadCompiledAssembly);
+        }
+
+        /// <summary>The loader production uses: reads the whole compiled image at the path.</summary>
+        internal static AssemblyDefinition ReadCompiledAssembly(string dllPath)
+        {
+            // InMemory: the DLL is the currently loaded script assembly; keep no file handle on it.
+            ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
+            return AssemblyDefinition.ReadAssembly(dllPath, readerParameters);
+        }
+
         /// <summary>
         /// Resolves <paramref name="methodName"/> on <paramref name="typeMetadataName"/> inside
         /// the assembly <paramref name="home"/> names, whose parameters and generic arity match
         /// <paramref name="parameterTypeFullNames"/> and <paramref name="genericArity"/>
         /// exactly (Cecil FullName, no <c>this</c>).
         /// </summary>
-        public static HotReloadMethodMatchResult Resolve(
+        public HotReloadMethodMatchResult Resolve(
             HotReloadTypeHome home,
             string typeMetadataName,
             string methodName,
@@ -50,9 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Compiled assembly not found at '{dllPath}'. Compile the project first.");
             }
 
-            // InMemory: the DLL is the currently loaded script assembly; keep no file handle on it.
-            ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
-            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllPath, readerParameters);
+            using AssemblyDefinition assemblyDefinition = _loadAssembly(dllPath);
 
             TypeDefinition typeDefinition = assemblyDefinition.MainModule.GetType(typeMetadataName);
             if (typeDefinition == null)
@@ -77,6 +109,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int metadataToken = methodDefinition.MetadataToken.ToInt32();
             string compiledMvid = assemblyDefinition.MainModule.Mvid.ToString();
             return ResolveLoadedMethod(home, compiledMvid, metadataToken);
+        }
+
+        public void Dispose()
+        {
         }
 
         private static MethodDefinition FindMatchingMethod(

@@ -197,6 +197,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadEntryHomeResolver homeResolver =
                 new HotReloadEntryHomeResolver(_domain, files[0].ProjectRoot);
+            // Why once for the group: every row of the group that names the same home resolves
+            // against the same compiled image, so the peel reads that image once instead of once
+            // for every row it resolves.
+            using HotReloadMethodMatcher matcher = HotReloadMethodMatcher.CreateReadingFromDisk();
+            HotReloadMethodResolver resolveMethod = matcher.Resolve;
             foreach (HotReloadGroupFile file in files)
             {
                 // Why a file left unapplied is left alone: a file the shim compile refused keeps
@@ -223,7 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     unchangedMethods,
                     file.Sinks.Outcomes,
                     file.AssemblyResolvePath,
-                    HotReloadMethodMatcher.Resolve);
+                    resolveMethod);
             }
         }
         /// <summary>
