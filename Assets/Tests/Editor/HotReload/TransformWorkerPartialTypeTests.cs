@@ -683,9 +683,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a body of a partial type that uses an internal member of a type the run was not given
         /// where the patched method cannot run it in place (inside a lambda, a local function or a
-        /// query, in an iterator or async method, as a method passed as a delegate, by a bare name, or
-        /// next to a lambda, local function or query that works with the member's result) is skipped
-        /// with a reason that says the member is internal, not that a part is missing.
+        /// query, in an iterator or async method, in a method that runs through a delegating shim, as
+        /// a method passed as a delegate, by a bare name, or next to a lambda, local function or query
+        /// that works with the member's result) is skipped with a reason that says the member is
+        /// internal, not that a part is missing.
         /// </summary>
         [TestCase("Lambda", "OwnOnly", null, "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
         [TestCase("LocalFunction", "OwnOnly", null, "int Read() { return HotReloadInternalMemberHost.InternalStaticValue(); } return Read();")]
@@ -697,6 +698,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("MethodPassedAsDelegate", "OwnOnly", null, "System.Func<int> read = HotReloadInternalMemberHost.InternalStaticValue; return read();")]
         [TestCase("Iterator", "IteratorValues", "yield return _seed;", "yield return HotReloadInternalMemberHost.InternalStaticValue();")]
         [TestCase("Async", "AsyncValue", "return 50;", "return HotReloadInternalMemberHost.InternalStaticValue();")]
+        [TestCase("MethodRaisingItsOwnEvent", "RaiseDerivedEvent", "return 60;", "return 60 + HotReloadInternalMemberHost.InternalStaticValue();")]
         [TestCase("BareName", "DerivedValue", PartialDerivedValueBody, "return InternalInstanceValue();")]
         public async Task Skip_PartialTypeBodyUsingInternalMemberWhereItCannotBePatchedInPlace_SaysWhy(
             string form,
@@ -718,22 +720,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a body of a plain type that uses an internal member of a type the run was not given
-        /// where the patched method cannot reach it (inside a lambda, a local function or an anonymous
-        /// method, in an iterator or async method, in a getter that runs through a delegating shim, by
-        /// a bare name, or next to a lambda or local function that works with the member's result) is
-        /// skipped with a reason that says the member is internal.
+        /// where the patched method cannot reach it (inside a lambda, a local function, an anonymous
+        /// method or a query, in an iterator or async method, in a getter or a method that runs
+        /// through a delegating shim, by a bare name, or next to a lambda, local function or query that
+        /// works with the member's result) is skipped with a reason that says the member is internal.
         /// </summary>
         [TestCase("Lambda", "DerivedValue", PlainDerivedValueBody, "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
         [TestCase("LocalFunction", "DerivedValue", PlainDerivedValueBody, "int Read() { return HotReloadInternalMemberHost.InternalStaticValue(); } return Read();")]
         [TestCase("AnonymousMethod", "DerivedValue", PlainDerivedValueBody, "System.Func<int> read = delegate { return HotReloadInternalMemberHost.InternalStaticValue(); }; return read();")]
+        [TestCase("Query", "DerivedValue", PlainDerivedValueBody, "return (from value in new[] { 1 } select value + HotReloadInternalMemberHost.InternalStaticValue()).First();")]
         [TestCase("Iterator", "IteratorValues", "yield return _seed;", "yield return HotReloadInternalMemberHost.InternalStaticValue();")]
         [TestCase("Async", "AsyncValue", "return 50;", "return HotReloadInternalMemberHost.InternalStaticValue();")]
         [TestCase("BareName", "DerivedValue", PlainDerivedValueBody, "return InternalInstanceValue();")]
         [TestCase("LambdaUsingTheResult", "DerivedValue", PlainDerivedValueBody, "var host = HotReloadInternalMemberHost.InternalSelf(); System.Func<int> read = () => host.InternalInstanceValue(); return read();")]
         [TestCase("LambdaParameterFromTheResult", "DerivedValue", PlainDerivedValueBody, "return System.Array.Exists(HotReloadInternalMemberHost.InternalHosts(), host => host.InternalField > 0) ? 1 : 0;")]
         [TestCase("LocalFunctionUsingTheResult", "DerivedValue", PlainDerivedValueBody, "var host = HotReloadInternalMemberHost.InternalSelf(); int Read() { return host.InternalInstanceValue(); } return Read();")]
-        [TestCase("LambdaCapturingTheResultAsAValue", "DerivedValue", PlainDerivedValueBody, "var seed = new HotReloadInternalMemberHost().InternalField; System.Func<int> read = () => seed + 100; return read();")]
+        [TestCase("QueryOverTheResult", "DerivedValue", PlainDerivedValueBody, "var hosts = HotReloadInternalMemberHost.InternalHosts(); return (from host in hosts select host.InternalField).First();")]
         [TestCase("GetterWithALambdaReadingAPrivateMember", "get_DerivedProperty", "return 40;", "System.Func<int> read = () => this._seed; return read() + HotReloadInternalMemberHost.InternalStaticValue();")]
+        [TestCase("MethodRaisingItsOwnEvent", "RaiseDerivedEvent", "return 60;", "return 60 + HotReloadInternalMemberHost.InternalStaticValue();")]
         [TestCase("LambdaNextToAnUnresolvedName", "DerivedValue", PlainDerivedValueBody, "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read() + NothingDeclaresThisName();")]
         public async Task Skip_PlainTypeBodyUsingInternalMemberWhereThePatchedMethodCannotReachIt_SaysWhy(
             string form,
@@ -748,6 +752,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(AssertSkipped(result, methodName), Does.Contain("is internal to 'HotReloadInternalMemberHost'"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a body of a plain type that would work if patched, but that the worker cannot tell
+        /// from a use the patched method cannot reach, is skipped with the same internal-member reason:
+        /// a lambda that only uses an internal member's result as a value, an internal member in the
+        /// first source expression of a query, which runs as the method's own statement, and an
+        /// internal member named in 'nameof' inside a lambda, which compiles to a constant. The skip is
+        /// a deliberate choice; a change that lets one of these through rewrites its case.
+        /// </summary>
+        [TestCase("LambdaCapturingTheResultAsAValue", "var seed = new HotReloadInternalMemberHost().InternalField; System.Func<int> read = () => seed + 100; return read();")]
+        [TestCase("QuerySourceExpression", "return (from host in HotReloadInternalMemberHost.InternalHosts() select 1).Count();")]
+        [TestCase("LambdaUsingNameofOfInternalMember", "System.Func<string> name = () => nameof(HotReloadInternalMemberHost.InternalField); return name().Length;")]
+        public async Task Skip_PlainTypeBodyTheGuardCannotTellFromAnOutOfReachUse_IsSkippedToo(string form, string replacement)
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(PlainDerivedFileName, "PlainInternalIndistinguishable" + form + ".cs", PlainDerivedValueBody, replacement)
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(AssertSkipped(result, "DerivedValue"), Does.Contain("is internal to 'HotReloadInternalMemberHost'"), FormatSkipped(result));
         }
 
         /// <summary>

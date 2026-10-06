@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -56,6 +57,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             await System.Threading.Tasks.Task.CompletedTask;
             return 50;
+        }
+
+        public event Action DerivedEvent;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int RaiseDerivedEvent()
+        {
+            DerivedEvent?.Invoke();
+            return 60;
         }
     }
 }

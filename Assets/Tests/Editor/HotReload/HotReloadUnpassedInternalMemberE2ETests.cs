@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ClosureSeedPlusValue = "ClosureSeedPlusValue";
         private const string DerivedPropertyGetter = "get_DerivedProperty";
         private const string AsyncValue = "AsyncValue";
+        private const string RaiseDerivedEvent = "RaiseDerivedEvent";
 
         // Public only because a test case argument has to be as visible as the test method.
         public enum FixtureKind
@@ -94,11 +95,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Edits the shim cannot run as written: a simple name it cannot qualify, or a use inside a
-        // lambda, local function, anonymous method, iterator or async method, or in a getter that runs
-        // through a delegating shim, which the shim assembly compiles as ordinary code of its own, also
-        // when the lambda reaches the member through the result of another internal member. A lambda
-        // that only uses such a result as a value is here too, because the worker cannot tell it from
-        // one that reaches the member through the result.
+        // lambda, local function, anonymous method, iterator or async method, or in a getter or a
+        // method that runs through a delegating shim, which the shim assembly compiles as ordinary
+        // code of its own, also when the lambda reaches the member through the result of another
+        // internal member. A lambda that only uses such a result as a value is here too, because the
+        // worker cannot tell it from one that reaches the member through the result.
         private static IEnumerable<string> EditsThatDoNotRunInThePatchedMethod()
         {
             yield return "InheritedInternalMethodBySimpleName";
@@ -114,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalStaticMethodInAnonymousMethod";
             yield return "InternalStaticMethodInAsyncMethod";
             yield return "InternalStaticMethodNextToLambdaReadingOwnPrivateFieldInGetter";
+            yield return "InternalStaticMethodNextToOwnEventRaise";
             yield return "InternalFieldReadIntoAVarCapturedByALambda";
         }
 
@@ -396,6 +398,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "return 40;",
                         "System.Func<int> read = () => this._seed; return read() + HotReloadInternalMemberHost.InternalStaticValue();",
                         1001);
+                case "InternalStaticMethodNextToOwnEventRaise":
+                    return new BodyEdit(RaiseDerivedEvent, "return 60;", "return 60 + HotReloadInternalMemberHost.InternalStaticValue();", 61);
                 case "InternalFieldReadIntoAVarCapturedByALambda":
                     return BodyEdit.OfDerivedValue(
                         "var seed = new HotReloadInternalMemberHost().InternalField;\n"
@@ -472,6 +476,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return 50;
                 case DerivedPropertyGetter:
                     return 40;
+                case RaiseDerivedEvent:
+                    return 60;
                 default:
                     return 1000;
             }
@@ -498,6 +504,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         return plain.DerivedProperty;
                     case AsyncValue:
                         return plain.AsyncValue().GetAwaiter().GetResult();
+                    case RaiseDerivedEvent:
+                        return plain.RaiseDerivedEvent();
                 }
             }
             else
@@ -519,6 +527,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         return partial.DerivedProperty;
                     case AsyncValue:
                         return partial.AsyncValue().GetAwaiter().GetResult();
+                    case RaiseDerivedEvent:
+                        return partial.RaiseDerivedEvent();
                 }
             }
 
