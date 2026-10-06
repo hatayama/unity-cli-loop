@@ -411,6 +411,10 @@ Wire details:
 - The patch ledger and loaded shim assemblies are static state; both are cleared by domain
   reload by design (no persistence, no auto-reapply). Shim assemblies cannot be unloaded and
   accumulate until the next domain reload; that is accepted.
+- `uloop run-tests` compiles first by default, so that compile drops every live patch;
+  `--skip-compile` runs the tests against the live patches instead. What each path was observed to
+  do is in "Running tests while patches are live" of
+  `Packages/src/Editor/FirstPartyTools/HotReload/Skill/references/mechanism-and-lifecycle.md`.
 - Mvid guard before patching: if the on-disk `Library/ScriptAssemblies/<asm>.dll` Mvid
   differs from the loaded module's `ModuleVersionId`, the assembly has already been rebuilt
   and reloaded — hot reload is refused with a pointer to `uloop compile`.
