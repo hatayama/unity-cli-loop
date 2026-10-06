@@ -358,8 +358,8 @@ func runFreshCompileAttempt(
 		timeout:        waitTimeout,
 		pollInterval:   freshWaitPollIntervalFor(compileWait),
 		resendBefore:   options.resendBefore,
-		// Only a dispatched send reaches this wait, so an error here means the connection dropped
-		// after Unity received the request.
+		// Only a dispatched send reaches this wait, so a dropped connection here came after the
+		// request was sent.
 		serverRestartSeen: err != nil && clierrors.IsTransportDisconnectError(err),
 	}, compileWait)
 	if errors.Is(waitErr, errCompileRequestMissing) {
