@@ -72,7 +72,7 @@ func TestTryHandleSkillsRequestInstallListUninstallRoundTrip(t *testing.T) {
 }
 
 func TestTryHandleSkillsRequestPrintsTargetGuidanceWithoutTargets(t *testing.T) {
-	// Verifies install and uninstall without target flags only print guidance and change nothing.
+	// Verifies install and uninstall without target flags only print guidance and change nothing when no target holds a uloop skill yet.
 	projectRoot := createSkillsTestProject(t)
 	for _, subcommand := range []string{"install", "uninstall"} {
 		code, stdout, stderr := runSkillsRequestForTest(t, projectRoot, subcommand)
