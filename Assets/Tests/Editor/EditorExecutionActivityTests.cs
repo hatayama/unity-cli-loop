@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
@@ -16,7 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class EditorExecutionActivityTests
     {
         private const string MissingEntryPointMessage = "native entry point missing in this test";
-        private const string EndFailureMessage = "End failed in this test";
 
         /// <summary>
         /// Verifies one hold starts one activity and disposing the hold ends that same token.
@@ -180,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             IDisposable first = activity.Hold();
             IDisposable second = activity.Hold();
             api.ThrowOnNextEnd = true;
-            LogAssert.Expect(LogType.Exception, new Regex(EndFailureMessage));
+            LogAssert.Expect(LogType.Exception, new Regex(RecordingProcessActivityApi.EndFailureMessage));
 
             Assert.DoesNotThrow(() => activity.ReleaseAllAndClose());
             Assert.That(api.EndedTokens, Is.EquivalentTo(new[] { new IntPtr(1), new IntPtr(2) }));
@@ -220,59 +218,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InertProcessActivityApi api = new InertProcessActivityApi();
 
             Assert.That(api.Begin("test reason"), Is.EqualTo(IntPtr.Zero));
-        }
-
-        /// <summary>
-        /// Records Begin and End calls in place of the operating system. Tokens count up from 1.
-        /// </summary>
-        private sealed class RecordingProcessActivityApi : IProcessActivityApi
-        {
-            private readonly HashSet<IntPtr> _liveTokens = new HashSet<IntPtr>();
-            private readonly List<IntPtr> _endedTokens = new List<IntPtr>();
-            private int _lastToken;
-
-            public int BeginCount { get; private set; }
-
-            public IReadOnlyList<IntPtr> EndedTokens => _endedTokens;
-
-            public int LiveCount => _liveTokens.Count;
-
-            public bool ReturnsNoToken { get; set; }
-
-            public Exception BeginException { get; set; }
-
-            public bool ThrowOnNextEnd { get; set; }
-
-            public IntPtr Begin(string reason)
-            {
-                BeginCount++;
-                if (BeginException != null)
-                {
-                    throw BeginException;
-                }
-
-                if (ReturnsNoToken)
-                {
-                    return IntPtr.Zero;
-                }
-
-                _lastToken++;
-                IntPtr token = new IntPtr(_lastToken);
-                _liveTokens.Add(token);
-                return token;
-            }
-
-            public void End(IntPtr token)
-            {
-                _endedTokens.Add(token);
-                if (ThrowOnNextEnd)
-                {
-                    ThrowOnNextEnd = false;
-                    throw new InvalidOperationException(EndFailureMessage);
-                }
-
-                _liveTokens.Remove(token);
-            }
         }
     }
 }

@@ -145,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new AllToolsEnabledSettingsPort(),
                 new UnityCliLoopToolExecutionService(new IdleEditorRuntimeStatePort()),
                 () => Array.Empty<IUnityCliLoopTool>());
-            JsonRpcRequestProcessor processor = new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService));
+            JsonRpcRequestProcessor processor = new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi())));
             return new UnityCliLoopBridgeClientSessionManager(
                 processor,
                 new UnityCliLoopBridgeHeartbeatService(),
