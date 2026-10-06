@@ -71,6 +71,17 @@ internal static class WorkerGroupPipeline
         }
 
         List<WorkerSourceUnit> transformUnits = SelectTransformableUnits(loadedUnits);
+        List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(transformUnits.Count);
+        foreach (WorkerSourceUnit transformUnit in transformUnits)
+        {
+            editedRoots.Add(transformUnit.Root);
+        }
+
+        // Why collected before any compilation: the global usings other files of the assembly
+        // declare must bind the edited files' signatures, not only reach the emitted shims.
+        List<UsingDirectiveSyntax> assemblyGlobalUsings =
+            WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, editedRoots);
+        SyntaxTree globalUsingTree = WorkerGlobalUsingBindingTree.Build(assemblyGlobalUsings, editedRoots, parseOptions);
 
         // Why a run-level failure and not a per-file diagnostic: the orchestrator advances to
         // revert, gating and compile whenever the run succeeds, so a run that could not trust its
@@ -81,7 +92,8 @@ internal static class WorkerGroupPipeline
             transformUnits,
             references,
             targetTypesReference,
-            parseOptions);
+            parseOptions,
+            globalUsingTree);
         if (artifactFailure != null)
         {
             return CreateRunFailureOutput(artifactFailure);
@@ -95,7 +107,7 @@ internal static class WorkerGroupPipeline
 
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadTransformWorkerCompilation",
-            syntaxTrees: bindingTrees,
+            syntaxTrees: WorkerGlobalUsingBindingTree.Append(bindingTrees, globalUsingTree),
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         Dictionary<SyntaxTree, string> projectRelativePathsByBindingTree = new Dictionary<SyntaxTree, string>();
@@ -113,19 +125,12 @@ internal static class WorkerGroupPipeline
         WorkerTypeHome home = new WorkerTypeHome(
             input.TargetAssemblyName,
             WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference));
-        List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(transformUnits.Count);
-        foreach (WorkerSourceUnit transformUnit in transformUnits)
-        {
-            editedRoots.Add(transformUnit.Root);
-        }
-
-        List<UsingDirectiveSyntax> assemblyGlobalUsings =
-            WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, editedRoots);
         List<string> siblingConstDriftWarnings = SiblingConstDriftCollector.CollectConstDriftWarnings(
             input.ChangedSiblingSourcePaths,
             parseOptions,
             references,
-            home);
+            home,
+            assemblyGlobalUsings);
 
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();

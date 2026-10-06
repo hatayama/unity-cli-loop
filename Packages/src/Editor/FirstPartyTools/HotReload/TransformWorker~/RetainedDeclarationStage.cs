@@ -16,13 +16,15 @@ internal static class RetainedDeclarationStage
     // unchanged, records the ones whose method bodies this edit changed and binds them with the
     // accessibility their artifact was compiled with, and reports why the artifacts could not be
     // used at all. Returns null when the run has no artifact to bind against, which is every run
-    // until introduced types are in play.
+    // until introduced types are in play. globalUsingTree is the assembly's global usings built
+    // against these units' roots, or null when they already declare every one.
     internal static string PrepareBindingTrees(
         WorkerInput input,
         List<WorkerSourceUnit> loadedUnits,
         List<MetadataReference> references,
         MetadataReference targetTypesReference,
-        CSharpParseOptions parseOptions)
+        CSharpParseOptions parseOptions,
+        SyntaxTree globalUsingTree)
     {
         if (input.IntroducedTypeArtifacts.Length == 0)
         {
@@ -47,7 +49,7 @@ internal static class RetainedDeclarationStage
         // trees as written; the binding compilation is built from what survives the removal.
         CSharpCompilation verificationCompilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadRetainedDeclarationVerification",
-            syntaxTrees: editedTrees,
+            syntaxTrees: WorkerGlobalUsingBindingTree.Append(editedTrees, globalUsingTree),
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         IAssemblySymbol targetAssembly = WorkerCompiledAssemblySymbols.ResolveWithAllMembers(
