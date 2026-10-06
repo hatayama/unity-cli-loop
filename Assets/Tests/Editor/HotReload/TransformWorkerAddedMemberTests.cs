@@ -570,7 +570,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string reason = FindSkipReason(result, "AddedUnresolved");
             Assert.That(reason, Is.Not.Null, "Expected a skip for AddedUnresolved.");
-            Assert.That(reason, Does.Contain("could not be resolved"));
+            Assert.That(reason, Does.Contain("could not resolve"));
+            Assert.That(reason, Does.Contain("'MissingReturnType'"));
             Assert.That(reason, Does.Not.Contain("condition c"));
         }
 
@@ -588,7 +589,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string reason = FindSkipReason(result, "AddedUnresolvedList");
             Assert.That(reason, Is.Not.Null, "Expected a skip for AddedUnresolvedList.");
-            Assert.That(reason, Does.Contain("could not be resolved"));
+            Assert.That(reason, Does.Contain("could not resolve"));
+            Assert.That(reason, Does.Contain("'MissingType'"));
             Assert.That(reason, Does.Not.Contain("condition c"));
         }
 
