@@ -55,6 +55,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadCompositionRoot.Services.WithChangeDetector(changeDetector));
         }
 
+        /// <summary>Replaces the capture the tool makes sure of before it reads a source snapshot.</summary>
+        internal static IDisposable BeginWithSourceSnapshotCapture(HotReloadSourceSnapshotCapture capture)
+        {
+            return HotReloadCompositionRoot.BeginReplacement(
+                HotReloadCompositionRoot.Services.WithSourceSnapshotCapture(capture));
+        }
+
         /// <summary>Replaces the transform worker host the client routes through.</summary>
         internal static IDisposable BeginWithWorkerHost(TransformWorkerHost host)
         {
@@ -104,7 +111,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     editorStateSnapshotCapture,
                     transformWorkerHost,
                     buildDependencies,
-                    playModeQuery));
+                    playModeQuery,
+                    installed.SourceSnapshotCapture));
         }
     }
 

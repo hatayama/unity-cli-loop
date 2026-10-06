@@ -58,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadEditorStateSnapshotCapture(),
                 TransformWorkerHost.Shared,
                 HotReloadGroupProcessorDependencies.CreateProduction,
-                new HotReloadApplicationPlayModeQuery());
+                new HotReloadApplicationPlayModeQuery(),
+                new HotReloadSourceSnapshotCapture(HotReloadSourceSnapshotter.CaptureAfterDomainReload));
         }
 
         /// <summary>
@@ -88,7 +89,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerHost transformWorkerHost,
             Func<HotReloadGroupStageCollaborators, HotReloadGroupProcessorDependencies>
                 buildDependencies,
-            IHotReloadPlayModeQuery playMode)
+            IHotReloadPlayModeQuery playMode,
+            HotReloadSourceSnapshotCapture sourceSnapshotCapture)
         {
             // Built in dependency order, and every collaborator takes what it needs here: nothing
             // below may read the installed services, or a replacement scope would leave it bound
@@ -183,7 +185,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadChangeDetector(),
                 unityMessageForwarding,
                 wiredValuePersistence,
-                wiredValueRestoreRefresh);
+                wiredValueRestoreRefresh,
+                sourceSnapshotCapture);
         }
 
         /// <summary>
