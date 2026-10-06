@@ -85,7 +85,8 @@ internal sealed class UnpassedInternalMemberUse
         // name would reach the shim compile unqualified and fail the whole file.
         bool canBePatchedInPlace = hasReceiver
             && IsPatchableKind(member, name)
-            && !RunsOutsideThePatchedMethod(name, bodyNode, methodDeclarationOrNull, decision);
+            && !RunsOutsideThePatchedMethod(name, bodyNode, methodDeclarationOrNull, decision)
+            && !HasAClosureOverAnUnresolvedValue(bodyNode, semanticModel);
         return new UnpassedInternalMemberUse(member.ContainingType, canBePatchedInPlace);
     }
 
@@ -259,6 +260,29 @@ internal sealed class UnpassedInternalMemberUse
             if (closureBody.Span.Contains(name.Span))
             {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Why a closure over a value the worker could not resolve keeps every use in the body out: the
+    // worker reports no error for a use that follows such a value, like the result of an internal
+    // member, so it cannot tell whether the closure reaches an internal member through it. A closure
+    // runs as ordinary code of the shim assembly, where that use throws once called. The method's
+    // own statements run inside the patched method, where a following internal use works, so only
+    // closures are checked.
+    private static bool HasAClosureOverAnUnresolvedValue(SyntaxNode bodyNode, SemanticModel semanticModel)
+    {
+        foreach (SyntaxNode closureBody in MethodTransformDecider.FindClosureBodies(bodyNode))
+        {
+            foreach (SyntaxNode node in closureBody.DescendantNodesAndSelf())
+            {
+                if (node is ExpressionSyntax expression
+                    && semanticModel.GetTypeInfo(expression).Type?.TypeKind == TypeKind.Error)
+                {
+                    return true;
+                }
             }
         }
 
