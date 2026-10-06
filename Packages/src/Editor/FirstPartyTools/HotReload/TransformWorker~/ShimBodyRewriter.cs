@@ -145,6 +145,18 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
                 return folded;
             }
 
+            // Why fold instead of rewriting the operand: the shim is a static method of another
+            // type, so nothing needs the operand rebound there, and a rewritten operand
+            // (__uloopInstance.x) names a parameter a static method's shim does not have.
+            string boundName = NameofRules.FindBoundNameofValueOrNull(node, _semanticModel);
+            if (boundName != null)
+            {
+                return SyntaxFactory.LiteralExpression(
+                        SyntaxKind.StringLiteralExpression,
+                        SyntaxFactory.Literal(boundName))
+                    .WithTriviaFrom(node);
+            }
+
             return base.VisitInvocationExpression(node);
         }
 
