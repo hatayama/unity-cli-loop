@@ -14,7 +14,7 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 /// looks just as missing to the worker, on a partial or a plain type; a use of it the patched
 /// method cannot reach is skipped with a reason that says why.
 /// </summary>
-internal static class PartialTypeBodyGuard
+internal static class UnresolvedBodyNameGuard
 {
     // Why only these: other binding errors are expected (a compiled API still expects the
     // compiled copy of a type the run declares from source) and the shim compile settles

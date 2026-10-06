@@ -94,7 +94,7 @@ internal static class PropertyGetterClassifier
             return (true, decision);
         }
 
-        WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(
+        WorkerReason unresolvedNameSkip = UnresolvedBodyNameGuard.DescribeSkipOrNull(
             typeDeclaration,
             semanticModel,
             getterBodyNode,
@@ -102,15 +102,15 @@ internal static class PropertyGetterClassifier
             decision,
             typeSymbol,
             targetAssembly);
-        if (partialSkip != null)
+        if (unresolvedNameSkip != null)
         {
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
-                Reason = partialSkip
+                Reason = unresolvedNameSkip
             });
-            return (true, MethodTransformDecision.Skip(partialSkip));
+            return (true, MethodTransformDecision.Skip(unresolvedNameSkip));
         }
 
         (WorkerReason addedCallSiteSkip, string calledAddedMethodKey) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
