@@ -239,6 +239,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies the build writes the exposed copies with the search directories it is given, not
+        /// with ones derived from the worker references, which do not reach an assembly the target's
+        /// metadata needs.
+        /// </summary>
+        [Test]
+        public void Build_UsesTheResolverSearchDirectoriesItIsGiven()
+        {
+            string externalName = "GivenSearchEnumFixture_" + Guid.NewGuid().ToString("N");
+            string externalDirectory = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                InternalsExposureTestImage target =
+                    InternalsExposureTestImage.CreateWithConstantOfEnumIn(externalDirectory, externalName, HideCandidate);
+                _images.Add(target);
+                TransformWorkerInputDto input = CreateInput(target);
+                IReadOnlyCollection<string> workerDirectories =
+                    ReferencePublicizer.CollectResolverSearchDirectories(input.referencePaths);
+                List<string> givenDirectories = new List<string>(workerDirectories) { externalDirectory };
+
+                // Why the failing build goes first: a failed write caches nothing, while a successful
+                // one would satisfy the second build from the cache before Cecil resolves anything.
+                HotReloadArtifactCompileReferences fromWorkerDirectories =
+                    BuildSearching(input, target, workerDirectories, true);
+                HotReloadArtifactCompileReferences fromGivenDirectories =
+                    BuildSearching(input, target, givenDirectories, true);
+
+                Assert.That(fromWorkerDirectories.Success, Is.False);
+                Assert.That(fromWorkerDirectories.ErrorMessage, Does.StartWith(ExposureFailurePrefix));
+                Assert.That(fromGivenDirectories.Success, Is.True);
+            }
+            finally
+            {
+                if (Directory.Exists(externalDirectory))
+                {
+                    Directory.Delete(externalDirectory, true);
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies building internals-only references leaves the shared worker input untouched, so
         /// the worker runs and the shim compilation keep binding against the raw references.
         /// </summary>
@@ -407,9 +447,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(failed.ErrorMessage, Is.EqualTo("Resolution failed."));
         }
 
+        // Searches the worker references' directories, as Build did before the caller supplied them.
         private HotReloadArtifactCompileReferences Build(
             TransformWorkerInputDto input,
             InternalsExposureTestImage target,
+            bool exposeInternals)
+        {
+            return BuildSearching(
+                input,
+                target,
+                ReferencePublicizer.CollectResolverSearchDirectories(input.referencePaths),
+                exposeInternals);
+        }
+
+        private HotReloadArtifactCompileReferences BuildSearching(
+            TransformWorkerInputDto input,
+            InternalsExposureTestImage target,
+            IReadOnlyCollection<string> resolverSearchDirectories,
             bool exposeInternals)
         {
             return HotReloadIntroducedTypeArtifactReferenceBuilder.Build(
@@ -417,6 +471,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 target.Home,
                 HotReloadCompositionRoot.Services.Domain,
                 _projectRoot,
+                resolverSearchDirectories,
                 exposeInternals);
         }
 
