@@ -15,6 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             get { return 4; }
         }
 
+        internal int InternalSettableProperty { get; set; } = 20;
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static int InternalStaticValue()
         {
