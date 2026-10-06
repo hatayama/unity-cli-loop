@@ -39,7 +39,7 @@ namespace UnityCliLoop.CodeComplexity
             {
                 issues = await runner.AnalyzeAsync(options, ct);
             }
-            catch (InvalidOperationException exception)
+            catch (NoProductionSourceException exception)
             {
                 Console.Error.WriteLine(exception.Message);
                 return 2;

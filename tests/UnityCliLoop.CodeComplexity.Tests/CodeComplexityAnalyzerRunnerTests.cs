@@ -201,7 +201,7 @@ namespace UnityCliLoop.CodeComplexity.Tests
                 ReportFormat.Table,
                 failOnExceeded: false);
 
-            InvalidOperationException? exception = Assert.ThrowsAsync<InvalidOperationException>(
+            NoProductionSourceException? exception = Assert.ThrowsAsync<NoProductionSourceException>(
                 async () => await runner.AnalyzeAsync(options, CancellationToken.None));
 
             Assert.That(exception?.Message, Does.Contain(Path.Combine(_rootPath, "Packages", "src")));

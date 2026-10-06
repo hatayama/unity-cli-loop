@@ -43,7 +43,7 @@ namespace UnityCliLoop.CodeComplexity
             // would otherwise turn the check green without analyzing anything.
             if (fileSet.ProductionFiles.Count == 0)
             {
-                throw new InvalidOperationException(
+                throw new NoProductionSourceException(
                     $"No C# source files were found below {Path.Combine(options.RootPath, "Packages", "src")}. Check --root.");
             }
 
