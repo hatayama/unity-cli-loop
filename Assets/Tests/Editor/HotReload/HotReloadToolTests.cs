@@ -829,6 +829,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the response's Timing copies each phase the run measured into its own field.
+        /// Every value differs, so a phase written into another's field fails.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithTiming_CopiesEveryPhase()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                timing: new HotReloadTimingBreakdown(5, 7, 1, 50));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Timing, Is.Not.Null);
+            Assert.That(response.Timing.AnalysisMs, Is.EqualTo(5), "AnalysisMs");
+            Assert.That(response.Timing.ShimCompileMs, Is.EqualTo(7), "ShimCompileMs");
+            Assert.That(response.Timing.PatchMs, Is.EqualTo(1), "PatchMs");
+            Assert.That(response.Timing.TotalMs, Is.EqualTo(50), "TotalMs");
+        }
+
+        /// <summary>
+        /// What: a result the run did not measure leaves Timing out of the response.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithoutTiming_OmitsTiming()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Timing, Is.Null);
+            Assert.That(response.ShouldSerializeTiming(), Is.False);
+        }
+
+        /// <summary>
         /// What: BuildApplyResponse does not emit pause-point warnings when no markers
         /// were retargeted or suppressed, even if PatchedTotal &gt; 0.
         /// </summary>
@@ -3036,6 +3083,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             JObject serialized = JObject.FromObject(response);
             Assert.That(serialized.ContainsKey("Outcome"), Is.False);
+        }
+
+        /// <summary>
+        /// What: --status omits Timing, which measures only an apply run.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_OmitsTiming()
+        {
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+
+            JObject serialized = JObject.FromObject(response);
+            Assert.That(serialized.ContainsKey("Timing"), Is.False);
         }
 
         /// <summary>

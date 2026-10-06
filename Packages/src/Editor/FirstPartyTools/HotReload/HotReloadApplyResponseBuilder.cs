@@ -123,7 +123,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
                     HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes),
-                    allRequestedSkipped)
+                    allRequestedSkipped),
+                Timing = ToTimingResponse(result.Timing)
+            };
+        }
+
+        private static HotReloadTimingResponse ToTimingResponse(HotReloadTimingBreakdown timing)
+        {
+            if (timing == null)
+            {
+                return null;
+            }
+
+            return new HotReloadTimingResponse
+            {
+                AnalysisMs = timing.AnalysisMs,
+                ShimCompileMs = timing.ShimCompileMs,
+                PatchMs = timing.PatchMs,
+                TotalMs = timing.TotalMs
             };
         }
 

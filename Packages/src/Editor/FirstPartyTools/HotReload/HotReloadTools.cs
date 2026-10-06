@@ -217,6 +217,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string CompileFallback { get; set; } =
             HotReloadCompileFallbackDecision.NotNeeded.ToString();
 
+        /// <summary>
+        /// Milliseconds the apply run spent per phase. Written on apply runs only; --status,
+        /// --revert-all, and requests refused before the run leave it out.
+        /// </summary>
+        public HotReloadTimingResponse Timing { get; set; }
+
         public bool ShouldSerializeErrorCode()
         {
             return !string.IsNullOrEmpty(ErrorCode);
@@ -230,6 +236,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeAutoRefreshHoldMessage()
         {
             return !string.IsNullOrEmpty(AutoRefreshHoldMessage);
+        }
+
+        public bool ShouldSerializeTiming()
+        {
+            return Timing != null;
         }
 
         public bool ShouldSerializeNextActions()
