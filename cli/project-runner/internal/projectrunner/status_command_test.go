@@ -32,15 +32,16 @@ var statusTestRunningToolFields = []string{
 // Verifies status rejects any argument other than the global ones before it contacts Unity.
 func TestRunStatusCommandRejectsExtraArguments(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
-	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, nil))
 
-	run := runStatusForTest(context.Background(), server.connection, []string{"--bogus"}, statusTestDeps(t))
+	// Why an endpoint that is never contacted instead of a fake server: a probe sent before the
+	// argument check would fail to connect and print a state report, which this test rejects, and
+	// on Windows, closing a named-pipe listener whose Accept still waits can hang forever.
+	run := runStatusForTest(context.Background(), unreachableConnection(projectRoot), []string{"--bogus"}, statusTestDeps(t))
 
 	assertStatusError(t, run, `"Message": "status takes no options: --bogus"`)
 	if !strings.Contains(run.stderr, `"ErrorCode": "INVALID_ARGUMENT"`) {
 		t.Fatalf("stderr must be an argument error:\n%s", run.stderr)
 	}
-	assertStatusRequestCount(t, server, 0)
 }
 
 // Verifies an idle Editor with its state recorded is Ready with exit code 0 and an empty
