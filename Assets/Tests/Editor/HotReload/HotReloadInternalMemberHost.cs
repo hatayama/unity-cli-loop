@@ -46,6 +46,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return 7;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int PrivateStaticValue()
+        {
+            return 13;
+        }
+
+        /// <summary>
+        /// A type nested in the host, so a test can name an internal member through the nested type.
+        /// </summary>
+        public class Nested
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            internal static int NestedInternalValue()
+            {
+                return 11;
+            }
+        }
     }
 
     /// <summary>

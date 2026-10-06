@@ -19,5 +19,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return 1;
         }
+
+        public int CallerProperty
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            get { return 30; }
+        }
     }
 }

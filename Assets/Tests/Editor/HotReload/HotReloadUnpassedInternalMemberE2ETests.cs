@@ -35,6 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ClosureValue = "ClosureValue";
         private const string ClosureSeedValue = "ClosureSeedValue";
         private const string IteratorValues = "IteratorValues";
+        private const string ClosureSeedPlusValue = "ClosureSeedPlusValue";
+        private const string DerivedPropertyGetter = "get_DerivedProperty";
 
         // Public only because a test case argument has to be as visible as the test method.
         public enum FixtureKind
@@ -70,6 +72,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalPropertyGet";
             yield return "InternalPropertyGetAndSet";
             yield return "InheritedInternalMethodThroughThis";
+            yield return "InternalInstanceMethodThroughConditionalAccess";
+            yield return "InternalStaticMethodOfNestedType";
+            yield return "InternalFieldInsideNameof";
+            yield return "InternalStaticMethodNextToLambdaReadingOwnPrivateField";
         }
 
         // Edits whose body runs as IL copied into the patched method.
@@ -149,6 +155,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
 
             AssertAppliedAsEditedOrSkipped(result, FixtureKind.Partial, edit);
+        }
+
+        /// <summary>
+        /// What: an edited getter that uses an internal member of a compiled type the reload was not
+        /// given is patched on a plain type and on a partial type, and the property returns the edited
+        /// value.
+        /// </summary>
+        [TestCase(FixtureKind.Plain)]
+        [TestCase(FixtureKind.Partial)]
+        public async Task Run_GetterUsingInternalMemberOfUnpassedType_PatchesBehavior(FixtureKind fixture)
+        {
+            BodyEdit edit = new BodyEdit(
+                DerivedPropertyGetter,
+                "return 40;",
+                "return HotReloadInternalMemberHost.InternalStaticValue() + 100;",
+                101);
+            HotReloadOrchestratorResult result = await RunEditAsync(fixture, edit);
+
+            AssertPatchedAsEdited(result, fixture, edit);
         }
 
         /// <summary>
@@ -255,6 +280,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         170);
                 case "InheritedInternalMethodThroughThis":
                     return BodyEdit.OfDerivedValue("return this.InternalInstanceValue() + 100;", 102);
+                case "InternalInstanceMethodThroughConditionalAccess":
+                    return BodyEdit.OfDerivedValue(
+                        "HotReloadInternalMemberHost host = new HotReloadInternalMemberHost();\n"
+                        + "            return (host?.InternalInstanceValue() ?? 0) + 100;",
+                        102);
+                case "InternalStaticMethodOfNestedType":
+                    return BodyEdit.OfDerivedValue("return HotReloadInternalMemberHost.Nested.NestedInternalValue() + 100;", 111);
+                case "InternalFieldInsideNameof":
+                    return BodyEdit.OfDerivedValue("return nameof(HotReloadInternalMemberHost.InternalField).Length + 100;", 113);
+                case "InternalStaticMethodNextToLambdaReadingOwnPrivateField":
+                    return new BodyEdit(ClosureSeedPlusValue, "read() + 7", "read() + HotReloadInternalMemberHost.InternalStaticValue()", 1001);
                 case "InternalMethodOfPublicTypeOfAnotherAssemblyThroughInternalsVisibleTo":
                     return BodyEdit.OfDerivedValue(
                         "return global::io.github.hatayama.UnityCliLoop.FirstPartyTools.PausePointResponse"
@@ -318,6 +354,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return fixture == FixtureKind.Plain ? 10 : 9;
                 case ClosureValue:
                     return 30;
+                case ClosureSeedPlusValue:
+                    return 1007;
                 default:
                     return 1000;
             }
@@ -336,8 +374,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         return plain.ClosureValue();
                     case ClosureSeedValue:
                         return plain.ClosureSeedValue();
+                    case ClosureSeedPlusValue:
+                        return plain.ClosureSeedPlusValue();
                     case IteratorValues:
                         return First(plain.IteratorValues());
+                    case DerivedPropertyGetter:
+                        return plain.DerivedProperty;
                 }
             }
             else
@@ -351,8 +393,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         return partial.ClosureValue();
                     case ClosureSeedValue:
                         return partial.ClosureSeedValue();
+                    case ClosureSeedPlusValue:
+                        return partial.ClosureSeedPlusValue();
                     case IteratorValues:
                         return First(partial.IteratorValues());
+                    case DerivedPropertyGetter:
+                        return partial.DerivedProperty;
                 }
             }
 

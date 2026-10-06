@@ -78,6 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CallerPlainValueBody = "return 1;";
         private const string PlainDerivedValueBody = "return 10;";
         private const string PartialDerivedValueBody = "return 9;";
+        private const string InternalMemberOfATypeOfAnotherAssembly =
+            "global::io.github.hatayama.UnityCliLoop.FirstPartyTools.PausePointCapturedVariable.FromSnapshot(null).Name.Length";
 
         /// <summary>
         /// What: a body that reads a private field declared in another part of the type is emitted.
@@ -654,6 +656,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         [TestCase("Protected", "ProtectedValue()")]
         [TestCase("PrivateProtected", "PrivateProtectedValue()")]
+        [TestCase("InheritedInternalThroughThis", "this.InternalInstanceValue()")]
         public async Task Run_DerivedPartialTypeBodyUsingBaseMemberOfUnpassedType_Binds(string memberKind, string expression)
         {
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
@@ -674,6 +677,203 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
 
             AssertControlAndReproEmitted(control, "DerivedValue", repro, "DerivedValue");
+        }
+
+        /// <summary>
+        /// What: a body of a partial type that uses an internal member of a type the run was not given
+        /// where the patched method cannot run it in place (inside a lambda, a local function or a
+        /// query, in an iterator or async method, as a method passed as a delegate, or by a bare name)
+        /// is skipped with a reason that says the member is internal, not that a part is missing.
+        /// </summary>
+        [TestCase("Lambda", "OwnOnly", null, "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
+        [TestCase("LocalFunction", "OwnOnly", null, "int Read() { return HotReloadInternalMemberHost.InternalStaticValue(); } return Read();")]
+        [TestCase("Query", "OwnOnly", null, "return (from value in new[] { 1 } select value + HotReloadInternalMemberHost.InternalStaticValue()).First();")]
+        [TestCase("MethodPassedAsDelegate", "OwnOnly", null, "System.Func<int> read = HotReloadInternalMemberHost.InternalStaticValue; return read();")]
+        [TestCase("Iterator", "IteratorValues", "yield return _seed;", "yield return HotReloadInternalMemberHost.InternalStaticValue();")]
+        [TestCase("Async", "AsyncValue", "return 50;", "return HotReloadInternalMemberHost.InternalStaticValue();")]
+        [TestCase("BareName", "DerivedValue", PartialDerivedValueBody, "return InternalInstanceValue();")]
+        public async Task Skip_PartialTypeBodyUsingInternalMemberWhereItCannotBePatchedInPlace_SaysWhy(
+            string form,
+            string methodName,
+            string partialDerivedFragment,
+            string replacement)
+        {
+            string editedFileName = "InternalOutOfReach" + form + ".cs";
+            TransformWorkerSourceDto edit = partialDerivedFragment == null
+                ? BuildFixtureOwnOnlyBodyEdit(editedFileName, replacement)
+                : BuildEditedFixtureSource(PartialDerivedFileName, editedFileName, partialDerivedFragment, replacement);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[] { edit });
+
+            string reason = AssertSkipped(result, methodName);
+            Assert.That(reason, Does.Contain("is internal to 'HotReloadInternalMemberHost'"), FormatSkipped(result));
+            Assert.That(reason, Does.Not.Contain("generated at compile time"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a getter of a partial type whose lambda reads a private member, so the whole getter
+        /// runs through a delegating shim, is skipped with a reason that says the internal member it
+        /// uses outside the lambda is internal.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeGetterWithALambdaReadingAPrivateMember_UsingInternalMemberDirectly_SaysWhy()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    PartialDerivedFileName,
+                    "InternalOutOfReachDelegatingGetter.cs",
+                    "return 40;",
+                    "System.Func<int> read = () => this._seed; return read() + HotReloadInternalMemberHost.InternalStaticValue();")
+            });
+
+            Assert.That(AssertSkipped(result, "get_DerivedProperty"), Does.Contain("is internal to"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a body of a partial type that uses a private member of a type the run was not given
+        /// keeps the missing-name reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyUsingPrivateMemberOfUnpassedType_KeepsTheMissingNameReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("UnpassedPrivateMember.cs", "HotReloadInternalMemberHost.PrivateStaticValue()")
+            });
+
+            Assert.That(AssertSkipped(result, "OwnOnly"), Does.Contain("generated at compile time"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a body of a partial type that uses an internal member of a type in another assembly
+        /// keeps the missing-name reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyUsingInternalMemberOfATypeOfAnotherAssembly_KeepsTheMissingNameReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("AnotherAssemblyInternalMember.cs", InternalMemberOfATypeOfAnotherAssembly)
+            });
+
+            Assert.That(AssertSkipped(result, "OwnOnly"), Does.Contain("generated at compile time"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a body of a partial type that uses an internal member of an unpassed type next to a
+        /// name nothing declares is skipped with a reason that names the undeclared name.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyUsingInternalMemberNextToAnUnresolvedName_NamesTheUnresolvedName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit(
+                    "InternalMemberNextToUnresolvedName.cs",
+                    "HotReloadInternalMemberHost.InternalStaticValue() + NoSuchName")
+            });
+
+            string reason = AssertSkipped(result, "OwnOnly");
+            Assert.That(reason, Does.Contain("NoSuchName"), FormatSkipped(result));
+            Assert.That(reason, Does.Contain("generated at compile time"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: when a part of the type is in no source file the run can see, a body that calls that
+        /// part's internal method through 'this' keeps the missing-name reason, although the compiled
+        /// type declares the method.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyUsingThisInternalMemberOfAPartNotAmongTheAssemblySources_KeepsTheMissingNameReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(
+                new[] { BuildFixtureOwnOnlyEdit("PartialThisInternalOfPartNotInSources.cs", "this.OtherPartInternalValue()") },
+                assemblySourcePathsOverride: BuildAssemblySourcePathsWithout(OtherPartFileName));
+
+            Assert.That(AssertSkipped(result, "OwnOnly"), Does.Contain("generated at compile time"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a body of a partial type that calls an internal method of a type nested in a type the
+        /// run was not given is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeBodyUsingInternalMemberOfANestedUnpassedType_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("NestedTypeInternalMember.cs", "HotReloadInternalMemberHost.Nested.NestedInternalValue()")
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "OwnOnly");
+        }
+
+        /// <summary>
+        /// What: an existing getter of a partial type that calls an internal method of a type the run
+        /// was not given is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeGetterUsingInternalMemberOfUnpassedType_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialGetterUsesUnpassedInternal.cs",
+                OtherPartPropertyGetter,
+                "get { return HotReloadInternalMemberHost.InternalStaticValue(); }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "get_ReadsOtherPartProperty");
+        }
+
+        /// <summary>
+        /// What: a getter of a file brought back to re-bind its active patches that calls an internal
+        /// method of a type the run was not given is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_SiblingBroughtBack_GetterUsingInternalMemberOfUnpassedType_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("SiblingGetterPassed.cs", "2"),
+                AsReappliedSibling(BuildEditedFixtureSource(
+                    CallerFileName,
+                    "SiblingGetterCaller.cs",
+                    "get { return 30; }",
+                    "get { return HotReloadInternalMemberHost.InternalStaticValue(); }"))
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "get_CallerProperty");
+        }
+
+        /// <summary>
+        /// What: a method of a file brought back to re-bind its active patches whose body uses an
+        /// internal member of an unpassed type inside a lambda keeps the sibling's skip reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_SiblingBroughtBack_UsingInternalMemberInsideALambda_KeepsTheSiblingReason()
+        {
+            TransformWorkerClientResult result = await RunWithSiblingPlainValueAsync(
+                "SiblingInternalInLambda",
+                "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();");
+
+            Assert.That(AssertSkipped(result, "PlainValue"), Does.Contain("brought back to re-bind"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a method of a file brought back to re-bind its active patches whose body uses an
+        /// internal member of an unpassed type next to a name nothing declares keeps the sibling's skip
+        /// reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_SiblingBroughtBack_UsingInternalMemberNextToAnUnresolvedName_KeepsTheSiblingReason()
+        {
+            TransformWorkerClientResult result = await RunWithSiblingPlainValueAsync(
+                "SiblingInternalNextToUnresolvedName",
+                "return HotReloadInternalMemberHost.InternalStaticValue() + NoSuchName;");
+
+            Assert.That(AssertSkipped(result, "PlainValue"), Does.Contain("brought back to re-bind"), FormatSkipped(result));
         }
 
         // A fixture file next to these tests, edited once and described as a passed run source whose
@@ -699,6 +899,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedOwnOnly =
                 "        public int OwnOnly()\n        {\n            return " + returnedExpression + ";\n        }";
             return BuildEditedFixtureSource(FixtureFileName, editedFileName, OwnOnlyDeclaration, editedOwnOnly);
+        }
+
+        // The edited main part of the partial fixture, with OwnOnly's body replaced by the given line,
+        // which may hold several statements.
+        private static TransformWorkerSourceDto BuildFixtureOwnOnlyBodyEdit(string editedFileName, string bodyLine)
+        {
+            string editedOwnOnly =
+                "        public int OwnOnly()\n        {\n            " + bodyLine + "\n        }";
+            return BuildEditedFixtureSource(FixtureFileName, editedFileName, OwnOnlyDeclaration, editedOwnOnly);
+        }
+
+        // An edit of the partial fixture passed next to the plain caller, which comes back as a sibling
+        // whose PlainValue body is the given line.
+        private static Task<TransformWorkerClientResult> RunWithSiblingPlainValueAsync(string label, string plainValueBody)
+        {
+            return RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit(label + "Passed.cs", "2"),
+                AsReappliedSibling(BuildEditedFixtureSource(CallerFileName, label + "Sibling.cs", CallerPlainValueBody, plainValueBody))
+            });
         }
 
         // The plain caller with PlainValue returning the given expression.
@@ -856,6 +1076,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(first),
                 "Fragment occurs more than once in the fixture: " + fragment);
             return source.Substring(0, first) + replacement + source.Substring(first + fragment.Length);
+        }
+
+        // The rendered reason of the method's skipped row, once the run succeeded without an entry for
+        // the method.
+        private static string AssertSkipped(TransformWorkerClientResult result, string methodName)
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be applied.\n" + FormatSkipped(result));
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName);
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for " + methodName + ".\n" + FormatSkipped(result));
+            return HotReloadWorkerReasonText.Render(skipped.reason);
         }
 
         private static TransformWorkerEntryDto AssertEmitted(TransformWorkerClientResult result, string methodName)

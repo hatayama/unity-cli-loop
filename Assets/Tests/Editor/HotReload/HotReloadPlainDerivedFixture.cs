@@ -37,5 +37,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             yield return _seed;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSeedPlusValue()
+        {
+            Func<int> read = () => this._seed;
+            return read() + 7;
+        }
+
+        public int DerivedProperty
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            get { return 40; }
+        }
     }
 }
