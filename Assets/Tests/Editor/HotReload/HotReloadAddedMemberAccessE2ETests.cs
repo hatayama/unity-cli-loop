@@ -93,6 +93,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(new HotReloadCrossFileAddedMemberHost().Scaled(3), Is.EqualTo(211), FormatOutcomes(result));
         }
 
+        /// <summary>
+        /// What: an added static method that names a compiled instance field with nameof is added
+        /// rather than failing its shim compile, and the patched caller returns the name's length.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedStaticMethodNamingInstanceFieldWithNameof_IsAddedAndReturnsTheNameLength()
+        {
+            string source = ReadFixture(HostFileName);
+            source = ReplaceInSource(
+                source,
+                HostScaledBodyAnchor,
+                "            return AddedStoredNameLength() + factor;\n");
+            source = ReplaceInSource(
+                source,
+                HostValueAnchor,
+                "        private static int AddedStoredNameLength()\n        {\n"
+                + "            return nameof(_stored).Length;\n        }\n\n"
+                + HostValueAnchor);
+
+            string hostPath = FixturePath(HostFileName);
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "AddedStaticNameofHost.cs",
+                        source)
+                });
+
+            AssertNoKind(result, HotReloadMethodOutcomeKind.Failed);
+            AssertNoKind(result, HotReloadMethodOutcomeKind.Skipped);
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Scaled");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "AddedStoredNameLength");
+            // "_stored".Length + 3 = 7 + 3.
+            Assert.That(new HotReloadCrossFileAddedMemberHost().Scaled(3), Is.EqualTo(10), FormatOutcomes(result));
+        }
+
         private static void AssertNoKind(HotReloadOrchestratorResult result, HotReloadMethodOutcomeKind kind)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
