@@ -230,9 +230,9 @@ func TestFinishNonRetryableConnectionAttemptPrefersBusyOverAnUndispatchedTranspo
 	}
 }
 
-// Verifies a dropped connection or a timeout from an attempt that reached Unity after a busy answer
-// comes back as that attempt's own error and outcome, so the caller can recover from what really
-// happened, and that a caller's cancellation still wins over it.
+// Verifies a dropped connection, a timeout, or any other non-RPC error from an attempt that reached
+// Unity after a busy answer comes back as that attempt's own error and outcome, so the caller can
+// recover from what really happened, and that a caller's cancellation still wins over it.
 func TestFinishNonRetryableConnectionAttemptKeepsADispatchedFailureAfterBusy(t *testing.T) {
 	busy := serverBusyRPCError(t)
 	last := busyAttemptAfterAccept(busy)
@@ -251,6 +251,12 @@ func TestFinishNonRetryableConnectionAttemptKeepsADispatchedFailureAfterBusy(t *
 		{
 			name:    "final response timed out after the accept",
 			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: os.ErrDeadlineExceeded},
+		},
+		{
+			// Stands for an error that is neither a disconnect nor a timeout, such as a final response
+			// that fails to decode: the rule does not depend on the kind of error.
+			name:    "failed another way after the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: errors.New("final response could not be decoded")},
 		},
 	}
 	for _, testCase := range cases {
