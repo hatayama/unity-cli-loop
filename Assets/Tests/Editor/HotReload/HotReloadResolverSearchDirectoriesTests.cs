@@ -145,6 +145,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(File.Exists(publicized), Is.True);
         }
 
+        /// <summary>
+        /// Verifies the shim reference build publicizes its target with the transitive search
+        /// directories, so a target whose metadata needs an assembly that only a transitive reference
+        /// lists yields references instead of a publicize failure.
+        /// </summary>
+        [Test]
+        public void TryBuildShimReferencePaths_PublicizesTheTargetWithTransitiveSearchDirectories()
+        {
+            string externalName = "TransitiveShimEnumFixture_" + Guid.NewGuid().ToString("N");
+            string externalDirectory = Path.Combine(_tempRoot, "plugins");
+            InternalsExposureTestImage image =
+                InternalsExposureTestImage.CreateWithConstantOfEnumIn(externalDirectory, externalName);
+            _images.Add(image);
+            ReferenceGraph graph = CreateReferenceGraph(
+                Path.Combine(externalDirectory, externalName + ".dll"),
+                Array.Empty<string>());
+
+            HotReloadShimReferenceBuilder.ShimReferencePathsResult result =
+                HotReloadShimReferenceBuilder.TryBuildShimReferencePaths(
+                    graph.Tests,
+                    image.Home,
+                    false,
+                    false,
+                    Array.Empty<HotReloadTypeHome>());
+
+            Assert.That(result.ErrorMessage, Is.Null);
+            Assert.That(File.Exists(result.References[0]), Is.True);
+        }
+
         // Tests -> Game -> Core -> plugin: two steps, so a walk that adds only the direct
         // reference's own references still misses the plugin.
         private ReferenceGraph CreateReferenceGraph(string pluginPath, string[] testsOwnReferences)
