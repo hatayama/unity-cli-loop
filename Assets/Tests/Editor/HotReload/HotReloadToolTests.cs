@@ -792,6 +792,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: each per-kind total counts only the rows of its own Kind, and AlreadyActive rows
+        /// beside a Skipped row answer PartiallyApplied. Every kind has a different row count, so
+        /// dropping or swapping any two totals fails.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithEveryMethodKind_CountsEachKindApart()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("Type.Skipped1()", "reason", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Added("Type.Added1()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Added("Type.Added2()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.AlreadyActive("Type.Active1()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.AlreadyActive("Type.Active2()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.AlreadyActive("Type.Active3()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale("Type.Removed1()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale("Type.Removed2()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale("Type.Removed3()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale("Type.Removed4()", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 9);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.SkippedTotal, Is.EqualTo(1), "SkippedTotal");
+            Assert.That(response.AddedTotal, Is.EqualTo(2), "AddedTotal");
+            Assert.That(response.AlreadyActiveTotal, Is.EqualTo(3), "AlreadyActiveTotal");
+            Assert.That(response.StaleTotal, Is.EqualTo(4), "StaleTotal");
+            Assert.That(response.PatchedTotal, Is.EqualTo(0), "PatchedTotal");
+            Assert.That(response.FailedTotal, Is.EqualTo(0), "FailedTotal");
+            Assert.That(response.Outcome, Is.EqualTo("PartiallyApplied"));
+        }
+
+        /// <summary>
         /// What: BuildApplyResponse does not emit pause-point warnings when no markers
         /// were retargeted or suppressed, even if PatchedTotal &gt; 0.
         /// </summary>

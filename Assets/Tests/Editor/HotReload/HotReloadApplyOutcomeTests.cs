@@ -156,27 +156,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: Introduced and AlreadyActive type rows of a requested file count as live, so a
-        /// run with no method rows answers Applied.
+        /// What: a requested type row that is Introduced or AlreadyActive each counts as live, so a
+        /// run of only that row and no method rows answers Applied.
         /// </summary>
         [Test]
         public void Decide_OnlyRequestedIntroducedTypes_ReturnsApplied()
         {
-            HotReloadApplyOutcomeKind outcome = HotReloadApplyOutcome.Decide(
-                Array.Empty<HotReloadMethodOutcome>(),
-                new List<HotReloadIntroducedTypeOutcome>
-                {
-                    HotReloadIntroducedTypeOutcome.Introduced("Example.NewType", "Assembly-CSharp", RequestedPath),
+            Assert.That(
+                DecideTypes(
+                    NoSiblings(),
+                    HotReloadIntroducedTypeOutcome.Introduced("Example.NewType", "Assembly-CSharp", RequestedPath)),
+                Is.EqualTo(HotReloadApplyOutcomeKind.Applied),
+                "Introduced");
+            Assert.That(
+                DecideTypes(
+                    NoSiblings(),
                     HotReloadIntroducedTypeOutcome.AlreadyActive(
                         "Example.OtherType",
                         "Assembly-CSharp",
                         RequestedPath,
-                        bodyEdited: false)
-                },
-                NoSiblings(),
-                hasFailure: false);
-
-            Assert.That(outcome, Is.EqualTo(HotReloadApplyOutcomeKind.Applied));
+                        bodyEdited: false)),
+                Is.EqualTo(HotReloadApplyOutcomeKind.Applied),
+                "AlreadyActive");
         }
 
         /// <summary>
@@ -186,14 +187,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Decide_OnlySiblingOwnedIntroducedType_ReturnsNothingToApply()
         {
-            HotReloadApplyOutcomeKind outcome = HotReloadApplyOutcome.Decide(
-                Array.Empty<HotReloadMethodOutcome>(),
-                new List<HotReloadIntroducedTypeOutcome>
-                {
-                    HotReloadIntroducedTypeOutcome.Introduced("Example.NewType", "Assembly-CSharp", SiblingPath)
-                },
+            HotReloadApplyOutcomeKind outcome = DecideTypes(
                 WithSibling(),
-                hasFailure: false);
+                HotReloadIntroducedTypeOutcome.Introduced("Example.NewType", "Assembly-CSharp", SiblingPath));
 
             Assert.That(outcome, Is.EqualTo(HotReloadApplyOutcomeKind.NothingToApply));
         }
@@ -205,6 +201,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadApplyOutcome.Decide(
                 methods,
                 Array.Empty<HotReloadIntroducedTypeOutcome>(),
+                siblingFiles,
+                hasFailure: false);
+        }
+
+        private static HotReloadApplyOutcomeKind DecideTypes(
+            HotReloadReappliedSiblingFiles siblingFiles,
+            params HotReloadIntroducedTypeOutcome[] introducedTypes)
+        {
+            return HotReloadApplyOutcome.Decide(
+                Array.Empty<HotReloadMethodOutcome>(),
+                introducedTypes,
                 siblingFiles,
                 hasFailure: false);
         }
