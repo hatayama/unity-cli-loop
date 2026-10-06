@@ -216,6 +216,7 @@ internal static class PropertyGetterEmitter
             addedFieldCatalog,
             addedPropertyCatalog,
             partialTypeParts,
+            targetAssembly,
             skipped);
         if (skipGetter)
         {
@@ -230,7 +231,10 @@ internal static class PropertyGetterEmitter
             WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
                 semanticModel,
                 getterBodyNode,
-                targetAssembly);
+                targetAssembly,
+                methodDeclarationOrNull: null,
+                decision,
+                typeSymbol);
             if (siblingSkip != null)
             {
                 skipped.Add(new WorkerSkipped

@@ -303,7 +303,10 @@ internal static class OrdinaryMethodQueue
             WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
                 semanticModel,
                 methodBodyNode,
-                typeState.TargetAssembly);
+                typeState.TargetAssembly,
+                methodDeclaration,
+                decision,
+                typeState.TypeSymbol);
             if (siblingSkip != null)
             {
                 decision = MethodTransformDecision.Skip(siblingSkip);
@@ -317,7 +320,11 @@ internal static class OrdinaryMethodQueue
             WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(
                 typeState.TypeDeclaration,
                 semanticModel,
-                methodBodyNode);
+                methodBodyNode,
+                methodDeclaration,
+                decision,
+                typeState.TypeSymbol,
+                typeState.TargetAssembly);
             if (partialSkip != null)
             {
                 decision = MethodTransformDecision.Skip(partialSkip);
