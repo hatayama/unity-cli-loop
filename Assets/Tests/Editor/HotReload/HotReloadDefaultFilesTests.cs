@@ -345,6 +345,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.FilesRequired));
         }
 
+        /// <summary>
+        /// What: with --files omitted, the tool captures the source snapshot before it detects the
+        /// changed files, so a request that waited out a domain reload detects them against the
+        /// snapshot of the compile that reload loaded.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilesAreOmitted_CapturesTheSourceSnapshotBeforeDetectingChanges()
+        {
+            int captureCount = 0;
+            using IDisposable captureScope = HotReloadServicesTestScope.BeginWithSourceSnapshotCapture(
+                new HotReloadSourceSnapshotCapture(() => captureCount++));
+            int captureCountAtDetection = -1;
+            using IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
+                new HotReloadStubChangeDetector(() =>
+                {
+                    captureCountAtDetection = captureCount;
+                    return new HotReloadChangedFileAggregationResult(
+                        hasBaseline: true,
+                        changedProjectRelativePaths: new List<string> { "Assets/Changed1.cs" },
+                        scanLimitWarnings: new List<string>());
+                }));
+            List<string> appliedFiles = new List<string>();
+            using IDisposable orchestratorScope = BeginRecordingOrchestrator(appliedFiles);
+
+            await ExecuteAsync(new JObject());
+
+            Assert.That(captureCountAtDetection, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: with --files, the tool captures the source snapshot before the run starts, so a
+        /// request that waited out a domain reload runs against the snapshot of the compile that
+        /// reload loaded.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WithFiles_CapturesTheSourceSnapshotBeforeTheRun()
+        {
+            int captureCount = 0;
+            using IDisposable captureScope = HotReloadServicesTestScope.BeginWithSourceSnapshotCapture(
+                new HotReloadSourceSnapshotCapture(() => captureCount++));
+            int captureCountAtRun = -1;
+            using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
+                new HotReloadStubOrchestrator((files, ignoredCt) =>
+                {
+                    captureCountAtRun = captureCount;
+                    return Task.FromResult(CreateAppliedResult());
+                }));
+
+            await ExecuteAsync(new JObject { ["Files"] = new JArray(ExistingScriptPath) });
+
+            Assert.That(captureCountAtRun, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: --status reads no source snapshot, so it does not run the capture.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ForStatus_DoesNotCaptureTheSourceSnapshot()
+        {
+            int captureCount = 0;
+            using IDisposable captureScope = HotReloadServicesTestScope.BeginWithSourceSnapshotCapture(
+                new HotReloadSourceSnapshotCapture(() => captureCount++));
+
+            HotReloadResponse response = await ExecuteAsync(new JObject { ["Status"] = true });
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(captureCount, Is.EqualTo(0));
+        }
+
         private static void RecordDroppedIntroducedSource(string projectRelativePath)
         {
             if (projectRelativePath == ExistingDroppedSourcePath)
@@ -384,16 +453,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadStubOrchestrator((files, ignoredCt) =>
                 {
                     appliedFiles.AddRange(files);
-                    return Task.FromResult(
-                        new HotReloadOrchestratorResult(
-                            new List<HotReloadMethodOutcome>
-                            {
-                                HotReloadMethodOutcome.Patched("Host.Selected()", "Assets/Changed1.cs")
-                            },
-                            new List<string>(),
-                            patchedTotal: 1,
-                            activePatchTotal: 1));
+                    return Task.FromResult(CreateAppliedResult());
                 }));
+        }
+
+        private static HotReloadOrchestratorResult CreateAppliedResult()
+        {
+            return new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Host.Selected()", "Assets/Changed1.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
         }
 
         private static Task<HotReloadOrchestratorResult> FailIfApplyRuns(
@@ -414,6 +487,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExistingDroppedSourcePath = "Assets/Tests/Editor/HotReload/HotReloadDefaultFilesTests.cs";
+
+        // A script on disk, so a run given it through --files names a file that exists.
+        private const string ExistingScriptPath = "Assets/Tests/Editor/HotReload/HotReloadDefaultFilesTests.cs";
 
         private const string AppliedMessageTail =
             "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1.";
