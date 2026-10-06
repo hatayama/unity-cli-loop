@@ -84,13 +84,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a path without a parent or without a grandparent is answered false instead of throwing.
+        /// What: a path without a parent or without a grandparent, including one made only of a
+        /// separator, is answered false instead of throwing.
         /// </summary>
         [Test]
         public void IsVirtualPlayerProjectRoot_PathTooShortToHaveAGrandparent_ReturnsFalse()
         {
             string playerDirectoryOnly = "mppm0a1b2c3d";
             string virtualPlayersAndPlayerDirectory = Path.Combine("VP", "mppm0a1b2c3d");
+            string separatorOnly = Path.DirectorySeparatorChar.ToString();
 
             Assert.That(
                 HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(playerDirectoryOnly),
@@ -100,6 +102,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(virtualPlayersAndPlayerDirectory),
                 Is.False,
                 "A path without a grandparent must not be taken for a Virtual Player root.");
+            Assert.That(
+                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(separatorOnly),
+                Is.False,
+                "A path made only of a separator must not be taken for a Virtual Player root.");
         }
 
         /// <summary>

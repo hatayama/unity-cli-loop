@@ -22,6 +22,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why trim first: with a trailing separator, Path.GetDirectoryName returns the same
             // directory, so every parent lookup below would land one level too low.
             string trimmedRoot = projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            // A root made only of separators has no parent, and Path.GetDirectoryName rejects the empty string.
+            if (trimmedRoot.Length == 0)
+            {
+                return false;
+            }
+
             string virtualPlayersDirectory = Path.GetDirectoryName(trimmedRoot);
             if (string.IsNullOrEmpty(virtualPlayersDirectory))
             {
