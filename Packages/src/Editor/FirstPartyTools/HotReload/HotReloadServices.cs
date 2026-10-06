@@ -25,7 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadChangeDetector changeDetector,
             HotReloadUnityMessageForwarding unityMessageForwarding,
             HotReloadWiredValuePersistence wiredValuePersistence,
-            HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh)
+            HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh,
+            HotReloadSourceSnapshotCapture sourceSnapshotCapture)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(harmony != null, "harmony must not be null.");
@@ -48,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(wiredValuePersistence != null, "wiredValuePersistence must not be null.");
             Debug.Assert(
                 wiredValueRestoreRefresh != null, "wiredValueRestoreRefresh must not be null.");
+            Debug.Assert(sourceSnapshotCapture != null, "sourceSnapshotCapture must not be null.");
             Domain = domain;
             Harmony = harmony;
             Patcher = patcher;
@@ -65,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityMessageForwarding = unityMessageForwarding;
             WiredValuePersistence = wiredValuePersistence;
             WiredValueRestoreRefresh = wiredValueRestoreRefresh;
+            SourceSnapshotCapture = sourceSnapshotCapture;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -116,6 +119,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadWiredValueRestoreRefresh WiredValueRestoreRefresh { get; }
 
         /// <summary>
+        /// Captures this domain's source snapshot once, before whichever comes first reads it.
+        /// </summary>
+        internal HotReloadSourceSnapshotCapture SourceSnapshotCapture { get; }
+
+        /// <summary>
         /// A copy that runs <paramref name="orchestrator"/> instead of this one, sharing every
         /// other collaborator — including the domain, so installing the copy neither takes the
         /// resolver over nor disposes anything when it is put back.
@@ -139,7 +147,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ChangeDetector,
                 UnityMessageForwarding,
                 WiredValuePersistence,
-                WiredValueRestoreRefresh);
+                WiredValueRestoreRefresh,
+                SourceSnapshotCapture);
         }
 
         /// <summary>
@@ -165,7 +174,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 changeDetector,
                 UnityMessageForwarding,
                 WiredValuePersistence,
-                WiredValueRestoreRefresh);
+                WiredValueRestoreRefresh,
+                SourceSnapshotCapture);
+        }
+
+        /// <summary>
+        /// A copy that captures the source snapshot through <paramref name="sourceSnapshotCapture"/>,
+        /// sharing every other collaborator.
+        /// </summary>
+        internal HotReloadServices WithSourceSnapshotCapture(
+            HotReloadSourceSnapshotCapture sourceSnapshotCapture)
+        {
+            return new HotReloadServices(
+                Domain,
+                Harmony,
+                Patcher,
+                FileEntryApplier,
+                EntryApplier,
+                TransformWorkerClient,
+                GroupStageCollaborators,
+                GroupCommitStage,
+                GroupProcessor,
+                Orchestrator,
+                StatusExecutor,
+                PackageRootCapture,
+                EditorStateSnapshotCapture,
+                ChangeDetector,
+                UnityMessageForwarding,
+                WiredValuePersistence,
+                WiredValueRestoreRefresh,
+                sourceSnapshotCapture);
         }
     }
 }
