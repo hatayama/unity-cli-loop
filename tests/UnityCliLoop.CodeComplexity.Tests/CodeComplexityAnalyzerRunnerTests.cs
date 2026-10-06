@@ -109,6 +109,104 @@ namespace UnityCliLoop.CodeComplexity.Tests
                 && issue.Message.Contains("ConditionalTestFrameworkBranch", StringComparison.Ordinal)), Is.True);
         }
 
+        // Verifies that a checkout placed below a .claude directory still has its sources analyzed.
+        [Test]
+        public async Task AnalyzeAsync_WhenRootSitsBelowClaudeDirectory_ShouldStillAnalyzeSources()
+        {
+            string rootPath = Path.Combine(
+                TestContext.CurrentContext.WorkDirectory,
+                ".claude",
+                "worktrees",
+                $"code-complexity-{Guid.NewGuid():N}");
+            try
+            {
+                Directory.CreateDirectory(rootPath);
+                CreateSampleRepository(rootPath);
+                CodeComplexityAnalyzerRunner runner = new();
+                CodeComplexityOptions options = new(
+                    rootPath,
+                    maxComplexity: 1,
+                    includeNonProduction: false,
+                    ReportFormat.Table,
+                    failOnExceeded: false);
+
+                IReadOnlyList<CodeComplexityIssue> issues = await runner.AnalyzeAsync(options, CancellationToken.None);
+
+                Assert.That(issues.Any(issue =>
+                    issue.RuleId == "CA1502"
+                    && issue.Message.Contains("ProductionBranch", StringComparison.Ordinal)), Is.True);
+            }
+            finally
+            {
+                // Only the per-test directory is removed: the work directory may already hold a real
+                // .claude directory, which a recursive delete of .claude would wipe out.
+                if (Directory.Exists(rootPath))
+                {
+                    Directory.Delete(rootPath, recursive: true);
+                }
+            }
+        }
+
+        // Verifies that a generated skill copy inside the scanned tree is skipped while the rest of the tree is analyzed.
+        [Test]
+        public async Task AnalyzeAsync_WhenGeneratedSkillCopyIsInsideScannedTree_ShouldIgnoreIt()
+        {
+            string skillCopyDirectory = Path.Combine(_rootPath, "Packages", "src", ".claude", "skills");
+            Directory.CreateDirectory(skillCopyDirectory);
+            WriteFile(
+                Path.Combine(skillCopyDirectory, "Generated.cs"),
+                """
+                namespace SampleGenerated
+                {
+                    public sealed class GeneratedCode
+                    {
+                        public int GeneratedBranch(bool condition)
+                        {
+                            if (condition)
+                            {
+                                return 1;
+                            }
+
+                            return 0;
+                        }
+                    }
+                }
+                """);
+            CodeComplexityAnalyzerRunner runner = new();
+            CodeComplexityOptions options = new(
+                _rootPath,
+                maxComplexity: 1,
+                includeNonProduction: false,
+                ReportFormat.Table,
+                failOnExceeded: false);
+
+            IReadOnlyList<CodeComplexityIssue> issues = await runner.AnalyzeAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Message.Contains("GeneratedBranch", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Message.Contains("ProductionBranch", StringComparison.Ordinal)), Is.True);
+        }
+
+        // Verifies that a root without production sources is rejected instead of being reported as clean.
+        [Test]
+        public void AnalyzeAsync_WhenNoProductionSourceExists_ShouldThrow()
+        {
+            DeleteProductionSources(_rootPath);
+            CodeComplexityAnalyzerRunner runner = new();
+            CodeComplexityOptions options = new(
+                _rootPath,
+                maxComplexity: 1,
+                includeNonProduction: false,
+                ReportFormat.Table,
+                failOnExceeded: false);
+
+            NoProductionSourceException? exception = Assert.ThrowsAsync<NoProductionSourceException>(
+                async () => await runner.AnalyzeAsync(options, CancellationToken.None));
+
+            Assert.That(exception?.Message, Does.Contain(Path.Combine(_rootPath, "Packages", "src")));
+        }
+
         // Verifies that advisory mode keeps the command successful when CA1502 diagnostics are present.
         [Test]
         public void Main_WhenFailOnExceededIsFalse_ShouldReturnSuccessForFindings()
@@ -196,6 +294,21 @@ namespace UnityCliLoop.CodeComplexity.Tests
             Assert.That(exitCode, Is.EqualTo(2));
         }
 
+        // Verifies that a root without production sources returns the validation failure code.
+        [Test]
+        public void Main_WhenNoProductionSourceExists_ShouldReturnValidationFailure()
+        {
+            DeleteProductionSources(_rootPath);
+
+            int exitCode = Program.Main(new[]
+            {
+                "--root",
+                _rootPath
+            });
+
+            Assert.That(exitCode, Is.EqualTo(2));
+        }
+
         private static void CreateSampleRepository(string rootPath)
         {
             string packageDirectory = Path.Combine(rootPath, "Packages", "src", "Editor", "Sample");
@@ -253,6 +366,15 @@ namespace UnityCliLoop.CodeComplexity.Tests
                     }
                 }
                 """);
+        }
+
+        private static void DeleteProductionSources(string rootPath)
+        {
+            string packageSourcePath = Path.Combine(rootPath, "Packages", "src");
+            foreach (string sourceFile in Directory.GetFiles(packageSourcePath, "*.cs", SearchOption.AllDirectories))
+            {
+                File.Delete(sourceFile);
+            }
         }
 
         private static void WriteFile(string path, string content)

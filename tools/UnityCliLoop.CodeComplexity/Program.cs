@@ -34,7 +34,17 @@ namespace UnityCliLoop.CodeComplexity
             CodeComplexityOptions options = parseResult.Options
                 ?? throw new InvalidOperationException("Successful command-line parsing must produce options.");
             CodeComplexityAnalyzerRunner runner = new();
-            IReadOnlyList<CodeComplexityIssue> issues = await runner.AnalyzeAsync(options, ct);
+            IReadOnlyList<CodeComplexityIssue> issues;
+            try
+            {
+                issues = await runner.AnalyzeAsync(options, ct);
+            }
+            catch (NoProductionSourceException exception)
+            {
+                Console.Error.WriteLine(exception.Message);
+                return 2;
+            }
+
             CodeComplexityReporter.Write(issues, options);
 
             if (options.FailOnExceeded && issues.Any())
