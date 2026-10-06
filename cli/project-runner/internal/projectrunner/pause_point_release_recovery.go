@@ -189,20 +189,6 @@ func sendCompileWithBusyRetry(
 	}
 }
 
-type compileErrorCodeProbe struct {
-	ErrorCode string `json:"ErrorCode"`
-}
-
-// Why ErrorCode only: the collision is a structured compile result, not a message string.
-func isRetryablePausePointRecoveryCompileResult(raw []byte) bool {
-	var probe compileErrorCodeProbe
-	if json.Unmarshal(raw, &probe) != nil {
-		return false
-	}
-	return probe.ErrorCode == compileAlreadyInProgressErrorCode ||
-		probe.ErrorCode == compileEditorUpdatingErrorCode
-}
-
 func runOneFreshCompileForPausePointRecoveryDefault(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -256,7 +242,7 @@ func runFreshCompileWithBusyRetryForPausePointRecovery(
 		if code == 0 {
 			return 0
 		}
-		if !isRetryablePausePointRecoveryCompileResult(attemptOut.Bytes()) {
+		if !isCompileEditorBusyRejection(attemptOut.Bytes()) {
 			_, _ = stdout.Write(attemptOut.Bytes())
 			return code
 		}

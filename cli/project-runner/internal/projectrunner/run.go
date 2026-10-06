@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -263,7 +264,7 @@ func runCompileWithReattachPolicy(
 		return result
 	}
 
-	return runFreshCompileWithDomainReloadWaitResultWithDeps(ctx, connection, params, stderr, compileWait)
+	return runFreshCompileRecoveringWithDeps(ctx, connection, params, stderr, compileWait)
 }
 
 func runFreshCompileWithDomainReloadWaitWithDeps(
@@ -305,6 +306,11 @@ func runFreshCompileAttempt(
 			Command:     clicore.CompileCommandName,
 		})
 		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
+	}
+	// Why only a resent attempt: the first one keeps the exact --timeout-seconds wait, which its log
+	// entry and its timeout message report.
+	if options.timeoutOverride > 0 {
+		waitTimeout = options.timeoutOverride
 	}
 
 	requestID, err := prepareCompileWaitParams(params)
@@ -351,7 +357,15 @@ func runFreshCompileAttempt(
 		forceRecompile: compileForceRecompileEnabled(params),
 		timeout:        waitTimeout,
 		pollInterval:   freshWaitPollIntervalFor(compileWait),
+		resendBefore:   options.resendBefore,
+		// Only a dispatched send reaches this wait, so an error here means the connection dropped
+		// after Unity received the request.
+		serverRestartSeen: err != nil && clierrors.IsTransportDisconnectError(err),
 	}, compileWait)
+	if errors.Is(waitErr, errCompileRequestMissing) {
+		spinner.Stop()
+		return compileExecutionResult{}, freshCompileAttemptRequestMissing
+	}
 	if waitErr != nil {
 		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
@@ -371,6 +385,10 @@ func runFreshCompileAttempt(
 			compilePendingRecordLifetime-waitTimeout,
 		))
 		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
+	}
+	if canResendCompile(options.resendBefore) && isCompileEditorBusyRejection(result) {
+		spinner.Stop()
+		return compileExecutionResult{}, freshCompileAttemptEditorBusy
 	}
 	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, outcome), freshCompileAttemptFinal
 }
