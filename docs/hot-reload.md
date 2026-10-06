@@ -69,6 +69,9 @@ assembly's compile references first, then in those of every assembly it referenc
 When a verified snapshot marks a currently patched method as unchanged, the
 orchestrator reverts that patch to the compiled IL instead of re-emitting a shim.
 
+The response's `Timing` object breaks the run down per phase (worker, shim compile, patch)
+and, after a fallback compile, adds the compile's time.
+
 ## Spike Findings
 
 ### S1 — access mechanics on the Editor Mono runtime (pivotal)
