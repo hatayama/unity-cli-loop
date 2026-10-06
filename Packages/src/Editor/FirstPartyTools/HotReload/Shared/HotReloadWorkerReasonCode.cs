@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         MethodTransformSiblingBodyUnbound,
         AddedMethodVirtualOrAbstract,
         AddedMethodGeneric,
+        AddedMethodSignatureTypeUnresolved,
         AddedMethodMethodGroupReference,
         AddedMethodMethodGroupSubscription,
         AddedMethodMethodGroupUnsubscription,
