@@ -235,7 +235,7 @@ func TestFinishNonRetryableConnectionAttemptPrefersBusyOverAnUndispatchedTranspo
 // happened, and that a caller's cancellation still wins over it.
 func TestFinishNonRetryableConnectionAttemptKeepsADispatchedFailureAfterBusy(t *testing.T) {
 	busy := serverBusyRPCError(t)
-	last := sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: busy}
+	last := busyAttemptAfterAccept(busy)
 	cases := []struct {
 		name    string
 		current sendAttempt
@@ -273,6 +273,52 @@ func TestFinishNonRetryableConnectionAttemptKeepsADispatchedFailureAfterBusy(t *
 				}
 			})
 		})
+	}
+}
+
+// busyAttemptAfterAccept returns a busy answer to an accepted request. Its distinct timing tells its
+// outcome apart from a current attempt whose flags are the same, so a test can see which outcome
+// came back.
+func busyAttemptAfterAccept(busy error) sendAttempt {
+	return sendAttempt{
+		outcome: unityipc.UnitySendOutcome{
+			RequestDispatched: true,
+			RequestAccepted:   true,
+			Timing:            unityipc.UnitySendTiming{Total: time.Millisecond},
+		},
+		err: busy,
+	}
+}
+
+// Verifies an editor-unresponsive error from an attempt that Unity accepted after a busy answer comes
+// back as that attempt's own error and outcome, and goes through the main-thread-stall focus handling
+// a first attempt would get, instead of being reported as the busy answer.
+func TestFinishNonRetryableConnectionAttemptKeepsAnEditorUnresponsiveErrorAfterBusy(t *testing.T) {
+	busy := serverBusyRPCError(t)
+	last := busyAttemptAfterAccept(busy)
+	current := sendAttempt{
+		outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		err:     &unityipc.EditorUnresponsiveError{StallSeconds: 30},
+	}
+	processLookups := 0
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		processLookups++
+		return nil, nil
+	}
+	// This error enters the focus handling whatever the response timeout is, so it needs a real focus
+	// controller. Finding no Unity process keeps the focus itself from running.
+	focusController := newConnectionRetryFocusController(unityipc.Connection{ProjectRoot: t.TempDir()}, "get-logs", deps)
+
+	outcome, err := finishNonRetryableConnectionAttempt(context.Background(), current, last, 0, focusController)
+	if !errors.Is(err, current.err) || isUnityServerBusyRPCError(err) {
+		t.Errorf("err = %v, want the accepted attempt's own error %v", err, current.err)
+	}
+	if !reflect.DeepEqual(outcome, current.outcome) {
+		t.Errorf("outcome = %+v, want the accepted attempt's outcome %+v", outcome, current.outcome)
+	}
+	if processLookups != 1 {
+		t.Errorf("Unity process lookups = %d, want 1 from the main-thread-stall focus handling", processLookups)
 	}
 }
 
