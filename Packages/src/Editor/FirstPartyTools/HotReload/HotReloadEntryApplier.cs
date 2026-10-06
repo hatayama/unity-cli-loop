@@ -89,22 +89,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context, file, compileResult, prepared.Entries, prepared.Resolution);
         }
 
-        // Peels leftover Harmony patches when the source again matches the verified baseline.
-        // Resolve failures are silent: unchanged identities already matched compile-time IL.
-        // A method Harmony could not restore becomes that method's Failed outcome instead of
-        // aborting the peel, so the remaining unchanged methods still get reverted.
-        // Returns how many Revert calls actually removed a live patch.
+        /// <summary>
+        /// Peels leftover Harmony patches when the source again matches the verified baseline.
+        /// Resolve failures are silent: unchanged identities already matched compile-time IL.
+        /// A method Harmony could not restore becomes that method's Failed outcome instead of
+        /// aborting the peel, so the remaining unchanged methods still get reverted.
+        /// Returns how many Revert calls actually removed a live patch.
+        /// </summary>
+        /// <param name="resolveMethod">
+        /// How a row is resolved; production passes HotReloadMethodMatcher.Resolve, and tests
+        /// count the calls.
+        /// </param>
         internal int RevertUnchangedPatches(
             HotReloadTypeHome fileHome,
             HotReloadEntryHomeResolver homeResolver,
             TransformWorkerUnchangedMethodDto[] unchangedMethods,
             List<HotReloadMethodOutcome> outcomes,
-            string assemblyResolvePath)
+            string assemblyResolvePath,
+            HotReloadMethodResolver resolveMethod)
         {
             Debug.Assert(fileHome != null, "fileHome must not be null.");
             Debug.Assert(homeResolver != null, "homeResolver must not be null.");
             Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
+            Debug.Assert(resolveMethod != null, "resolveMethod must not be null.");
 
             int revertedCount = 0;
             for (int index = 0; index < unchangedMethods.Length; index++)
@@ -123,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // non-generic sibling and peel its live patch.
                 // Why the row decides the home: a method of a type an artifact serves is patched
                 // on that artifact, so the leftover patch to peel is only findable there.
-                HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
+                HotReloadMethodMatchResult matchResult = resolveMethod(
                     homeResolver.Resolve(fileHome, unchanged.homeAssemblyName),
                     unchanged.typeMetadataName,
                     unchanged.methodName,
@@ -194,7 +202,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     homeResolver,
                     unchangedMethods,
                     file.Sinks.Outcomes,
-                    file.AssemblyResolvePath);
+                    file.AssemblyResolvePath,
+                    HotReloadMethodMatcher.Resolve);
             }
         }
         /// <summary>
