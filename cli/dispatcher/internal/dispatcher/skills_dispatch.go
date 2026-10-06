@@ -209,9 +209,18 @@ func runSkillsInstallWithGuidance(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
+	// The help text promises that targets already holding uloop skills never go stale, even
+	// when their flag is omitted, so only ask where to install when no target holds one yet.
 	if len(options.targets) == 0 {
-		printSkillsTargetGuidance("install", stdout)
-		return 0
+		detected, err := detectInstalledSkillTargets(projectRoot, skills, options)
+		if err != nil {
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			return 1
+		}
+		if len(detected) == 0 {
+			printSkillsTargetGuidance("install", stdout)
+			return 0
+		}
 	}
 	return runSkillsInstall(projectRoot, skills, options, stdout, stderr)
 }

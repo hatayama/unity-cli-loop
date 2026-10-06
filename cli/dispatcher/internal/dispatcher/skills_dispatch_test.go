@@ -151,6 +151,20 @@ func TestRunSkillsSubcommandInstallWithoutTargetAndNoInstallPrintsGuidance(t *te
 	}
 }
 
+func TestRunSkillsSubcommandInstallWithoutTargetReportsDetectionErrors(t *testing.T) {
+	// Verifies install without a target flag fails with code 1 instead of printing guidance when installed targets cannot be detected.
+	stubSkillsUserHomeDir(t, "", errors.New("home unavailable"))
+	skill := skillDefinition{name: "uloop-sample", content: []byte(sampleSkillContent)}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runSkillsSubcommand("install", t.TempDir(), []skillDefinition{skill}, skillCommandOptions{global: true}, &stdout, &stderr)
+
+	if code != 1 || !strings.Contains(stderr.String(), "home unavailable") || strings.Contains(stdout.String(), "Please specify at least one target") {
+		t.Fatalf("expected the detection error: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestTryHandleSkillsRequestInstallsIntoOutputDir(t *testing.T) {
 	// Verifies --output-dir routes the request to dir mode and installs and removes the skill there.
 	projectRoot := createSkillsTestProject(t)
