@@ -1123,6 +1123,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding only a block comment between a field's type and its name emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithBlockCommentOnlyEditAfterAFieldType_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "BlockCommentAfterFieldTypeDrift.cs";
+            // Why after the type: a comment on the same line belongs to the token before it, so
+            // this one becomes part of the field's type rather than of its modifiers.
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "private int _secret = 10;",
+                    "private int /* comment added by the test */ _secret = 10;"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
         /// What: rewording only the XML documentation comment of the type emits neither the
         /// file-level nor a named outside-method-body warning.
         /// </summary>

@@ -1670,6 +1670,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding only a line comment above the attribute list of an existing field emits no
+        /// outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Drift_LineCommentOnlyEditAboveAFieldAttribute_DoesNotWarn()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            // Why the snapshot carries the attribute too: no field of the compiled host has one, and
+            // the comment must be the only difference between the snapshot and the edited source.
+            string snapshotSource = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        [SerializeField]\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            string edited = snapshotSource.Replace(
+                "        [SerializeField]\n        public int PublicSeed = 3;",
+                "        // comment added by the test\n        [SerializeField]\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: the snapshot must add the attribute.");
+            Assert.That(edited, Is.Not.EqualTo(snapshotSource), "Precondition: the edit must add the comment.");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("FieldAttributeCommentOnly.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Is.Empty,
+                string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
         /// What: a readonly added field can still be read through GetOrInit.
         /// </summary>
         [Test]
