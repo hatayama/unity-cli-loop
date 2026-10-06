@@ -47,6 +47,12 @@ Harmony transpiler transplant  (5) patch the original method with a transpiler t
                                    DynamicMethod replacement
 ```
 
+The worker's compilations hold only the edited sources (plus the changed siblings for the const
+checks), so each of them also gets one synthesized tree, `WorkerGlobalUsingBindingTree`, that holds
+nothing but the `global using` directives collected from the assembly's other sources. Without it,
+a type a sibling file imports through a `global using` would not bind, and an existing method whose
+signature names that type would look like an added method.
+
 Skip reasons and introduced-type diagnostics leave the worker as a reason `code` plus its
 `args` (and an optional free-form detail), never as a sentence. Only the Editor's
 `HotReloadWorkerReasonText` turns those into the English a caller reads, so a wording change
