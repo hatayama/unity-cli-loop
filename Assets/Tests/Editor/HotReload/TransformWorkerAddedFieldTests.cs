@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/OutsideMethodBodyDriftChecker.cs.
         // That constant lives in the Unity-ignored worker process and is not visible here.
         private const string OutsideMethodBodyDriftWarningFormat =
-            "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+            "Edits outside method bodies in {0} (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up.";
 
         private const string FieldKindChangeProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
@@ -1470,7 +1470,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundDrift, Is.True, "Existing field initializer edits must still warn.");
             AssertHasDeclarationDriftWarning(
                 result,
-                "Edits outside method bodies in AddedFieldWithInitializerDrift.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up.");
+                "Edits outside method bodies in AddedFieldWithInitializerDrift.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up.");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
@@ -1496,7 +1496,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in NamedInitializerDrift.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in NamedInitializerDrift.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1525,7 +1525,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in FieldOrderSwapDrift.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in FieldOrderSwapDrift.cs (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1552,7 +1552,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in MultiDeclaratorAttributeDrift.cs (field attributes: PairAlpha, PairBeta) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in MultiDeclaratorAttributeDrift.cs (field attributes: PairAlpha, PairBeta) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1578,7 +1578,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in MultiDeclaratorInitializerDrift.cs (field initializer: PairAlpha) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in MultiDeclaratorInitializerDrift.cs (field initializer: PairAlpha) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1604,7 +1604,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in MultiDeclaratorRegroupDrift.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in MultiDeclaratorRegroupDrift.cs (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1634,7 +1634,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in DupFieldKeyFailOpen.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in DupFieldKeyFailOpen.cs (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1953,7 +1953,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new[]
                     {
                         "Compiled property 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.Hp' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.",
-                        "Edits outside method bodies in PropertyKindChangeWithInitializer.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in PropertyKindChangeWithInitializer.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1984,7 +1984,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new[]
                     {
                         "Compiled event 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.ScoreChanged' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.",
-                        "Edits outside method bodies in EventKindChangeWithInitializer.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in EventKindChangeWithInitializer.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 

@@ -1365,7 +1365,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in NonConstFieldInitializerDrift.cs (field initializer: _secret) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in NonConstFieldInitializerDrift.cs (field initializer: _secret) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2133,7 +2133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/OutsideMethodBodyDriftChecker.cs.
         // That constant lives in the Unity-ignored worker process and is not visible here.
         private const string OutsideMethodBodyDriftWarningFormat =
-            "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+            "Edits outside method bodies in {0} (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up.";
 
         /// <summary>
         /// What: editing one instance constructor reports that .ctor as Skipped and omits an
@@ -2488,7 +2488,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindCtorInitializerDrift.cs (constructor: .ctor) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindCtorInitializerDrift.cs (constructor: .ctor) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2507,7 +2507,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindOperatorAttributeDrift.cs (operator: +) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindOperatorAttributeDrift.cs (operator: +) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2526,7 +2526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindConversionAttributeDrift.cs (conversion: implicit->int) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindConversionAttributeDrift.cs (conversion: implicit->int) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2545,7 +2545,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindEventAttributeDrift.cs (event: Edited) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindEventAttributeDrift.cs (event: Edited) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
