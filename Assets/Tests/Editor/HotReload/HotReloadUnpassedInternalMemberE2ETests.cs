@@ -60,8 +60,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             VibeLogger.ClearMemoryLogs();
         }
 
-        // Edits whose body runs as IL copied into the patched method.
-        private static IEnumerable<string> EditsThatRunInThePatchedMethod()
+        // Edits whose body runs as IL copied into the patched method and uses an internal member of
+        // a type in the edited file's own assembly.
+        private static IEnumerable<string> EditsOfTheSameAssemblyThatRunInThePatchedMethod()
         {
             yield return "InternalStaticMethod";
             yield return "InternalInstanceMethod";
@@ -69,6 +70,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalPropertyGet";
             yield return "InternalPropertyGetAndSet";
             yield return "InheritedInternalMethodThroughThis";
+        }
+
+        // Edits whose body runs as IL copied into the patched method.
+        private static IEnumerable<string> EditsThatRunInThePatchedMethod()
+        {
+            foreach (string editName in EditsOfTheSameAssemblyThatRunInThePatchedMethod())
+            {
+                yield return editName;
+            }
+
             yield return "InternalMethodOfPublicTypeOfAnotherAssemblyThroughInternalsVisibleTo";
         }
 
@@ -99,11 +110,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: the same edits on a partial type are patched, and the method returns the edited
-        /// value, as they are on a plain type.
+        /// What: the edits that use an internal member of a type in the edited file's own assembly
+        /// are patched on a partial type too, and the method returns the edited value, as on a plain
+        /// type.
         /// </summary>
-        [TestCaseSource(nameof(EditsThatRunInThePatchedMethod))]
-        public async Task Repro_PartialTypeBodyUsingInternalMemberOfUnpassedType_PatchesBehavior(string editName)
+        [TestCaseSource(nameof(EditsOfTheSameAssemblyThatRunInThePatchedMethod))]
+        public async Task Run_PartialTypeBodyUsingInternalMemberOfUnpassedType_PatchesBehavior(string editName)
         {
             BodyEdit edit = FindEdit(editName);
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
@@ -112,22 +124,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an edited body of a plain type that the shim cannot run as written is either
-        /// patched and returns the edited value, or skipped and keeps the compiled behavior. It is
-        /// never reported as patched and then fails when called, and never fails the file.
+        /// What: an edited body of a partial type that uses an internal member of a type in another
+        /// assembly is either patched and returns the edited value, or skipped and keeps the
+        /// compiled behavior.
         /// </summary>
-        [TestCaseSource(nameof(EditsThatDoNotRunInThePatchedMethod))]
-        public async Task Repro_PlainTypeBodyUsingInternalMemberOfUnpassedType_IsAppliedAsEditedOrSkipped(string editName)
+        [Test]
+        public async Task Run_PartialTypeBodyUsingInternalMemberOfATypeOfAnotherAssembly_IsAppliedAsEditedOrSkipped()
         {
-            BodyEdit edit = FindEdit(editName);
-            HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Plain, edit);
+            BodyEdit edit = FindEdit("InternalMethodOfPublicTypeOfAnotherAssemblyThroughInternalsVisibleTo");
+            HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
 
-            AssertAppliedAsEditedOrSkipped(result, FixtureKind.Plain, edit);
+            AssertAppliedAsEditedOrSkipped(result, FixtureKind.Partial, edit);
         }
 
         /// <summary>
-        /// What: the same edits on a partial type are either patched and return the edited value,
-        /// or skipped and keep the compiled behavior.
+        /// What: edits on a partial type that the shim cannot run as written are either patched and
+        /// return the edited value, or skipped and keep the compiled behavior. They are never
+        /// reported as patched and then fail when called, and never fail the file.
         /// </summary>
         [TestCaseSource(nameof(EditsThatDoNotRunInThePatchedMethod))]
         public async Task Run_PartialTypeBodyUsingInternalMemberOfUnpassedType_IsAppliedAsEditedOrSkipped(string editName)

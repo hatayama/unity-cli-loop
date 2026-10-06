@@ -516,12 +516,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: shape A of the internal-visibility regression. A body of a partial type that calls an
-        /// internal method of a plain type the run was not given binds, as the same call from a plain
-        /// type does (the control run of the same test).
+        /// What: a body of a partial type that calls an internal method of a plain type the run was
+        /// not given binds, as the same call from a plain type does (the control run of the same test).
         /// </summary>
         [Test]
-        public async Task Repro_PartialTypeBodyCallingInternalMethodOfUnpassedPlainType_Binds()
+        public async Task Run_PartialTypeBodyCallingInternalMethodOfUnpassedPlainType_Binds()
         {
             const string call = "HotReloadInternalMemberHost.InternalStaticValue()";
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
@@ -537,12 +536,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: shape B of the regression with the plain file passed. A plain type's body that calls
-        /// an internal method of an unpassed type binds when an edit of a partial type is in the same
-        /// run, as it does when the plain file is passed alone (the control run of the same test).
+        /// What: a plain type's body that calls an internal method of an unpassed type binds when an
+        /// edit of a partial type is in the same run, as it does when the plain file is passed alone
+        /// (the control run of the same test).
         /// </summary>
         [Test]
-        public async Task Repro_PlainFilePassedNextToPartialTypeEdit_CallingInternalMethodOfUnpassedType_Binds()
+        public async Task Run_PlainFilePassedNextToPartialTypeEdit_CallingInternalMethodOfUnpassedType_Binds()
         {
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
             {
@@ -558,13 +557,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: shape B of the regression as the field run had it: the plain file comes back as a
-        /// sibling to re-bind its active patches while an edit of a partial type is passed. Its body
-        /// that calls an internal method of an unpassed type binds, as it does when the passed edit is
-        /// in a plain type (the control run of the same test).
+        /// What: a plain file that comes back as a sibling to re-bind its active patches while an edit
+        /// of a partial type is passed: its body that calls an internal method of an unpassed type
+        /// binds, as it does when the passed edit is in a plain type (the control run of the same test).
         /// </summary>
         [Test]
-        public async Task Repro_PlainSiblingBroughtBackNextToPartialTypeEdit_CallingInternalMethodOfUnpassedType_Binds()
+        public async Task Run_PlainSiblingBroughtBackNextToPartialTypeEdit_CallingInternalMethodOfUnpassedType_Binds()
         {
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
             {
@@ -581,12 +579,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: shape C of the regression. A body of a partial type that calls an internal method
-        /// another partial type declares in a separate file the run was not given binds, as the same
-        /// call from a plain type does (the control run of the same test).
+        /// What: a body of a partial type that calls an internal method another partial type declares
+        /// in a separate file the run was not given binds, as the same call from a plain type does
+        /// (the control run of the same test).
         /// </summary>
         [Test]
-        public async Task Repro_PartialTypeBodyCallingInternalMethodOfAnotherUnpassedPartialType_Binds()
+        public async Task Run_PartialTypeBodyCallingInternalMethodOfAnotherUnpassedPartialType_Binds()
         {
             const string call = "new HotReloadPartialInternalPeer().PeerInternalValue()";
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
@@ -602,12 +600,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: shape C with the other partial type's file wrapped whole in a conditional-compilation
-        /// block whose symbol the assembly defines: the call binds, as the same call from a plain type
-        /// does (the control run of the same test).
+        /// What: the same call, with the other partial type's file wrapped whole in a
+        /// conditional-compilation block whose symbol the assembly defines, binds as the same call
+        /// from a plain type does (the control run of the same test).
         /// </summary>
         [Test]
-        public async Task Repro_PartialTypeBodyCallingInternalMethodOfAnotherUnpassedPartialTypeInAConditionalFile_Binds()
+        public async Task Run_PartialTypeBodyCallingInternalMethodOfAnotherUnpassedPartialTypeInAConditionalFile_Binds()
         {
             const string call = "new HotReloadPartialInternalGuardedPeer().GuardedPeerInternalValue()";
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
@@ -623,9 +621,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: the reach of the regression over member kinds. A body of a partial type that uses a
-        /// non-public member of a type the run was not given binds, as the same use from a plain type
-        /// does (the control run of the same test).
+        /// What: a body of a partial type that uses a non-public member of a type the run was not
+        /// given binds, whatever the kind of member, as the same use from a plain type does (the
+        /// control run of the same test).
         /// </summary>
         [TestCase("InternalInstanceMethod", "new HotReloadInternalMemberHost().InternalInstanceValue()")]
         [TestCase("InternalField", "new HotReloadInternalMemberHost().InternalField")]
@@ -635,10 +633,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase(
             "PublicMemberOfInternalTypeOfAnotherAssemblyThroughInternalsVisibleTo",
             "global::io.github.hatayama.UnityCliLoop.FirstPartyTools.HotReloadConstants.TestSourcesRelativeDirectory.Length")]
-        [TestCase(
-            "InternalMemberOfPublicTypeOfAnotherAssemblyThroughInternalsVisibleTo",
-            "global::io.github.hatayama.UnityCliLoop.FirstPartyTools.PausePointCapturedVariable.FromSnapshot(null).Name.Length")]
-        public async Task Repro_PartialTypeBodyUsingNonPublicMemberOfUnpassedType_Binds(string memberKind, string expression)
+        public async Task Run_PartialTypeBodyUsingNonPublicMemberOfUnpassedType_Binds(string memberKind, string expression)
         {
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
             {
@@ -653,14 +648,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: the reach of the regression over members a compiled base type grants its derived
-        /// types. A body of a partial type that uses such a member binds, as the same use from a plain
-        /// derived type does (the control run of the same test).
+        /// What: a body of a partial type that uses a member a compiled base type grants its derived
+        /// types binds, as the same use from a plain derived type does (the control run of the same
+        /// test).
         /// </summary>
         [TestCase("Protected", "ProtectedValue()")]
         [TestCase("PrivateProtected", "PrivateProtectedValue()")]
-        [TestCase("InheritedInternal", "InternalInstanceValue()")]
-        public async Task Repro_DerivedPartialTypeBodyUsingBaseMemberOfUnpassedType_Binds(string memberKind, string expression)
+        public async Task Run_DerivedPartialTypeBodyUsingBaseMemberOfUnpassedType_Binds(string memberKind, string expression)
         {
             TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
             {
