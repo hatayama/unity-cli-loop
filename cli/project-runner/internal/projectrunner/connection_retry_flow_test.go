@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -211,11 +212,11 @@ func TestFinishBusyRetryStopsWithTheRightError(t *testing.T) {
 	}
 }
 
-// Verifies a transport error right after a busy answer reports the busy answer, unless the caller
-// cancelled, in which case the cancellation wins.
-func TestFinishNonRetryableConnectionAttemptPrefersBusyOverTransportError(t *testing.T) {
+// Verifies a transport error from an attempt that never reached Unity reports the earlier busy
+// answer, unless the caller cancelled, in which case the cancellation wins.
+func TestFinishNonRetryableConnectionAttemptPrefersBusyOverAnUndispatchedTransportError(t *testing.T) {
 	busy := serverBusyRPCError(t)
-	current := sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true}, err: io.ErrUnexpectedEOF}
+	current := sendAttempt{err: io.ErrUnexpectedEOF}
 	last := sendAttempt{err: busy}
 
 	_, err := finishNonRetryableConnectionAttempt(context.Background(), current, last, 0, nil)
@@ -226,6 +227,52 @@ func TestFinishNonRetryableConnectionAttemptPrefersBusyOverTransportError(t *tes
 	_, err = finishNonRetryableConnectionAttempt(cancelledContext(), current, last, 0, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// Verifies a dropped connection or a timeout from an attempt that reached Unity after a busy answer
+// comes back as that attempt's own error and outcome, so the caller can recover from what really
+// happened, and that a caller's cancellation still wins over it.
+func TestFinishNonRetryableConnectionAttemptKeepsADispatchedFailureAfterBusy(t *testing.T) {
+	busy := serverBusyRPCError(t)
+	last := sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: busy}
+	cases := []struct {
+		name    string
+		current sendAttempt
+	}{
+		{
+			name:    "dropped after the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: io.ErrUnexpectedEOF},
+		},
+		{
+			name:    "dropped before the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true}, err: io.EOF},
+		},
+		{
+			name:    "final response timed out after the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: os.ErrDeadlineExceeded},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Run("reports the dispatched failure", func(t *testing.T) {
+				// A positive response timeout keeps the accepted timeout out of the focus handling,
+				// which needs a focus controller this test does not build.
+				outcome, err := finishNonRetryableConnectionAttempt(context.Background(), testCase.current, last, time.Second, nil)
+				if !errors.Is(err, testCase.current.err) || isUnityServerBusyRPCError(err) {
+					t.Fatalf("err = %v, want the dispatched attempt's own error %v", err, testCase.current.err)
+				}
+				if !reflect.DeepEqual(outcome, testCase.current.outcome) {
+					t.Fatalf("outcome = %+v, want the dispatched attempt's outcome %+v", outcome, testCase.current.outcome)
+				}
+			})
+			t.Run("reports the cancellation", func(t *testing.T) {
+				_, err := finishNonRetryableConnectionAttempt(cancelledContext(), testCase.current, last, time.Second, nil)
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("err = %v, want context.Canceled", err)
+				}
+			})
+		})
 	}
 }
 
