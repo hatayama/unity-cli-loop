@@ -110,7 +110,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "The added member's body could not be fully bound in the hot-reload compilation ({0}); "
                     + "hot reload cannot verify a member it cannot bind, so it is skipped. If the name is "
                     + "declared in a new file, pass that file to --files too (new files are not selected "
-                    + "automatically); run 'uloop compile' only if it still does not bind.",
+                    + "automatically). If the name is generated at compile time, for example by a source "
+                    + "generator, hot reload cannot see it: run 'uloop compile'. Also run 'uloop compile' if "
+                    + "it still does not bind.",
                     1));
             // Why the next step is not worded here: which step works (pass the file, leave it
             // out, undo the edit and leave it out, or compile) depends on how the file entered the
