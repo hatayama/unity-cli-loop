@@ -165,7 +165,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Debug.LogException(exception);
             }
 
-            EditorApplication.delayCall += () => AbortCompileAfterWatchdogFault(compileTask);
+            // The fault continuation runs on the thread pool; the dispatcher hands the abort to the main
+            // thread and wakes the Editor with SignalTick, even in sessions where delayCall stops flushing.
+            MainThreadSwitcher.AddContinuation(() => AbortCompileAfterWatchdogFault(compileTask));
         }
 
         /// <summary>
