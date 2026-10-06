@@ -401,7 +401,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 
 | Condition | Why |
 |-----------|-----|
-| Method on a `partial` type when another part of the type changed since the last compile and was not passed | Hot reload binds against the compiled type; pass that file with `--files` too, or run `uloop compile` |
+| Method on a `partial` type when another part of the type changed since the last compile and was not passed, or when a file that names the type has syntax errors (passed or not) | Hot reload binds against the compiled type; pass that file with `--files` too, or run `uloop compile`. For a file with syntax errors, fix it and run hot reload again |
 | Method on a `partial` type when the other parts could not be checked against the last compile (no source snapshot yet, or more than 50 changed files in the assembly) | Run `uloop compile` |
 | Method on a `partial` type whose body names a member no source file of the assembly declares | A part generated at compile time (a source generator's output) is not visible to hot reload; run `uloop compile` |
 | Method on a struct (value type) | Value-type patching is out of scope |
