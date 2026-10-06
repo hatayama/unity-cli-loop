@@ -195,6 +195,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: once the PDB can no longer be read, every lookup throws instead of answering from the
+        /// list read from the earlier files, and no list is stored for the unreadable files.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PdbUnreadableAfterAListWasKept_ThrowsAndKeepsNoStaleList()
+        {
+            string dllPath = CopyAssemblyToTemp(TestAssemblyName);
+            try
+            {
+                string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+                bool foundBefore = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+                // Why a shorter file: the length alone makes the files differ from the ones the list
+                // was read from, even if the new write time lands on the same tick as the old one.
+                File.WriteAllBytes(pdbPath, new byte[] { 0x6E, 0x6F, 0x74, 0x20, 0x61, 0x20, 0x70, 0x64, 0x62 });
+                TestDelegate findAgain = () => Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+                Assert.That(foundBefore, Is.True);
+                Assert.That(findAgain, Throws.Exception, "The list read before the PDB changed must not answer.");
+                Assert.That(findAgain, Throws.Exception, "No list may be stored for a PDB that could not be read.");
+                Assert.That(_index.LoadCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                Directory.Delete(Path.GetDirectoryName(dllPath), recursive: true);
+            }
+        }
+
         private static string ProjectRoot()
         {
             return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
