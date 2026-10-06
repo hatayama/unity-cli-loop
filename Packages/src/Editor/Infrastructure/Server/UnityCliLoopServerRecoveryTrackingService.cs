@@ -35,10 +35,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal Task RecoveryTask => _currentRecoveryTask;
 
         internal Task ScheduleStartupRecovery(
-            Action<Action> scheduleDelayCall,
+            Action<Action> scheduleOnEditorTick,
             Func<Task> restoreServerState)
         {
-            Debug.Assert(scheduleDelayCall != null, "scheduleDelayCall must not be null");
+            Debug.Assert(scheduleOnEditorTick != null, "scheduleOnEditorTick must not be null");
             Debug.Assert(restoreServerState != null, "restoreServerState must not be null");
 
             TaskCompletionSource<bool> scheduledRecoveryCompletionSource = null;
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return scheduledRecoveryTask;
             }
 
-            scheduleDelayCall(() =>
+            scheduleOnEditorTick(() =>
             {
                 Task restoreTask;
                 try

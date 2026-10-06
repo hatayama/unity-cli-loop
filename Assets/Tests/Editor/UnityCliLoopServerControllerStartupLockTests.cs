@@ -157,7 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task ScheduleStartupRecovery_WhenTrackedRecoveryIsRunning_ReturnsCurrentTaskWithoutSchedulingStartupRecovery()
         {
-            // Tests that startup recovery joins an active tracked recovery without registering a delay call.
+            // Tests that startup recovery joins an active tracked recovery without scheduling the startup recovery action.
             int scheduledActionCount = 0;
             TaskCompletionSource<bool> trackedRecoveryCompletionSource = new();
             UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
@@ -319,7 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that recovery does not spend readiness timeout while Unity is still compiling or updating.
             bool editorIsBusy = true;
-            int delayCallCount = 0;
+            int readinessRetryWaitCount = 0;
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
@@ -333,7 +333,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isReadinessProbeBlocked: () => editorIsBusy,
                 waitBeforeReadinessRetryAsync: (delayMilliseconds, ct) =>
                 {
-                    delayCallCount++;
+                    readinessRetryWaitCount++;
                     Assert.That(readinessProbe.CallCount, Is.EqualTo(0));
                     editorIsBusy = false;
                     return Task.CompletedTask;
@@ -341,7 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             await service.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None);
 
-            Assert.That(delayCallCount, Is.EqualTo(1));
+            Assert.That(readinessRetryWaitCount, Is.EqualTo(1));
             Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
             Assert.That(serverStartedCount, Is.EqualTo(1));
         }
@@ -373,7 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void StartRecoveryIfNeededAsync_WhenEditorNeverBecomesIdle_ShouldFailWithoutReadinessProbe()
         {
             // Tests that recovery does not hang forever when Unity never leaves compile or update state.
-            int delayCallCount = 0;
+            int readinessRetryWaitCount = 0;
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
@@ -387,7 +387,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isReadinessProbeBlocked: () => true,
                 waitBeforeReadinessRetryAsync: (delayMilliseconds, ct) =>
                 {
-                    delayCallCount++;
+                    readinessRetryWaitCount++;
                     return Task.CompletedTask;
                 },
                 readinessIdleTimeoutMilliseconds: 1);
@@ -399,7 +399,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         CancellationToken.None));
 
             Assert.That(exception.Message, Does.Contain("Unity editor idle"));
-            Assert.That(delayCallCount, Is.EqualTo(1));
+            Assert.That(readinessRetryWaitCount, Is.EqualTo(1));
             Assert.That(readinessProbe.CallCount, Is.EqualTo(0));
             Assert.That(serverStartedCount, Is.EqualTo(0));
         }
