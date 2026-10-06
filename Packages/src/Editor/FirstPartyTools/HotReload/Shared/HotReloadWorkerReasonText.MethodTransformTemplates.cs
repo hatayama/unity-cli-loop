@@ -62,8 +62,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "a use of such a member only where it is a field, a property or a method call written with its "
                     + "receiver ('this.Name', 'Type.Name', 'value.Name') in the method's own statements: not a bare "
                     + "name, a method passed as a delegate, or a use inside a lambda, local function, query, iterator "
-                    + "or async method, or in a body patched through a delegating shim. Qualify a bare name with "
-                    + "'this.' or the type name, or run 'uloop compile'.",
+                    + "or async method, or in a body patched through a delegating shim. A lambda, local function or "
+                    + "query that works with a value hot reload could not resolve, such as the member's result, keeps "
+                    + "the whole body out as well. Qualify a bare name with 'this.' or the type name, or run "
+                    + "'uloop compile'.",
                     2));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
