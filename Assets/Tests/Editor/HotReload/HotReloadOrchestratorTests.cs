@@ -925,8 +925,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a body edit to an existing method whose parameter type is an internal type of
-        /// another file is patched, and the run reports no Skipped row. The worker binds that type
-        /// as an inaccessible error type, which must not count as an unresolved signature type.
+        /// another file is patched, and no row of its fixture is Skipped. The worker binds that
+        /// type as an inaccessible error type, which must not count as an unresolved signature type.
         /// </summary>
         [Test]
         public async Task Run_EditedMethodWithInternalParameterTypeFromAnotherFile_PatchesBehavior()
@@ -951,12 +951,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadInternalSignatureFixture.CountProbe));
+            // Why only this fixture's rows: the shape fixture file holds other fixtures, and one of
+            // them may be skipped on purpose without saying anything about the inaccessible type.
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
+                if (!outcome.Method.Contains(nameof(HotReloadInternalSignatureFixture) + "."))
+                {
+                    continue;
+                }
+
                 Assert.That(
                     outcome.Kind,
                     Is.Not.EqualTo(HotReloadMethodOutcomeKind.Skipped),
-                    "No method of the edited file may be skipped.\n" + FormatOutcomes(result));
+                    "The internal-signature fixture must not be skipped.\n" + FormatOutcomes(result));
             }
 
             Assert.That(fixture.CountProbe(null), Is.EqualTo(11));
