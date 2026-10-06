@@ -1,0 +1,562 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+using NUnit.Framework;
+
+using UnityEditor.Compilation;
+
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    /// <summary>
+    /// Worker coverage for edits to methods of partial types: the parts of the type in files the run
+    /// was not given complete the binding, and a method is skipped with a specific reason only when
+    /// such a part cannot be trusted or its body names something no visible part declares.
+    /// </summary>
+    public class TransformWorkerPartialTypeTests
+    {
+        private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
+        private const string FixtureFileName = "HotReloadPartialTypeFixture.cs";
+        private const string OtherPartFileName = "HotReloadPartialTypeFixture.Other.cs";
+        private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
+        private const string OwnOnlyDeclaration =
+            "        public int OwnOnly()\n        {\n            return 1;\n        }";
+        private const string OwnOnlyEdited =
+            "        public int OwnOnly()\n        {\n            return 2;\n        }";
+        private const string OwnOnlyWithAttribute =
+            "[MethodImpl(MethodImplOptions.NoInlining)]\n        public int OwnOnly()";
+        private const string OtherPartPropertyGetter = "get { return OtherPartProperty; }";
+        private const string OtherPartPropertyGetterEdited = "get { return OtherPartProperty + 100; }";
+
+        /// <summary>
+        /// What: a body that reads a private field declared in another part of the type is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeBodyEdit_ReadingOtherPartField_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialReadsOtherPartField.cs",
+                "return _otherSeed;",
+                "return _otherSeed + 100;");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "ReadsOtherPartField");
+        }
+
+        /// <summary>
+        /// What: a body that uses only members of its own part is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeBodyEdit_UsingOwnMembersOnly_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialOwnOnly.cs",
+                OwnOnlyDeclaration,
+                OwnOnlyEdited);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "OwnOnly");
+        }
+
+        /// <summary>
+        /// What: a body that calls a private method declared in another part of the type is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeBodyEdit_CallingOtherPartPrivateMethod_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialCallsOtherPartMethod.cs",
+                "return OtherPartValue();",
+                "return OtherPartValue() + 100;");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "CallsOtherPartMethod");
+        }
+
+        /// <summary>
+        /// What: a method whose parameter is a type nested in another part of the type keeps matching
+        /// the compiled method, so its body edit is a normal edit and not an added method.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeMethodTakingOtherPartNestedType_IsNotClassifiedAsAdded()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialTakesOtherPartNested.cs",
+                "return value.Number;",
+                "return value.Number + 100;");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto entry = AssertEmitted(result, "TakesOtherPartNested");
+            Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.replacesCompiledMethod, Is.False);
+        }
+
+        /// <summary>
+        /// What: in a partial type nested in a partial type, a body that reads a field declared in the
+        /// nested type's other part is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_NestedPartialTypeBodyEdit_ReadingOtherPartField_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialNestedReadsOtherPartField.cs",
+                "return _nestedSeed;",
+                "return _nestedSeed + 100;");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "ReadsOtherPartNestedField");
+        }
+
+        /// <summary>
+        /// What: an existing property getter that reads a property declared in another part of the
+        /// type is emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeGetterEdit_ReadingOtherPartProperty_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialGetterReadsOtherPartProperty.cs",
+                OtherPartPropertyGetter,
+                OtherPartPropertyGetterEdited);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "get_ReadsOtherPartProperty");
+        }
+
+        /// <summary>
+        /// What: when another part of the type changed since the last compile and is not in the run,
+        /// the edited method is skipped with a reason that names that file.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenAnotherPartChangedSinceTheLastCompile_NamesThatFile()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialOtherPartChanged.cs",
+                OwnOnlyDeclaration,
+                OwnOnlyEdited,
+                changedSiblingSourcePaths: new[] { ResolveFixturePath(OtherPartFileName) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "OwnOnly"), Is.Null, "OwnOnly must not be applied.");
+            string reason = FindSkipReason(result, "OwnOnly");
+            Assert.That(reason, Does.Contain(OtherPartFileName), FormatSkipped(result));
+            Assert.That(reason, Does.Contain("changed since the last compile"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: when a part of the type is in no source file the run can see (the stand-in for a part
+        /// generated at compile time), only the body that names that part's member is skipped, with
+        /// the unresolved-name diagnostic, and the other edited method of the file is still emitted.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenTheOtherPartIsNotAmongTheAssemblySources_SkipsOnlyTheUnboundBody()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string edited = ReplaceOnce(onDisk, OwnOnlyDeclaration, OwnOnlyEdited);
+            edited = ReplaceOnce(edited, "return _otherSeed;", "return _otherSeed + 100;");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialOtherPartNotInSources.cs", edited),
+                FixtureProjectRelativePath,
+                onDisk,
+                assemblySourcePathsOverride: BuildAssemblySourcePathsWithout(OtherPartFileName));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "OwnOnly");
+            Assert.That(FindEntry(result, "ReadsOtherPartField"), Is.Null, "ReadsOtherPartField must not be applied.");
+            string reason = FindSkipReason(result, "ReadsOtherPartField");
+            Assert.That(reason, Does.Contain("CS0103"), FormatSkipped(result));
+            Assert.That(reason, Does.Contain("generated at compile time"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: when a part of the type is in no source file the run can see, an existing getter
+        /// that names that part's property is skipped with the unresolved-name diagnostic.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeGetterEdit_WhenTheOtherPartIsNotAmongTheAssemblySources_SkipsTheGetter()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string edited = ReplaceOnce(onDisk, OtherPartPropertyGetter, OtherPartPropertyGetterEdited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialGetterOtherPartNotInSources.cs", edited),
+                FixtureProjectRelativePath,
+                onDisk,
+                assemblySourcePathsOverride: BuildAssemblySourcePathsWithout(OtherPartFileName));
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_ReadsOtherPartProperty"), Is.Null, "The getter must not be applied.");
+            Assert.That(FindSkipReason(result, "get_ReadsOtherPartProperty"), Does.Contain("CS0103"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a body that passes the instance to a compiled API is emitted even though the worker's
+        /// binding reports a conversion error for it, because the shim compile settles that error.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeBodyEdit_PassingItselfToACompiledApi_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialPassesThisToCompiledApi.cs",
+                "return HotReloadPartialTypeFixtureConsumer.Describe(this);",
+                "return HotReloadPartialTypeFixtureConsumer.Describe(this) + 100;");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "PassesThisToCompiledApi");
+        }
+
+        /// <summary>
+        /// What: a non-partial type nested in a partial type can read a member declared in the outer
+        /// type's other part.
+        /// </summary>
+        [Test]
+        public async Task Run_PlainTypeNestedInAPartialType_ReadingTheOuterOtherPartMember_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialNestedPlainReadsOuterOtherPart.cs",
+                "return _otherStaticSeed;",
+                "return _otherStaticSeed + 100;");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "ReadsOuterOtherPartStatic");
+        }
+
+        /// <summary>
+        /// What: with two declarations of one partial type in the edited file, each edited method is
+        /// emitted exactly once.
+        /// </summary>
+        [Test]
+        public async Task Run_TwoDeclarationsOfOnePartialTypeInTheEditedFile_EmitEachMethodOnce()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string edited = ReplaceOnce(onDisk, OwnOnlyDeclaration, OwnOnlyEdited);
+            edited = ReplaceOnce(edited, "return 21;", "return 22;");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialTwoDeclarations.cs", edited),
+                FixtureProjectRelativePath,
+                onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(CountEntries(result, "OwnOnly"), Is.EqualTo(1), FormatSkipped(result));
+            Assert.That(CountEntries(result, "SecondBlockMethod"), Is.EqualTo(1), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a method of a partial struct is skipped for being on a struct, not for being partial.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialStructMethodEdit_ReportsTheStructReason()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialStructValue.cs",
+                "        public int StructValue()\n        {\n            return 1;\n        }",
+                "        public int StructValue()\n        {\n            return 2;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "StructValue");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for StructValue.\n" + FormatSkipped(result));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformStructHost));
+        }
+
+        /// <summary>
+        /// What: a method added to a partial type that calls a method of another part is added, not
+        /// skipped.
+        /// </summary>
+        [Test]
+        public async Task Run_MethodAddedToAPartialType_CallingAnOtherPartMethod_IsAddedNotSkipped()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialAddedCallsOtherPart.cs",
+                OwnOnlyWithAttribute,
+                "public int AddedCallsOtherPart()\n        {\n            return OtherPartValue() + 1;\n        }\n\n        "
+                + OwnOnlyWithAttribute);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipped(result, "AddedCallsOtherPart"), Is.Null, "Unexpected skip.\n" + FormatSkipped(result));
+            TransformWorkerEntryDto entry = FindEntry(result, "AddedCallsOtherPart");
+            Assert.That(entry, Is.Not.Null, "Missing entry for AddedCallsOtherPart.\n" + FormatSkipped(result));
+            Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+        }
+
+        /// <summary>
+        /// What: a method added to a partial type that passes the instance to a compiled API is skipped
+        /// with the same split reason a non-partial type gets, and the run itself does not fail.
+        /// </summary>
+        [Test]
+        public async Task Skip_MethodAddedToAPartialType_PassingItselfToACompiledApi_NamesTheSplitWithoutFailingTheRun()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialAddedPassesThis.cs",
+                OwnOnlyWithAttribute,
+                "public int AddedPassesThis()\n        {\n            return HotReloadPartialTypeFixtureConsumer.Describe(this);\n        }\n\n        "
+                + OwnOnlyWithAttribute);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedPassesThis"), Is.Null, "AddedPassesThis must not be applied.");
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "AddedPassesThis");
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for AddedPassesThis.\n" + FormatSkipped(result));
+            Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
+        }
+
+        private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(
+            string editedFileName,
+            string fragment,
+            string replacement,
+            string[] changedSiblingSourcePaths = null)
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string edited = ReplaceOnce(onDisk, fragment, replacement);
+            return await RunWorkerOnSourceAsync(
+                WriteEdited(editedFileName, edited),
+                FixtureProjectRelativePath,
+                onDisk,
+                changedSiblingSourcePaths: changedSiblingSourcePaths);
+        }
+
+        // Why the uniqueness check: a fragment that also matched another member would edit a method
+        // the test does not look at, and the assert would pass or fail for the wrong reason.
+        private static string ReplaceOnce(string source, string fragment, string replacement)
+        {
+            int first = source.IndexOf(fragment, StringComparison.Ordinal);
+            Assert.That(first, Is.GreaterThanOrEqualTo(0), "Fragment missing from the fixture: " + fragment);
+            Assert.That(
+                source.LastIndexOf(fragment, StringComparison.Ordinal),
+                Is.EqualTo(first),
+                "Fragment occurs more than once in the fixture: " + fragment);
+            return source.Substring(0, first) + replacement + source.Substring(first + fragment.Length);
+        }
+
+        private static TransformWorkerEntryDto AssertEmitted(TransformWorkerClientResult result, string methodName)
+        {
+            TransformWorkerEntryDto entry = FindEntry(result, methodName);
+            Assert.That(entry, Is.Not.Null, "Missing entry for " + methodName + ".\n" + FormatSkipped(result));
+            Assert.That(FindSkipReason(result, methodName), Is.Null, FormatSkipped(result));
+            return entry;
+        }
+
+        private static TransformWorkerEntryDto FindEntry(TransformWorkerClientResult result, string methodName)
+        {
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    return entry;
+                }
+            }
+
+            return null;
+        }
+
+        private static int CountEntries(TransformWorkerClientResult result, string methodName)
+        {
+            int count = 0;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static TransformWorkerSkippedDto FindSkipped(TransformWorkerClientResult result, string methodName)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null && skipped.method.Contains("." + methodName + "("))
+                {
+                    return skipped;
+                }
+            }
+
+            return null;
+        }
+
+        private static string FindSkipReason(TransformWorkerClientResult result, string methodNameFragment)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null && skipped.method.Contains(methodNameFragment))
+                {
+                    return HotReloadWorkerReasonText.Render(skipped.reason);
+                }
+            }
+
+            return null;
+        }
+
+        private static string FormatSkipped(TransformWorkerClientResult result)
+        {
+            if (result.Output == null || result.Output.skipped == null || result.Output.skipped.Length == 0)
+            {
+                return "Skipped=(none)";
+            }
+
+            List<string> rows = new List<string>();
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                rows.Add(
+                    skipped.method + " :: "
+                    + (skipped.reason == null ? "(no reason)" : HotReloadWorkerReasonText.Render(skipped.reason)));
+            }
+
+            return "Skipped=\n" + string.Join("\n", rows);
+        }
+
+        private static string WriteEdited(string fileName, string contents)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, fileName);
+            File.WriteAllText(path, contents);
+            return path;
+        }
+
+        private static string ResolveFixturePath(string fileName)
+        {
+            string path = Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fileName);
+            Assert.That(File.Exists(path), Is.True, "Partial type fixture missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string[] BuildAssemblySourcePathsWithout(string fileName)
+        {
+            List<string> paths = new List<string>();
+            foreach (string path in BuildAbsoluteAssemblySourcePaths(FindCompilationAssembly().sourceFiles))
+            {
+                if (!string.Equals(Path.GetFileName(path), fileName, StringComparison.Ordinal))
+                {
+                    paths.Add(path);
+                }
+            }
+
+            return paths.ToArray();
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
+            string sourcePath,
+            string projectRelativePath,
+            string snapshotSource,
+            string[] assemblySourcePathsOverride = null,
+            string[] changedSiblingSourcePaths = null)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                "Library",
+                "ScriptAssemblies",
+                TestAssemblyName + ".dll");
+            Assert.That(File.Exists(targetDllPath), Is.True, "Test assembly dll missing: " + targetDllPath);
+
+            UnityEditor.Compilation.Assembly compilationAssembly = FindCompilationAssembly();
+            string[] referencePaths = BuildAbsoluteReferencePaths(
+                compilationAssembly.allReferences,
+                targetDllPath);
+            string[] assemblySourcePaths = assemblySourcePathsOverride
+                ?? BuildAbsoluteAssemblySourcePaths(compilationAssembly.sourceFiles);
+
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = sourcePath,
+                        projectRelativePath = projectRelativePath,
+                        snapshotSource = snapshotSource
+                    }
+                },
+                defines = compilationAssembly.defines ?? Array.Empty<string>(),
+                referencePaths = referencePaths,
+                targetTypesAssemblyPath = targetDllPath,
+                assemblySourcePaths = assemblySourcePaths,
+                changedSiblingSourcePaths = changedSiblingSourcePaths ?? Array.Empty<string>(),
+                excludedMethodKeys = Array.Empty<string>(),
+                excludedAddedMethodKeys = Array.Empty<string>()
+            };
+
+            return await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
+        }
+
+        private static UnityEditor.Compilation.Assembly FindCompilationAssembly()
+        {
+            foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
+            {
+                if (assembly.name == TestAssemblyName)
+                {
+                    return assembly;
+                }
+            }
+
+            Assert.Fail("CompilationPipeline assembly not found: " + TestAssemblyName);
+            return null;
+        }
+
+        private static string[] BuildAbsoluteReferencePaths(string[] allReferences, string targetDllPath)
+        {
+            List<string> paths = new List<string>();
+            if (allReferences != null)
+            {
+                foreach (string reference in allReferences)
+                {
+                    if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                    {
+                        continue;
+                    }
+
+                    paths.Add(Path.GetFullPath(reference));
+                }
+            }
+
+            string fullTarget = Path.GetFullPath(targetDllPath);
+            bool hasTarget = false;
+            foreach (string path in paths)
+            {
+                if (string.Equals(path, fullTarget, StringComparison.OrdinalIgnoreCase))
+                {
+                    hasTarget = true;
+                    break;
+                }
+            }
+
+            if (!hasTarget)
+            {
+                paths.Add(fullTarget);
+            }
+
+            return paths.ToArray();
+        }
+
+        private static string[] BuildAbsoluteAssemblySourcePaths(string[] sourceFiles)
+        {
+            if (sourceFiles == null || sourceFiles.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string[] paths = new string[sourceFiles.Length];
+            for (int index = 0; index < sourceFiles.Length; index++)
+            {
+                string normalizedRelativePath = sourceFiles[index].Replace('\\', '/');
+                string absoluteSourcePath = Path.Combine(
+                    projectRoot,
+                    normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar));
+                paths[index] = Path.GetFullPath(absoluteSourcePath);
+            }
+
+            return paths;
+        }
+    }
+}
