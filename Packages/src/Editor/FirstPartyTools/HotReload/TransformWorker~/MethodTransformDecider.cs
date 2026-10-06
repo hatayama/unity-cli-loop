@@ -28,13 +28,15 @@ internal static class MethodTransformDecider
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
         AddedMemberAccessLookup addedMemberAccess,
-        AddedEventLookup addedEvents)
+        AddedEventLookup addedEvents,
+        PartialTypeParts partialTypeParts)
     {
         WorkerReason hardSkip = EvaluateHardSkipReason(
             typeDeclaration,
             typeSymbol,
             methodDeclaration,
-            methodSymbol);
+            methodSymbol,
+            partialTypeParts);
         if (hardSkip != null)
         {
             return MethodTransformDecision.Skip(hardSkip);
@@ -195,17 +197,15 @@ internal static class MethodTransformDecider
         TypeDeclarationSyntax typeDeclaration,
         INamedTypeSymbol typeSymbol,
         MethodDeclarationSyntax methodDeclaration,
-        IMethodSymbol methodSymbol)
+        IMethodSymbol methodSymbol,
+        PartialTypeParts partialTypeParts)
     {
-        // A nested type inside a partial outer type still has an incomplete single-file model.
-        for (TypeDeclarationSyntax declaration = typeDeclaration;
-             declaration != null;
-             declaration = declaration.Parent as TypeDeclarationSyntax)
+        // Why only an untrusted part skips: the loader put every trusted part into the binding,
+        // so the type is complete unless a part changed after the last compile, or could not be checked.
+        WorkerReason untrustedPart = partialTypeParts.FindUntrustedOtherPartReasonOrNull(typeDeclaration);
+        if (untrustedPart != null)
         {
-            if (declaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
-            {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformPartialType);
-            }
+            return untrustedPart;
         }
 
         if (typeSymbol.TypeKind == TypeKind.Struct || typeSymbol.IsValueType)
@@ -313,7 +313,8 @@ internal static class MethodTransformDecider
         Diagnostic bindingError,
         IntroducedTypeArtifactMap artifactMap,
         IAssemblySymbol targetAssembly,
-        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree,
+        PartialTypeParts partialTypeParts)
     {
         string diagnosticText = bindingError.Id + ": " + bindingError.GetMessage(CultureInfo.InvariantCulture);
         CompiledSignatureSplit split = CompiledSignatureSplitCollector.Collect(
@@ -322,7 +323,8 @@ internal static class MethodTransformDecider
             AddedMemberBindingGuard.FindBindingErrorSpans(semanticModel, methodBodyNode),
             artifactMap,
             targetAssembly,
-            projectRelativePathsByBindingTree);
+            projectRelativePathsByBindingTree,
+            partialTypeParts);
         // Checked first: a compile clears this split and any other one, while the advice to
         // pass a file would leave this one in place.
         if (split.ArtifactHostMetadataNames.Count > 0)
@@ -386,7 +388,8 @@ internal static class MethodTransformDecider
                     bindingError,
                     sourceUnit.ArtifactMap,
                     targetAssembly,
-                    sourceUnit.RunProjectRelativePathsByBindingTree));
+                    sourceUnit.RunProjectRelativePathsByBindingTree,
+                    sourceUnit.PartialTypeParts));
         }
 
         // Checked before the delegation path too: a closure reaching the member through an accessor

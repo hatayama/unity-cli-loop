@@ -150,6 +150,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the list of changed files may be incomplete, no other part of the type is
+        /// trusted, so the edited method is skipped with a reason that says the parts were not checked.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenTheSiblingScanIsIncomplete_SaysTheOtherPartsWereNotChecked()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "PartialSiblingScanIncomplete.cs",
+                OwnOnlyDeclaration,
+                OwnOnlyEdited,
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "OwnOnly"), Is.Null, "OwnOnly must not be applied.");
+            string reason = FindSkipReason(result, "OwnOnly");
+            Assert.That(reason, Does.Contain("could not be checked against the last compile"), FormatSkipped(result));
+        }
+
+        /// <summary>
         /// What: when a part of the type is in no source file the run can see (the stand-in for a part
         /// generated at compile time), only the body that names that part's member is skipped, with
         /// the unresolved-name diagnostic, and the other edited method of the file is still emitted.
@@ -310,7 +329,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedFileName,
             string fragment,
             string replacement,
-            string[] changedSiblingSourcePaths = null)
+            string[] changedSiblingSourcePaths = null,
+            bool changedSiblingScanComplete = true)
         {
             string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
             string edited = ReplaceOnce(onDisk, fragment, replacement);
@@ -318,7 +338,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEdited(editedFileName, edited),
                 FixtureProjectRelativePath,
                 onDisk,
-                changedSiblingSourcePaths: changedSiblingSourcePaths);
+                changedSiblingSourcePaths: changedSiblingSourcePaths,
+                changedSiblingScanComplete: changedSiblingScanComplete);
         }
 
         // Why the uniqueness check: a fragment that also matched another member would edit a method
@@ -449,7 +470,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string projectRelativePath,
             string snapshotSource,
             string[] assemblySourcePathsOverride = null,
-            string[] changedSiblingSourcePaths = null)
+            string[] changedSiblingSourcePaths = null,
+            bool changedSiblingScanComplete = true)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -482,6 +504,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetTypesAssemblyPath = targetDllPath,
                 assemblySourcePaths = assemblySourcePaths,
                 changedSiblingSourcePaths = changedSiblingSourcePaths ?? Array.Empty<string>(),
+                changedSiblingScanComplete = changedSiblingScanComplete,
                 excludedMethodKeys = Array.Empty<string>(),
                 excludedAddedMethodKeys = Array.Empty<string>()
             };

@@ -283,7 +283,8 @@ internal static class OrdinaryMethodQueue
                 semanticModel,
                 typeState.CompiledType,
                 typeState.AddedMemberAccess,
-                typeState.AddedEvents);
+                typeState.AddedEvents,
+                typeState.SourceUnit.PartialTypeParts);
         if (isAddedMethod && decision.SkipReason == null)
         {
             decision = MethodTransformDecider.DecideAddedMethodAccessors(

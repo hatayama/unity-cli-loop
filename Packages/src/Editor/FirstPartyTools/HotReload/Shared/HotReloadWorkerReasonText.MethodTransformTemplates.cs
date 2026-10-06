@@ -35,10 +35,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     AccessorRewriteUnavailableSeparator,
                     string.Empty));
             templates.Add(
-                HotReloadWorkerReasonCode.MethodTransformPartialType,
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartChanged,
                 Plain(
-                    "Partial types are skipped because a single file cannot provide a complete semantic model.",
+                    "Another part of this partial type changed since the last compile ({0}), so hot reload "
+                    + "cannot bind this method against the compiled type. Pass that file with --files too, "
+                    + "or run 'uloop compile'.",
+                    1));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified,
+                Plain(
+                    "The other parts of this partial type could not be checked against the last compile "
+                    + "(no source snapshot for the assembly, or too many changed files to scan), so hot "
+                    + "reload cannot bind this method against the compiled type. Run 'uloop compile'.",
                     0));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformPartialBodyUnbound,
+                Plain(
+                    "{0}. None of this partial type's source files known to hot reload declares that name: "
+                    + "a part generated at compile time is not visible to it, and a file added since the "
+                    + "last compile must be passed with --files. Otherwise run 'uloop compile'.",
+                    1));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 Plain(

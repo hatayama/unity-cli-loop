@@ -68,6 +68,7 @@ internal static class PropertyGetterClassifier
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog,
+        PartialTypeParts partialTypeParts,
         List<WorkerSkipped> skipped)
     {
         MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
@@ -79,7 +80,8 @@ internal static class PropertyGetterClassifier
             semanticModel,
             compiledType,
             addedMemberAccess: null,
-            addedEvents);
+            addedEvents,
+            partialTypeParts);
         if (decision.SkipReason != null)
         {
             skipped.Add(new WorkerSkipped

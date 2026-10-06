@@ -21,10 +21,13 @@ internal static class CompiledSignatureSplitCollector
         IReadOnlyList<TextSpan> bindingErrorSpans,
         IntroducedTypeArtifactMap artifactMap,
         IAssemblySymbol targetAssembly,
-        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree,
+        PartialTypeParts partialTypeParts)
     {
         IAssemblySymbol sourceAssembly = semanticModel.Compilation.Assembly;
-        CompiledSignatureSplitNames names = new CompiledSignatureSplitNames(projectRelativePathsByBindingTree);
+        CompiledSignatureSplitNames names = new CompiledSignatureSplitNames(
+            projectRelativePathsByBindingTree,
+            partialTypeParts);
         foreach (SyntaxNode node in body.DescendantNodesAndSelf())
         {
             // Why only uses an error touches: a compiled API elsewhere in the body that binds is
@@ -172,6 +175,7 @@ internal static class CompiledSignatureSplitCollector
                     signatureType,
                     sourceAssembly,
                     names.ProjectRelativePathsByBindingTree,
+                    names.PartialTypeParts,
                     names.ArtifactBoundDeclaringFiles);
                 continue;
             }
@@ -188,6 +192,7 @@ internal static class CompiledSignatureSplitCollector
                 signatureType,
                 sourceAssembly,
                 names.ProjectRelativePathsByBindingTree,
+                names.PartialTypeParts,
                 names.SplitSourceFiles);
             found = true;
         }
@@ -205,14 +210,23 @@ internal static class CompiledSignatureSplitCollector
         INamedTypeSymbol signatureType,
         IAssemblySymbol sourceAssembly,
         IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree,
+        PartialTypeParts partialTypeParts,
         SortedSet<string> sourceCopyFiles)
     {
         string reflectionName = CecilTypeNames.ToMetadataName(signatureType.OriginalDefinition).Replace('/', '+');
         INamedTypeSymbol sourceCopy = sourceAssembly.GetTypeByMetadataName(reflectionName);
         foreach (SyntaxReference declaration in sourceCopy.DeclaringSyntaxReferences)
         {
-            // The compilation holds only the run's binding trees, so a declaration outside them
-            // means the map was built from other trees than the ones this model binds.
+            // A part of a partial type the run did not receive is not one of the files this reload
+            // builds the type from, so it is not a file to name.
+            if (partialTypeParts.IsBindingOnlyTree(declaration.SyntaxTree))
+            {
+                continue;
+            }
+
+            // Besides those parts the compilation holds only the run's binding trees, so a
+            // declaration outside them means the map was built from other trees than the ones this
+            // model binds.
             if (!projectRelativePathsByBindingTree.TryGetValue(
                     declaration.SyntaxTree,
                     out string projectRelativePath))
@@ -312,13 +326,18 @@ internal static class CompiledSignatureSplitCollector
 // The sorted names one collection gathers, kept together so each use adds to all of them.
 internal sealed class CompiledSignatureSplitNames
 {
-    internal CompiledSignatureSplitNames(IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree)
+    internal CompiledSignatureSplitNames(
+        IReadOnlyDictionary<SyntaxTree, string> projectRelativePathsByBindingTree,
+        PartialTypeParts partialTypeParts)
     {
         ProjectRelativePathsByBindingTree = projectRelativePathsByBindingTree
             ?? throw new ArgumentNullException(nameof(projectRelativePathsByBindingTree));
+        PartialTypeParts = partialTypeParts ?? throw new ArgumentNullException(nameof(partialTypeParts));
     }
 
     internal IReadOnlyDictionary<SyntaxTree, string> ProjectRelativePathsByBindingTree { get; }
+
+    internal PartialTypeParts PartialTypeParts { get; }
 
     internal SortedSet<string> SplitTypes { get; } = new SortedSet<string>(StringComparer.Ordinal);
 

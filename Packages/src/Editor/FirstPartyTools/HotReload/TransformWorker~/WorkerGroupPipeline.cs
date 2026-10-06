@@ -77,6 +77,10 @@ internal static class WorkerGroupPipeline
             editedRoots.Add(transformUnit.Root);
         }
 
+        // Why loaded before the compilation: a body of a partial type may name a member another
+        // file declares, and only the parts of the type in those files let it bind.
+        PartialTypeParts partialTypeParts = PartialTypePartLoader.Load(input, parseOptions, transformUnits);
+
         // Why collected before any compilation: the global usings other files of the assembly
         // declare must bind the edited files' signatures, not only reach the emitted shims.
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
@@ -105,6 +109,8 @@ internal static class WorkerGroupPipeline
             bindingTrees.Add(transformUnit.BindingSyntaxTree);
         }
 
+        bindingTrees.AddRange(partialTypeParts.BindingOnlyTrees);
+
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadTransformWorkerCompilation",
             syntaxTrees: WorkerGlobalUsingBindingTree.Append(bindingTrees, globalUsingTree),
@@ -120,6 +126,7 @@ internal static class WorkerGroupPipeline
         {
             unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
             unit.RunProjectRelativePathsByBindingTree = projectRelativePathsByBindingTree;
+            unit.PartialTypeParts = partialTypeParts;
         }
 
         WorkerTypeHome home = new WorkerTypeHome(

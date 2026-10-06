@@ -2400,6 +2400,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
                 assemblySourcePaths = assemblySourcePaths,
+                // No sibling is passed, which stands for a scan that compared every sibling and
+                // found none changed.
+                changedSiblingScanComplete = true,
                 excludedMethodKeys = excludedMethodKeys ?? Array.Empty<string>(),
                 excludedAddedMethodKeys = excludedAddedMethodKeys ?? Array.Empty<string>()
             };
