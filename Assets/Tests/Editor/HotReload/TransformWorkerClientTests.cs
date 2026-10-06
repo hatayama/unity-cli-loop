@@ -1541,6 +1541,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a generic method whose parameter type cannot be resolved no longer matches its
+        /// compiled signature, and its skip reason names that type instead of calling it an added
+        /// generic method, so the caller sees the missing type rather than a generic-method limit.
+        /// </summary>
+        [Test]
+        public async Task Run_GenericMethodWhoseParameterTypeDoesNotResolve_IsSkippedNamingTheType()
+        {
+            const string fileName = "HotReloadShapeFixtures.cs";
+            string onDisk = File.ReadAllText(ResolveShapeFixturePath());
+            string editedSource = onDisk.Replace(
+                "public int F<T>(int x)",
+                "public int F<T>(HotReloadMissingAlias x)",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: the generic parameter must change.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            // Why "F`1(": the method label carries the generic arity, and "F(" would match the
+            // non-generic F(System.Int32) instead.
+            AssertHasSkip(result, "F`1(", "HotReloadMissingAlias");
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                string rendered = HotReloadWorkerReasonText.Render(skipped.reason);
+                Assert.That(
+                    rendered,
+                    Does.Not.Contain("Added generic methods are skipped"),
+                    skipped.method + ": " + rendered);
+            }
+        }
+
+        /// <summary>
         /// What: after including ExplicitInterfaceSpecifier in syntax keys, IA.Run and IB.Run no
         /// longer collide, so an identical self-snapshot treats both as unchanged.
         /// </summary>
