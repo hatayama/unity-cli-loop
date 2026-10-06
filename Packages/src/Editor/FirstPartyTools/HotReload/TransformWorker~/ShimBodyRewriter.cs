@@ -145,6 +145,18 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
                 return folded;
             }
 
+            // Why fold instead of rewriting the operand: the shim is a static method of another
+            // type, so nothing needs the operand rebound there, and a rewritten operand
+            // (__uloopInstance.x) names a parameter a static method's shim does not have.
+            string boundName = NameofRules.FindBoundNameofValueOrNull(node, _semanticModel);
+            if (boundName != null)
+            {
+                return SyntaxFactory.LiteralExpression(
+                        SyntaxKind.StringLiteralExpression,
+                        SyntaxFactory.Literal(boundName))
+                    .WithTriviaFrom(node);
+            }
+
             return base.VisitInvocationExpression(node);
         }
 
@@ -502,6 +514,14 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = HarmonyAccessors.ResolveOwnedMember(symbol);
         if (!ownership.owned)
+        {
+            return original;
+        }
+
+        // Why only before the final qualification, not with the name-side checks at the top:
+        // returning there would also skip the accessor-read and added-field rewrites above, and
+        // a pattern naming a member the shim cannot reach could then compile and fail at run time.
+        if (HarmonyAccessorShimRewrite.IsSubpatternMemberName(node))
         {
             return original;
         }

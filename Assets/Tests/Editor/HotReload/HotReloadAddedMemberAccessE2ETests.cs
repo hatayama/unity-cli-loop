@@ -14,9 +14,11 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// End-to-end EditMode coverage for added private members that compiled-member accessor
-    /// delegates cannot reach: a static property the compiled type lacks, and ref/out arguments.
-    /// The reload must emit them and the patched runtime must return their values.
+    /// End-to-end EditMode coverage for private member use in reloaded bodies: added private
+    /// members that compiled-member accessor delegates cannot reach (a static property the
+    /// compiled type lacks, ref/out arguments), nameof of a compiled private field, and a property
+    /// pattern on a compiled private field. The reload must apply them and the patched runtime
+    /// must return their values.
     /// </summary>
     public class HotReloadAddedMemberAccessE2ETests
     {
@@ -91,6 +93,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // (3 + 100) * 2 + 5: the ref write, the out value and the static property all reach
             // the result, so a shim that dropped any of them returns something else.
             Assert.That(new HotReloadCrossFileAddedMemberHost().Scaled(3), Is.EqualTo(211), FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: an added static method that names a compiled instance field with nameof is added
+        /// rather than failing its shim compile, and the patched caller returns the name's length.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedStaticMethodNamingInstanceFieldWithNameof_IsAddedAndReturnsTheNameLength()
+        {
+            string source = ReadFixture(HostFileName);
+            source = ReplaceInSource(
+                source,
+                HostScaledBodyAnchor,
+                "            return AddedStoredNameLength() + factor;\n");
+            source = ReplaceInSource(
+                source,
+                HostValueAnchor,
+                "        private static int AddedStoredNameLength()\n        {\n"
+                + "            return nameof(_stored).Length;\n        }\n\n"
+                + HostValueAnchor);
+
+            string hostPath = FixturePath(HostFileName);
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "AddedStaticNameofHost.cs",
+                        source)
+                });
+
+            AssertNoKind(result, HotReloadMethodOutcomeKind.Failed);
+            AssertNoKind(result, HotReloadMethodOutcomeKind.Skipped);
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Scaled");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "AddedStoredNameLength");
+            // "_stored".Length + 3 = 7 + 3.
+            Assert.That(new HotReloadCrossFileAddedMemberHost().Scaled(3), Is.EqualTo(10), FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: a compiled method whose new body matches property patterns against a compiled
+        /// private field is patched, and the patched call tells the matching pattern from the
+        /// non-matching one.
+        /// </summary>
+        [Test]
+        public async Task Run_PropertyPatternOnCompiledPrivateField_IsPatchedAndEvaluatesThePatterns()
+        {
+            string source = ReadFixture(HostFileName);
+            source = ReplaceInSource(
+                source,
+                HostScaledBodyAnchor,
+                "            return (this is { _stored: 0 } ? 100 : 0) + (this is { _stored: 1 } ? 10 : 0) + factor;\n");
+
+            string hostPath = FixturePath(HostFileName);
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "PropertyPatternPrivateFieldHost.cs",
+                        source)
+                });
+
+            AssertNoKind(result, HotReloadMethodOutcomeKind.Failed);
+            AssertNoKind(result, HotReloadMethodOutcomeKind.Skipped);
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Scaled");
+            // A new instance's _stored is 0, so only the first pattern matches: 100 + 0 + 3. A shim
+            // that read the wrong value, or matched both or neither, returns something else.
+            Assert.That(new HotReloadCrossFileAddedMemberHost().Scaled(3), Is.EqualTo(103), FormatOutcomes(result));
         }
 
         private static void AssertNoKind(HotReloadOrchestratorResult result, HotReloadMethodOutcomeKind kind)

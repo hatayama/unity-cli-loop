@@ -300,4 +300,13 @@ internal sealed class HarmonyAccessorShimRewrite
 
         return assignment.Parent is InitializerExpressionSyntax;
     }
+
+    // `x is { Member: 1 }` names a member of the matched value: the name is not an expression,
+    // so it cannot take a receiver.
+    internal static bool IsSubpatternMemberName(SimpleNameSyntax node)
+    {
+        return node.Parent is NameColonSyntax nameColon
+            && nameColon.Name == node
+            && nameColon.Parent is SubpatternSyntax;
+    }
 }
