@@ -175,7 +175,10 @@ baseline is available (next paragraph), other outside-body drift — existing-fi
 initializers, attributes, and other declaration edits — is reported as a `Warnings`
 entry as well (handled added members and reported removed members are excluded
 from this generic warning); without a baseline it stays silent. Either way, use
-`uloop compile` for such edits.
+`uloop compile` for such edits. The comparison is against the source the loaded
+assembly was compiled from, so an earlier edit outside method bodies keeps this
+warning on every reload until `uloop compile`. Comment-only edits (line, block, and
+XML documentation comments) do not count.
 
 ## Signature changes: return type, rename, parameters
 

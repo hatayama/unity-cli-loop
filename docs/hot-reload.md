@@ -68,6 +68,9 @@ Cecil looks up the assemblies a publicized copy refers to in the directories of 
 assembly's compile references first, then in those of every assembly it references transitively.
 When a verified snapshot marks a currently patched method as unchanged, the
 orchestrator reverts that patch to the compiled IL instead of re-emitting a shim.
+The outside-method-body warning compares against the same snapshot, the source of the last
+compile, so a declaration edit made since then keeps the warning on every reload until
+`uloop compile`; comment-only differences do not count.
 
 ## Spike Findings
 
