@@ -315,7 +315,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            EditorApplication.delayCall += () => _showWindowOnVersionChange();
+            // Every await above resumes on Unity's synchronization context, so this already runs on the main
+            // thread; delayCall would only add a hop that some sessions never flush.
+            _showWindowOnVersionChange();
         }
 
         private async Task<bool> NeedsCliUpdateForSetupWizardAsync(CancellationToken ct)

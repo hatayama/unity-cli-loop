@@ -15,8 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Verifies the setup wizard's version-change evaluation for already-seen package versions:
-    /// when it records the last-seen state, when it refreshes the CLI, and when it does nothing. Also covers the
-    /// migration auto-scan poll actions and the fallback full scan with recording ports.
+    /// when it shows the window, when it records the last-seen state, when it refreshes the CLI, and when it does
+    /// nothing. Also covers the migration auto-scan poll actions and the fallback full scan with recording ports.
     /// </summary>
     public sealed class SetupWizardStartupFlowVersionChangeTests
     {
@@ -201,6 +201,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _editorSettingsPort.Settings.lastSeenSetupWizardVersion,
                 Is.EqualTo(UnityCliLoopConstants.PackageInfo.version));
             Assert.That(_showWindowCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a new package version with a dispatcher older than the minimum shows the window synchronously
+        /// through the flow, without depending on delayCall.
+        /// </summary>
+        [Test]
+        public void TryShowOnVersionChange_WhenThePackageChangedAndTheCliNeedsUpdate_ShowsTheWindow()
+        {
+            const string PreviousVersion = "3.0.0-previous.1";
+            Assume.That(UnityCliLoopConstants.PackageInfo.version, Is.Not.EqualTo(PreviousVersion));
+            _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = PreviousVersion,
+                lastSeenSetupWizardMinimumDispatcherVersion = MinimumDispatcherVersion
+            };
+            _cliDetector.CliVersion = "1.0.0";
+            _cliDetector.IsDispatcher = true;
+
+            _flow.TryShowOnVersionChange();
+
+            Assert.That(_showWindowCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a new package version with outdated installed skills shows the window synchronously through the
+        /// flow, without depending on delayCall.
+        /// </summary>
+        [Test]
+        public void TryShowOnVersionChange_WhenThePackageChangedAndTheSkillsAreOutdated_ShowsTheWindow()
+        {
+            const string PreviousVersion = "3.0.0-previous.1";
+            Assume.That(UnityCliLoopConstants.PackageInfo.version, Is.Not.EqualTo(PreviousVersion));
+            _editorSettingsPort.Settings = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = PreviousVersion,
+                lastSeenSetupWizardMinimumDispatcherVersion = MinimumDispatcherVersion
+            };
+            _cliDetector.CliVersion = "3.1.0";
+            _cliDetector.IsDispatcher = true;
+            _skillSetupPort.ReturnOutdatedTarget = true;
+
+            _flow.TryShowOnVersionChange();
+
+            Assert.That(_showWindowCount, Is.EqualTo(1));
         }
 
         /// <summary>
@@ -542,6 +587,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             internal List<string> DetectProjectRoots { get; } = new List<string>();
             internal List<bool> DetectGroupFlags { get; } = new List<bool>();
+            internal bool ReturnOutdatedTarget { get; set; }
 
             public void RemoveSkillFiles(string toolName) => throw new NotSupportedException();
             public bool IsSkillInstalled(string toolName) => throw new NotSupportedException();
@@ -561,7 +607,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         hasSkillsDirectory: true,
                         hasExistingSkills: true,
                         hasDifferentLayoutSkills: false,
-                        SkillInstallState.Installed)
+                        ReturnOutdatedTarget ? SkillInstallState.Outdated : SkillInstallState.Installed)
                 };
             }
 
