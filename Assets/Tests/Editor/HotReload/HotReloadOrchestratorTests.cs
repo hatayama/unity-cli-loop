@@ -970,6 +970,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a method added next to one whose parameter type is an internal type of another
+        /// file, with that same type in its own signature, is added and its caller is patched. The
+        /// worker binds that type as an inaccessible error type, which must not be reported as an
+        /// unresolved signature type for an added method either.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodWithInternalParameterTypeFromAnotherFile_IsAdded()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "            return probe == null ? 1 : 2;\n        }\n",
+                "            return AddedCountProbe(probe);\n        }\n\n"
+                + "        public int AddedCountProbe(HotReloadInternalSignatureProbe probe)\n"
+                + "        {\n"
+                + "            return probe == null ? 21 : 22;\n"
+                + "        }\n",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: the added method must be inserted.");
+
+            string editedPath = WriteEditedSource("AddedCountProbe.cs", editedSource);
+
+            HotReloadInternalSignatureFixture fixture = new HotReloadInternalSignatureFixture();
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(1));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            // Why the type-qualified names: "CountProbe" alone is also part of "AddedCountProbe".
+            AssertHasAdded(result, nameof(HotReloadInternalSignatureFixture) + ".AddedCountProbe(");
+            AssertHasPatched(
+                result,
+                nameof(HotReloadInternalSignatureFixture) + "." + nameof(HotReloadInternalSignatureFixture.CountProbe) + "(");
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(21));
+        }
+
+        /// <summary>
         /// What: under Debug code optimization, size-only small methods do not emit the
         /// aggregated inline-risk warning (branch a); Patched Reason stays empty.
         /// </summary>
