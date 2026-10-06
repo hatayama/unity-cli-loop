@@ -33,13 +33,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Creates the registry for this Editor domain. It closes itself before the next domain reload,
+        /// Creates the registry for this Editor domain: it holds the macOS activity on macOS and holds
+        /// nothing on other platforms. It closes itself before the next domain reload,
         /// because a reload abandons awaiting commands without disposing their holds, and the native
         /// activity would outlive the domain that started it.
         /// </summary>
         internal static EditorExecutionActivity CreateForEditor()
         {
-            IProcessActivityApi api = new InertProcessActivityApi();
+            IProcessActivityApi api = UnityEngine.Application.platform == UnityEngine.RuntimePlatform.OSXEditor
+                ? new MacProcessActivityApi()
+                : new InertProcessActivityApi();
             EditorExecutionActivity activity = new EditorExecutionActivity(api);
             AssemblyReloadEvents.beforeAssemblyReload += activity.ReleaseAllAndClose;
             return activity;
