@@ -631,6 +631,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("InternalField", "new HotReloadInternalMemberHost().InternalField")]
         [TestCase("InternalProperty", "new HotReloadInternalMemberHost().InternalProperty")]
         [TestCase("InternalType", "HotReloadInternalOnlyType.Value()")]
+        [TestCase("InternalMethodOfAnInternalResult", "HotReloadInternalMemberHost.InternalSelf().InternalInstanceValue()")]
         [TestCase("ProtectedInternalMethod", "new HotReloadInternalMemberHost().ProtectedInternalValue()")]
         [TestCase(
             "PublicMemberOfInternalTypeOfAnotherAssemblyThroughInternalsVisibleTo",
@@ -682,12 +683,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a body of a partial type that uses an internal member of a type the run was not given
         /// where the patched method cannot run it in place (inside a lambda, a local function or a
-        /// query, in an iterator or async method, as a method passed as a delegate, or by a bare name)
-        /// is skipped with a reason that says the member is internal, not that a part is missing.
+        /// query, in an iterator or async method, as a method passed as a delegate, by a bare name, or
+        /// next to a lambda, local function or query that works with the member's result) is skipped
+        /// with a reason that says the member is internal, not that a part is missing.
         /// </summary>
         [TestCase("Lambda", "OwnOnly", null, "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
         [TestCase("LocalFunction", "OwnOnly", null, "int Read() { return HotReloadInternalMemberHost.InternalStaticValue(); } return Read();")]
         [TestCase("Query", "OwnOnly", null, "return (from value in new[] { 1 } select value + HotReloadInternalMemberHost.InternalStaticValue()).First();")]
+        [TestCase("LambdaUsingTheResult", "OwnOnly", null, "var host = HotReloadInternalMemberHost.InternalSelf(); System.Func<int> read = () => host.InternalInstanceValue(); return read();")]
+        [TestCase("LambdaParameterFromTheResult", "OwnOnly", null, "return System.Array.Exists(HotReloadInternalMemberHost.InternalHosts(), host => host.InternalField > 0) ? 1 : 0;")]
+        [TestCase("LocalFunctionUsingTheResult", "OwnOnly", null, "var host = HotReloadInternalMemberHost.InternalSelf(); int Read() { return host.InternalInstanceValue(); } return Read();")]
+        [TestCase("QueryOverTheResult", "OwnOnly", null, "var hosts = HotReloadInternalMemberHost.InternalHosts(); return (from host in hosts select host.InternalField).First();")]
         [TestCase("MethodPassedAsDelegate", "OwnOnly", null, "System.Func<int> read = HotReloadInternalMemberHost.InternalStaticValue; return read();")]
         [TestCase("Iterator", "IteratorValues", "yield return _seed;", "yield return HotReloadInternalMemberHost.InternalStaticValue();")]
         [TestCase("Async", "AsyncValue", "return 50;", "return HotReloadInternalMemberHost.InternalStaticValue();")]
@@ -725,6 +731,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "InternalOutOfReachDelegatingGetter.cs",
                     "return 40;",
                     "System.Func<int> read = () => this._seed; return read() + HotReloadInternalMemberHost.InternalStaticValue();")
+            });
+
+            Assert.That(AssertSkipped(result, "get_DerivedProperty"), Does.Contain("is internal to"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a getter of a partial type whose lambda works with the result of an internal member
+        /// of a type the run was not given is skipped with the internal-member reason, as a method
+        /// with the same body is.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeGetterWithALambdaUsingTheResultOfAnInternalMember_SaysWhy()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    PartialDerivedFileName,
+                    "InternalOutOfReachGetterLambdaUsingTheResult.cs",
+                    "return 40;",
+                    "var host = HotReloadInternalMemberHost.InternalSelf(); System.Func<int> read = () => host.InternalInstanceValue(); return read();")
             });
 
             Assert.That(AssertSkipped(result, "get_DerivedProperty"), Does.Contain("is internal to"), FormatSkipped(result));
@@ -857,6 +883,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunWithSiblingPlainValueAsync(
                 "SiblingInternalInLambda",
                 "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();");
+
+            Assert.That(AssertSkipped(result, "PlainValue"), Does.Contain("brought back to re-bind"), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a method of a file brought back to re-bind its active patches whose lambda works with
+        /// the result of an internal member of an unpassed type keeps the sibling's skip reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_SiblingBroughtBack_WithALambdaUsingTheResultOfAnInternalMember_KeepsTheSiblingReason()
+        {
+            TransformWorkerClientResult result = await RunWithSiblingPlainValueAsync(
+                "SiblingLambdaUsingTheResult",
+                "var host = HotReloadInternalMemberHost.InternalSelf(); System.Func<int> read = () => host.InternalInstanceValue(); return read();");
 
             Assert.That(AssertSkipped(result, "PlainValue"), Does.Contain("brought back to re-bind"), FormatSkipped(result));
         }

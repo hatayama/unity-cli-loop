@@ -53,6 +53,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 13;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static HotReloadInternalMemberHost InternalSelf()
+        {
+            return new HotReloadInternalMemberHost();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static HotReloadInternalMemberHost[] InternalHosts()
+        {
+            return new HotReloadInternalMemberHost[] { new HotReloadInternalMemberHost() };
+        }
+
         /// <summary>
         /// A type nested in the host, so a test can name an internal member through the nested type.
         /// </summary>

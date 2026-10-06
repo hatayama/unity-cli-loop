@@ -76,6 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalStaticMethodOfNestedType";
             yield return "InternalFieldInsideNameof";
             yield return "InternalStaticMethodNextToLambdaReadingOwnPrivateField";
+            yield return "InternalInstanceMethodOfAnInternalResult";
         }
 
         // Edits whose body runs as IL copied into the patched method.
@@ -90,7 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Edits the shim cannot run as written: a simple name it cannot qualify, or a use inside a
-        // lambda or iterator, which the shim assembly compiles as ordinary code of its own.
+        // lambda or iterator, which the shim assembly compiles as ordinary code of its own, also when
+        // the lambda reaches the member through the result of another internal member.
         private static IEnumerable<string> EditsThatDoNotRunInThePatchedMethod()
         {
             yield return "InheritedInternalMethodBySimpleName";
@@ -100,6 +102,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalStaticMethodInIteratorReadingOwnPrivateField";
             yield return "InternalInstanceMethodInIteratorReadingOwnPrivateField";
             yield return "InternalStaticMethodInIterator";
+            yield return "InternalInstanceMethodInLambdaOverAnInternalResult";
+            yield return "InternalFieldInLambdaParameterFromAnInternalResult";
         }
 
         /// <summary>
@@ -291,6 +295,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return BodyEdit.OfDerivedValue("return nameof(HotReloadInternalMemberHost.InternalField).Length + 100;", 113);
                 case "InternalStaticMethodNextToLambdaReadingOwnPrivateField":
                     return new BodyEdit(ClosureSeedPlusValue, "read() + 7", "read() + HotReloadInternalMemberHost.InternalStaticValue()", 1001);
+                case "InternalInstanceMethodOfAnInternalResult":
+                    return BodyEdit.OfDerivedValue("return HotReloadInternalMemberHost.InternalSelf().InternalInstanceValue() + 120;", 122);
                 case "InternalMethodOfPublicTypeOfAnotherAssemblyThroughInternalsVisibleTo":
                     return BodyEdit.OfDerivedValue(
                         "return global::io.github.hatayama.UnityCliLoop.FirstPartyTools.PausePointResponse"
@@ -310,6 +316,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return new BodyEdit(IteratorValues, "yield return _seed;", "yield return _seed + new HotReloadInternalMemberHost().InternalInstanceValue();", 1002);
                 case "InternalStaticMethodInIterator":
                     return new BodyEdit(IteratorValues, "yield return _seed;", "yield return HotReloadInternalMemberHost.InternalStaticValue() + 100;", 101);
+                case "InternalInstanceMethodInLambdaOverAnInternalResult":
+                    return BodyEdit.OfDerivedValue(
+                        "var host = HotReloadInternalMemberHost.InternalSelf();\n"
+                        + "            System.Func<int> read = () => host.InternalInstanceValue() + 100;\n"
+                        + "            return read();",
+                        102);
+                case "InternalFieldInLambdaParameterFromAnInternalResult":
+                    return BodyEdit.OfDerivedValue(
+                        "return System.Array.Exists(HotReloadInternalMemberHost.InternalHosts(), host => host.InternalField > 0) ? 100 : 0;",
+                        100);
                 default:
                     throw new ArgumentException("Unknown edit: " + editName);
             }
